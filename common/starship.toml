@@ -1,0 +1,144 @@
+# ~/.config/starship.toml
+
+# Add a blank line between commands
+add_newline = true
+
+# Left prompt
+format = '$directory$git_branch$git_status$character'
+
+# Right prompt
+right_format = '$status$cmd_duration$aws$kubernetes$python$nodejs$java$time'
+
+
+# ─────────────────────────────
+# Current directory
+# ─────────────────────────────
+[directory]
+format = '[$path]($style) '
+style = 'bold fg:#00afff'
+
+# Display paths like ~/code/lgcns-final/... with limited truncation
+truncation_length = 2
+truncation_symbol = '.../'
+truncate_to_repo = false
+home_symbol = '~'
+
+
+# ─────────────────────────────
+# Git branch
+# ─────────────────────────────
+[git_branch]
+format = '[$branch]($style) '
+style = 'bold fg:#5fd700'
+symbol = ''
+
+
+# ─────────────────────────────
+# Git status
+# ─────────────────────────────
+[git_status]
+format = '($all_status$ahead_behind )'
+style = 'bold fg:#d7af00'
+
+# Display counts such as !1
+modified = '[!${count}](bold fg:#ffb86c)'
+staged = '[+${count}](bold fg:#50fa7b)'
+untracked = '[?${count}](bold fg:#ff79c6)'
+deleted = '[-${count}](bold fg:#ff5555)'
+renamed = '[»${count}](bold fg:#8be9fd)'
+conflicted = '[~${count}](bold fg:#ff5555)'
+stashed = '[*${count}](bold fg:#bd93f9)'
+
+ahead = '[⇡${count}](bold fg:#50fa7b)'
+behind = '[⇣${count}](bold fg:#ff5555)'
+diverged = '[⇕⇡${ahead_count}⇣${behind_count}](bold fg:#f1fa8c)'
+up_to_date = ''
+
+
+# ─────────────────────────────
+# Command prompt character
+# ─────────────────────────────
+[character]
+format = '$symbol '
+
+success_symbol = '[❯](bold fg:#5fd700)'
+error_symbol = '[❯](bold fg:#ff5f5f)'
+vimcmd_symbol = '[❮](bold fg:#5fd700)'
+
+
+# ─────────────────────────────
+# Exit code of the previous command
+# Hidden when the command succeeds
+# ─────────────────────────────
+[status]
+disabled = false
+format = '[✘ $status]($style) '
+symbol = ''
+style = 'bold fg:#ff5f5f'
+
+
+# ─────────────────────────────
+# Duration of long-running commands
+# ─────────────────────────────
+[cmd_duration]
+disabled = false
+min_time = 1000
+show_milliseconds = false
+format = '[$duration]($style) '
+style = 'bold fg:#aab2bf'
+
+
+# ─────────────────────────────
+# Cloud environment
+# Display the AWS profile and Kubernetes context
+# ─────────────────────────────
+[aws]
+format = '([󰸏 $profile]($style) )'
+style = 'bold fg:#ffaf00'
+
+[kubernetes]
+disabled = false
+format = '[󱃾 $context]($style) '
+style = 'bold fg:#5fd7ff'
+detect_files = [
+  'Chart.yaml',
+  'helmfile.yaml',
+  'helmfile.yml',
+  'kustomization.yaml',
+  'kustomization.yml',
+  'skaffold.yaml',
+  'skaffold.yml',
+  'Tiltfile',
+]
+detect_folders = ['k8s', 'kubernetes', 'helm', 'charts']
+
+[[kubernetes.contexts]]
+context_pattern = 'arn:aws:eks:[^:]+:[^:]+:cluster/(?P<cluster>[^/]+)'
+context_alias = '$cluster'
+
+
+# ─────────────────────────────
+# Project runtime versions
+# Display only when related files exist in the current directory
+# ─────────────────────────────
+[python]
+format = '[ $version]($style) '
+style = 'bold fg:#ffd75f'
+
+[nodejs]
+format = '[ $version]($style) '
+style = 'bold fg:#5faf5f'
+
+[java]
+format = '[ $version]($style) '
+style = 'bold fg:#ff875f'
+
+
+# ─────────────────────────────
+# Current time on the right
+# ─────────────────────────────
+[time]
+disabled = false
+format = '[$time]($style)'
+time_format = '%T'
+style = 'fg:#6f9393'
