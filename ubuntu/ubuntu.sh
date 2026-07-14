@@ -25,6 +25,9 @@ apt_install_packages() {
   local package
   local install_packages=()
 
+  log "Updating apt package index"
+  sudo apt-get update
+
   for package in "$@"; do
     if dpkg -s "$package" >/dev/null 2>&1; then
       warn "Already installed: $package"
@@ -43,7 +46,6 @@ apt_install_packages() {
   fi
 
   log "Installing apt packages"
-  sudo apt-get update
   sudo apt-get install -y "${install_packages[@]}"
 }
 
@@ -127,6 +129,18 @@ main() {
     unzip \
     build-essential \
     ca-certificates \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    libffi-dev \
+    liblzma-dev \
     fzf \
     zoxide \
     eza \
