@@ -1,12 +1,12 @@
-# Lightship
+# Selfishell
 
-A lightweight and intuitive Zsh environment powered by Starship and Zinit. Lightship stays fast and readable while providing useful completions, aliases, runtime information, and Git status at a glance.
+A lightweight and intuitive Zsh environment powered by Starship and Zinit. Selfishell stays fast and readable while providing useful completions, aliases, runtime information, and Git status at a glance.
 
 ## Preview
 
-![Lightship shell prompt showing the current directory, Git branch, command output, and time](img/shell.png)
+![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/preview.png)
 
-Lightship keeps the primary prompt focused on the current directory and Git status, while contextual information such as the time appears on the right.
+Selfishell keeps the primary prompt focused on the current directory and Git status, while contextual information such as the time appears on the right.
 
 ## Usage
 
