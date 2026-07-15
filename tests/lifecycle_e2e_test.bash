@@ -19,14 +19,6 @@ test_complete_release_lifecycle() {
   export XDG_CONFIG_HOME="$HOME/.config"
   export XDG_STATE_HOME="$HOME/.local/state"
   export SELFISHELL_RELEASE_ROOT="file://$release_store"
-  export SELFISHELL_BOOTSTRAP_OS=Linux
-  export SELFISHELL_BOOTSTRAP_ARCH=x86_64
-  export SELFISHELL_TEST_SYSTEM_NAME=Linux
-  export SELFISHELL_TEST_MACHINE_ARCH=x86_64
-  export SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release"
-  export SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version"
-  printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
-  printf 'Linux version 6.8.0\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
   printf 'original zshrc\n' >"$HOME/.zshrc"
 
   for version in "$initial_version" "$next_version"; do
@@ -38,6 +30,7 @@ test_complete_release_lifecycle() {
 
   bash "$ROOT_DIR/install.sh" --version "$initial_version" --prefix "$prefix" \
     --setup --yes --profile minimal --skip-packages >/dev/null
+  "$prefix/bin/selfishell" doctor >/dev/null
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $initial_version" ]] || fail "Clean install failed"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
 

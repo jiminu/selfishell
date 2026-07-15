@@ -134,13 +134,16 @@ Goal: make releases routine for maintainers and understandable to new users.
 - [x] Add end-to-end tests for clean install, upgrade, rollback, and uninstall.
 - [x] Publish installation, profile, security, company, and troubleshooting docs.
 - [x] Add a security policy and vulnerability reporting channel.
-- [ ] Perform a beta on at least one clean machine per supported platform.
+- [x] Run the full lifecycle on clean Ubuntu and macOS hosted runners.
+- [ ] Publish a GitHub pre-release and verify its public install path.
+- [ ] Complete a smoke test on one existing supported development machine.
 
 Acceptance criteria:
 
 - Creating a semantic-version tag produces a tested, installable release without
   manual archive editing.
-- The README's primary installation path succeeds on clean supported machines.
+- The README's primary installation path succeeds on clean hosted runners and
+  against the published pre-release assets.
 - A new contributor can reproduce tests and create a local release candidate from
   repository documentation alone.
 

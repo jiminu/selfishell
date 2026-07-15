@@ -54,7 +54,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           version="${TAG#v}"
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
             exit 1
           fi
@@ -82,8 +82,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          release_args=()
+          [[ "$TAG" != *-* ]] || release_args+=(--prerelease)
           gh release view "$TAG" >/dev/null 2>&1 && {
             printf 'Release already exists: %s\n' "$TAG" >&2
             exit 1
           }
-          gh release create "$TAG" dist/* --verify-tag --generate-notes --title "Selfishell $TAG"
+          gh release create "$TAG" dist/* --verify-tag --generate-notes \
+            --title "Selfishell $TAG" "${release_args[@]}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 release_root_url() {
-  printf '%s\n' "${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/lightship/releases}"
+  printf '%s\n' "${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/selfishell/releases}"
 }
 
 release_installation_paths() {

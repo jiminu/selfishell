@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/lightship/releases}"
+SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/selfishell/releases}"
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 

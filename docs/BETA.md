@@ -1,25 +1,44 @@
 # Public Beta Verification
 
-Complete this checklist on machines that were not used to develop Selfishell.
-Record the release, operating-system version, architecture, date, and tester for
-each result. Do not mark the M6 beta milestone complete from container-only
-testing.
+Selfishell does not require dedicated clean physical machines for beta entry.
+Automated lifecycle tests run in GitHub-hosted Ubuntu and macOS environments that
+are recreated for each job. Human verification uses an existing machine and a
+public GitHub pre-release.
 
-## macOS
+Container-only testing is insufficient for macOS, but a GitHub-hosted macOS
+runner is an acceptable clean OS environment for configuration-only lifecycle
+coverage. Package-manager prompts and terminal ergonomics remain manual checks.
 
-- [ ] Clean Apple Silicon machine tested.
-- [ ] Clean Intel machine tested, or explicitly documented as unavailable.
-- [ ] CLI bootstrap, minimal profile, new terminal, update, rollback, and
-      uninstall/restore verified.
-- [ ] Homebrew prompts and `~/.local/bin` PATH guidance verified.
+## Automated Clean Runner Gate
 
-## Ubuntu
+- [x] Ubuntu runner verifies exact bootstrap, minimal configuration install,
+      doctor, CLI upgrade, offline rollback, uninstall, and backup restoration.
+- [x] macOS runner verifies the same lifecycle using the native macOS platform
+      and system Bash.
+- [x] Direct downloads and package installation are skipped in lifecycle E2E;
+      their adapters, checksums, and failure behavior are covered separately.
 
-- [ ] Clean native Ubuntu AMD64 or ARM64 machine tested.
-- [ ] Clean Ubuntu on WSL machine tested.
-- [ ] CLI bootstrap, minimal profile, new terminal, update, rollback, and
-      uninstall/restore verified.
-- [ ] Apt prompts, optional dependency failures, and offline mode verified.
+Reference run: [Ubuntu and macOS CI](https://github.com/jiminu/selfishell/actions/runs/29426244329).
+
+## Pre-release Gate
+
+- [ ] Publish a `v<version>-beta.<number>` GitHub pre-release.
+- [ ] Verify the README curl command against the published assets.
+- [ ] Confirm `VERSION`, `SHA256SUMS`, and all four platform archives are present.
+- [ ] Leave the pre-release available long enough to collect installation
+      feedback before declaring a stable release.
+
+## Existing Machine Smoke Test
+
+Run these checks on one existing macOS or Ubuntu development machine. A fresh
+user account or temporary `HOME` is preferred but not required.
+
+- [ ] Review `selfishell install --profile minimal --dry-run`.
+- [ ] Install the beta CLI and minimal profile.
+- [ ] Open a new terminal and verify prompt rendering and Git completion.
+- [ ] Run `selfishell status`, `self-update`, and `rollback`.
+- [ ] Run uninstall with restore and confirm the original configuration returns.
+- [ ] Record package-manager prompts, PATH guidance, and any usability issues.
 
 ## Result Record
 
@@ -29,6 +48,7 @@ Platform and version:
 Architecture:
 Date:
 Tester:
+Automated CI run:
 Result:
 Notes or issue links:
 ```

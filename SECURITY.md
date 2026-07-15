@@ -9,7 +9,7 @@ here explicitly.
 ## Reporting a Vulnerability
 
 Report vulnerabilities privately through
-[GitHub Security Advisories](https://github.com/jiminu/lightship/security/advisories/new).
+[GitHub Security Advisories](https://github.com/jiminu/selfishell/security/advisories/new).
 Include affected versions, platform, reproduction steps, impact, and any known
 mitigation. Do not open a public issue for an undisclosed vulnerability.
 

@@ -18,7 +18,7 @@ shell startup.
 Install the Selfishell CLI on macOS, Ubuntu, or Ubuntu on WSL:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 ```
 
 The bootstrap installs only the CLI. Configure the development environment
@@ -31,7 +31,7 @@ selfishell install --profile developer
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --version 1.0.0
 ```
 
@@ -39,7 +39,7 @@ For company or security-sensitive environments, download and review the small
 bootstrap before running it:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/lightship/main/install.sh
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh
 less install.sh
 bash install.sh --version 1.0.0
 ```
@@ -51,7 +51,7 @@ and atomically updates `~/.local/bin/selfishell` and the optional `sfs` shorthan
 To install the CLI and immediately run setup in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --setup --yes --profile developer
 ```
 

@@ -5,7 +5,7 @@ The public bootstrap installs the CLI in the current user's home directory and
 does not require root access.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 selfishell install --profile developer
 ```
 
@@ -16,7 +16,7 @@ is explicitly supplied.
 Use an exact release in controlled environments:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --version 1.0.0
 selfishell install --profile minimal --yes
 ```

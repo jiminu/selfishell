@@ -25,9 +25,10 @@ selfishell-1.0.0-macos-arm64.tar.gz
 
 ## Automated Publish
 
-The `v<major>.<minor>.<patch>` tag is the release version source. The release
-workflow runs the full suite, builds every archive, smoke-tests an exact install,
-and creates the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`.
+The `v<major>.<minor>.<patch>` tag is the stable release version source. A suffix
+such as `v1.0.0-beta.1` creates a GitHub pre-release. The release workflow runs
+the full suite, builds every archive, smoke-tests an exact install, and creates
+the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`.
 
 ```bash
 git tag -a v1.0.0 -m 'Selfishell 1.0.0'
