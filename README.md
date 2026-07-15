@@ -15,13 +15,191 @@ shell startup.
 
 ## Usage
 
-Clone this repository and run:
+Install the Selfishell CLI on macOS, Ubuntu, or Ubuntu on WSL:
 
 ```bash
-bash ./main.sh
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 ```
 
-`main.sh` detects the current environment and runs the appropriate setup for macOS or Ubuntu on WSL.
+The bootstrap installs only the CLI. Configure the development environment
+explicitly afterward:
+
+```bash
+selfishell install --profile developer
+```
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+  bash -s -- --version 1.0.0
+```
+
+For company or security-sensitive environments, download and review the small
+bootstrap before running it:
+
+```bash
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh
+less install.sh
+bash install.sh --version 1.0.0
+```
+
+The installer verifies the selected platform archive against the release's
+`SHA256SUMS`, installs it under `~/.local/share/selfishell/releases/<version>`,
+and atomically updates `~/.local/bin/selfishell` and the optional `sfs` shorthand.
+
+To install the CLI and immediately run setup in one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+  bash -s -- --setup --yes --profile developer
+```
+
+### Source Bootstrap
+
+The legacy full bootstrap remains available when working from a clone:
+
+```bash
+bash ./bootstrap.sh
+```
+
+`bootstrap.sh` detects the current environment and runs the appropriate legacy
+setup for macOS or Ubuntu on WSL.
+
+The repository also includes the managed configuration CLI:
+
+```bash
+./bin/selfishell help
+./bin/selfishell version
+./bin/selfishell doctor
+./bin/selfishell install --dry-run
+./bin/selfishell install --profile developer --yes
+./bin/selfishell status
+```
+
+Update approved direct tools and managed configuration separately from the CLI:
+
+```bash
+selfishell status --check-updates
+selfishell update --yes
+selfishell self-update --yes
+selfishell rollback --yes
+```
+
+Direct downloads are pinned and checksum-verified from `dependencies.conf`.
+Git-based plugins are checked out at an approved tag or commit. Selfishell never
+performs network updates during interactive shell startup. See
+[`docs/UPDATES.md`](docs/UPDATES.md) for the update and recovery contract.
+
+`./bin/sfs` is an optional shorthand for the same CLI. The existing `bootstrap.sh`
+entrypoint remains a compatibility wrapper for the current full package
+bootstrap while profiles and managed package installation are developed.
+
+The CLI copies configuration into `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell` and
+links the active user's Zsh, Starship, Vim, and platform-specific configuration
+to those managed copies. It stores recovery metadata under
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`, so the source checkout can be
+moved or deleted after managed installation.
+
+Use the following command to remove managed files and restore configuration that
+was backed up during installation:
+
+```bash
+./bin/selfishell uninstall --restore --yes
+```
+
+If a managed file or link was changed after installation, uninstall stops before
+removing anything and preserves both the changed path and its original backup.
+
+## Profiles
+
+Selfishell separates package selection from installation logic:
+
+| Profile | Included tools |
+| --- | --- |
+| `minimal` | Zsh, Git, Curl, Starship |
+| `developer` | Minimal plus FZF, Zoxide, Eza, Bat, pyenv, NVM, Vim, build tools |
+| `kubernetes` | Developer plus kubectl and context tools |
+| `full` | Kubernetes plus supported macOS desktop, font, and Java integrations |
+
+`developer` is the default. Preview another profile without changing packages or
+files:
+
+```bash
+./bin/selfishell install --profile kubernetes --dry-run
+```
+
+For restricted networks, configuration can be installed without any package or
+network operation:
+
+```bash
+SELFISHELL_OFFLINE=1 ./bin/selfishell install --yes
+# or
+./bin/selfishell install --skip-packages --yes
+```
+
+Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
+package managers and direct download commands.
+
+Private or company packages can be added without changing the repository:
+
+```text
+# company.conf
+package macos required formula company-cli
+package ubuntu required apt company-cli
+```
+
+```bash
+./bin/selfishell install --local-profile ./company.conf --yes
+```
+
+Private shell configuration can be placed in
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
+file but does not overwrite, track, or remove it.
+
+## Documentation
+
+- [Installation](docs/INSTALLATION.md)
+- [Profiles](docs/PROFILES.md)
+- [Updates and rollback](docs/UPDATES.md)
+- [Company deployment](docs/COMPANY.md)
+- [Security model](docs/SECURITY.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Release process](docs/RELEASING.md)
+- [Public beta verification](docs/BETA.md)
+- [Vulnerability reporting](SECURITY.md)
+
+## Supported Environments
+
+The current bootstrap officially supports:
+
+- macOS on Apple Silicon or Intel, using Homebrew
+- Native Ubuntu on AMD64 or ARM64
+- Ubuntu running on WSL
+
+Native Ubuntu, Ubuntu on WSL, and macOS are supported by the managed CLI. Other
+Linux distributions are not currently supported.
+
+## Before You Run It
+
+The bootstrap changes the current user's development environment. In particular,
+it may:
+
+- install system packages and request administrator privileges;
+- change the default login shell to Zsh on Ubuntu WSL;
+- move existing `.zshrc`, `.vimrc`, Starship, and Ghostty configuration files to
+  timestamped backups;
+- replace those paths with symbolic links into this repository checkout;
+- download and execute third-party installers and clone plugin repositories.
+
+Keep the checkout in a stable location after running the legacy `bootstrap.sh`
+bootstrap because its links still point into the checkout. Configuration created
+with `selfishell install` is copied to the managed XDG directory and does not have
+this limitation.
+
+On Ubuntu WSL, missing required packages stop setup with a nonzero exit status.
+Unavailable optional convenience tools such as FZF, Zoxide, Eza, or Bat are
+reported at the end without failing the rest of setup.
 
 ## What It Installs
 

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+
+status_resource() {
+  local resource="$1"
+  local current_checksum
+
+  if ! managed_read_state "$resource"; then
+    return 0
+  fi
+
+  SELFISHELL_STATUS_RESOURCE_COUNT=$((SELFISHELL_STATUS_RESOURCE_COUNT + 1))
+
+  if [[ "$MANAGED_STATE_STATUS" != "active" ]]; then
+    printf '[PENDING] %s\n' "$MANAGED_STATE_TARGET"
+    SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+    return
+  fi
+
+  case "$MANAGED_STATE_TYPE" in
+    link)
+      if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
+        printf '[OK] %s -> %s\n' "$MANAGED_STATE_TARGET" "$MANAGED_STATE_REFERENCE"
+      else
+        printf '[CHANGED] %s\n' "$MANAGED_STATE_TARGET"
+        SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+      fi
+      ;;
+    file)
+      if [[ -f "$MANAGED_STATE_TARGET" ]]; then
+        current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
+      fi
+      if [[ -n "$current_checksum" && "$current_checksum" == "$MANAGED_STATE_CHECKSUM" ]]; then
+        printf '[OK] %s\n' "$MANAGED_STATE_TARGET"
+      else
+        printf '[CHANGED] %s\n' "$MANAGED_STATE_TARGET"
+        SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+      fi
+      ;;
+  esac
+}
+
+command_status() {
+  local check_updates=0
+  local current_version="unknown"
+  local available_version="not checked"
+  local dependency_platform architecture
+  local type name version entry_platform entry_architecture _
+  local installed key=""
+  local resource
+
+  while (("$#" > 0)); do
+    case "$1" in
+      --check-updates) check_updates=1 ;;
+      help | --help | -h)
+        printf 'Usage: selfishell status [--check-updates]\n'
+        return
+        ;;
+      *)
+        cli_error "Unknown status option: $1"
+        return "$SELFISHELL_EXIT_USAGE"
+        ;;
+    esac
+    shift
+  done
+  selfishell_initialize_paths
+
+  [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
+  if [[ "$check_updates" == 1 ]]; then
+    available_version="$(curl -fsSL "$(release_root_url)/latest/download/VERSION")" || {
+      cli_error "Unable to check the available CLI version."
+      available_version="unavailable"
+    }
+    available_version="${available_version#v}"
+  fi
+  printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
+
+  case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
+  architecture="$(detect_architecture)"
+  while read -r type name version entry_platform entry_architecture _; do
+    [[ -n "$type" && "${type#\#}" == "$type" ]] || continue
+    [[ "$entry_platform" == all || "$entry_platform" == "$dependency_platform" ]] || continue
+    [[ "$entry_architecture" == all || "$entry_architecture" == "$architecture" ]] || continue
+    [[ "$key" != *"|$name|"* ]] || continue
+    key="${key}|${name}|"
+    installed="$(dependency_installed_version "$name")"
+    [[ -n "$installed" ]] || installed="not managed"
+    printf '[TOOL] %s | Current: %s | Approved: %s\n' "$name" "$installed" "$version"
+  done <"$(dependencies_manifest_path)"
+
+  SELFISHELL_STATUS_RESOURCE_COUNT=0
+  SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
+
+  if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
+    printf '[INFO] Profile: %s\n' "$(<"$SELFISHELL_STATE_DIR/profile")"
+  fi
+
+  for resource in \
+    zshrc-config zsh-common aliases-common aliases-git aliases-kubectl \
+    starship-config vim-config ghostty-config \
+    user-zshrc user-starship user-vim user-ghostty; do
+    status_resource "$resource"
+  done
+
+  if ((SELFISHELL_STATUS_RESOURCE_COUNT == 0)); then
+    printf 'Selfishell configuration is not installed.\n'
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  return "$SELFISHELL_STATUS_RESULT"
+}

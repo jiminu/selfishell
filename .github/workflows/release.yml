@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Install shell tooling (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt zsh
+
+      - name: Install shell tooling (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck shfmt
+
+      - name: Run verification suite
+        run: bash scripts/check.sh
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Validate release tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            printf 'Invalid release tag: %s\n' "$TAG" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
+
+      - name: Build release artifacts
+        run: bash scripts/build-release.sh --version '${{ steps.version.outputs.version }}' --output dist
+
+      - name: Smoke test exact release
+        env:
+          SELFISHELL_BOOTSTRAP_OS: Linux
+          SELFISHELL_BOOTSTRAP_ARCH: x86_64
+          SELFISHELL_RELEASE_ROOT: file://${{ runner.temp }}/selfishell-releases
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          release_dir="$RUNNER_TEMP/selfishell-releases/download/v$VERSION"
+          mkdir -p "$release_dir"
+          cp dist/* "$release_dir/"
+          prefix="$RUNNER_TEMP/selfishell-prefix"
+          bash install.sh --version "$VERSION" --prefix "$prefix"
+          test "$("$prefix/bin/selfishell" version)" = "selfishell $VERSION"
+
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          release_args=()
+          [[ "$TAG" != *-* ]] || release_args+=(--prerelease)
+          gh release view "$TAG" >/dev/null 2>&1 && {
+            printf 'Release already exists: %s\n' "$TAG" >&2
+            exit 1
+          }
+          gh release create "$TAG" dist/* --verify-tag --generate-notes \
+            --title "Selfishell $TAG" "${release_args[@]}"
