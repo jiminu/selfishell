@@ -40,3 +40,11 @@ assert_symlink_to() {
   [[ "$(readlink "$link")" == "$expected" ]] ||
     fail "Expected '$link' to point to '$expected'"
 }
+
+fixture_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}

@@ -157,6 +157,18 @@ Private shell configuration can be placed in
 `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
 file but does not overwrite, track, or remove it.
 
+## Documentation
+
+- [Installation](docs/INSTALLATION.md)
+- [Profiles](docs/PROFILES.md)
+- [Updates and rollback](docs/UPDATES.md)
+- [Company deployment](docs/COMPANY.md)
+- [Security model](docs/SECURITY.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Release process](docs/RELEASING.md)
+- [Public beta verification](docs/BETA.md)
+- [Vulnerability reporting](SECURITY.md)
+
 ## Supported Environments
 
 The current bootstrap officially supports:

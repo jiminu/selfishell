@@ -6,11 +6,10 @@ are added later.
 
 ## Build Artifacts
 
-Run the full verification suite, then build an exact version:
+Run the release-candidate check with an exact semantic version:
 
 ```bash
-bash scripts/check.sh
-bash scripts/build-release.sh --version 1.0.0 --output dist
+bash scripts/release-check.sh 1.0.0
 ```
 
 The output must contain:
@@ -24,18 +23,23 @@ selfishell-1.0.0-macos-amd64.tar.gz
 selfishell-1.0.0-macos-arm64.tar.gz
 ```
 
-## Publish
+## Automated Publish
 
-1. Confirm `VERSION` in the source tree matches the intended release.
-2. Create a `v<version>` Git tag from a fully tested commit.
-3. Create a GitHub Release for that tag.
-4. Upload every generated archive, `SHA256SUMS`, and `VERSION` as release assets.
-5. Verify the release with an exact-version install into a temporary prefix.
-6. Verify the GitHub `releases/latest/download/VERSION` URL resolves to the new
-   stable version.
+The `v<major>.<minor>.<patch>` tag is the release version source. The release
+workflow runs the full suite, builds every archive, smoke-tests an exact install,
+and creates the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`.
+
+```bash
+git tag -a v1.0.0 -m 'Selfishell 1.0.0'
+git push origin v1.0.0
+```
+
+After the workflow completes:
+
+1. Verify all expected assets are attached to the GitHub Release.
+2. Verify `releases/latest/download/VERSION` resolves to the stable version.
+3. Run the exact-version bootstrap on the beta machines in `docs/BETA.md`.
+4. Record failures as issues and publish a new patch release after fixes.
 
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.
-
-Release publication will be automated in M6. Until then, this checklist is the
-required manual release contract.

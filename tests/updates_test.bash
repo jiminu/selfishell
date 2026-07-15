@@ -28,7 +28,7 @@ test_download_dependency_is_checksum_verified_and_recorded() {
   setup_update_home
   payload="$TEST_ROOT/tool"
   printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
-  checksum="$(sha256sum "$payload" | awk '{print $1}')"
+  checksum="$(fixture_sha256 "$payload")"
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 

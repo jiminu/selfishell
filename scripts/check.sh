@@ -36,6 +36,7 @@ bash_files=(
   lib/platforms/ubuntu.sh
   scripts/check.sh
   scripts/build-release.sh
+  scripts/release-check.sh
   tests/cli_test.bash
   tests/common_test.bash
   tests/managed_install_test.bash
@@ -48,6 +49,7 @@ bash_files=(
   tests/test_helper.bash
   tests/ubuntu_packages_test.bash
   tests/updates_test.bash
+  tests/lifecycle_e2e_test.bash
 )
 
 zsh_files=(

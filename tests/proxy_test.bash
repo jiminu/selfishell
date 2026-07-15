@@ -19,7 +19,7 @@ test_direct_installer_preserves_proxy_environment() {
   local payload checksum
   payload="$TEST_ROOT/nvm.tar"
   printf 'nvm fixture' >"$payload"
-  checksum="$(sha256sum "$payload" | awk '{print $1}')"
+  checksum="$(fixture_sha256 "$payload")"
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'download nvm 1.0 linux amd64 file://%s %s .nvm/nvm.sh raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 

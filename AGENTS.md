@@ -41,7 +41,8 @@ Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 The `selfishell` CLI, managed configuration lifecycle, declarative profiles, and
 managed apt/Homebrew/direct package installation now exist. The versioned release
 bootstrap, reproducible dependency manifest, explicit updates, rollback, and
-artifact builder also exist. Automated publication remains target architecture.
+artifact builder also exist. Tagged release publication is automated; public
+beta verification remains a manual release gate.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
 `update`, `self-update`, `rollback`, and `uninstall`. `bootstrap.sh` intentionally
@@ -179,6 +180,8 @@ then atomically switches `current` and CLI links.
 Release assets and naming are defined in `docs/RELEASING.md`. A requested version
 must use only its `releases/download/v<version>` path and must never fall back to
 latest. The bootstrap installs the CLI only unless `--setup` is explicit.
+Semantic version tags are the release version source. Do not replace assets on an
+existing GitHub Release.
 
 ## Verification Expectations
 
@@ -211,7 +214,7 @@ Tests should cover at least:
   the direct dependency manifest, so their exact transitive versions are not
   reproducible across repository snapshots.
 - Release archives are checksum-verified but are not yet cryptographically
-  signed. Release automation and signing policy belong in M6.
+  signed. Do not describe checksums as publisher authentication.
 
 Address these through the milestones instead of hiding them with documentation.
 
