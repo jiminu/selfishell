@@ -129,7 +129,7 @@ Acceptance criteria:
 
 Goal: make releases routine for maintainers and understandable to new users.
 
-- [ ] Run Ubuntu and macOS CI with supported shell versions.
+- [x] Run Ubuntu and macOS CI with supported shell versions.
 - [x] Automate tagged GitHub Release archives and checksums.
 - [x] Add end-to-end tests for clean install, upgrade, rollback, and uninstall.
 - [x] Publish installation, profile, security, company, and troubleshooting docs.
