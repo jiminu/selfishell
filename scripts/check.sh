@@ -13,8 +13,13 @@ bash_files=(
   legacy/ubuntu.sh
   lib/common.sh
   lib/managed.sh
+  lib/installers.sh
+  lib/packages.sh
   lib/paths.sh
   lib/platform.sh
+  lib/profiles.sh
+  lib/package_managers/apt.sh
+  lib/package_managers/homebrew.sh
   lib/commands/doctor.sh
   lib/commands/help.sh
   lib/commands/install.sh
@@ -27,7 +32,10 @@ bash_files=(
   tests/cli_test.bash
   tests/common_test.bash
   tests/managed_install_test.bash
+  tests/package_adapters_test.bash
   tests/platform_test.bash
+  tests/profiles_test.bash
+  tests/proxy_test.bash
   tests/run.bash
   tests/test_helper.bash
   tests/ubuntu_packages_test.bash

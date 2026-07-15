@@ -172,3 +172,13 @@ fi
 if command -v starship >/dev/null 2>&1; then
   eval "$(starship init zsh)"
 fi
+
+
+# --------------------------------------------------
+# Local extension
+# Kept outside managed resource state for private/company configuration
+# --------------------------------------------------
+
+SELFISHELL_LOCAL_ZSH="${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh"
+[[ -r "$SELFISHELL_LOCAL_ZSH" ]] && source "$SELFISHELL_LOCAL_ZSH"
+unset SELFISHELL_LOCAL_ZSH

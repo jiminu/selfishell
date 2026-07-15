@@ -3,9 +3,13 @@
 print_install_help() {
   cat <<'EOF'
 Usage:
-  selfishell install [--dry-run] [--yes]
+  selfishell install [--profile NAME] [--local-profile FILE]
+                      [--skip-packages] [--dry-run] [--yes]
 
 Options:
+  --profile NAME       Select minimal, developer, kubernetes, or full
+  --local-profile FILE Add private platform package records
+  --skip-packages      Install configuration without package operations
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -15,6 +19,7 @@ EOF
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
+  local profile="$3"
   local zsh_source
 
   case "$platform" in
@@ -34,7 +39,7 @@ install_managed_configuration() {
   managed_install_file starship-config "$SELFISHELL_ROOT/common/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
   managed_install_file vim-config "$SELFISHELL_ROOT/common/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
 
-  if [[ "$platform" == "macos" ]]; then
+  if [[ "$platform" == "macos" && "$profile" == "full" ]]; then
     managed_install_file ghostty-config "$SELFISHELL_ROOT/mac/config.ghostty" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
   fi
 
@@ -42,7 +47,7 @@ install_managed_configuration() {
   managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
   managed_install_link user-vim "$HOME/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
 
-  if [[ "$platform" == "macos" ]]; then
+  if [[ "$platform" == "macos" && "$profile" == "full" ]]; then
     managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
   fi
 }
@@ -50,12 +55,32 @@ install_managed_configuration() {
 command_install() {
   local assume_yes=0
   local dry_run=0
+  local profile=developer
+  local local_profile="${SELFISHELL_LOCAL_PROFILE:-}"
+  local skip_packages=0
   local platform
 
   while (("$#" > 0)); do
     case "$1" in
       --dry-run) dry_run=1 ;;
       --yes) assume_yes=1 ;;
+      --skip-packages) skip_packages=1 ;;
+      --profile)
+        shift
+        if (("$#" == 0)); then
+          cli_error "--profile requires a value"
+          return "$SELFISHELL_EXIT_USAGE"
+        fi
+        profile="$1"
+        ;;
+      --local-profile)
+        shift
+        if (("$#" == 0)); then
+          cli_error "--local-profile requires a file"
+          return "$SELFISHELL_EXIT_USAGE"
+        fi
+        local_profile="$1"
+        ;;
       help | --help | -h)
         print_install_help
         return
@@ -76,7 +101,29 @@ command_install() {
 
   confirm_action "Install Selfishell configuration?" "$assume_yes" "$dry_run" || return
   selfishell_initialize_paths
-  install_managed_configuration "$platform" "$dry_run"
+  profile_load "$profile" "$local_profile"
+
+  if [[ "${SELFISHELL_OFFLINE:-0}" == "1" ]]; then
+    skip_packages=1
+  fi
+
+  if [[ "$skip_packages" == "1" ]]; then
+    printf 'Skipping package installation.\n'
+  else
+    packages_install_profile "$platform" "$dry_run"
+  fi
+
+  install_managed_configuration "$platform" "$dry_run" "$profile"
+
+  if [[ "$dry_run" == "0" ]]; then
+    local profile_state
+    local temporary_profile_state
+    mkdir -p "$SELFISHELL_STATE_DIR"
+    profile_state="$SELFISHELL_STATE_DIR/profile"
+    temporary_profile_state="$(mktemp "${profile_state}.tmp.XXXXXX")"
+    printf '%s\n' "$profile" >"$temporary_profile_state"
+    mv "$temporary_profile_state" "$profile_state"
+  fi
 
   if [[ "$dry_run" == "1" ]]; then
     printf 'Dry run complete; no files were changed.\n'

@@ -34,7 +34,7 @@ test_install_copies_configuration_and_tracks_resources() {
   local state_count
 
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
@@ -53,11 +53,23 @@ test_install_copies_configuration_and_tracks_resources() {
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --profile full --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config"
   cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config" ||
     fail "Ghostty configuration was not copied"
+}
+
+test_local_zsh_extension_is_preserved() {
+  local output
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  printf 'export SELFISHELL_COMPANY_TEST=loaded\n' >"$XDG_CONFIG_HOME/selfishell/local.zsh"
+  run_selfishell install --skip-packages --yes >/dev/null
+
+  output="$(HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" zsh -dfc 'source "$HOME/.zshrc" >/dev/null 2>&1; print "$SELFISHELL_COMPANY_TEST"')"
+  [[ "$output" == "loaded" ]] || fail "Local Zsh extension was not loaded"
+  assert_file_content 'export SELFISHELL_COMPANY_TEST=loaded' "$XDG_CONFIG_HOME/selfishell/local.zsh"
 }
 
 test_install_is_idempotent() {
@@ -65,9 +77,9 @@ test_install_is_idempotent() {
   local second_backup_count
 
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   first_backup_count="$(find "$HOME" -name '*.backup.*' | wc -l)"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   second_backup_count="$(find "$HOME" -name '*.backup.*' | wc -l)"
 
   [[ "$second_backup_count" -eq "$first_backup_count" ]] ||
@@ -102,7 +114,7 @@ test_noninteractive_install_requires_yes() {
 test_status_detects_modified_managed_file() {
   local status
 
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   printf 'user modification' >"$XDG_CONFIG_HOME/selfishell/zsh/common.zsh"
 
   set +e
@@ -115,7 +127,7 @@ test_status_detects_modified_managed_file() {
 
 test_uninstall_restores_original_files() {
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
 
   assert_file_content 'original zshrc' "$HOME/.zshrc"
@@ -126,7 +138,7 @@ test_uninstall_restores_original_files() {
 test_uninstall_dry_run_changes_nothing() {
   local state_count
 
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
   run_selfishell uninstall --restore --dry-run >/dev/null
 
@@ -139,7 +151,7 @@ test_uninstall_preserves_user_modifications() {
   local status
 
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   printf 'user modification' >"$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
 
   set +e
@@ -159,14 +171,14 @@ test_pending_link_state_recovers_on_reinstall() {
   local temporary_state
 
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
   temporary_state="${state_file}.test"
   awk 'NR == 3 { print "pending"; next } { print }' "$state_file" >"$temporary_state"
   mv "$temporary_state" "$state_file"
   rm "$HOME/.zshrc"
 
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
   [[ "$(sed -n '3p' "$state_file")" == "active" ]] || fail "Pending state was not completed"
 }
@@ -185,7 +197,7 @@ test_pending_file_state_recovers_before_backup() {
       "$(cksum <"$ROOT_DIR/common/common.zsh" | awk '{print $1 ":" $2}')"
   } >"$state_dir/zsh-common.state"
 
-  run_selfishell install --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   assert_file_content 'preexisting managed path' "$backup_file"
   cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
@@ -198,10 +210,10 @@ test_install_does_not_depend_on_checkout() {
   local release_root="$TEST_ROOT/release"
 
   mkdir -p "$release_root"
-  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/common" "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
   cp "$ROOT_DIR/VERSION" "$release_root/VERSION"
 
-  bash "$release_root/bin/selfishell" install --yes >/dev/null
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
   rm -rf "$release_root"
 
   [[ -r "$HOME/.zshrc" ]] || fail "Zsh configuration broke after checkout removal"

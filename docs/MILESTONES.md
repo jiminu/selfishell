@@ -67,11 +67,11 @@ Acceptance criteria:
 Goal: make Selfishell useful to different users without forcing every tool on
 everyone.
 
-- [ ] Define `minimal`, `developer`, `kubernetes`, and `full` profiles.
-- [ ] Move package lists out of command flow and into declarative profile data.
-- [ ] Implement consistent Homebrew and apt adapters.
-- [ ] Add local/private configuration injection without secrets in this repository.
-- [ ] Respect proxy variables and restricted-network environments.
+- [x] Define `minimal`, `developer`, `kubernetes`, and `full` profiles.
+- [x] Move package lists out of command flow and into declarative profile data.
+- [x] Implement consistent Homebrew and apt adapters.
+- [x] Add local/private configuration injection without secrets in this repository.
+- [x] Respect proxy variables and restricted-network environments.
 
 Proposed profile boundaries:
 

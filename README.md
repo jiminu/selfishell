@@ -31,7 +31,7 @@ The repository also includes the managed configuration CLI:
 ./bin/selfishell version
 ./bin/selfishell doctor
 ./bin/selfishell install --dry-run
-./bin/selfishell install --yes
+./bin/selfishell install --profile developer --yes
 ./bin/selfishell status
 ```
 
@@ -54,6 +54,52 @@ was backed up during installation:
 
 If a managed file or link was changed after installation, uninstall stops before
 removing anything and preserves both the changed path and its original backup.
+
+## Profiles
+
+Selfishell separates package selection from installation logic:
+
+| Profile | Included tools |
+| --- | --- |
+| `minimal` | Zsh, Git, Curl, Starship |
+| `developer` | Minimal plus FZF, Zoxide, Eza, Bat, pyenv, NVM, Vim, build tools |
+| `kubernetes` | Developer plus kubectl and context tools |
+| `full` | Kubernetes plus supported macOS desktop, font, and Java integrations |
+
+`developer` is the default. Preview another profile without changing packages or
+files:
+
+```bash
+./bin/selfishell install --profile kubernetes --dry-run
+```
+
+For restricted networks, configuration can be installed without any package or
+network operation:
+
+```bash
+SELFISHELL_OFFLINE=1 ./bin/selfishell install --yes
+# or
+./bin/selfishell install --skip-packages --yes
+```
+
+Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
+package managers and direct download commands.
+
+Private or company packages can be added without changing the repository:
+
+```text
+# company.conf
+package macos required formula company-cli
+package ubuntu required apt company-cli
+```
+
+```bash
+./bin/selfishell install --local-profile ./company.conf --yes
+```
+
+Private shell configuration can be placed in
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
+file but does not overwrite, track, or remove it.
 
 ## Supported Environments
 

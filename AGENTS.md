@@ -39,8 +39,9 @@ Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 - Configuration files are currently linked directly from the checkout.
 
 The `selfishell` CLI foundation and managed configuration lifecycle now exist.
-The release archive installer, profiles, managed tool installation, updates, and
-rollback support described below are still target architecture.
+Declarative profiles and managed apt/Homebrew/direct package installation also
+exist. The release archive installer, reproducible dependency manifest, updates,
+and rollback support described below are still target architecture.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
 and `uninstall`. `bootstrap.sh` intentionally remains a legacy full-bootstrap wrapper
@@ -149,6 +150,23 @@ Preserve these invariants when extending the lifecycle:
   separate private repository.
 - Do not claim support for a platform without automated or documented manual
   verification.
+
+## Profiles and Local Extensions
+
+Built-in profiles live in `profiles/*.conf` and contain declarative `include` and
+`package` records. Keep profile files free of executable shell code. The profile
+order is `minimal`, `developer`, `kubernetes`, then `full`; each larger profile
+includes the preceding one.
+
+Private package additions use `--local-profile FILE` or
+`SELFISHELL_LOCAL_PROFILE`. Local files may contain only package records and may
+not include another profile. Private shell customization belongs in
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`; it is sourced but never
+tracked, replaced, or deleted by managed resource state.
+
+Package adapters must inherit proxy environment variables. `--skip-packages` and
+`SELFISHELL_OFFLINE=1` must perform configuration-only installation without any
+package or network command.
 
 ## Verification Expectations
 

@@ -48,6 +48,10 @@ command_status() {
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
 
+  if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
+    printf '[INFO] Profile: %s\n' "$(<"$SELFISHELL_STATE_DIR/profile")"
+  fi
+
   for resource in \
     zshrc-config zsh-common aliases-common aliases-git aliases-kubectl \
     starship-config vim-config ghostty-config \
