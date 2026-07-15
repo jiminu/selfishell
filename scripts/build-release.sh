@@ -43,6 +43,7 @@ cp -R \
   "$ROOT_DIR/mac" \
   "$ROOT_DIR/ubuntu" \
   "$payload_dir/"
+cp "$ROOT_DIR/dependencies.conf" "$payload_dir/"
 printf '%s\n' "$version" >"$payload_dir/VERSION"
 
 for platform in linux macos; do

@@ -77,6 +77,20 @@ The repository also includes the managed configuration CLI:
 ./bin/selfishell status
 ```
 
+Update approved direct tools and managed configuration separately from the CLI:
+
+```bash
+selfishell status --check-updates
+selfishell update --yes
+selfishell self-update --yes
+selfishell rollback --yes
+```
+
+Direct downloads are pinned and checksum-verified from `dependencies.conf`.
+Git-based plugins are checked out at an approved tag or commit. Selfishell never
+performs network updates during interactive shell startup. See
+[`docs/UPDATES.md`](docs/UPDATES.md) for the update and recovery contract.
+
 `./bin/sfs` is an optional shorthand for the same CLI. The existing `bootstrap.sh`
 entrypoint remains a compatibility wrapper for the current full package
 bootstrap while profiles and managed package installation are developed.
@@ -148,11 +162,11 @@ file but does not overwrite, track, or remove it.
 The current bootstrap officially supports:
 
 - macOS on Apple Silicon or Intel, using Homebrew
+- Native Ubuntu on AMD64 or ARM64
 - Ubuntu running on WSL
 
-Native Ubuntu and other Linux distributions are not supported by the current
-entrypoint yet. Broader platform support is planned as part of the Selfishell CLI
-roadmap.
+Native Ubuntu, Ubuntu on WSL, and macOS are supported by the managed CLI. Other
+Linux distributions are not currently supported.
 
 ## Before You Run It
 

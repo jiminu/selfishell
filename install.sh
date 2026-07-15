@@ -99,7 +99,10 @@ bootstrap_atomic_link() {
   done
 
   ln -s "$link_target" "$temporary_link"
-  mv -f "$temporary_link" "$link_path"
+  if mv -fT "$temporary_link" "$link_path" 2>/dev/null; then
+    return
+  fi
+  mv -fh "$temporary_link" "$link_path"
 }
 
 bootstrap_validate_link_path() {

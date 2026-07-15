@@ -110,13 +110,13 @@ Acceptance criteria:
 
 Goal: make updates deliberate, observable, and recoverable.
 
-- [ ] Add a single version manifest for directly managed dependencies.
-- [ ] Pin and checksum direct release downloads.
-- [ ] Pin Git-based plugins by tag or commit where reproducibility requires it.
-- [ ] Implement `selfishell update` for managed tools and configuration.
-- [ ] Implement `selfishell self-update` for the CLI release.
-- [ ] Retain prior releases and implement `selfishell rollback`.
-- [ ] Prevent automatic network updates during interactive shell startup.
+- [x] Add a single version manifest for directly managed dependencies.
+- [x] Pin and checksum direct release downloads.
+- [x] Pin Git-based plugins by tag or commit where reproducibility requires it.
+- [x] Implement `selfishell update` for managed tools and configuration.
+- [x] Implement `selfishell self-update` for the CLI release.
+- [x] Retain prior releases and implement `selfishell rollback`.
+- [x] Prevent automatic network updates during interactive shell startup.
 
 Acceptance criteria:
 

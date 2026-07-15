@@ -40,13 +40,13 @@ Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 
 The `selfishell` CLI, managed configuration lifecycle, declarative profiles, and
 managed apt/Homebrew/direct package installation now exist. The versioned release
-bootstrap and artifact builder also exist. The reproducible dependency manifest,
-updates, rollback, and automated publication described below are still target
-architecture.
+bootstrap, reproducible dependency manifest, explicit updates, rollback, and
+artifact builder also exist. Automated publication remains target architecture.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-and `uninstall`. `bootstrap.sh` intentionally remains a legacy full-bootstrap wrapper
-while the managed package/profile layer is developed.
+`update`, `self-update`, `rollback`, and `uninstall`. `bootstrap.sh` intentionally
+remains a legacy full-bootstrap wrapper while the managed package/profile layer
+is developed.
 
 ## Product Decisions
 
@@ -204,14 +204,14 @@ Tests should cover at least:
 
 ## Known Risks in the Current Implementation
 
-- Direct `curl | sh`/command substitution and unpinned Git clones weaken supply
-  chain security and reproducibility.
-- Backup names use second-level timestamps and can collide, overwriting an older
-  backup.
-- Configuration symlinks point into the checkout and break when it is moved.
-- Unavailable apt packages may be skipped while the script still reports setup
-  completion.
-- There is no automated test suite or CI yet.
+- Homebrew bootstrap still executes Homebrew's upstream installer when Homebrew
+  is absent; company deployments should provision Homebrew separately when this
+  trust model is not acceptable.
+- Apt and Homebrew packages follow their package-manager repositories rather than
+  the direct dependency manifest, so their exact transitive versions are not
+  reproducible across repository snapshots.
+- Release archives are checksum-verified but are not yet cryptographically
+  signed. Release automation and signing policy belong in M6.
 
 Address these through the milestones instead of hiding them with documentation.
 

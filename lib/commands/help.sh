@@ -13,6 +13,9 @@ Commands:
   install    Install managed shell configuration
   status     Show managed configuration status
   uninstall  Remove managed configuration
+  update     Update approved tools and managed configuration
+  self-update Update the Selfishell CLI release
+  rollback   Switch back to a retained CLI release
   doctor     Diagnose platform and required dependencies
   version    Print the Selfishell version
   help       Show this help

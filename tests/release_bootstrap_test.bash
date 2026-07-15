@@ -8,6 +8,7 @@ source "$ROOT_DIR/tests/test_helper.bash"
 
 setup_release_home() {
   local version
+  local next_version=0.2.0
 
   setup_test_home
   version="$(<"$ROOT_DIR/VERSION")"
@@ -23,10 +24,14 @@ setup_release_home() {
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux version 6.8.0\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
 
-  mkdir -p "$TEST_ROOT/artifacts" "$TEST_ROOT/releases/download/v$version" "$TEST_ROOT/releases/latest/download"
+  mkdir -p "$TEST_ROOT/artifacts" "$TEST_ROOT/next-artifacts" \
+    "$TEST_ROOT/releases/download/v$version" "$TEST_ROOT/releases/download/v$next_version" \
+    "$TEST_ROOT/releases/latest/download"
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$TEST_ROOT/artifacts" >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" --output "$TEST_ROOT/next-artifacts" >/dev/null
   cp "$TEST_ROOT/artifacts"/* "$TEST_ROOT/releases/download/v$version/"
-  cp "$TEST_ROOT/artifacts/VERSION" "$TEST_ROOT/releases/latest/download/VERSION"
+  cp "$TEST_ROOT/next-artifacts"/* "$TEST_ROOT/releases/download/v$next_version/"
+  cp "$TEST_ROOT/next-artifacts/VERSION" "$TEST_ROOT/releases/latest/download/VERSION"
 }
 
 teardown_release_home() {
@@ -69,12 +74,24 @@ test_installs_exact_version_and_cli_links() {
 }
 
 test_latest_uses_published_version_file() {
+  run_bootstrap >/dev/null
+  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.0 ]] ||
+    fail "Latest installation selected the wrong version"
+}
+
+test_self_update_and_offline_rollback() {
   local version
   version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
 
-  run_bootstrap >/dev/null
-  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == "$version" ]] ||
-    fail "Latest installation selected the wrong version"
+  "$TEST_ROOT/prefix/bin/selfishell" self-update --version 0.2.0 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+
+  SELFISHELL_RELEASE_ROOT='file:///unavailable' \
+    "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/previous"
 }
 
 test_checksum_mismatch_preserves_active_release() {

@@ -19,6 +19,8 @@ bash_files=(
   lib/paths.sh
   lib/platform.sh
   lib/profiles.sh
+  lib/dependencies.sh
+  lib/releases.sh
   lib/package_managers/apt.sh
   lib/package_managers/homebrew.sh
   lib/commands/doctor.sh
@@ -27,6 +29,9 @@ bash_files=(
   lib/commands/status.sh
   lib/commands/uninstall.sh
   lib/commands/version.sh
+  lib/commands/update.sh
+  lib/commands/self-update.sh
+  lib/commands/rollback.sh
   lib/platforms/macos.sh
   lib/platforms/ubuntu.sh
   scripts/check.sh
@@ -42,6 +47,7 @@ bash_files=(
   tests/run.bash
   tests/test_helper.bash
   tests/ubuntu_packages_test.bash
+  tests/updates_test.bash
 )
 
 zsh_files=(

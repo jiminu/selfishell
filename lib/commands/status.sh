@@ -40,10 +40,52 @@ status_resource() {
 }
 
 command_status() {
+  local check_updates=0
+  local current_version="unknown"
+  local available_version="not checked"
+  local dependency_platform architecture
+  local type name version entry_platform entry_architecture _
+  local installed key=""
   local resource
 
-  require_no_arguments status "$@" || return
+  while (("$#" > 0)); do
+    case "$1" in
+      --check-updates) check_updates=1 ;;
+      help | --help | -h)
+        printf 'Usage: selfishell status [--check-updates]\n'
+        return
+        ;;
+      *)
+        cli_error "Unknown status option: $1"
+        return "$SELFISHELL_EXIT_USAGE"
+        ;;
+    esac
+    shift
+  done
   selfishell_initialize_paths
+
+  [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
+  if [[ "$check_updates" == 1 ]]; then
+    available_version="$(curl -fsSL "$(release_root_url)/latest/download/VERSION")" || {
+      cli_error "Unable to check the available CLI version."
+      available_version="unavailable"
+    }
+    available_version="${available_version#v}"
+  fi
+  printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
+
+  case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
+  architecture="$(detect_architecture)"
+  while read -r type name version entry_platform entry_architecture _; do
+    [[ -n "$type" && "${type#\#}" == "$type" ]] || continue
+    [[ "$entry_platform" == all || "$entry_platform" == "$dependency_platform" ]] || continue
+    [[ "$entry_architecture" == all || "$entry_architecture" == "$architecture" ]] || continue
+    [[ "$key" != *"|$name|"* ]] || continue
+    key="${key}|${name}|"
+    installed="$(dependency_installed_version "$name")"
+    [[ -n "$installed" ]] || installed="not managed"
+    printf '[TOOL] %s | Current: %s | Approved: %s\n' "$name" "$installed" "$version"
+  done <"$(dependencies_manifest_path)"
 
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
