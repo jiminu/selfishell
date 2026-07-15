@@ -50,7 +50,6 @@ test_required_package_unavailable_fails() {
 
   if apt_install_required_packages available missing; then
     fail "Missing required package must fail"
-    return
   fi
 
   [[ "$MOCK_INSTALLED_PACKAGES" == "available" ]] ||

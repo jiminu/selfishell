@@ -23,18 +23,36 @@ bash ./main.sh
 
 `main.sh` detects the current environment and runs the appropriate setup for macOS or Ubuntu on WSL.
 
-The repository also includes the CLI foundation used by the upcoming managed
-installer:
+The repository also includes the managed configuration CLI:
 
 ```bash
 ./bin/selfishell help
 ./bin/selfishell version
 ./bin/selfishell doctor
+./bin/selfishell install --dry-run
+./bin/selfishell install --yes
+./bin/selfishell status
 ```
 
 `./bin/sfs` is an optional shorthand for the same CLI. The existing `main.sh`
-entrypoint remains a compatibility wrapper for the current bootstrap while the
-managed installation commands are developed.
+entrypoint remains a compatibility wrapper for the current full package
+bootstrap while profiles and managed package installation are developed.
+
+The CLI copies configuration into `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell` and
+links the active user's Zsh, Starship, Vim, and platform-specific configuration
+to those managed copies. It stores recovery metadata under
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`, so the source checkout can be
+moved or deleted after managed installation.
+
+Use the following command to remove managed files and restore configuration that
+was backed up during installation:
+
+```bash
+./bin/selfishell uninstall --restore --yes
+```
+
+If a managed file or link was changed after installation, uninstall stops before
+removing anything and preserves both the changed path and its original backup.
 
 ## Supported Environments
 
@@ -59,9 +77,10 @@ it may:
 - replace those paths with symbolic links into this repository checkout;
 - download and execute third-party installers and clone plugin repositories.
 
-Keep the checkout in a stable location after setup. Moving or deleting it will
-break configuration links created by the current installer. A future managed
-installation will remove this limitation.
+Keep the checkout in a stable location after running the legacy `main.sh`
+bootstrap because its links still point into the checkout. Configuration created
+with `selfishell install` is copied to the managed XDG directory and does not have
+this limitation.
 
 On Ubuntu WSL, missing required packages stop setup with a nonzero exit status.
 Unavailable optional convenience tools such as FZF, Zoxide, Eza, or Bat are

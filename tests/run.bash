@@ -6,5 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 bash "$ROOT_DIR/tests/cli_test.bash"
 bash "$ROOT_DIR/tests/common_test.bash"
+bash "$ROOT_DIR/tests/managed_install_test.bash"
 bash "$ROOT_DIR/tests/platform_test.bash"
 bash "$ROOT_DIR/tests/ubuntu_packages_test.bash"

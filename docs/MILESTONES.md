@@ -48,12 +48,12 @@ Acceptance criteria:
 
 Goal: stop depending on the source checkout and make user changes reversible.
 
-- [ ] Install configuration into XDG-compatible managed directories.
-- [ ] Track every created, replaced, and backed-up path in state metadata.
-- [ ] Implement `selfishell install`, `status`, and `uninstall`.
-- [ ] Implement restoration without overwriting files modified after installation.
-- [ ] Make every operation idempotent and safe after interruption.
-- [ ] Provide `--dry-run`, `--yes`, and non-interactive behavior.
+- [x] Install configuration into XDG-compatible managed directories.
+- [x] Track every created, replaced, and backed-up path in state metadata.
+- [x] Implement `selfishell install`, `status`, and `uninstall`.
+- [x] Implement restoration without overwriting files modified after installation.
+- [x] Make every operation idempotent and safe after interruption.
+- [x] Provide `--dry-run`, `--yes`, and non-interactive behavior.
 
 Acceptance criteria:
 

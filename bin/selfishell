@@ -16,11 +16,15 @@ export SELFISHELL_ROOT
 unset SELFISHELL_SOURCE SELFISHELL_SOURCE_DIR
 
 source "$SELFISHELL_ROOT/lib/common.sh"
+source "$SELFISHELL_ROOT/lib/paths.sh"
 source "$SELFISHELL_ROOT/lib/platform.sh"
+source "$SELFISHELL_ROOT/lib/managed.sh"
 source "$SELFISHELL_ROOT/lib/commands/help.sh"
 source "$SELFISHELL_ROOT/lib/commands/version.sh"
 source "$SELFISHELL_ROOT/lib/commands/doctor.sh"
 source "$SELFISHELL_ROOT/lib/commands/install.sh"
+source "$SELFISHELL_ROOT/lib/commands/status.sh"
+source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
 
 main() {
   local command="${1:-help}"
@@ -41,6 +45,15 @@ main() {
       ;;
     install)
       command_install "$@"
+      ;;
+    status)
+      command_status "$@"
+      ;;
+    uninstall)
+      command_uninstall "$@"
+      ;;
+    legacy-install)
+      command_legacy_install "$@"
       ;;
     *)
       cli_error "Unknown command: $command"

@@ -18,7 +18,7 @@ teardown_test_home() {
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
-  return 1
+  exit 1
 }
 
 assert_file_content() {

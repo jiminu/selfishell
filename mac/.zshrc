@@ -68,7 +68,10 @@ fi
 # Common settings
 # --------------------------------------------------
 
-COMMON_ZSH="$HOME/.config/zsh/common.zsh"
+COMMON_ZSH="${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/common.zsh"
+if [[ ! -r "$COMMON_ZSH" ]]; then
+  COMMON_ZSH="$HOME/.config/zsh/common.zsh"
+fi
 
 if [[ -r "$COMMON_ZSH" ]]; then
   source "$COMMON_ZSH"

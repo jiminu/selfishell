@@ -10,7 +10,9 @@ Usage:
   selfishell <command>
 
 Commands:
-  install    Run the current platform bootstrap
+  install    Install managed shell configuration
+  status     Show managed configuration status
+  uninstall  Remove managed configuration
   doctor     Diagnose platform and required dependencies
   version    Print the Selfishell version
   help       Show this help

@@ -12,16 +12,21 @@ bash_files=(
   ubuntu/ubuntu.sh
   common/common.sh
   lib/common.sh
+  lib/managed.sh
+  lib/paths.sh
   lib/platform.sh
   lib/commands/doctor.sh
   lib/commands/help.sh
   lib/commands/install.sh
+  lib/commands/status.sh
+  lib/commands/uninstall.sh
   lib/commands/version.sh
   lib/platforms/macos.sh
   lib/platforms/ubuntu.sh
   scripts/check.sh
   tests/cli_test.bash
   tests/common_test.bash
+  tests/managed_install_test.bash
   tests/platform_test.bash
   tests/run.bash
   tests/test_helper.bash

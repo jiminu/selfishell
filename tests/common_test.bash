@@ -19,7 +19,6 @@ test_backup_preserves_same_second_files() {
   backups=("$HOME"/config.backup.*)
   if [[ "${#backups[@]}" -ne 2 ]]; then
     fail "Expected two distinct backups"
-    return
   fi
   assert_file_content first "${backups[0]}"
   assert_file_content second "${backups[1]}"

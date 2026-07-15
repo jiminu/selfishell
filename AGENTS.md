@@ -38,8 +38,13 @@ Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 - `common/common.zsh` contains shared interactive shell initialization.
 - Configuration files are currently linked directly from the checkout.
 
-The `selfishell` CLI, release archive installer, profiles, rollback support, and
-CI described below are target architecture. They do not exist yet.
+The `selfishell` CLI foundation and managed configuration lifecycle now exist.
+The release archive installer, profiles, managed tool installation, updates, and
+rollback support described below are still target architecture.
+
+Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
+and `uninstall`. `main.sh` intentionally remains a legacy full-bootstrap wrapper
+while the managed package/profile layer is developed.
 
 ## Product Decisions
 
@@ -100,6 +105,26 @@ Keep command names and responsibilities narrow:
 primary form.
 
 Do not implement an implicit update during ordinary shell startup.
+
+## Managed Resource State
+
+Managed configuration is copied under `~/.config/selfishell`; user-facing paths
+link to those copies, never to a source checkout. Each managed file and link has
+an individual versioned state record under
+`~/.local/state/selfishell/resources`. State is written through a temporary file
+and atomic rename.
+
+Preserve these invariants when extending the lifecycle:
+
+- Write pending state before moving user data or creating a managed path.
+- Retain the original backup path across idempotent reinstalls.
+- Record and verify checksums for managed regular files.
+- Treat a replaced link, changed file, or changed path type as user data.
+- Preflight every uninstall resource before removing any of them.
+- Never restore a backup over an occupied target.
+- Dry-run must not create XDG directories, state files, backups, or links.
+- The fixed-line state format is internal. Increment its version before changing
+  field order or meaning.
 
 ## Engineering Rules
 

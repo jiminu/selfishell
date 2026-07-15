@@ -24,3 +24,29 @@ require_no_arguments() {
     return "$SELFISHELL_EXIT_USAGE"
   fi
 }
+
+confirm_action() {
+  local prompt="$1"
+  local assume_yes="$2"
+  local dry_run="$3"
+  local answer
+
+  if [[ "$dry_run" == "1" || "$assume_yes" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    cli_error "Confirmation requires an interactive terminal; use --yes."
+    return "$SELFISHELL_EXIT_USAGE"
+  fi
+
+  printf '%s [y/N] ' "$prompt"
+  IFS= read -r answer
+  case "$answer" in
+    y | Y | yes | YES) return 0 ;;
+    *)
+      printf 'Cancelled.\n'
+      return "$SELFISHELL_EXIT_ERROR"
+      ;;
+  esac
+}
