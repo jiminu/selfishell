@@ -18,7 +18,7 @@ coverage. Package-manager prompts and terminal ergonomics remain manual checks.
 - [x] Direct downloads and package installation are skipped in lifecycle E2E;
       their adapters, checksums, and failure behavior are covered separately.
 
-Reference run: [Ubuntu and macOS CI](https://github.com/jiminu/selfishell/actions/runs/29426244329).
+Reference run: [Ubuntu and macOS native lifecycle CI](https://github.com/jiminu/selfishell/actions/runs/29426591218).
 
 ## Pre-release Gate
 
