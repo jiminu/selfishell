@@ -17,7 +17,8 @@ fi
 # Register paths before plugins look for commands such as kubectl
 # --------------------------------------------------
 
-export PATH="$HOME/.rd/bin:$PATH"
+typeset -U path PATH
+path=("$HOME/.rd/bin" $path)
 
 
 # --------------------------------------------------
@@ -55,7 +56,7 @@ if (( $+commands[brew] )); then
 
     if [[ -d "$JAVA_HOME_17" ]]; then
       export JAVA_HOME="$JAVA_HOME_17"
-      export PATH="$JAVA_HOME/bin:$PATH"
+      path=("$JAVA_HOME/bin" $path)
     fi
   fi
 
