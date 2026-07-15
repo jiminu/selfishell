@@ -9,6 +9,9 @@ ZSH_SOURCE="${ZSH_SOURCE:-$SHELL_DIR/.zshrc}"
 
 source "$ROOT_DIR/common/common.sh"
 
+APT_INDEX_UPDATED=0
+APT_SKIPPED_OPTIONAL_PACKAGES=()
+
 is_ubuntu_wsl() (
   grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null || return 1
   [[ -r /etc/os-release ]] || return 1
@@ -17,14 +20,24 @@ is_ubuntu_wsl() (
 )
 
 apt_install_packages() {
+  local package_kind="$1"
+  shift
+
+  if [[ "$package_kind" != "required" && "$package_kind" != "optional" ]]; then
+    warn "Unknown package kind: $package_kind"
+    return 2
+  fi
+
   if ! have apt-get; then
-    warn "Skipping because apt-get was not found"
+    warn "Cannot install $package_kind packages because apt-get was not found"
+    [[ "$package_kind" == "optional" ]]
     return
   fi
 
   local package
   local missing_packages=()
   local install_packages=()
+  local unavailable_packages=()
 
   for package in "$@"; do
     if dpkg -s "$package" >/dev/null 2>&1; then
@@ -35,27 +48,57 @@ apt_install_packages() {
     missing_packages+=("$package")
   done
 
-  if (( ${#missing_packages[@]} == 0 )); then
+  if ((${#missing_packages[@]} == 0)); then
     return
   fi
 
-  log "Updating apt package index"
-  sudo apt-get update
+  if ((APT_INDEX_UPDATED == 0)); then
+    log "Updating apt package index"
+    sudo apt-get update
+    APT_INDEX_UPDATED=1
+  fi
 
   for package in "${missing_packages[@]}"; do
     if apt-cache show "$package" >/dev/null 2>&1; then
       install_packages+=("$package")
     else
-      warn "Skipping unavailable apt package: $package"
+      unavailable_packages+=("$package")
     fi
   done
 
-  if (( ${#install_packages[@]} == 0 )); then
-    return
+  if ((${#install_packages[@]} > 0)); then
+    log "Installing $package_kind apt packages"
+    if ! sudo apt-get install -y "${install_packages[@]}"; then
+      warn "Could not install $package_kind apt packages: ${install_packages[*]}"
+      if [[ "$package_kind" == "required" ]]; then
+        return 1
+      fi
+      APT_SKIPPED_OPTIONAL_PACKAGES+=("${install_packages[@]}")
+    fi
   fi
 
-  log "Installing apt packages"
-  sudo apt-get install -y "${install_packages[@]}"
+  if ((${#unavailable_packages[@]} > 0)); then
+    warn "Unavailable $package_kind apt packages: ${unavailable_packages[*]}"
+    if [[ "$package_kind" == "optional" ]]; then
+      APT_SKIPPED_OPTIONAL_PACKAGES+=("${unavailable_packages[@]}")
+    fi
+    [[ "$package_kind" == "optional" ]]
+    return
+  fi
+}
+
+apt_install_required_packages() {
+  apt_install_packages required "$@"
+}
+
+apt_install_optional_packages() {
+  apt_install_packages optional "$@"
+}
+
+print_apt_package_summary() {
+  if ((${#APT_SKIPPED_OPTIONAL_PACKAGES[@]} > 0)); then
+    warn "Setup completed without optional packages: ${APT_SKIPPED_OPTIONAL_PACKAGES[*]}"
+  fi
 }
 
 install_starship() {
@@ -137,7 +180,7 @@ main() {
     exit 1
   fi
 
-  apt_install_packages \
+  apt_install_required_packages \
     zsh \
     git \
     curl \
@@ -156,11 +199,13 @@ main() {
     libxmlsec1-dev \
     libffi-dev \
     liblzma-dev \
+    vim
+
+  apt_install_optional_packages \
     fzf \
     zoxide \
     eza \
-    bat \
-    vim
+    bat
 
   install_starship
   install_nvm
@@ -171,9 +216,12 @@ main() {
   install_shell_configs
   set_default_shell
   install_vim_plugins
+  print_apt_package_summary
 
   log "Setup complete"
   warn "Open a new terminal, or run 'source ~/.zshrc' if needed."
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

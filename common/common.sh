@@ -21,7 +21,16 @@ backup_path() {
     return
   fi
 
-  local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
+  local backup_base
+  backup_base="${target}.backup.$(date +%Y%m%d%H%M%S)"
+  local backup="$backup_base"
+  local suffix=0
+
+  while [[ -e "$backup" || -L "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="${backup_base}.${suffix}"
+  done
+
   warn "Backing up existing file: $target -> $backup"
   mv "$target" "$backup"
 }
@@ -75,7 +84,7 @@ install_kubectl_completion() {
   local temporary_file="${completion_file}.tmp"
 
   mkdir -p "$completion_dir"
-  if kubectl completion zsh > "$temporary_file"; then
+  if kubectl completion zsh >"$temporary_file"; then
     mv "$temporary_file" "$completion_file"
     warn "Generated kubectl completion: $completion_file"
   else

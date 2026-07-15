@@ -23,6 +23,37 @@ bash ./main.sh
 
 `main.sh` detects the current environment and runs the appropriate setup for macOS or Ubuntu on WSL.
 
+## Supported Environments
+
+The current bootstrap officially supports:
+
+- macOS on Apple Silicon or Intel, using Homebrew
+- Ubuntu running on WSL
+
+Native Ubuntu and other Linux distributions are not supported by the current
+entrypoint yet. Broader platform support is planned as part of the Selfishell CLI
+roadmap.
+
+## Before You Run It
+
+The bootstrap changes the current user's development environment. In particular,
+it may:
+
+- install system packages and request administrator privileges;
+- change the default login shell to Zsh on Ubuntu WSL;
+- move existing `.zshrc`, `.vimrc`, Starship, and Ghostty configuration files to
+  timestamped backups;
+- replace those paths with symbolic links into this repository checkout;
+- download and execute third-party installers and clone plugin repositories.
+
+Keep the checkout in a stable location after setup. Moving or deleting it will
+break configuration links created by the current installer. A future managed
+installation will remove this limitation.
+
+On Ubuntu WSL, missing required packages stop setup with a nonzero exit status.
+Unavailable optional convenience tools such as FZF, Zoxide, Eza, or Bat are
+reported at the end without failing the rest of setup.
+
 ## What It Installs
 
 ### macOS
