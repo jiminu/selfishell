@@ -37,19 +37,23 @@ packages_install_profile() {
     esac
   done
 
-  apt_install_managed_packages required "$dry_run" "${required_apt[@]}"
-  apt_install_managed_packages optional "$dry_run" "${optional_apt[@]}"
-  homebrew_install_packages required formula "$dry_run" "${required_formula[@]}"
-  homebrew_install_packages optional formula "$dry_run" "${optional_formula[@]}"
-  homebrew_install_packages required cask "$dry_run" "${required_cask[@]}"
-  homebrew_install_packages optional cask "$dry_run" "${optional_cask[@]}"
+  ((${#required_apt[@]} == 0)) || apt_install_managed_packages required "$dry_run" "${required_apt[@]}"
+  ((${#optional_apt[@]} == 0)) || apt_install_managed_packages optional "$dry_run" "${optional_apt[@]}"
+  ((${#required_formula[@]} == 0)) || homebrew_install_packages required formula "$dry_run" "${required_formula[@]}"
+  ((${#optional_formula[@]} == 0)) || homebrew_install_packages optional formula "$dry_run" "${optional_formula[@]}"
+  ((${#required_cask[@]} == 0)) || homebrew_install_packages required cask "$dry_run" "${required_cask[@]}"
+  ((${#optional_cask[@]} == 0)) || homebrew_install_packages optional cask "$dry_run" "${optional_cask[@]}"
 
-  for index in "${required_direct[@]}"; do
-    install_direct_package required "$index" "$dry_run"
-  done
-  for index in "${optional_direct[@]}"; do
-    install_direct_package optional "$index" "$dry_run"
-  done
+  if ((${#required_direct[@]} > 0)); then
+    for index in "${required_direct[@]}"; do
+      install_direct_package required "$index" "$dry_run"
+    done
+  fi
+  if ((${#optional_direct[@]} > 0)); then
+    for index in "${optional_direct[@]}"; do
+      install_direct_package optional "$index" "$dry_run"
+    done
+  fi
 
   if ((${#SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[@]} > 0)); then
     cli_error "Skipped optional packages: ${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}"
