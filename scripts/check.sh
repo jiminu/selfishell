@@ -6,12 +6,23 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 bash_files=(
+  bin/selfishell
   main.sh
   mac/mac.sh
   ubuntu/ubuntu.sh
   common/common.sh
+  lib/common.sh
+  lib/platform.sh
+  lib/commands/doctor.sh
+  lib/commands/help.sh
+  lib/commands/install.sh
+  lib/commands/version.sh
+  lib/platforms/macos.sh
+  lib/platforms/ubuntu.sh
   scripts/check.sh
+  tests/cli_test.bash
   tests/common_test.bash
+  tests/platform_test.bash
   tests/run.bash
   tests/test_helper.bash
   tests/ubuntu_packages_test.bash

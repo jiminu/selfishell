@@ -29,12 +29,12 @@ Acceptance criteria:
 Goal: introduce the `selfishell` command without changing the installation model
 all at once.
 
-- [ ] Add `bin/selfishell` with help, version, doctor, and explicit exit codes.
-- [ ] Provide `sfs` as an optional convenience symlink; do not claim `sf`.
-- [ ] Split commands, shared logic, and platform adapters into separate modules.
-- [ ] Detect macOS, Ubuntu, Ubuntu on WSL, architecture, and package manager.
-- [ ] Keep the entrypoint compatible with the supported macOS shell environment.
-- [ ] Preserve `main.sh` as a temporary compatibility wrapper.
+- [x] Add `bin/selfishell` with help, version, doctor, and explicit exit codes.
+- [x] Provide `sfs` as an optional convenience symlink; do not claim `sf`.
+- [x] Split commands, shared logic, and platform adapters into separate modules.
+- [x] Detect macOS, Ubuntu, Ubuntu on WSL, architecture, and package manager.
+- [x] Keep the entrypoint compatible with the supported macOS shell environment.
+- [x] Preserve `main.sh` as a temporary compatibility wrapper.
 
 Acceptance criteria:
 

@@ -23,6 +23,19 @@ bash ./main.sh
 
 `main.sh` detects the current environment and runs the appropriate setup for macOS or Ubuntu on WSL.
 
+The repository also includes the CLI foundation used by the upcoming managed
+installer:
+
+```bash
+./bin/selfishell help
+./bin/selfishell version
+./bin/selfishell doctor
+```
+
+`./bin/sfs` is an optional shorthand for the same CLI. The existing `main.sh`
+entrypoint remains a compatibility wrapper for the current bootstrap while the
+managed installation commands are developed.
+
 ## Supported Environments
 
 The current bootstrap officially supports:

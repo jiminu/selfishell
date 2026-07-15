@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SELFISHELL_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SELFISHELL_SOURCE" ]]; do
+  SELFISHELL_SOURCE_DIR="$(cd "$(dirname "$SELFISHELL_SOURCE")" && pwd)"
+  SELFISHELL_SOURCE="$(readlink "$SELFISHELL_SOURCE")"
+  if [[ "$SELFISHELL_SOURCE" != /* ]]; then
+    SELFISHELL_SOURCE="$SELFISHELL_SOURCE_DIR/$SELFISHELL_SOURCE"
+  fi
+done
+
+SELFISHELL_ROOT="$(cd "$(dirname "$SELFISHELL_SOURCE")/.." && pwd)"
+export SELFISHELL_ROOT
+unset SELFISHELL_SOURCE SELFISHELL_SOURCE_DIR
+
+source "$SELFISHELL_ROOT/lib/common.sh"
+source "$SELFISHELL_ROOT/lib/platform.sh"
+source "$SELFISHELL_ROOT/lib/commands/help.sh"
+source "$SELFISHELL_ROOT/lib/commands/version.sh"
+source "$SELFISHELL_ROOT/lib/commands/doctor.sh"
+source "$SELFISHELL_ROOT/lib/commands/install.sh"
+
+main() {
+  local command="${1:-help}"
+
+  if (("$#" > 0)); then
+    shift
+  fi
+
+  case "$command" in
+    help | --help | -h)
+      command_help "$@"
+      ;;
+    version | --version | -v)
+      command_version "$@"
+      ;;
+    doctor)
+      command_doctor "$@"
+      ;;
+    install)
+      command_install "$@"
+      ;;
+    *)
+      cli_error "Unknown command: $command"
+      cli_error "Run 'selfishell help' to see available commands."
+      return "$SELFISHELL_EXIT_USAGE"
+      ;;
+  esac
+}
+
+main "$@"
