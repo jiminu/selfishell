@@ -115,35 +115,13 @@ unset SELFISHELL_COMPLETION_DIR
 # Aliases
 # --------------------------------------------------
 
-# Local, dependency-free replacements for the Oh My Zsh git and kubectl
-# plugins. Keeping aliases in separate files makes them easy to review.
+# Local, dependency-free aliases. Keeping aliases in separate files makes them
+# easy to review without mixing them with completion and tool initialization.
 SELFISHELL_COMMON_DIR="${${(%):-%x}:A:h}"
-source "$SELFISHELL_COMMON_DIR/git-aliases.zsh"
-source "$SELFISHELL_COMMON_DIR/kubectl-aliases.zsh"
+source "$SELFISHELL_COMMON_DIR/aliases-common.zsh"
+source "$SELFISHELL_COMMON_DIR/aliases-git.zsh"
+source "$SELFISHELL_COMMON_DIR/aliases-kubectl.zsh"
 unset SELFISHELL_COMMON_DIR
-
-if command -v kubectl >/dev/null 2>&1; then
-  alias kd='kubectl describe'
-  alias kg='kubectl get'
-fi
-
-if command -v kubectx >/dev/null 2>&1; then
-  alias kx='kubectx'
-fi
-
-if command -v kubens >/dev/null 2>&1; then
-  alias kn='kubens'
-fi
-
-if command -v bat >/dev/null 2>&1; then
-  alias cat='bat'
-elif command -v batcat >/dev/null 2>&1; then
-  alias cat='batcat'
-fi
-
-if command -v eza >/dev/null 2>&1; then
-  alias ls='eza --icons=auto'
-fi
 
 
 # --------------------------------------------------

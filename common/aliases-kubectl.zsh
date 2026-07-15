@@ -3,6 +3,8 @@
 
 if (( $+commands[kubectl] )); then
   alias k='kubectl'
+  alias kd='kubectl describe'
+  alias kg='kubectl get'
   alias kaf='kubectl apply -f'
   alias kapk='kubectl apply -k'
   alias keti='kubectl exec -t -i'
@@ -59,4 +61,12 @@ if (( $+commands[kubectl] )); then
   alias kgds='kubectl get daemonset'
   alias kgcj='kubectl get cronjob'
   alias kgj='kubectl get job'
+fi
+
+if (( $+commands[kubectx] )); then
+  alias kx='kubectx'
+fi
+
+if (( $+commands[kubens] )); then
+  alias kn='kubens'
 fi
