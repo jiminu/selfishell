@@ -23,10 +23,8 @@ apt_install_packages() {
   fi
 
   local package
+  local missing_packages=()
   local install_packages=()
-
-  log "Updating apt package index"
-  sudo apt-get update
 
   for package in "$@"; do
     if dpkg -s "$package" >/dev/null 2>&1; then
@@ -34,6 +32,17 @@ apt_install_packages() {
       continue
     fi
 
+    missing_packages+=("$package")
+  done
+
+  if (( ${#missing_packages[@]} == 0 )); then
+    return
+  fi
+
+  log "Updating apt package index"
+  sudo apt-get update
+
+  for package in "${missing_packages[@]}"; do
     if apt-cache show "$package" >/dev/null 2>&1; then
       install_packages+=("$package")
     else
@@ -73,8 +82,14 @@ install_nvm() {
 install_pyenv() {
   local pyenv_dir="$HOME/.pyenv"
 
-  if [[ -d "$pyenv_dir" ]]; then
+  if [[ -x "$pyenv_dir/bin/pyenv" ]]; then
     return
+  fi
+
+  if [[ -d "$pyenv_dir" ]]; then
+    warn "Incomplete pyenv installation found: $pyenv_dir"
+    warn "Remove or repair it before running setup again"
+    return 1
   fi
 
   log "Installing pyenv"
