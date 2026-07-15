@@ -15,13 +15,13 @@ npx()  { load_nvm; command npx "$@" }
 export PYENV_ROOT="$HOME/.pyenv"
 
 if [[ -d "$PYENV_ROOT/bin" ]]; then
-  export PATH="$PYENV_ROOT/bin:$PATH"
+  path=("$PYENV_ROOT/bin" $path)
 fi
 
 # Shims do not require shell initialization and keep python/pip immediately
 # available while the pyenv shell function itself is loaded on demand.
 if [[ -d "$PYENV_ROOT/shims" ]]; then
-  export PATH="$PYENV_ROOT/shims:$PATH"
+  path=("$PYENV_ROOT/shims" $path)
 fi
 
 if (( $+commands[pyenv] )); then

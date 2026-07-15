@@ -3,7 +3,8 @@
 # Prefer user-local binaries on Ubuntu/WSL
 # --------------------------------------------------
 
-export PATH="$HOME/.local/bin:$HOME/.rd/bin:$PATH"
+typeset -U path PATH
+path=("$HOME/.local/bin" "$HOME/.rd/bin" $path)
 
 
 # --------------------------------------------------
