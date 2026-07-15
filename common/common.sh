@@ -65,6 +65,25 @@ install_zinit() {
   git clone https://github.com/zdharma-continuum/zinit.git "$zinit_home"
 }
 
+install_kubectl_completion() {
+  if ! have kubectl; then
+    return
+  fi
+
+  local completion_dir="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
+  local completion_file="$completion_dir/_kubectl"
+  local temporary_file="${completion_file}.tmp"
+
+  mkdir -p "$completion_dir"
+  if kubectl completion zsh > "$temporary_file"; then
+    mv "$temporary_file" "$completion_file"
+    warn "Generated kubectl completion: $completion_file"
+  else
+    rm -f "$temporary_file"
+    warn "Could not generate kubectl completion"
+  fi
+}
+
 install_vundle() {
   local vundle_dir="$HOME/.vim/bundle/Vundle.vim"
 

@@ -8,6 +8,11 @@ A lightweight and intuitive Zsh environment powered by Starship and Zinit. Selfi
 
 Selfishell keeps the primary prompt focused on the current directory and Git status, while contextual information such as the time appears on the right.
 
+Git and kubectl integration works without Oh My Zsh. Git uses Zsh's built-in
+completion, while kubectl completion is cached during setup. If the cache is
+unavailable, it is generated on the first completion request without delaying
+shell startup.
+
 ## Usage
 
 Clone this repository and run:

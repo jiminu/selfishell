@@ -151,6 +151,7 @@ main() {
   install_nvm
   install_pyenv
   install_zinit
+  install_kubectl_completion
   install_vundle
   install_shell_configs
   set_default_shell
