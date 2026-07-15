@@ -15,7 +15,49 @@ shell startup.
 
 ## Usage
 
-Clone this repository and run:
+Install the Selfishell CLI on macOS, Ubuntu, or Ubuntu on WSL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh | bash
+```
+
+The bootstrap installs only the CLI. Configure the development environment
+explicitly afterward:
+
+```bash
+selfishell install --profile developer
+```
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh |
+  bash -s -- --version 1.0.0
+```
+
+For company or security-sensitive environments, download and review the small
+bootstrap before running it:
+
+```bash
+curl -fLO https://raw.githubusercontent.com/jiminu/lightship/main/install.sh
+less install.sh
+bash install.sh --version 1.0.0
+```
+
+The installer verifies the selected platform archive against the release's
+`SHA256SUMS`, installs it under `~/.local/share/selfishell/releases/<version>`,
+and atomically updates `~/.local/bin/selfishell` and the optional `sfs` shorthand.
+
+To install the CLI and immediately run setup in one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/lightship/main/install.sh |
+  bash -s -- --setup --yes --profile developer
+```
+
+### Source Bootstrap
+
+The legacy full bootstrap remains available when working from a clone:
 
 ```bash
 bash ./bootstrap.sh

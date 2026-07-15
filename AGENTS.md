@@ -38,10 +38,11 @@ Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 - `common/common.zsh` contains shared interactive shell initialization.
 - Configuration files are currently linked directly from the checkout.
 
-The `selfishell` CLI foundation and managed configuration lifecycle now exist.
-Declarative profiles and managed apt/Homebrew/direct package installation also
-exist. The release archive installer, reproducible dependency manifest, updates,
-and rollback support described below are still target architecture.
+The `selfishell` CLI, managed configuration lifecycle, declarative profiles, and
+managed apt/Homebrew/direct package installation now exist. The versioned release
+bootstrap and artifact builder also exist. The reproducible dependency manifest,
+updates, rollback, and automated publication described below are still target
+architecture.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
 and `uninstall`. `bootstrap.sh` intentionally remains a legacy full-bootstrap wrapper
@@ -167,6 +168,17 @@ tracked, replaced, or deleted by managed resource state.
 Package adapters must inherit proxy environment variables. `--skip-packages` and
 `SELFISHELL_OFFLINE=1` must perform configuration-only installation without any
 package or network command.
+
+## Release Contract
+
+`install.sh` is the public, curl-delivered bootstrap. Keep it small and compatible
+with macOS Bash 3.2. It selects an exact platform/architecture archive, verifies
+that archive against `SHA256SUMS`, extracts into a versioned release directory,
+then atomically switches `current` and CLI links.
+
+Release assets and naming are defined in `docs/RELEASING.md`. A requested version
+must use only its `releases/download/v<version>` path and must never fall back to
+latest. The bootstrap installs the CLI only unless `--setup` is explicit.
 
 ## Verification Expectations
 

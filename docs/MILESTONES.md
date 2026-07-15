@@ -90,14 +90,14 @@ Acceptance criteria:
 
 Goal: provide one safe installation command for macOS and Ubuntu.
 
-- [ ] Create a small, auditable `install.sh` bootstrap.
-- [ ] Build versioned release archives for `amd64` and `arm64` where applicable.
-- [ ] Publish SHA-256 checksums with every release.
-- [ ] Install releases under `~/.local/share/selfishell/releases/<version>`.
-- [ ] Atomically switch the `current` link and expose `~/.local/bin/selfishell`.
-- [ ] Link `~/.local/bin/sfs` to `selfishell` as an optional shorthand.
-- [ ] Support `--version`, `--prefix`, `--yes`, and optional `--setup`.
-- [ ] Handle a missing `~/.local/bin` PATH entry with an actionable message.
+- [x] Create a small, auditable `install.sh` bootstrap.
+- [x] Build versioned release archives for `amd64` and `arm64` where applicable.
+- [x] Publish SHA-256 checksums with every release.
+- [x] Install releases under `~/.local/share/selfishell/releases/<version>`.
+- [x] Atomically switch the `current` link and expose `~/.local/bin/selfishell`.
+- [x] Link `~/.local/bin/sfs` to `selfishell` as an optional shorthand.
+- [x] Support `--version`, `--prefix`, `--yes`, and optional `--setup`.
+- [x] Handle a missing `~/.local/bin` PATH entry with an actionable message.
 
 Acceptance criteria:
 
