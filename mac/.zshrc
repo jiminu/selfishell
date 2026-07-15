@@ -34,8 +34,10 @@ load_nvm() {
   fi
 }
 
-if command -v brew >/dev/null 2>&1; then
-  BREW_PREFIX="$(brew --prefix 2>/dev/null)"
+if (( $+commands[brew] )); then
+  # Avoid spawning Homebrew on every shell startup. Resolve the prefix from
+  # the executable path, while respecting an explicitly configured prefix.
+  BREW_PREFIX="${HOMEBREW_PREFIX:-${commands[brew]:A:h:h}}"
 
   # Java 17
   JAVA_HOME_17="$BREW_PREFIX/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
