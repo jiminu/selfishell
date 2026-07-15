@@ -85,10 +85,19 @@ if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
       compdef _kubectl kubectl k
     else
       _selfishell_kubectl_completion() {
-        unfunction _selfishell_kubectl_completion
-        source <(kubectl completion zsh)
-        compdef _kubectl kubectl k
-        _kubectl "$@"
+        local completion_source
+
+        if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
+           [[ -n "$completion_source" ]]; then
+          if eval "$completion_source" && (( $+functions[_kubectl] )); then
+            unfunction _selfishell_kubectl_completion
+            compdef _kubectl kubectl k
+            _kubectl "$@"
+            return
+          fi
+        fi
+
+        return 1
       }
       compdef _selfishell_kubectl_completion kubectl k
     fi
