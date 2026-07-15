@@ -22,11 +22,15 @@ Reference run: [Ubuntu and macOS native lifecycle CI](https://github.com/jiminu/
 
 ## Pre-release Gate
 
-- [ ] Publish a `v<version>-beta.<number>` GitHub pre-release.
-- [ ] Verify the README curl command against the published assets.
-- [ ] Confirm `VERSION`, `SHA256SUMS`, and all four platform archives are present.
+- [x] Publish a `v<version>-beta.<number>` GitHub pre-release.
+- [x] Verify the README curl command against the published assets.
+- [x] Confirm `VERSION`, `SHA256SUMS`, and all four platform archives are present.
 - [ ] Leave the pre-release available long enough to collect installation
       feedback before declaring a stable release.
+
+Published candidate: [v0.1.0-beta.1](https://github.com/jiminu/selfishell/releases/tag/v0.1.0-beta.1).
+The public installer was verified on Linux AMD64 using an isolated `HOME` and
+prefix on 2026-07-16.
 
 ## Existing Machine Smoke Test
 

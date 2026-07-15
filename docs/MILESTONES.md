@@ -135,7 +135,7 @@ Goal: make releases routine for maintainers and understandable to new users.
 - [x] Publish installation, profile, security, company, and troubleshooting docs.
 - [x] Add a security policy and vulnerability reporting channel.
 - [x] Run the full lifecycle on clean Ubuntu and macOS hosted runners.
-- [ ] Publish a GitHub pre-release and verify its public install path.
+- [x] Publish a GitHub pre-release and verify its public install path.
 - [ ] Complete a smoke test on one existing supported development machine.
 
 Acceptance criteria:
