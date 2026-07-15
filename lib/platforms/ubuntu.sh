@@ -5,5 +5,5 @@ ubuntu_package_manager() {
 }
 
 ubuntu_wsl_legacy_install() {
-  exec bash "$SELFISHELL_ROOT/ubuntu/ubuntu.sh" "$@"
+  exec bash "$SELFISHELL_ROOT/legacy/ubuntu.sh" "$@"
 }

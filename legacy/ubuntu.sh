@@ -7,7 +7,7 @@ SHELL_DIR="${SHELL_DIR:-$ROOT_DIR/ubuntu}"
 COMMON_DIR="${COMMON_DIR:-$ROOT_DIR/common}"
 ZSH_SOURCE="${ZSH_SOURCE:-$SHELL_DIR/.zshrc}"
 
-source "$ROOT_DIR/common/common.sh"
+source "$ROOT_DIR/legacy/common.sh"
 
 APT_INDEX_UPDATED=0
 APT_SKIPPED_OPTIONAL_PACKAGES=()

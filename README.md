@@ -18,10 +18,11 @@ shell startup.
 Clone this repository and run:
 
 ```bash
-bash ./main.sh
+bash ./bootstrap.sh
 ```
 
-`main.sh` detects the current environment and runs the appropriate setup for macOS or Ubuntu on WSL.
+`bootstrap.sh` detects the current environment and runs the appropriate legacy
+setup for macOS or Ubuntu on WSL.
 
 The repository also includes the managed configuration CLI:
 
@@ -34,7 +35,7 @@ The repository also includes the managed configuration CLI:
 ./bin/selfishell status
 ```
 
-`./bin/sfs` is an optional shorthand for the same CLI. The existing `main.sh`
+`./bin/sfs` is an optional shorthand for the same CLI. The existing `bootstrap.sh`
 entrypoint remains a compatibility wrapper for the current full package
 bootstrap while profiles and managed package installation are developed.
 
@@ -77,7 +78,7 @@ it may:
 - replace those paths with symbolic links into this repository checkout;
 - download and execute third-party installers and clone plugin repositories.
 
-Keep the checkout in a stable location after running the legacy `main.sh`
+Keep the checkout in a stable location after running the legacy `bootstrap.sh`
 bootstrap because its links still point into the checkout. Configuration created
 with `selfishell install` is copied to the managed XDG directory and does not have
 this limitation.

@@ -5,5 +5,5 @@ macos_package_manager() {
 }
 
 macos_legacy_install() {
-  exec bash "$SELFISHELL_ROOT/mac/mac.sh" "$@"
+  exec bash "$SELFISHELL_ROOT/legacy/macos.sh" "$@"
 }

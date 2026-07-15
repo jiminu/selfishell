@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/tests/test_helper.bash"
-source "$ROOT_DIR/common/common.sh"
+source "$ROOT_DIR/legacy/common.sh"
 
 test_backup_preserves_same_second_files() {
   local target="$HOME/config"

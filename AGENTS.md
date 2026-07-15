@@ -31,10 +31,10 @@ Do not add a dead production URL to executable code.
 The repository currently contains Bash bootstrap scripts, shared Zsh settings,
 Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 
-- `main.sh` dispatches to macOS or Ubuntu on WSL.
-- `mac/mac.sh` installs packages with Homebrew.
-- `ubuntu/ubuntu.sh` installs packages with apt and direct downloads.
-- `common/common.sh` contains shared installation helpers.
+- `bootstrap.sh` is the temporary legacy full-setup entrypoint.
+- `legacy/macos.sh` installs packages with Homebrew.
+- `legacy/ubuntu.sh` installs packages with apt and direct downloads.
+- `legacy/common.sh` contains shared legacy installation helpers.
 - `common/common.zsh` contains shared interactive shell initialization.
 - Configuration files are currently linked directly from the checkout.
 
@@ -43,7 +43,7 @@ The release archive installer, profiles, managed tool installation, updates, and
 rollback support described below are still target architecture.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-and `uninstall`. `main.sh` intentionally remains a legacy full-bootstrap wrapper
+and `uninstall`. `bootstrap.sh` intentionally remains a legacy full-bootstrap wrapper
 while the managed package/profile layer is developed.
 
 ## Product Decisions
@@ -155,7 +155,7 @@ Preserve these invariants when extending the lifecycle:
 Every shell change should receive the checks applicable to it:
 
 ```sh
-bash -n main.sh mac/mac.sh ubuntu/ubuntu.sh common/common.sh
+bash -n bootstrap.sh legacy/common.sh legacy/macos.sh legacy/ubuntu.sh
 zsh -n mac/.zshrc ubuntu/.zshrc common/*.zsh
 ```
 

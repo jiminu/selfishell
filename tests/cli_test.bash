@@ -94,7 +94,7 @@ test_commands_reject_extra_arguments() {
   [[ "$status" -eq 2 ]] || fail "Extra arguments should return exit code 2"
 }
 
-test_main_is_install_compatibility_wrapper() {
+test_bootstrap_is_install_compatibility_wrapper() {
   local output
   local status
 
@@ -108,7 +108,7 @@ test_main_is_install_compatibility_wrapper() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/main.sh" 2>&1
+      bash "$ROOT_DIR/bootstrap.sh" 2>&1
   )"
   status=$?
   set -e
@@ -116,7 +116,7 @@ test_main_is_install_compatibility_wrapper() {
   teardown_test_home
   [[ "$status" -eq 1 ]] || fail "Compatibility wrapper should preserve install failure"
   [[ "$output" == *"Run 'selfishell doctor'"* ]] ||
-    fail "main.sh should dispatch through the Selfishell CLI"
+    fail "bootstrap.sh should dispatch through the Selfishell CLI"
 }
 
 run_test() {

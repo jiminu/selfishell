@@ -7,7 +7,7 @@ SHELL_DIR="${SHELL_DIR:-$ROOT_DIR/mac}"
 COMMON_DIR="${COMMON_DIR:-$ROOT_DIR/common}"
 ZSH_SOURCE="${ZSH_SOURCE:-$SHELL_DIR/.zshrc}"
 
-source "$ROOT_DIR/common/common.sh"
+source "$ROOT_DIR/legacy/common.sh"
 
 brew_shellenv() {
   if [[ -x /opt/homebrew/bin/brew ]]; then

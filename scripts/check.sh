@@ -7,10 +7,10 @@ cd "$ROOT_DIR"
 
 bash_files=(
   bin/selfishell
-  main.sh
-  mac/mac.sh
-  ubuntu/ubuntu.sh
-  common/common.sh
+  bootstrap.sh
+  legacy/common.sh
+  legacy/macos.sh
+  legacy/ubuntu.sh
   lib/common.sh
   lib/managed.sh
   lib/paths.sh
