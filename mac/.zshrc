@@ -35,17 +35,31 @@ load_nvm() {
 }
 
 if (( $+commands[brew] )); then
-  # Avoid spawning Homebrew on every shell startup. Resolve the prefix from
-  # the executable path, while respecting an explicitly configured prefix.
-  BREW_PREFIX="${HOMEBREW_PREFIX:-${commands[brew]:A:h:h}}"
+  # Keep standard installations fast and ask Homebrew only when the executable
+  # comes from a custom prefix or a wrapper.
+  BREW_PATH="${commands[brew]:A}"
+
+  if [[ -n "$HOMEBREW_PREFIX" ]]; then
+    BREW_PREFIX="$HOMEBREW_PREFIX"
+  elif [[ "$BREW_PATH" == /opt/homebrew/bin/brew ]]; then
+    BREW_PREFIX="/opt/homebrew"
+  elif [[ "$BREW_PATH" == /usr/local/bin/brew ]]; then
+    BREW_PREFIX="/usr/local"
+  else
+    BREW_PREFIX="$(command brew --prefix 2>/dev/null)" || BREW_PREFIX=""
+  fi
 
   # Java 17
-  JAVA_HOME_17="$BREW_PREFIX/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+  if [[ -n "$BREW_PREFIX" && "$BREW_PREFIX" == /* ]]; then
+    JAVA_HOME_17="$BREW_PREFIX/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
 
-  if [[ -d "$JAVA_HOME_17" ]]; then
-    export JAVA_HOME="$JAVA_HOME_17"
-    export PATH="$JAVA_HOME/bin:$PATH"
+    if [[ -d "$JAVA_HOME_17" ]]; then
+      export JAVA_HOME="$JAVA_HOME_17"
+      export PATH="$JAVA_HOME/bin:$PATH"
+    fi
   fi
+
+  unset BREW_PATH
 fi
 
 
