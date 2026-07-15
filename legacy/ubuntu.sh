@@ -15,6 +15,8 @@ APT_SKIPPED_OPTIONAL_PACKAGES=()
 is_ubuntu_wsl() (
   grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null || return 1
   [[ -r /etc/os-release ]] || return 1
+  # The file exists only on the target Linux host.
+  # shellcheck disable=SC1091
   source /etc/os-release
   [[ "${ID:-}" == "ubuntu" ]]
 )
