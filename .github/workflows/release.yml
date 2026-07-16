@@ -17,7 +17,11 @@ on:
         type: string
 
 permissions:
+  artifact-metadata: write
+  attestations: write
   contents: write
+  id-token: write
+  issues: write
 
 concurrency:
   group: release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
@@ -87,6 +91,11 @@ jobs:
       - name: Build release artifacts
         run: bash scripts/build-release.sh --version '${{ steps.version.outputs.version }}' --output dist
 
+      - name: Generate signed build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+
       - name: Smoke test exact release
         env:
           SELFISHELL_BOOTSTRAP_OS: Linux
@@ -128,3 +137,21 @@ jobs:
           }
           gh release create "$TAG" dist/* --verify-tag --generate-notes \
             --title "Selfishell $TAG" "${release_args[@]}"
+
+  notify:
+    name: Report release automation result
+    if: always()
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out notification script
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Create or resolve failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ needs.verify.result == 'success' && needs.publish.result == 'success' && 'success' || 'failure' }}
+        run: bash scripts/workflow-failure-issue.sh '[automation] Release failed' "$RESULT" "$RUN_URL"

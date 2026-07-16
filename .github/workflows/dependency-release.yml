@@ -10,6 +10,7 @@ on:
 permissions:
   actions: write
   contents: read
+  issues: write
   pull-requests: read
 
 concurrency:
@@ -50,3 +51,11 @@ jobs:
           version="$(bash scripts/next-patch-version.sh)"
           printf 'Dispatching Selfishell %s from %s.\n' "$version" "$RELEASE_REF"
           gh workflow run release.yml --ref main -f version="$version" -f ref="$RELEASE_REF"
+
+      - name: Create or resolve failure issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ job.status }}
+        run: bash scripts/workflow-failure-issue.sh '[automation] Dependency patch dispatch failed' "$RESULT" "$RUN_URL"

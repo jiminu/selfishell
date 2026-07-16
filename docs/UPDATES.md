@@ -6,6 +6,7 @@ same command so packages newly added to that release's profile are included.
 
 ```sh
 selfishell status --check-updates
+selfishell status --check-package-updates
 selfishell update --yes
 selfishell update --cli-only --yes
 selfishell update --tools-only --yes
@@ -18,6 +19,12 @@ installed profile, installs directly managed tools at the approved versions in
 declared by the managed vimrc. Already installed operating-system packages
 remain managed by apt or Homebrew; this command does not perform a general
 package upgrade. A CLI-only installation skips this phase.
+
+`status --check-package-updates` reads Homebrew's outdated inventory or Apt's
+local upgradable inventory and reports `Update: available` without installing
+anything or refreshing package indexes. The normal `status` command does not run
+these slower package-manager queries. Use `brew upgrade` or the operating
+system's Apt upgrade policy to apply system package updates explicitly.
 
 The CLI phase downloads a versioned platform archive, verifies its published
 SHA-256 checksum, retains the active release, and switches `current` only after
