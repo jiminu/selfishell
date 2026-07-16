@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# These globals are outputs consumed by separately sourced command modules.
+# shellcheck disable=SC2034
+
 tool_status_detect() {
   local manager="$1"
   local package="$2"
