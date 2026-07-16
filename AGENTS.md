@@ -231,8 +231,9 @@ Tests should cover at least:
 - Apt and Homebrew packages follow their package-manager repositories rather than
   the direct dependency manifest, so their exact transitive versions are not
   reproducible across repository snapshots.
-- Release archives are checksum-verified but are not yet cryptographically
-  signed. Do not describe checksums as publisher authentication.
+- Release archives are checksum-verified and carry signed GitHub Artifact
+  Attestations. Keep checksum integrity and provenance authentication described
+  as separate guarantees.
 
 Address these through the milestones instead of hiding them with documentation.
 

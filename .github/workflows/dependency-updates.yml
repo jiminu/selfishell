@@ -8,6 +8,7 @@ on:
 permissions:
   actions: write
   contents: write
+  issues: write
   pull-requests: write
 
 concurrency:
@@ -59,3 +60,11 @@ jobs:
             --title 'Update approved dependencies' \
             --body 'Updates pinned direct dependencies and verified download checksums. Review release notes and CI results before merging. This workflow never merges or releases automatically.'
           gh workflow run ci.yml --ref "$BRANCH"
+
+      - name: Create or resolve failure issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ job.status }}
+        run: bash scripts/workflow-failure-issue.sh '[automation] Dependency updates failed' "$RESULT" "$RUN_URL"

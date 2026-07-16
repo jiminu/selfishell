@@ -34,6 +34,7 @@ bash_files=(
   scripts/next-patch-version.sh
   scripts/update-dependencies.sh
   scripts/ubuntu-container-e2e.sh
+  scripts/workflow-failure-issue.sh
   tests/cli_test.bash
   tests/common_zsh_test.bash
   tests/managed_install_test.bash
@@ -43,6 +44,7 @@ bash_files=(
   tests/profiles_test.bash
   tests/proxy_test.bash
   tests/tool_status_test.bash
+  tests/workflow_notifications_test.bash
   tests/release_bootstrap_test.bash
   tests/release_version_test.bash
   tests/run.bash

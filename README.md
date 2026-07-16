@@ -146,6 +146,7 @@ Ghostty remains a separate interactive choice on macOS.
 ```bash
 selfishell status                   # Show the active profile and managed resources
 selfishell status --check-updates   # Also check for a newer Selfishell release
+selfishell status --check-package-updates # Report available Homebrew/APT updates without installing
 selfishell doctor                   # Diagnose the current installation
 selfishell update                   # Update the CLI, profile tools, and configuration
 selfishell rollback                 # Return to the previous Selfishell release

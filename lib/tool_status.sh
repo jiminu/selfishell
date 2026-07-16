@@ -10,6 +10,63 @@ tool_status_reset_cache() {
   TOOL_STATUS_BREW_CASKS_READY=0
   TOOL_STATUS_APT_PACKAGES=""
   TOOL_STATUS_APT_PACKAGES_READY=0
+  TOOL_STATUS_BREW_OUTDATED_FORMULAE=""
+  TOOL_STATUS_BREW_OUTDATED_CASKS=""
+  TOOL_STATUS_BREW_OUTDATED_FORMULAE_READY=0
+  TOOL_STATUS_BREW_OUTDATED_CASKS_READY=0
+  TOOL_STATUS_APT_UPGRADABLE=""
+  TOOL_STATUS_APT_UPGRADABLE_READY=0
+}
+
+tool_status_package_update() {
+  local manager="$1"
+  local package="$2"
+  local inventory=""
+  local entry
+
+  TOOL_STATUS_UPDATE="unknown"
+  case "$manager" in
+    formula)
+      have_command brew || return
+      if [[ "$TOOL_STATUS_BREW_OUTDATED_FORMULAE_READY" == 0 ]]; then
+        TOOL_STATUS_BREW_OUTDATED_FORMULAE="$(brew outdated --formula 2>/dev/null)" ||
+          TOOL_STATUS_BREW_OUTDATED_FORMULAE=""
+        TOOL_STATUS_BREW_OUTDATED_FORMULAE_READY=1
+      fi
+      inventory="$TOOL_STATUS_BREW_OUTDATED_FORMULAE"
+      ;;
+    cask)
+      have_command brew || return
+      if [[ "$TOOL_STATUS_BREW_OUTDATED_CASKS_READY" == 0 ]]; then
+        TOOL_STATUS_BREW_OUTDATED_CASKS="$(brew outdated --cask 2>/dev/null)" ||
+          TOOL_STATUS_BREW_OUTDATED_CASKS=""
+        TOOL_STATUS_BREW_OUTDATED_CASKS_READY=1
+      fi
+      inventory="$TOOL_STATUS_BREW_OUTDATED_CASKS"
+      ;;
+    apt)
+      have_command apt || return
+      if [[ "$TOOL_STATUS_APT_UPGRADABLE_READY" == 0 ]]; then
+        TOOL_STATUS_APT_UPGRADABLE="$(apt list --upgradable 2>/dev/null)" ||
+          TOOL_STATUS_APT_UPGRADABLE=""
+        TOOL_STATUS_APT_UPGRADABLE_READY=1
+      fi
+      inventory="$TOOL_STATUS_APT_UPGRADABLE"
+      ;;
+    *)
+      TOOL_STATUS_UPDATE="selfishell-managed"
+      return
+      ;;
+  esac
+
+  TOOL_STATUS_UPDATE="current"
+  while IFS= read -r entry; do
+    entry="${entry%% *}"
+    entry="${entry%%/*}"
+    [[ "$entry" == "$package" ]] || continue
+    TOOL_STATUS_UPDATE="available"
+    return
+  done <<<"$inventory"
 }
 
 tool_status_apt_version() {

@@ -56,6 +56,18 @@ dispatches the regular release workflow against the merge commit. Verification,
 artifact building, the exact-version smoke test, tag creation, and GitHub Release
 publication all remain part of the regular release gate.
 
+Every release asset receives signed build provenance through GitHub Artifact
+Attestations before publication. Verification requires GitHub CLI:
+
+```bash
+gh attestation verify PATH_TO_ARCHIVE --repo jiminu/selfishell
+```
+
+Release, dependency discovery, and dependency patch-dispatch failures create a
+deduplicated `automation-failure` issue. A later successful run closes the open
+issue. Maintainers receive email when GitHub issue or repository-watch email
+notifications are enabled in their account settings.
+
 General feature and documentation PRs never trigger this path. If an automated
 dependency PR needs another file changed, close it and use the normal manual
 release process instead.

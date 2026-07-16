@@ -41,6 +41,7 @@ status_resource() {
 
 command_status() {
   local check_updates=0
+  local check_package_updates=0
   local current_version="unknown"
   local available_version="not checked"
   local platform profile_platform dependency_platform architecture
@@ -50,8 +51,9 @@ command_status() {
   while (("$#" > 0)); do
     case "$1" in
       --check-updates) check_updates=1 ;;
+      --check-package-updates) check_package_updates=1 ;;
       help | --help | -h)
-        printf 'Usage: selfishell status [--check-updates]\n'
+        printf 'Usage: selfishell status [--check-updates] [--check-package-updates]\n'
         return
         ;;
       *)
@@ -102,8 +104,14 @@ command_status() {
       manager="${PROFILE_MANAGERS[$index]}"
       requirement="${PROFILE_REQUIREMENTS[$index]}"
       tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
-      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
-        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
+      if [[ "$check_package_updates" == 1 ]]; then
+        tool_status_package_update "$manager" "$package"
+        printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s | Update: %s\n' \
+          "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED" "$TOOL_STATUS_UPDATE"
+      else
+        printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
+          "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
+      fi
       if [[ "$requirement" == required && "$TOOL_STATUS_INSTALLED" == missing ]]; then
         SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
       fi
