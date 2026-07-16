@@ -23,6 +23,20 @@ test_version_reads_version_file() {
   [[ "$output" == "selfishell $expected" ]] || fail "Unexpected version output: $output"
 }
 
+test_version_available_reads_release_metadata() {
+  local release_root output
+
+  setup_test_home
+  release_root="$TEST_ROOT/releases"
+  mkdir -p "$release_root/latest/download"
+  printf '1.2.3\n' >"$release_root/latest/download/VERSION"
+
+  output="$(SELFISHELL_RELEASE_ROOT="file://$release_root" bash "$ROOT_DIR/bin/selfishell" version --available)"
+
+  [[ "$output" == 1.2.3 ]] || fail "Available release version was not reported"
+  teardown_test_home
+}
+
 test_sfs_runs_same_cli() {
   local canonical
   local shorthand

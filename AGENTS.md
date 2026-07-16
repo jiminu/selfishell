@@ -107,7 +107,10 @@ Keep command names and responsibilities narrow:
 `selfishell <command>`. Help and documentation should show `selfishell` as the
 primary form.
 
-Do not implement an implicit update during ordinary shell startup.
+Do not implement an implicit update during ordinary shell startup. A cached
+release notice is enabled by default and may refresh version metadata in a
+non-blocking background job at most once per configured interval; it must never
+delay startup or install an update.
 
 ## Managed Resource State
 

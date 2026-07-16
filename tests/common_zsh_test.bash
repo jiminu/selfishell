@@ -41,7 +41,57 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   teardown_test_home
 }
 
+test_update_notice_uses_cache_and_refreshes_in_background_format() {
+  local fake_bin cache_dir output now
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  now="$(date +%s)"
+  mkdir -p "$fake_bin" "$cache_dir"
+  # Positional parameters must expand in the generated mock, not this test.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'if [[ "${2:-}" == "--available" ]]; then' \
+    '  printf "1.1.0\\n"' \
+    'else' \
+    '  printf "selfishell 1.0.0\\n"' \
+    'fi' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  printf '1.1.0\n' >"$cache_dir/available-version"
+  printf '%s\n' "$now" >"$cache_dir/update-checked-at"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        load_nvm() { :; }
+        source "$1"
+        _selfishell_update_notice
+        SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice
+        command rm -f "$2/available-version" "$2/update-checked-at"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ "$(<"$2/available-version")" == 1.1.0 ]]
+        [[ "$(<"$2/update-checked-at")" == 12345 ]]
+        command rm -f "$2/available-version" "$2/update-checked-at"
+        SELFISHELL_UPDATE_CHECK_INTERVAL=0 _selfishell_update_notice
+        for attempt in {1..40}; do
+          [[ -r "$2/available-version" ]] && break
+          command sleep 0.05
+        done
+        [[ "$(<"$2/available-version")" == 1.1.0 ]]
+      ' zsh "$ROOT_DIR/common/common.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == '[Selfishell] 1.1.0 is available. Run: sfs update' ]] ||
+    fail "Default update notice did not use cached version metadata"
+  teardown_test_home
+}
+
 test_minimal_profile_initializes_git_completion_without_zinit
 printf 'PASS: test_minimal_profile_initializes_git_completion_without_zinit\n'
 test_macos_managed_zsh_adds_default_cli_prefix_to_path
 printf 'PASS: test_macos_managed_zsh_adds_default_cli_prefix_to_path\n'
+test_update_notice_uses_cache_and_refreshes_in_background_format
+printf 'PASS: test_update_notice_uses_cache_and_refreshes_in_background_format\n'
