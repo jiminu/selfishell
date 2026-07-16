@@ -1,0 +1,52 @@
+name: Dependency patch release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: dependency-patch-release
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch approved dependency release
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'automation/dependency-updates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out merged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Verify dependency-only change
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mapfile -t files < <(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != dependencies.conf ]]; then
+            printf 'Automatic dependency releases require a dependencies.conf-only PR.\n' >&2
+            printf 'Changed files: %s\n' "${files[*]}" >&2
+            exit 1
+          fi
+
+      - name: Dispatch next patch release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          version="$(bash scripts/next-patch-version.sh)"
+          printf 'Dispatching Selfishell %s from %s.\n' "$version" "$RELEASE_REF"
+          gh workflow run release.yml --ref main -f version="$version" -f ref="$RELEASE_REF"

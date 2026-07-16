@@ -31,6 +31,7 @@ bash_files=(
   scripts/check.sh
   scripts/build-release.sh
   scripts/release-check.sh
+  scripts/next-patch-version.sh
   scripts/update-dependencies.sh
   scripts/ubuntu-container-e2e.sh
   tests/cli_test.bash
@@ -43,6 +44,7 @@ bash_files=(
   tests/proxy_test.bash
   tests/tool_status_test.bash
   tests/release_bootstrap_test.bash
+  tests/release_version_test.bash
   tests/run.bash
   tests/test_helper.bash
   tests/updates_test.bash
