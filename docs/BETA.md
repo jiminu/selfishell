@@ -107,3 +107,12 @@ behavior remains covered by automated required/optional package tests.
 With that environment-specific waiver, the existing-machine smoke test is
 complete. The pre-release feedback window remains open and still blocks a stable
 release declaration.
+
+### Initial daily-use feedback
+
+On 2026-07-16 the tester installed the managed configuration on the existing
+macOS ARM64 development machine and confirmed that the initial shell experience
+was working as expected. The full profile was selected with package operations
+skipped because the machine uses a non-writable company-managed Homebrew prefix.
+No release-blocking configuration or terminal issue was reported during this
+initial session.

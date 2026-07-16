@@ -168,9 +168,10 @@ Acceptance criteria:
 
 A public stable release should not be declared until all of the following hold:
 
-- [ ] M0 through M6 are complete.
-- [ ] No known path can overwrite an existing backup.
-- [ ] Direct downloads are versioned and checksum-verified.
-- [ ] Installation, update, rollback, and uninstall have end-to-end coverage.
-- [ ] Supported platforms and limitations are documented accurately.
-- [ ] No secrets or company-specific infrastructure are present in release files.
+- [x] M0 through M6 are complete.
+- [x] No known path can overwrite an existing backup.
+- [x] Direct downloads are versioned and checksum-verified.
+- [x] Installation, update, rollback, and uninstall have end-to-end coverage.
+- [x] Supported platforms and limitations are documented accurately.
+- [x] No secrets or company-specific infrastructure are present in release files.
+- [ ] Complete the public beta feedback window without a release-blocking issue.
