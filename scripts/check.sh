@@ -8,10 +8,6 @@ cd "$ROOT_DIR"
 bash_files=(
   bin/selfishell
   install.sh
-  bootstrap.sh
-  legacy/common.sh
-  legacy/macos.sh
-  legacy/ubuntu.sh
   lib/common.sh
   lib/managed.sh
   lib/installers.sh
@@ -36,7 +32,6 @@ bash_files=(
   scripts/build-release.sh
   scripts/release-check.sh
   tests/cli_test.bash
-  tests/common_test.bash
   tests/common_zsh_test.bash
   tests/managed_install_test.bash
   tests/installers_test.bash
@@ -48,7 +43,6 @@ bash_files=(
   tests/release_bootstrap_test.bash
   tests/run.bash
   tests/test_helper.bash
-  tests/ubuntu_packages_test.bash
   tests/updates_test.bash
   tests/lifecycle_e2e_test.bash
 )

@@ -8,6 +8,29 @@ tool_status_reset_cache() {
   TOOL_STATUS_BREW_CASKS=""
   TOOL_STATUS_BREW_FORMULAE_READY=0
   TOOL_STATUS_BREW_CASKS_READY=0
+  TOOL_STATUS_APT_PACKAGES=""
+  TOOL_STATUS_APT_PACKAGES_READY=0
+}
+
+tool_status_apt_version() {
+  local package="$1"
+  local name version
+
+  TOOL_STATUS_APT_VERSION=""
+  if [[ "$TOOL_STATUS_APT_PACKAGES_READY" == 0 ]]; then
+    TOOL_STATUS_APT_PACKAGES="$(dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null)" ||
+      TOOL_STATUS_APT_PACKAGES=""
+    TOOL_STATUS_APT_PACKAGES_READY=1
+  fi
+
+  while IFS=$'\t' read -r name version; do
+    name="${name%%:*}"
+    if [[ "$name" == "$package" && -n "$version" ]]; then
+      TOOL_STATUS_APT_VERSION="$version"
+      return
+    fi
+  done <<<"$TOOL_STATUS_APT_PACKAGES"
+  return 1
 }
 
 tool_status_brew_version() {
@@ -96,7 +119,8 @@ tool_status_detect() {
       ;;
     apt)
       if have_command dpkg-query; then
-        output="$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null)" || output=""
+        tool_status_apt_version "$package" || true
+        output="$TOOL_STATUS_APT_VERSION"
         if [[ -n "$output" ]]; then
           TOOL_STATUS_INSTALLED="$output"
           TOOL_STATUS_SOURCE="apt"

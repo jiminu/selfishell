@@ -64,8 +64,9 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --add-to-path
 ```
 
-The option uses the current default shell and adds an idempotent PATH entry.
-Open a new shell afterward, or run the printed `export` command immediately.
+The option uses the current default shell and adds an idempotent, tracked PATH
+entry. Open a new shell afterward, or run the printed `export` command
+immediately.
 
 ### 2. Install a profile
 
@@ -152,7 +153,8 @@ selfishell rollback                 # Return to the previous Selfishell release
 
 `selfishell update` activates the latest CLI first and then continues with that
 release's profile, so newly added packages and configuration are applied in the
-same command. Only the active release and one rollback release are retained.
+same command. Rerunning the bootstrap follows the same retention policy: only
+the active release and one rollback release are kept.
 
 `sfs` is available as a shorter interactive alias for the same commands.
 
@@ -192,7 +194,9 @@ selfishell uninstall --restore --purge
 Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
 as Zinit and Vim plugins. They may be shared with other configurations and
 should be removed separately only if you no longer use them. Personal
-`~/.config/selfishell/local.zsh` configuration is preserved.
+`~/.config/selfishell/local.zsh` configuration is preserved. If installation
+used `--add-to-path`, purge also removes the unchanged PATH entry created by the
+installer. It stops and preserves the startup file if that entry was edited.
 
 ## Existing Configuration and Safety
 
@@ -244,7 +248,7 @@ Personal shell configuration can be placed in
 `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
 file but does not overwrite, track, or remove it.
 
-## Development and Legacy Bootstrap
+## Development
 
 Commands can be run directly from a source checkout while developing:
 
@@ -253,10 +257,6 @@ Commands can be run directly from a source checkout while developing:
 ./bin/selfishell install --dry-run
 bash scripts/check.sh
 ```
-
-The legacy checkout-linked bootstrap remains available as `bash ./bootstrap.sh`
-for compatibility. New installations should use the managed CLI instructions
-above because they do not require keeping the source checkout in a fixed path.
 
 ## Documentation
 

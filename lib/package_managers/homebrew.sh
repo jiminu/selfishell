@@ -49,6 +49,7 @@ homebrew_install_packages() {
   local manager="$2"
   local dry_run="$3"
   local package
+  local installed_packages=()
   local missing_packages=()
   shift 3
 
@@ -75,11 +76,16 @@ homebrew_install_packages() {
 
   for package in "$@"; do
     if homebrew_package_installed "$manager" "$package"; then
-      printf 'Already installed: %s\n' "$package"
+      installed_packages+=("$package")
     else
       missing_packages+=("$package")
     fi
   done
+
+  if ((${#installed_packages[@]} > 0)); then
+    printf 'Already installed Homebrew %s (%d): %s\n' \
+      "$manager" "${#installed_packages[@]}" "${installed_packages[*]}"
+  fi
 
   ((${#missing_packages[@]} > 0)) || return 0
 

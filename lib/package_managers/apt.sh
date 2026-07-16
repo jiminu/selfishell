@@ -19,6 +19,7 @@ apt_install_managed_packages() {
   local dry_run="$2"
   shift 2
   local package
+  local installed_packages=()
   local missing_packages=()
   local available_packages=()
   local unavailable_packages=()
@@ -41,11 +42,15 @@ apt_install_managed_packages() {
 
   for package in "$@"; do
     if dpkg -s "$package" >/dev/null 2>&1; then
-      printf 'Already installed: %s\n' "$package"
+      installed_packages+=("$package")
     else
       missing_packages+=("$package")
     fi
   done
+
+  if ((${#installed_packages[@]} > 0)); then
+    printf 'Already installed apt packages (%d): %s\n' "${#installed_packages[@]}" "${installed_packages[*]}"
+  fi
 
   ((${#missing_packages[@]} > 0)) || return 0
 

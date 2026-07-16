@@ -155,31 +155,6 @@ test_commands_reject_extra_arguments() {
   [[ "$status" -eq 2 ]] || fail "Extra arguments should return exit code 2"
 }
 
-test_bootstrap_rejects_unsupported_legacy_platform() {
-  local output
-  local status
-
-  setup_test_home
-  printf 'ID=fedora\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-
-  set +e
-  output="$(
-    SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bootstrap.sh" 2>&1
-  )"
-  status=$?
-  set -e
-
-  teardown_test_home
-  [[ "$status" -eq 1 ]] || fail "Legacy bootstrap should reject unsupported platforms"
-  [[ "$output" == *'Use the managed installer documented in README.md.'* ]] ||
-    fail "Legacy bootstrap should direct users to the managed installer"
-}
-
 run_test() {
   local test_name="$1"
 

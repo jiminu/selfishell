@@ -34,7 +34,7 @@ all at once.
 - [x] Split commands, shared logic, and platform adapters into separate modules.
 - [x] Detect macOS, Ubuntu, Ubuntu on WSL, architecture, and package manager.
 - [x] Keep the entrypoint compatible with the supported macOS shell environment.
-- [x] Preserve `bootstrap.sh` as a temporary legacy compatibility wrapper.
+- [x] Retire the temporary legacy bootstrap after managed installation replaces it.
 
 Acceptance criteria:
 
