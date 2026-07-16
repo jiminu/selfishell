@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+apt_run_privileged() {
+  if [[ "$(id -u)" == "0" ]]; then
+    apt-get "$@"
+    return
+  fi
+
+  if ! have_command sudo; then
+    cli_error "sudo is required to install apt packages as a non-root user."
+    return 1
+  fi
+
+  sudo apt-get "$@"
+}
+
 apt_install_managed_packages() {
   local requirement="$1"
   local dry_run="$2"
@@ -25,7 +39,7 @@ apt_install_managed_packages() {
   fi
 
   if ((SELFISHELL_APT_UPDATED == 0)); then
-    sudo apt-get update
+    apt_run_privileged update || return 1
     SELFISHELL_APT_UPDATED=1
   fi
 
@@ -49,7 +63,7 @@ apt_install_managed_packages() {
 
   ((${#available_packages[@]} > 0)) || return 0
 
-  if ! sudo apt-get install -y "${available_packages[@]}"; then
+  if ! apt_run_privileged install -y "${available_packages[@]}"; then
     cli_error "Could not install $requirement apt packages: ${available_packages[*]}"
     if [[ "$requirement" == "optional" ]]; then
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${available_packages[@]}")
