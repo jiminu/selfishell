@@ -34,7 +34,7 @@ test_complete_release_lifecycle() {
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $initial_version" ]] || fail "Clean install failed"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
 
-  "$prefix/bin/selfishell" self-update --version "$next_version" --yes >/dev/null
+  "$prefix/bin/selfishell" update --cli-only --version "$next_version" --yes >/dev/null
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $next_version" ]] || fail "Upgrade failed"
 
   SELFISHELL_RELEASE_ROOT='file:///network-must-not-be-used' \

@@ -77,12 +77,14 @@ The repository also includes the managed configuration CLI:
 ./bin/selfishell status
 ```
 
-Update approved direct tools and managed configuration separately from the CLI:
+Update the CLI, approved direct tools, and managed configuration together, or
+limit the update scope explicitly:
 
 ```bash
 selfishell status --check-updates
 selfishell update --yes
-selfishell self-update --yes
+selfishell update --cli-only --yes
+selfishell update --tools-only --yes
 selfishell rollback --yes
 ```
 

@@ -45,7 +45,7 @@ artifact builder also exist. Tagged release publication is automated; public
 beta verification remains a manual release gate.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-`update`, `self-update`, `rollback`, and `uninstall`. `bootstrap.sh` intentionally
+`update`, `rollback`, and `uninstall`. `bootstrap.sh` intentionally
 remains a legacy full-bootstrap wrapper while the managed package/profile layer
 is developed.
 
@@ -95,8 +95,8 @@ directory is moved or removed.
 Keep command names and responsibilities narrow:
 
 - `selfishell install`: install a selected profile and user configuration.
-- `selfishell update`: update managed tools and configuration to approved versions.
-- `selfishell self-update`: install a new Selfishell release.
+- `selfishell update`: update the CLI release, managed tools, and configuration;
+  `--cli-only` and `--tools-only` restrict the scope.
 - `selfishell doctor`: diagnose platform, dependencies, and configuration.
 - `selfishell status`: report installed versions and managed files.
 - `selfishell rollback`: switch to a retained Selfishell release.
@@ -203,7 +203,7 @@ Tests should cover at least:
 - two consecutive installations;
 - interrupted or incomplete downloads and clones;
 - unsupported platforms and missing optional packages;
-- uninstall, restore, self-update, and rollback behavior.
+- uninstall, restore, CLI update, and rollback behavior.
 
 ## Known Risks in the Current Implementation
 
