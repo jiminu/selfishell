@@ -159,11 +159,12 @@ Preserve these invariants when extending the lifecycle:
 ## Profiles and Local Extensions
 
 Built-in profiles live in `profiles/*.conf` and contain declarative `include` and
-`package` records. Keep profile files free of executable shell code. The profile
-order is `minimal`, `developer`, `kubernetes`, then `full`; each larger profile
-includes the preceding one. `minimal` is the default and includes the everyday
-interactive shell tools; language runtimes and build dependencies begin in
-`developer`.
+`package` records. Keep profile files free of executable shell code. The built-in
+profiles are `minimal` and `developer`; `developer` includes `minimal`. `minimal`
+is the default and includes everyday interactive shell tools, Zinit, and macOS
+terminal fonts. Language runtimes, build dependencies, Kubernetes tools, and
+OpenJDK begin in `developer`. Ghostty is a separate macOS installation choice
+whose selection is retained in state for later updates.
 
 Private package additions use `--local-profile FILE` or
 `SELFISHELL_LOCAL_PROFILE`. Local files may contain only package records and may

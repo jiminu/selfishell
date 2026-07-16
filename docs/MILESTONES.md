@@ -67,7 +67,7 @@ Acceptance criteria:
 Goal: make Selfishell useful to different users without forcing every tool on
 everyone.
 
-- [x] Define `minimal`, `developer`, `kubernetes`, and `full` profiles.
+- [x] Define focused `minimal` and `developer` profiles.
 - [x] Move package lists out of command flow and into declarative profile data.
 - [x] Implement consistent Homebrew and apt adapters.
 - [x] Add local/private configuration injection without secrets in this repository.
@@ -75,10 +75,11 @@ everyone.
 
 Proposed profile boundaries:
 
-- `minimal`: Zsh, Git, Starship, fzf, zoxide, eza, bat, Vim, and core configuration.
-- `developer`: minimal plus pyenv, pyenv-virtualenv, NVM, Zinit, and build tools.
-- `kubernetes`: developer plus kubectl and context tools.
-- `full`: all supported CLI and desktop integrations.
+- `minimal`: Zsh, Git, Starship, Zinit, fzf, zoxide, eza, bat, Vim, core
+  configuration, and macOS terminal fonts.
+- `developer`: minimal plus pyenv, pyenv-virtualenv, NVM, build tools,
+  Kubernetes tools, and OpenJDK.
+- Ghostty is a separate macOS installation choice rather than a profile tier.
 
 Acceptance criteria:
 

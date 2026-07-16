@@ -52,11 +52,12 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$output" == *'vim'* ]] || fail "Minimal profile is missing Vim"
   [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
   [[ "$output" == *'direct package: vundle'* ]] || fail "Minimal profile is missing Vundle"
+  [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
   [[ "$output" != *'direct package: pyenv'* ]] || fail "Minimal profile included developer runtimes"
   [[ "$output" != *'kubectl'* ]] || fail "Minimal profile included Kubernetes tools"
 }
 
-test_developer_inherits_minimal_only() {
+test_developer_includes_development_kubernetes_and_java_tools() {
   local output
   output="$(run_profile_dry_run developer)"
 
@@ -64,27 +65,19 @@ test_developer_inherits_minimal_only() {
     fail "Developer profile is missing development tools"
   [[ "$output" == *'direct package: pyenv-virtualenv'* ]] ||
     fail "Developer profile is missing pyenv-virtualenv"
-  [[ "$output" != *'kubectl'* ]] || fail "Developer profile included Kubernetes tools"
+  [[ "$output" == *'kubectl'* && "$output" == *'openjdk-17-jdk'* ]] ||
+    fail "Developer profile is missing Kubernetes or Java tools"
 }
 
-test_kubernetes_inherits_developer() {
-  local output
-  output="$(run_profile_dry_run kubernetes)"
-
-  [[ "$output" == *'fzf'* && "$output" == *'kubectl'* ]] ||
-    fail "Kubernetes profile inheritance is incomplete"
-  [[ "$output" != *'ghostty'* ]] || fail "Kubernetes profile included full-only tools"
-}
-
-test_full_macos_includes_desktop_packages() {
+test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
   local output
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  output="$(run_profile_dry_run full)"
+  output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
-  [[ "$output" == *'pyenv-virtualenv'* ]] ||
-    fail "Full macOS profile is missing pyenv-virtualenv"
-  [[ "$output" == *'Homebrew cask: ghostty font-meslo-lg-nerd-font font-noto-sans-cjk-kr'* ]] ||
-    fail "Full macOS profile is missing desktop packages"
+  [[ "$output" == *'optional Homebrew cask: font-meslo-lg-nerd-font font-noto-sans-cjk-kr'* ]] ||
+    fail "Minimal macOS profile is missing fonts"
+  [[ "$output" == *'optional Homebrew cask: ghostty'* ]] ||
+    fail "Ghostty was not included in the macOS dry run"
 }
 
 test_local_profile_adds_private_package() {
@@ -101,7 +94,7 @@ test_local_profile_adds_private_package() {
 test_offline_mode_skips_package_operations() {
   local output
   export SELFISHELL_OFFLINE=1
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --profile full --dry-run)"
+  output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
 
   [[ "$output" == *'Skipping package installation.'* ]] || fail "Offline mode did not skip packages"
   [[ "$output" != *'Would install required apt packages'* ]] ||

@@ -9,7 +9,7 @@ profile_reset() {
 
 profile_is_supported() {
   case "$1" in
-    minimal | developer | kubernetes | full) return 0 ;;
+    minimal | developer) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -102,7 +102,7 @@ profile_load_builtin() {
   local profile="$1"
 
   if ! profile_is_supported "$profile"; then
-    cli_error "Unknown profile: $profile (expected: minimal, developer, kubernetes, full)"
+    cli_error "Unknown profile: $profile (expected: minimal or developer)"
     return "$SELFISHELL_EXIT_USAGE"
   fi
 

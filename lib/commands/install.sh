@@ -7,7 +7,7 @@ Usage:
                       [--skip-packages] [--dry-run] [--yes]
 
 Options:
-  --profile NAME       Select minimal, developer, kubernetes, or full (default: minimal)
+  --profile NAME       Select minimal or developer (default: minimal)
   --local-profile FILE Add private platform package records
   --skip-packages      Install configuration without package operations
   --dry-run  Show changes without modifying files
@@ -19,7 +19,7 @@ EOF
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
-  local profile="$3"
+  local ghostty_enabled="${3:-0}"
   local zsh_source
 
   case "$platform" in
@@ -39,7 +39,7 @@ install_managed_configuration() {
   managed_install_file starship-config "$SELFISHELL_ROOT/common/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
   managed_install_file vim-config "$SELFISHELL_ROOT/common/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
 
-  if [[ "$platform" == "macos" && "$profile" == "full" ]]; then
+  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_file ghostty-config "$SELFISHELL_ROOT/mac/config.ghostty" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
   fi
 
@@ -47,7 +47,7 @@ install_managed_configuration() {
   managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
   managed_install_link user-vim "$HOME/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
 
-  if [[ "$platform" == "macos" && "$profile" == "full" ]]; then
+  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
   fi
 }
@@ -59,6 +59,8 @@ command_install() {
   local local_profile="${SELFISHELL_LOCAL_PROFILE:-}"
   local skip_packages=0
   local platform
+  local ghostty_enabled=0
+  local ghostty_answer
 
   while (("$#" > 0)); do
     case "$1" in
@@ -103,6 +105,19 @@ command_install() {
   selfishell_initialize_paths
   profile_load "$profile" "$local_profile"
 
+  if [[ "$platform" == "macos" ]]; then
+    if [[ -r "$SELFISHELL_STATE_DIR/ghostty" ]]; then
+      ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
+      [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
+    elif [[ "$assume_yes" == "1" || "$dry_run" == "1" ]]; then
+      ghostty_enabled=1
+    elif [[ -t 0 ]]; then
+      printf 'Install Ghostty terminal and managed configuration? [y/N] '
+      IFS= read -r ghostty_answer
+      case "$ghostty_answer" in y | Y | yes | YES) ghostty_enabled=1 ;; esac
+    fi
+  fi
+
   if [[ "${SELFISHELL_OFFLINE:-0}" == "1" ]]; then
     skip_packages=1
   fi
@@ -111,18 +126,27 @@ command_install() {
     printf 'Skipping package installation.\n'
   else
     packages_install_profile "$platform" "$dry_run"
+    if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
+      homebrew_install_packages optional cask "$dry_run" ghostty
+    fi
   fi
 
-  install_managed_configuration "$platform" "$dry_run" "$profile"
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
 
   if [[ "$dry_run" == "0" ]]; then
     local profile_state
     local temporary_profile_state
+    local ghostty_state
+    local temporary_ghostty_state
     mkdir -p "$SELFISHELL_STATE_DIR"
     profile_state="$SELFISHELL_STATE_DIR/profile"
     temporary_profile_state="$(mktemp "${profile_state}.tmp.XXXXXX")"
     printf '%s\n' "$profile" >"$temporary_profile_state"
     mv "$temporary_profile_state" "$profile_state"
+    ghostty_state="$SELFISHELL_STATE_DIR/ghostty"
+    temporary_ghostty_state="$(mktemp "${ghostty_state}.tmp.XXXXXX")"
+    printf '%s\n' "$ghostty_enabled" >"$temporary_ghostty_state"
+    mv "$temporary_ghostty_state" "$ghostty_state"
   fi
 
   if [[ "$dry_run" == "1" ]]; then
