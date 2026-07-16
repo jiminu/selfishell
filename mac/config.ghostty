@@ -1,5 +1,11 @@
 theme = Dark+
 
+window-padding-x = 8
+window-padding-y = 6
+window-padding-balance = true
+
+macos-option-as-alt = left
+
 keybind = global:cmd+grave_accent=toggle_quick_terminal
 keybind = super+left=previous_tab
 keybind = super+right=next_tab
