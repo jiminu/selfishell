@@ -74,6 +74,8 @@ bootstrap has been retired.
 - Prefer reproducible releases. Pin and checksum direct downloads; use normal
   package-manager resolution for system packages unless there is a documented
   compatibility requirement.
+- Automated dependency discovery may update `dependencies.conf` through a
+  review PR, but must never auto-merge or auto-publish a Selfishell release.
 
 ## Target Filesystem Layout
 

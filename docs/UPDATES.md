@@ -38,6 +38,15 @@ does not use the network. An exact retained version can be selected with
 Direct download and Git dependency versions are changed only by reviewing and
 updating `dependencies.conf` in a new Selfishell release.
 
+Maintainers can run `scripts/update-dependencies.sh` to discover current
+upstream releases, download platform artifacts, calculate Starship checksums,
+and read published kubectl checksums. The weekly `Dependency updates` workflow
+uses the same script and opens or refreshes a review PR only when the manifest
+changes. It never merges the PR or publishes a Selfishell release. Review
+upstream release notes and the generated checksums before merging, then publish
+a normal Selfishell patch release so users receive the approved versions through
+`selfishell update`.
+
 Interactive Zsh sessions read the installed `VERSION` file and show a cached
 notification when a newer Selfishell CLI release is available. The cache is
 refreshed in the background at most once per day, so neither a CLI process nor
