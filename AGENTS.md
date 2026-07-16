@@ -55,6 +55,8 @@ scripts.
   bootstrap script backed by versioned GitHub Release archives.
 - The bootstrap installs only the Selfishell CLI. It must not silently replace
   user configuration or install the full development environment.
+- The bootstrap must not modify shell startup files by default. An explicit
+  `--add-to-path` option may add one idempotent Bash or Zsh PATH entry.
 - The canonical command is `selfishell`. Also provide `sfs` as an optional
   convenience symlink for interactive use.
 - Do not use `sf` as a command name because it is too generic and has a higher

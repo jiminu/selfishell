@@ -9,11 +9,20 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 selfishell install
 ```
 
-The default prefix is `~/.local`. Add `~/.local/bin` to `PATH` if the installer
-reports that it is missing. The bootstrap installs only the CLI unless `--setup`
-is explicitly supplied. Version discovery prefers the latest stable release and
-otherwise uses the newest version tag only after its exact `VERSION` release
-asset is published.
+The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
+installer prints commands for the current shell and an absolute command that
+works immediately. It does not modify shell startup files by default. Pass
+`--add-to-path` to add an idempotent entry to `~/.bashrc` or `~/.zshrc` based on
+the current default shell:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+  bash -s -- --add-to-path
+```
+
+The bootstrap installs only the CLI unless `--setup` is explicitly supplied.
+Version discovery prefers the latest stable release and otherwise uses the
+newest version tag only after its exact `VERSION` release asset is published.
 
 Use an exact release in controlled environments:
 

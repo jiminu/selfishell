@@ -54,7 +54,18 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 
 The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
 under `~/.local/bin`. If the installer reports that this directory is not in
-`PATH`, follow the command it prints and open a new terminal.
+`PATH`, follow the `export` command it prints. The bootstrap does not modify
+shell startup files unless explicitly requested.
+
+To add the CLI directory to `~/.bashrc` or `~/.zshrc` automatically:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+  bash -s -- --add-to-path
+```
+
+The option uses the current default shell and adds an idempotent PATH entry.
+Open a new shell afterward, or run the printed `export` command immediately.
 
 ### 2. Install a profile
 

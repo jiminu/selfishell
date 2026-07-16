@@ -247,6 +247,30 @@ test_bootstrap_installs_cli_only_by_default() {
 
   [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "CLI was not installed"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Bootstrap changed user configuration"
+  [[ ! -e "$HOME/.bashrc" && ! -e "$HOME/.zshrc" ]] ||
+    fail "Default bootstrap changed shell startup files"
+}
+
+test_add_to_path_updates_bashrc_once() {
+  local count output
+
+  output="$(SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path)"
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  [[ "$output" == *"Added $TEST_ROOT/prefix/bin to PATH in $HOME/.bashrc"* ]] ||
+    fail "Bash PATH installation was not reported"
+  count="$(grep -Fc '# Added by Selfishell installer' "$HOME/.bashrc")"
+  [[ "$count" -eq 1 ]] || fail "Bash PATH entry was added more than once"
+  PATH=/usr/bin:/bin bash -c 'source "$1"; [[ ":$PATH:" == *":$2:"* ]]' \
+    _ "$HOME/.bashrc" "$TEST_ROOT/prefix/bin" || fail "Bash startup did not activate the CLI path"
+}
+
+test_add_to_path_selects_zshrc() {
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/zsh run_bootstrap --add-to-path >/dev/null
+
+  [[ -r "$HOME/.zshrc" ]] || fail "Zsh PATH installation did not create .zshrc"
+  [[ ! -e "$HOME/.bashrc" ]] || fail "Zsh PATH installation changed .bashrc"
+  grep -Fq "$TEST_ROOT/prefix/bin" "$HOME/.zshrc" || fail "Zsh PATH entry is missing"
 }
 
 test_setup_is_explicit_and_can_run_offline() {
@@ -260,8 +284,12 @@ test_missing_bin_path_prints_actionable_message() {
   local output
   output="$(PATH=/usr/bin:/bin run_bootstrap)"
 
-  [[ "$output" == *"Add $TEST_ROOT/prefix/bin to PATH"* ]] ||
-    fail "Missing PATH guidance was not printed"
+  [[ "$output" == *"export PATH=\"$TEST_ROOT/prefix/bin:\$PATH\""* ]] ||
+    fail "Missing PATH guidance did not include a current-shell command"
+  [[ "$output" == *'reinstall with --add-to-path'* ]] ||
+    fail "Missing PATH guidance did not explain persistent setup"
+  [[ "$output" == *"$TEST_ROOT/prefix/bin/selfishell install"* ]] ||
+    fail "Missing PATH guidance did not include the absolute CLI command"
 }
 
 test_purge_dry_run_preserves_installation() {
