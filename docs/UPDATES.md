@@ -47,6 +47,13 @@ upstream release notes and the generated checksums before merging, then publish
 a normal Selfishell patch release so users receive the approved versions through
 `selfishell update`.
 
+When the generated `automation/dependency-updates` PR changes only
+`dependencies.conf`, a maintainer merge dispatches the next stable patch release
+automatically. The merge remains the approval boundary: discovery never chooses
+or publishes a version by itself. The release workflow calculates the next patch
+from the latest stable tag, reruns macOS and Ubuntu verification, builds and
+smoke-tests the artifacts, and creates the tag only after those gates pass.
+
 Interactive Zsh sessions read the installed `VERSION` file and show a cached
 notification when a newer Selfishell CLI release is available. The cache is
 refreshed in the background at most once per day, so neither a CLI process nor

@@ -45,3 +45,17 @@ After the workflow completes:
 
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.
+
+## Approved dependency patch releases
+
+The weekly dependency workflow opens or refreshes a PR from
+`automation/dependency-updates`. It never merges the PR. When a maintainer merges
+that exact branch and the PR changes only `dependencies.conf`, the dependency
+release workflow calculates the next patch after the latest stable tag and
+dispatches the regular release workflow against the merge commit. Verification,
+artifact building, the exact-version smoke test, tag creation, and GitHub Release
+publication all remain part of the regular release gate.
+
+General feature and documentation PRs never trigger this path. If an automated
+dependency PR needs another file changed, close it and use the normal manual
+release process instead.

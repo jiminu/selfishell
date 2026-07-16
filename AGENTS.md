@@ -76,6 +76,9 @@ bootstrap has been retired.
   compatibility requirement.
 - Automated dependency discovery may update `dependencies.conf` through a
   review PR, but must never auto-merge or auto-publish a Selfishell release.
+- A maintainer merge of the exact automated dependency branch may dispatch the
+  next stable patch release only when `dependencies.conf` is the sole changed
+  file. General PR merges must never trigger automatic publication.
 
 ## Target Filesystem Layout
 

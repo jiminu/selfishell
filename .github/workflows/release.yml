@@ -4,12 +4,23 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable or pre-release version without the v prefix
+        required: true
+        type: string
+      ref:
+        description: Commit or ref to release
+        required: true
+        default: main
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
   cancel-in-progress: false
 
 jobs:
@@ -25,6 +36,8 @@ jobs:
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -47,18 +60,29 @@ jobs:
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
 
       - name: Validate release tag
         id: version
         env:
-          TAG: ${{ github.ref_name }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          PUSHED_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
-          version="${TAG#v}"
+          if [[ -n "$PUSHED_TAG" ]]; then
+            TAG="$PUSHED_TAG"
+            version="${TAG#v}"
+          else
+            version="$REQUESTED_VERSION"
+            TAG="v$version"
+          fi
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
             exit 1
           fi
           printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$TAG" >>"$GITHUB_OUTPUT"
 
       - name: Build release artifacts
         run: bash scripts/build-release.sh --version '${{ steps.version.outputs.version }}' --output dist
@@ -77,10 +101,24 @@ jobs:
           bash install.sh --version "$VERSION" --prefix "$prefix"
           test "$("$prefix/bin/selfishell" version)" = "selfishell $VERSION"
 
+      - name: Create immutable release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git rev-parse "refs/tags/$TAG" >/dev/null 2>&1 && {
+            printf 'Release tag already exists: %s\n' "$TAG" >&2
+            exit 1
+          }
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "$TAG" -m "Selfishell ${TAG#v}"
+          git push origin "$TAG"
+
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           release_args=()
           [[ "$TAG" != *-* ]] || release_args+=(--prerelease)
