@@ -136,7 +136,7 @@ jobs:
             exit 1
           }
           gh release create "$TAG" dist/* --verify-tag --generate-notes \
-            --title "Selfishell $TAG" "${release_args[@]}"
+            --title "$TAG" "${release_args[@]}"
 
   notify:
     name: Report release automation result
