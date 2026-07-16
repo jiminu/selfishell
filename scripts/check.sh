@@ -31,6 +31,7 @@ bash_files=(
   scripts/check.sh
   scripts/build-release.sh
   scripts/release-check.sh
+  scripts/update-dependencies.sh
   scripts/ubuntu-container-e2e.sh
   tests/cli_test.bash
   tests/common_zsh_test.bash
@@ -45,6 +46,7 @@ bash_files=(
   tests/run.bash
   tests/test_helper.bash
   tests/updates_test.bash
+  tests/dependency_updates_test.bash
   tests/lifecycle_e2e_test.bash
 )
 

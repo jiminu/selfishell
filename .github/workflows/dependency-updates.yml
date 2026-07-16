@@ -1,0 +1,54 @@
+name: Dependency updates
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependency-updates
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Check approved dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Update dependency manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/update-dependencies.sh
+
+      - name: Validate updated manifest
+        run: bash scripts/check.sh
+
+      - name: Create or refresh dependency update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/dependency-updates
+        run: |
+          git diff --quiet dependencies.conf && {
+            printf 'All approved dependencies are current.\n'
+            exit 0
+          }
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch origin "$BRANCH" || true
+          git checkout -B "$BRANCH"
+          git add dependencies.conf
+          git commit -m 'Update approved dependencies'
+          git push --force-with-lease origin "HEAD:$BRANCH"
+          gh pr view "$BRANCH" >/dev/null 2>&1 || gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title 'Update approved dependencies' \
+            --body 'Updates pinned direct dependencies and verified download checksums. Review release notes and CI results before merging. This workflow never merges or releases automatically.'
