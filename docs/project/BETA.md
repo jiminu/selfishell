@@ -17,8 +17,12 @@ coverage. Package-manager prompts and terminal ergonomics remain manual checks.
       and system Bash.
 - [x] Direct downloads and package installation are skipped in lifecycle E2E;
       their adapters, checksums, and failure behavior are covered separately.
+- [x] A minimal Ubuntu 24.04 container performs real APT and direct dependency
+      installation as root without `sudo`, then verifies a fresh Bash PATH,
+      status, doctor, update, offline rollback, and purge.
 
 Reference run: [Ubuntu and macOS native lifecycle CI](https://github.com/jiminu/selfishell/actions/runs/29426591218).
+Container reference run: [Ubuntu 24.04 installation lifecycle CI](https://github.com/jiminu/selfishell/actions/runs/29478415421).
 
 ## Pre-release Gate
 
