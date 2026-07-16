@@ -16,7 +16,7 @@ update_tools_and_configuration() {
   local assume_yes="$1"
   local dry_run="$2"
   local require_configuration="$3"
-  local profile platform profile_platform dependency_platform architecture index package
+  local profile platform profile_platform dependency_platform architecture index package ghostty_enabled=0
 
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
@@ -28,6 +28,8 @@ update_tools_and_configuration() {
     return
   fi
   profile="$(<"$SELFISHELL_STATE_DIR/profile")"
+  [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
+  [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
   platform="$(detect_platform)"
   architecture="$(detect_architecture)"
   case "$platform" in
@@ -54,7 +56,7 @@ update_tools_and_configuration() {
       dependency_install "$package" "$dependency_platform" "$architecture"
     fi
   done
-  install_managed_configuration "$platform" "$dry_run" "$profile"
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
 }
 

@@ -120,16 +120,14 @@ Selfishell separates package selection from installation logic:
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, FZF, Zoxide, Eza, Bat, Vim, Vundle |
-| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, Zinit, and build tools |
-| `kubernetes` | Developer plus kubectl and context tools |
-| `full` | Kubernetes plus supported macOS desktop, font, and Java integrations |
+| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
+| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
 
 `minimal` is the default. Preview another profile without changing packages or
 files:
 
 ```bash
-./bin/selfishell install --profile kubernetes --dry-run
+./bin/selfishell install --profile developer --dry-run
 ```
 
 For restricted networks, configuration can be installed without any package or
@@ -143,6 +141,10 @@ SELFISHELL_OFFLINE=1 ./bin/selfishell install --yes
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
 package managers and direct download commands.
+
+On macOS, interactive installation asks separately whether to install Ghostty
+and manage its configuration. `--yes` accepts the Ghostty choice automatically,
+and later updates reuse the saved choice.
 
 Private or company packages can be added without changing the repository:
 

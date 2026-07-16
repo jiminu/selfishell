@@ -53,11 +53,24 @@ test_install_copies_configuration_and_tracks_resources() {
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 
-  run_selfishell install --profile full --skip-packages --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config"
   cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config" ||
     fail "Ghostty configuration was not copied"
+  assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
+}
+
+test_macos_install_reuses_declined_ghostty_choice() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  mkdir -p "$XDG_STATE_HOME/selfishell"
+  printf '0\n' >"$XDG_STATE_HOME/selfishell/ghostty"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config" ]] ||
+    fail "A saved declined Ghostty choice was ignored"
+  assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
 test_local_zsh_extension_is_preserved() {
