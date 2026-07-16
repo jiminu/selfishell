@@ -85,8 +85,8 @@ exec zsh
 ### 4. Verify the installation
 
 ```bash
-sfs doctor
-sfs status
+selfishell doctor
+selfishell status
 ```
 
 To install the CLI and the default profile non-interactively in one command:
@@ -118,26 +118,32 @@ are activated.
 `minimal` is the default. Preview a profile without changing anything:
 
 ```bash
-sfs install --profile developer --dry-run
+selfishell install --profile developer --dry-run
 ```
 
 You can change an existing installation from `minimal` to `developer` by
 running the developer installation command. Existing managed settings are
 updated safely.
 
+Packages marked optional by a profile are recommended packages: Selfishell
+attempts to install them automatically but continues if they are unavailable.
+Ghostty remains a separate interactive choice on macOS.
+
 ## Everyday Commands
 
 ```bash
-sfs status                   # Show the active profile and managed resources
-sfs status --check-updates   # Also check for a newer Selfishell release
-sfs doctor                   # Diagnose the current installation
-sfs update                   # Update the CLI, profile tools, and configuration
-sfs rollback                 # Return to the previous Selfishell release
+selfishell status                   # Show the active profile and managed resources
+selfishell status --check-updates   # Also check for a newer Selfishell release
+selfishell doctor                   # Diagnose the current installation
+selfishell update                   # Update the CLI, profile tools, and configuration
+selfishell rollback                 # Return to the previous Selfishell release
 ```
 
-`sfs update` activates the latest CLI first and then continues with that
+`selfishell update` activates the latest CLI first and then continues with that
 release's profile, so newly added packages and configuration are applied in the
 same command. Only the active release and one rollback release are retained.
+
+`sfs` is available as a shorter interactive alias for the same commands.
 
 Interactive Zsh sessions use a small local cache to announce new releases at
 most once per day. The network check runs in the background and never installs
@@ -150,36 +156,32 @@ an update automatically.
 Preview the operation first:
 
 ```bash
-sfs uninstall --restore --dry-run
+selfishell uninstall --restore --dry-run
 ```
 
 Then remove managed configuration and restore files backed up during
 installation:
 
 ```bash
-sfs uninstall --restore
+selfishell uninstall --restore
 ```
 
 If a managed file has been modified since installation, Selfishell stops before
 removing anything so that it does not overwrite your changes.
 
-### Remove the CLI and remaining data
+### Remove everything managed by Selfishell
 
-After running `sfs uninstall --restore`, remove the CLI, releases, cache, and
-remaining state:
+To restore backed-up configuration and also remove the CLI, releases, cache,
+and remaining state in one operation:
 
 ```bash
-rm -f ~/.local/bin/selfishell ~/.local/bin/sfs
-rm -rf ~/.local/share/selfishell
-rm -rf ~/.local/state/selfishell
-rm -rf ~/.cache/selfishell
+selfishell uninstall --restore --purge
 ```
 
 Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
 as Zinit and Vim plugins. They may be shared with other configurations and
-should be removed separately only if you no longer use them. Also preserve
-`~/.config/selfishell/local.zsh` before deleting it if it contains personal
-configuration.
+should be removed separately only if you no longer use them. Personal
+`~/.config/selfishell/local.zsh` configuration is preserved.
 
 ## Existing Configuration and Safety
 
@@ -207,9 +209,9 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 Install configuration without package or network operations:
 
 ```bash
-SELFISHELL_OFFLINE=1 sfs install --profile developer --yes
+SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
 # or
-sfs install --profile developer --skip-packages --yes
+selfishell install --profile developer --skip-packages --yes
 ```
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
@@ -224,7 +226,7 @@ package ubuntu required apt company-cli
 ```
 
 ```bash
-sfs install --profile developer --local-profile ./company.conf --yes
+selfishell install --profile developer --local-profile ./company.conf --yes
 ```
 
 Personal shell configuration can be placed in
@@ -254,7 +256,6 @@ above because they do not require keeping the source checkout in a fixed path.
 - [Security model](docs/SECURITY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Release process](docs/RELEASING.md)
-- [Public beta verification](docs/BETA.md)
 - [Vulnerability reporting](SECURITY.md)
 
 ## Platform Notes

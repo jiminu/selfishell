@@ -32,8 +32,6 @@ bash_files=(
   lib/commands/version.sh
   lib/commands/update.sh
   lib/commands/rollback.sh
-  lib/platforms/macos.sh
-  lib/platforms/ubuntu.sh
   scripts/check.sh
   scripts/build-release.sh
   scripts/release-check.sh

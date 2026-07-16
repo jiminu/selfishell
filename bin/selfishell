@@ -68,9 +68,6 @@ main() {
     rollback)
       command_rollback "$@"
       ;;
-    legacy-install)
-      command_legacy_install "$@"
-      ;;
     *)
       cli_error "Unknown command: $command"
       cli_error "Run 'selfishell help' to see available commands."

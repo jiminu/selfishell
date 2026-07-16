@@ -27,9 +27,18 @@ selfishell install --profile developer --yes
 ```
 
 The active profile is recorded in the XDG state directory. `selfishell update`
-uses that recorded profile when updating approved direct tools and managed
-configuration. Apt and Homebrew retain responsibility for system package
-versions.
+uses that recorded profile to install missing Apt, Homebrew, and directly
+managed tools before updating configuration. Apt and Homebrew retain
+responsibility for versions of packages they already manage.
+
+Profile package requirements have two failure policies:
+
+- `required` packages must be available and install successfully;
+- `optional` packages are recommended and attempted automatically, but an
+  unavailable package or installation failure does not stop the rest of setup.
+
+`optional` does not mean that Selfishell asks about each package. Ghostty is the
+separate interactive installation choice on macOS.
 
 On macOS, interactive installation separately asks whether to install Ghostty
 and manage its configuration. `--yes` accepts that choice automatically. The

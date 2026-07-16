@@ -35,3 +35,17 @@ SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
 ```
 
 This skips all package and direct dependency network operations.
+
+Remove managed configuration and restore backups with:
+
+```sh
+selfishell uninstall --restore
+```
+
+Add `--purge` to also remove the installed CLI, retained releases, cache, and
+state. Personal `local.zsh` configuration and packages installed through Apt,
+Homebrew, or direct tool installers are preserved.
+
+```sh
+selfishell uninstall --restore --purge
+```

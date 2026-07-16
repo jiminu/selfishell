@@ -17,6 +17,15 @@ packages_install_profile() {
   # Consumed by the apt adapter after this module is sourced.
   # shellcheck disable=SC2034
   SELFISHELL_APT_UPDATED=0
+  # Consumed by the Homebrew adapter after this module is sourced.
+  # shellcheck disable=SC2034
+  SELFISHELL_BREW_FORMULAE=""
+  # shellcheck disable=SC2034
+  SELFISHELL_BREW_CASKS=""
+  # shellcheck disable=SC2034
+  SELFISHELL_BREW_FORMULAE_READY=0
+  # shellcheck disable=SC2034
+  SELFISHELL_BREW_CASKS_READY=0
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
   [[ "$platform" == "ubuntu-wsl" ]] && profile_platform=ubuntu || profile_platform="$platform"
 

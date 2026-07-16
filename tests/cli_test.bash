@@ -86,6 +86,17 @@ test_removed_self_update_command_is_rejected() {
     fail "Removed self-update command should be reported as unknown"
 }
 
+test_removed_legacy_install_command_is_rejected() {
+  local status
+
+  set +e
+  bash "$ROOT_DIR/bin/selfishell" legacy-install >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 2 ]] || fail "Removed legacy-install command should return usage error"
+}
+
 test_update_rejects_conflicting_scopes() {
   local status
 
@@ -144,7 +155,7 @@ test_commands_reject_extra_arguments() {
   [[ "$status" -eq 2 ]] || fail "Extra arguments should return exit code 2"
 }
 
-test_bootstrap_is_install_compatibility_wrapper() {
+test_bootstrap_rejects_unsupported_legacy_platform() {
   local output
   local status
 
@@ -164,9 +175,9 @@ test_bootstrap_is_install_compatibility_wrapper() {
   set -e
 
   teardown_test_home
-  [[ "$status" -eq 1 ]] || fail "Compatibility wrapper should preserve install failure"
-  [[ "$output" == *"Run 'selfishell doctor'"* ]] ||
-    fail "bootstrap.sh should dispatch through the Selfishell CLI"
+  [[ "$status" -eq 1 ]] || fail "Legacy bootstrap should reject unsupported platforms"
+  [[ "$output" == *'Use the managed installer documented in README.md.'* ]] ||
+    fail "Legacy bootstrap should direct users to the managed installer"
 }
 
 run_test() {

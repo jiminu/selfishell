@@ -19,10 +19,37 @@ homebrew_ensure_installed() {
   have_command brew
 }
 
+homebrew_package_installed() {
+  local manager="$1"
+  local package="$2"
+  local inventory
+
+  if [[ "$manager" == cask ]]; then
+    if [[ "${SELFISHELL_BREW_CASKS_READY:-0}" == 0 ]]; then
+      SELFISHELL_BREW_CASKS="$(brew list --cask 2>/dev/null)" || SELFISHELL_BREW_CASKS=""
+      SELFISHELL_BREW_CASKS_READY=1
+    fi
+    inventory="$SELFISHELL_BREW_CASKS"
+  else
+    if [[ "${SELFISHELL_BREW_FORMULAE_READY:-0}" == 0 ]]; then
+      SELFISHELL_BREW_FORMULAE="$(brew list --formula 2>/dev/null)" || SELFISHELL_BREW_FORMULAE=""
+      SELFISHELL_BREW_FORMULAE_READY=1
+    fi
+    inventory="$SELFISHELL_BREW_FORMULAE"
+  fi
+
+  while IFS= read -r installed; do
+    [[ "$installed" == "$package" ]] && return 0
+  done <<<"$inventory"
+  return 1
+}
+
 homebrew_install_packages() {
   local requirement="$1"
   local manager="$2"
   local dry_run="$3"
+  local package
+  local missing_packages=()
   shift 3
 
   (("$#" > 0)) || return 0
@@ -46,20 +73,30 @@ homebrew_install_packages() {
     return 1
   fi
 
+  for package in "$@"; do
+    if homebrew_package_installed "$manager" "$package"; then
+      printf 'Already installed: %s\n' "$package"
+    else
+      missing_packages+=("$package")
+    fi
+  done
+
+  ((${#missing_packages[@]} > 0)) || return 0
+
   if [[ "$manager" == "cask" ]]; then
-    if ! HOMEBREW_NO_ASK=1 brew install --cask "$@"; then
-      cli_error "Could not install $requirement Homebrew casks: $*"
+    if ! HOMEBREW_NO_ASK=1 brew install --cask "${missing_packages[@]}"; then
+      cli_error "Could not install $requirement Homebrew casks: ${missing_packages[*]}"
       if [[ "$requirement" == "optional" ]]; then
-        SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
+        SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${missing_packages[@]}")
         return 0
       fi
       return 1
     fi
   else
-    if ! HOMEBREW_NO_ASK=1 brew install "$@"; then
-      cli_error "Could not install $requirement Homebrew formulae: $*"
+    if ! HOMEBREW_NO_ASK=1 brew install "${missing_packages[@]}"; then
+      cli_error "Could not install $requirement Homebrew formulae: ${missing_packages[*]}"
       if [[ "$requirement" == "optional" ]]; then
-        SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
+        SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${missing_packages[@]}")
         return 0
       fi
       return 1

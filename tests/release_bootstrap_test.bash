@@ -264,6 +264,48 @@ test_missing_bin_path_prints_actionable_message() {
     fail "Missing PATH guidance was not printed"
 }
 
+test_purge_dry_run_preserves_installation() {
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --dry-run >/dev/null
+
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Purge dry-run removed the CLI"
+  [[ -L "$HOME/.zshrc" ]] || fail "Purge dry-run removed managed configuration"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge dry-run removed releases"
+}
+
+test_purge_removes_cli_releases_cache_and_state() {
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+  mkdir -p "$HOME/.cache/selfishell"
+  printf 'cache\n' >"$HOME/.cache/selfishell/test"
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes >/dev/null
+
+  [[ ! -e "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Purge retained the CLI link"
+  [[ ! -e "$TEST_ROOT/prefix/bin/sfs" ]] || fail "Purge retained the sfs link"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge retained releases"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Purge retained state"
+  [[ ! -e "$HOME/.cache/selfishell" ]] || fail "Purge retained cache"
+  [[ ! -e "$HOME/.zshrc" ]] || fail "Purge retained managed configuration"
+}
+
+test_purge_refuses_non_managed_cli_path_before_uninstall() {
+  local status
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+  rm "$TEST_ROOT/prefix/bin/sfs"
+  printf 'user command\n' >"$TEST_ROOT/prefix/bin/sfs"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Purge should reject a non-managed CLI path"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected purge removed the CLI"
+  [[ -L "$HOME/.zshrc" ]] || fail "Rejected purge removed managed configuration"
+  assert_file_content 'user command' "$TEST_ROOT/prefix/bin/sfs"
+}
+
 test_refuses_to_replace_non_link_cli_path() {
   local status
 

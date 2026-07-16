@@ -16,6 +16,10 @@ MOCK_UID=1000
 MOCK_HAVE_SUDO=1
 MOCK_SUDO_COUNT=0
 MOCK_HOMEBREW_NO_ASK=""
+MOCK_BREW_FORMULAE=""
+MOCK_BREW_CASKS=""
+MOCK_APT_UPDATE_COUNT=0
+MOCK_DPKG_PACKAGES=""
 
 have_command() {
   [[ "$1" != "sudo" || "$MOCK_HAVE_SUDO" == "1" ]]
@@ -27,7 +31,7 @@ id() {
 }
 
 dpkg() {
-  return 1
+  [[ " $MOCK_DPKG_PACKAGES " == *" $2 "* ]]
 }
 
 apt-cache() {
@@ -37,7 +41,9 @@ apt-cache() {
 # sudo is mocked below and invokes this function in the same shell.
 # shellcheck disable=SC2032
 apt-get() {
-  if [[ "$1" == "install" ]]; then
+  if [[ "$1" == "update" ]]; then
+    MOCK_APT_UPDATE_COUNT=$((MOCK_APT_UPDATE_COUNT + 1))
+  elif [[ "$1" == "install" ]]; then
     shift 2
     MOCK_INSTALLED_PACKAGES="$*"
     ((MOCK_INSTALL_FAILURE == 0))
@@ -51,7 +57,11 @@ sudo() {
 }
 
 brew() {
-  if [[ "$1" == "install" ]]; then
+  if [[ "$1 $2" == "list --formula" ]]; then
+    printf '%s\n' "$MOCK_BREW_FORMULAE"
+  elif [[ "$1 $2" == "list --cask" ]]; then
+    printf '%s\n' "$MOCK_BREW_CASKS"
+  elif [[ "$1" == "install" ]]; then
     MOCK_HOMEBREW_NO_ASK="${HOMEBREW_NO_ASK:-}"
     shift
     [[ "${1:-}" == "--cask" ]] && shift
@@ -70,6 +80,24 @@ reset_package_mocks() {
   MOCK_HAVE_SUDO=1
   MOCK_SUDO_COUNT=0
   MOCK_HOMEBREW_NO_ASK=""
+  MOCK_BREW_FORMULAE=""
+  MOCK_BREW_CASKS=""
+  MOCK_APT_UPDATE_COUNT=0
+  MOCK_DPKG_PACKAGES=""
+  SELFISHELL_BREW_FORMULAE=""
+  SELFISHELL_BREW_CASKS=""
+  SELFISHELL_BREW_FORMULAE_READY=0
+  SELFISHELL_BREW_CASKS_READY=0
+}
+
+test_apt_skips_index_update_when_packages_are_installed() {
+  reset_package_mocks
+  MOCK_DPKG_PACKAGES="first second"
+
+  apt_install_managed_packages required 0 first second
+
+  [[ "$MOCK_APT_UPDATE_COUNT" -eq 0 ]] || fail "Installed apt packages triggered an index update"
+  [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed apt packages were reinstalled"
 }
 
 test_apt_non_root_requires_sudo() {
@@ -129,6 +157,24 @@ test_homebrew_optional_failure_is_reported() {
   homebrew_install_packages optional formula 0 optional-tool
   [[ "${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}" == "optional-tool" ]] ||
     fail "Failed optional Homebrew formula was not reported"
+}
+
+test_homebrew_installs_only_missing_packages() {
+  reset_package_mocks
+  MOCK_BREW_FORMULAE="installed"
+
+  homebrew_install_packages required formula 0 installed missing
+
+  [[ "$MOCK_INSTALLED_PACKAGES" == missing ]] || fail "Homebrew did not filter installed formulae"
+}
+
+test_homebrew_skips_install_when_packages_are_installed() {
+  reset_package_mocks
+  MOCK_BREW_CASKS=$'font-one\nfont-two'
+
+  homebrew_install_packages optional cask 0 font-one font-two
+
+  [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed Homebrew casks were reinstalled"
 }
 
 test_homebrew_suppresses_duplicate_confirmation() {
