@@ -47,7 +47,7 @@ homebrew_install_packages() {
   fi
 
   if [[ "$manager" == "cask" ]]; then
-    if ! brew install --cask "$@"; then
+    if ! HOMEBREW_NO_ASK=1 brew install --cask "$@"; then
       cli_error "Could not install $requirement Homebrew casks: $*"
       if [[ "$requirement" == "optional" ]]; then
         SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
@@ -56,7 +56,7 @@ homebrew_install_packages() {
       return 1
     fi
   else
-    if ! brew install "$@"; then
+    if ! HOMEBREW_NO_ASK=1 brew install "$@"; then
       cli_error "Could not install $requirement Homebrew formulae: $*"
       if [[ "$requirement" == "optional" ]]; then
         SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
