@@ -31,6 +31,7 @@ bash_files=(
   scripts/check.sh
   scripts/build-release.sh
   scripts/release-check.sh
+  scripts/ubuntu-container-e2e.sh
   tests/cli_test.bash
   tests/common_zsh_test.bash
   tests/managed_install_test.bash
