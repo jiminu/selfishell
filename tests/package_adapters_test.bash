@@ -33,6 +33,8 @@ apt-cache() {
   [[ " $MOCK_AVAILABLE_PACKAGES " == *" $2 "* ]]
 }
 
+# sudo is mocked below and invokes this function in the same shell.
+# shellcheck disable=SC2032
 apt-get() {
   if [[ "$1" == "install" ]]; then
     shift 2
