@@ -39,7 +39,7 @@ setup_release_home() {
 }
 
 teardown_release_home() {
-  unset SELFISHELL_RELEASE_ROOT SELFISHELL_RELEASE_API_URL
+  unset SELFISHELL_RELEASE_ROOT SELFISHELL_RELEASE_API_URL SELFISHELL_RELEASE_TAGS_API_URL
   unset SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
   unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
@@ -86,8 +86,8 @@ test_latest_uses_published_version_file() {
 
 test_latest_falls_back_to_published_prerelease() {
   rm "$TEST_ROOT/releases/latest/download/VERSION"
-  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
-  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+  printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"
+  export SELFISHELL_RELEASE_TAGS_API_URL="file://$TEST_ROOT/tags-api.json"
 
   run_bootstrap >/dev/null
 
@@ -100,8 +100,8 @@ test_update_falls_back_to_published_prerelease() {
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
   rm "$TEST_ROOT/releases/latest/download/VERSION"
-  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
-  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+  printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"
+  export SELFISHELL_RELEASE_TAGS_API_URL="file://$TEST_ROOT/tags-api.json"
 
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --yes >/dev/null
 
@@ -115,8 +115,8 @@ test_status_falls_back_to_published_prerelease() {
   SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
     install --profile minimal --skip-packages --yes >/dev/null
   rm "$TEST_ROOT/releases/latest/download/VERSION"
-  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
-  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+  printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"
+  export SELFISHELL_RELEASE_TAGS_API_URL="file://$TEST_ROOT/tags-api.json"
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" status --check-updates)" || true
 
@@ -137,6 +137,20 @@ test_latest_lookup_failure_is_actionable() {
   [[ "$output" == *'Use --version VERSION to select one.'* ]] ||
     fail "Missing release metadata did not provide version guidance"
   [[ "$output" != *'curl:'* ]] || fail "Raw curl errors should not leak from release discovery"
+}
+
+test_unpublished_tag_is_not_selected() {
+  local status
+  rm "$TEST_ROOT/releases/latest/download/VERSION"
+  printf '[{"name":"v9.9.9-beta.1"}]\n' >"$TEST_ROOT/tags-api.json"
+  export SELFISHELL_RELEASE_TAGS_API_URL="file://$TEST_ROOT/tags-api.json"
+
+  set +e
+  run_bootstrap >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "A tag without published VERSION metadata was selected"
 }
 
 test_cli_update_and_offline_rollback() {

@@ -41,6 +41,7 @@ bash_files=(
   tests/common_test.bash
   tests/common_zsh_test.bash
   tests/managed_install_test.bash
+  tests/installers_test.bash
   tests/package_adapters_test.bash
   tests/platform_test.bash
   tests/profiles_test.bash

@@ -57,6 +57,7 @@ update_tools_and_configuration() {
     fi
   done
   install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
+  install_vim_plugins "$dry_run"
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
 }
 
