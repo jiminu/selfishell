@@ -49,6 +49,8 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
   cache_dir="$HOME/.cache/selfishell"
   now="$(date +%s)"
   mkdir -p "$fake_bin" "$cache_dir"
+  # Positional parameters must expand in the generated mock, not this test.
+  # shellcheck disable=SC2016
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     'if [[ "${2:-}" == "--available" ]]; then' \
