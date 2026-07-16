@@ -21,7 +21,8 @@ test_complete_release_lifecycle() {
     chmod +x "$TEST_ROOT/bin/$tool"
   done
   export PATH="$TEST_ROOT/bin:$PATH"
-  mkdir -p "$HOME/.vim/bundle/Vundle.vim/.git"
+  mkdir -p "$HOME/.vim/bundle/Vundle.vim/.git" "$HOME/.local/share/zinit/zinit.git"
+  printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"
   export XDG_CONFIG_HOME="$HOME/.config"
