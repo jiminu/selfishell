@@ -12,9 +12,17 @@ source "$ROOT_DIR/lib/package_managers/homebrew.sh"
 MOCK_AVAILABLE_PACKAGES=""
 MOCK_INSTALL_FAILURE=0
 MOCK_INSTALLED_PACKAGES=""
+MOCK_UID=1000
+MOCK_HAVE_SUDO=1
+MOCK_SUDO_COUNT=0
 
 have_command() {
-  return 0
+  [[ "$1" != "sudo" || "$MOCK_HAVE_SUDO" == "1" ]]
+}
+
+id() {
+  [[ "$1" == "-u" ]] || return 1
+  printf '%s\n' "$MOCK_UID"
 }
 
 dpkg() {
@@ -25,12 +33,18 @@ apt-cache() {
   [[ " $MOCK_AVAILABLE_PACKAGES " == *" $2 "* ]]
 }
 
-sudo() {
-  if [[ "$1 $2" == "apt-get install" ]]; then
-    shift 3
+apt-get() {
+  if [[ "$1" == "install" ]]; then
+    shift 2
     MOCK_INSTALLED_PACKAGES="$*"
     ((MOCK_INSTALL_FAILURE == 0))
   fi
+}
+
+sudo() {
+  MOCK_SUDO_COUNT=$((MOCK_SUDO_COUNT + 1))
+  shift
+  apt-get "$@"
 }
 
 brew() {
@@ -48,6 +62,39 @@ reset_package_mocks() {
   MOCK_AVAILABLE_PACKAGES=""
   MOCK_INSTALL_FAILURE=0
   MOCK_INSTALLED_PACKAGES=""
+  MOCK_UID=1000
+  MOCK_HAVE_SUDO=1
+  MOCK_SUDO_COUNT=0
+}
+
+test_apt_non_root_requires_sudo() {
+  reset_package_mocks
+  MOCK_AVAILABLE_PACKAGES="available"
+
+  apt_install_managed_packages required 0 available
+
+  [[ "$MOCK_SUDO_COUNT" -eq 2 ]] || fail "Non-root apt operations must use sudo"
+}
+
+test_apt_non_root_without_sudo_fails() {
+  reset_package_mocks
+  MOCK_HAVE_SUDO=0
+
+  if apt_install_managed_packages required 0 available; then
+    fail "Non-root apt installation without sudo must fail"
+  fi
+}
+
+test_apt_root_does_not_require_sudo() {
+  reset_package_mocks
+  MOCK_UID=0
+  MOCK_HAVE_SUDO=0
+  MOCK_AVAILABLE_PACKAGES="available"
+
+  apt_install_managed_packages required 0 available
+
+  [[ "$MOCK_INSTALLED_PACKAGES" == "available" ]] || fail "Root apt installation did not run"
+  [[ "$MOCK_SUDO_COUNT" -eq 0 ]] || fail "Root apt operations must not use sudo"
 }
 
 test_apt_installs_available_optional_packages() {
