@@ -47,6 +47,8 @@ test_developer_inherits_minimal_only() {
 
   [[ "$output" == *'fzf'* && "$output" == *'direct package: pyenv'* ]] ||
     fail "Developer profile is missing development tools"
+  [[ "$output" == *'direct package: pyenv-virtualenv'* ]] ||
+    fail "Developer profile is missing pyenv-virtualenv"
   [[ "$output" != *'kubectl'* ]] || fail "Developer profile included Kubernetes tools"
 }
 
@@ -64,6 +66,8 @@ test_full_macos_includes_desktop_packages() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   output="$(run_profile_dry_run full)"
 
+  [[ "$output" == *'pyenv-virtualenv'* ]] ||
+    fail "Full macOS profile is missing pyenv-virtualenv"
   [[ "$output" == *'Homebrew cask: ghostty font-meslo-lg-nerd-font font-noto-sans-cjk-kr'* ]] ||
     fail "Full macOS profile is missing desktop packages"
 }

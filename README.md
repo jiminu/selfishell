@@ -118,7 +118,7 @@ Selfishell separates package selection from installation logic:
 | Profile | Included tools |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Starship |
-| `developer` | Minimal plus FZF, Zoxide, Eza, Bat, pyenv, NVM, Vim, build tools |
+| `developer` | Minimal plus FZF, Zoxide, Eza, Bat, pyenv, pyenv-virtualenv, NVM, Vim, build tools |
 | `kubernetes` | Developer plus kubectl and context tools |
 | `full` | Kubernetes plus supported macOS desktop, font, and Java integrations |
 
@@ -208,7 +208,7 @@ reported at the end without failing the rest of setup.
 - Homebrew
 - Zsh tools: Starship, Zinit, Zoxide, FZF
 - CLI tools: Git, Eza, Bat, kubectl, kubectx
-- Runtime tools: pyenv, NVM, OpenJDK 17
+- Runtime tools: pyenv, pyenv-virtualenv, NVM, OpenJDK 17
 - Vim and Vundle configuration
 - Ghostty
 - Meslo Nerd Font and Noto Sans CJK KR
@@ -218,7 +218,7 @@ reported at the end without failing the rest of setup.
 - Zsh, Git, Curl, Unzip, and build tools
 - Starship, Zinit, Zoxide, FZF
 - Eza, Bat, Vim
-- pyenv and NVM
+- pyenv, pyenv-virtualenv, and NVM
 - Vundle and Vim plugins
 - Zsh as the default shell
 
