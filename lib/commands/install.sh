@@ -7,7 +7,7 @@ Usage:
                       [--skip-packages] [--dry-run] [--yes]
 
 Options:
-  --profile NAME       Select minimal, developer, kubernetes, or full
+  --profile NAME       Select minimal, developer, kubernetes, or full (default: minimal)
   --local-profile FILE Add private platform package records
   --skip-packages      Install configuration without package operations
   --dry-run  Show changes without modifying files
@@ -55,7 +55,7 @@ install_managed_configuration() {
 command_install() {
   local assume_yes=0
   local dry_run=0
-  local profile=developer
+  local profile=minimal
   local local_profile="${SELFISHELL_LOCAL_PROFILE:-}"
   local skip_packages=0
   local platform

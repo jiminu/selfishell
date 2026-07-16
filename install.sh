@@ -30,7 +30,7 @@ Options:
   --prefix PATH      Installation prefix (default: $HOME/.local)
   --setup            Run 'selfishell install' after installing the CLI
   --yes              Skip setup confirmation when used with --setup
-  --profile NAME     Profile passed to setup (default: developer)
+  --profile NAME     Profile passed to setup (default: minimal)
   --skip-packages    Pass configuration-only mode to setup
   --help             Show this help
 EOF
@@ -141,7 +141,7 @@ main() {
   local prefix="${HOME}/.local"
   local setup=0
   local assume_yes=0
-  local profile=developer
+  local profile=minimal
   local skip_packages=0
   local platform
   local architecture

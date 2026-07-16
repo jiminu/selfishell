@@ -75,8 +75,8 @@ everyone.
 
 Proposed profile boundaries:
 
-- `minimal`: Zsh, Git, Starship, and core configuration.
-- `developer`: minimal plus fzf, zoxide, pyenv, and NVM.
+- `minimal`: Zsh, Git, Starship, fzf, zoxide, eza, bat, Vim, and core configuration.
+- `developer`: minimal plus pyenv, pyenv-virtualenv, NVM, Zinit, and build tools.
 - `kubernetes`: developer plus kubectl and context tools.
 - `full`: all supported CLI and desktop integrations.
 
