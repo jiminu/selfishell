@@ -19,8 +19,10 @@ operating-system package upgrade. A CLI-only installation skips this phase.
 
 The CLI phase downloads a versioned platform archive, verifies its published
 SHA-256 checksum, retains the active release, and switches `current` only after
-validation. Use `--version VERSION` to select an exact release. `--version`
-cannot be combined with `--tools-only`.
+validation. Automatic version discovery prefers the latest stable release and
+falls back to the most recently published pre-release when no stable release is
+available. Use `--version VERSION` to select an exact release. `--version` cannot
+be combined with `--tools-only`.
 
 `--dry-run` previews every selected phase without changing tools,
 configuration, or the active CLI release.
