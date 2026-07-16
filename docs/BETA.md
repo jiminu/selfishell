@@ -39,8 +39,8 @@ user account or temporary `HOME` is preferred but not required.
 
 - [x] Review `selfishell install --profile minimal --dry-run`.
 - [x] Install the beta CLI and minimal profile.
-- [ ] Open a new terminal and verify prompt rendering and Git completion.
-- [ ] Run `selfishell status`, `self-update`, and `rollback`.
+- [x] Open a new terminal and verify prompt rendering and Git completion.
+- [x] Run `selfishell status`, `self-update`, and `rollback`.
 - [x] Run uninstall with restore and confirm the original configuration returns.
 - [x] Record package-manager prompts, PATH guidance, and any usability issues.
 
@@ -80,3 +80,23 @@ offline rollback restored beta.1, and uninstall restored the original `.zshrc`.
 These checks validate the candidate behavior but do not replace verification of
 the next published pre-release. Keep the remaining smoke-test items open until
 the candidate is published and installed through the public release path.
+
+### Published beta.2 follow-up
+
+Public `v0.1.0-beta.2` verification passed on the same macOS ARM64 machine on
+2026-07-16. The release workflow passed on Ubuntu and macOS and published all
+four archives, `SHA256SUMS`, and `VERSION`. An isolated-home smoke test then:
+
+- installed public beta.1 and updated to public beta.2;
+- confirmed status reported beta.2 and retained beta.1;
+- initialized Starship and native Git completion in a TTY-backed login Zsh
+  without Zinit;
+- rolled back to beta.1 with an intentionally unusable release root; and
+- uninstalled the configuration and restored the original `.zshrc`.
+
+Release: [v0.1.0-beta.2](https://github.com/jiminu/selfishell/releases/tag/v0.1.0-beta.2).
+Workflow: [beta.2 release run](https://github.com/jiminu/selfishell/actions/runs/29460439754).
+
+Package-manager execution remains the final manual gate. It was not run because
+Homebrew operations would affect the existing development machine outside the
+isolated home.
