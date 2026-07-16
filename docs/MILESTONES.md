@@ -75,9 +75,9 @@ everyone.
 
 Proposed profile boundaries:
 
-- `minimal`: Zsh, Git, Starship, Zinit, fzf, zoxide, eza, bat, Vim, core
+- `minimal`: Zsh, Git, Starship, Zinit, fzf, zoxide, ripgrep, eza, bat, Vim, core
   configuration, and macOS terminal fonts.
-- `developer`: minimal plus pyenv, pyenv-virtualenv, NVM, build tools,
+- `developer`: minimal plus jq, pyenv, pyenv-virtualenv, NVM, build tools,
   Kubernetes tools, and OpenJDK.
 - Ghostty is a separate macOS installation choice rather than a profile tier.
 

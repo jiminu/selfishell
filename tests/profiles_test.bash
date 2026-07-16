@@ -45,7 +45,7 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   local output
   output="$(run_profile_dry_run minimal)"
 
-  [[ "$output" == *'zsh git curl ca-certificates fzf zoxide'* ]] ||
+  [[ "$output" == *'zsh git curl ca-certificates fzf zoxide ripgrep'* ]] ||
     fail "Minimal required apt packages are incomplete"
   [[ "$output" == *'optional apt packages: eza bat'* ]] ||
     fail "Minimal optional apt packages are incomplete"
@@ -53,6 +53,7 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
   [[ "$output" == *'direct package: vundle'* ]] || fail "Minimal profile is missing Vundle"
   [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
+  [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"
   [[ "$output" != *'direct package: pyenv'* ]] || fail "Minimal profile included developer runtimes"
   [[ "$output" != *'kubectl'* ]] || fail "Minimal profile included Kubernetes tools"
 }
@@ -67,6 +68,7 @@ test_developer_includes_development_kubernetes_and_java_tools() {
     fail "Developer profile is missing pyenv-virtualenv"
   [[ "$output" == *'kubectl'* && "$output" == *'openjdk-17-jdk'* ]] ||
     fail "Developer profile is missing Kubernetes or Java tools"
+  [[ "$output" == *'jq'* ]] || fail "Developer profile is missing jq"
 }
 
 test_minimal_macos_includes_fonts_and_opt_in_ghostty() {

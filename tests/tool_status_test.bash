@@ -119,6 +119,11 @@ test_distinguishes_external_and_missing_direct_dependencies() {
   teardown_tool_status_home
 }
 
+test_maps_package_name_to_executable() {
+  [[ "$(tool_status_executable ripgrep)" == "rg" ]] ||
+    fail "Ripgrep package name was not mapped to the rg executable"
+}
+
 main() {
   test_detects_apt_package_version
   printf 'PASS: test_detects_apt_package_version\n'
@@ -130,6 +135,8 @@ main() {
   printf 'PASS: test_detects_selfishell_managed_direct_dependency\n'
   test_distinguishes_external_and_missing_direct_dependencies
   printf 'PASS: test_distinguishes_external_and_missing_direct_dependencies\n'
+  test_maps_package_name_to_executable
+  printf 'PASS: test_maps_package_name_to_executable\n'
 }
 
 main "$@"

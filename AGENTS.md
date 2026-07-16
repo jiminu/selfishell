@@ -161,9 +161,9 @@ Preserve these invariants when extending the lifecycle:
 Built-in profiles live in `profiles/*.conf` and contain declarative `include` and
 `package` records. Keep profile files free of executable shell code. The built-in
 profiles are `minimal` and `developer`; `developer` includes `minimal`. `minimal`
-is the default and includes everyday interactive shell tools, Zinit, and macOS
-terminal fonts. Language runtimes, build dependencies, Kubernetes tools, and
-OpenJDK begin in `developer`. Ghostty is a separate macOS installation choice
+is the default and includes everyday interactive shell tools, Zinit, Ripgrep,
+and macOS terminal fonts. jq, language runtimes, build dependencies, Kubernetes
+tools, and OpenJDK begin in `developer`. Ghostty is a separate macOS installation choice
 whose selection is retained in state for later updates.
 
 Private package additions use `--local-profile FILE` or
