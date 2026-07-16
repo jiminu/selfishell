@@ -97,6 +97,13 @@ four archives, `SHA256SUMS`, and `VERSION`. An isolated-home smoke test then:
 Release: [v0.1.0-beta.2](https://github.com/jiminu/selfishell/releases/tag/v0.1.0-beta.2).
 Workflow: [beta.2 release run](https://github.com/jiminu/selfishell/actions/runs/29460439754).
 
-Package-manager execution remains the final manual gate. It was not run because
-Homebrew operations would affect the existing development machine outside the
-isolated home.
+Package-manager execution was waived for this machine after a read-only
+preflight. The required `git` and `starship` formulae were already installed and
+current, but the company-managed Homebrew prefix, cache, and logs were not
+writable by the tester. Changing ownership or forcing an install would have
+altered machine management state outside Selfishell's scope. Homebrew adapter
+behavior remains covered by automated required/optional package tests.
+
+With that environment-specific waiver, the existing-machine smoke test is
+complete. The pre-release feedback window remains open and still blocks a stable
+release declaration.
