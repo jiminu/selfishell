@@ -29,12 +29,13 @@ Container reference run: [Ubuntu 24.04 installation lifecycle CI](https://github
 - [x] Publish a `v<version>-beta.<number>` GitHub pre-release.
 - [x] Verify the README curl command against the published assets.
 - [x] Confirm `VERSION`, `SHA256SUMS`, and all four platform archives are present.
-- [ ] Leave the pre-release available long enough to collect installation
+- [x] Leave the pre-release available long enough to collect installation
       feedback before declaring a stable release.
 
-Published candidate: [v0.1.0-beta.1](https://github.com/jiminu/selfishell/releases/tag/v0.1.0-beta.1).
+Final candidate: [v0.1.0-beta.14](https://github.com/jiminu/selfishell/releases/tag/v0.1.0-beta.14).
 The public installer was verified on Linux AMD64 using an isolated `HOME` and
-prefix on 2026-07-16.
+prefix, and the final candidate passed the Ubuntu 24.04 container lifecycle
+gate on 2026-07-16.
 
 ## Existing Machine Smoke Test
 
@@ -120,3 +121,10 @@ was working as expected. The full profile was selected with package operations
 skipped because the machine uses a non-writable company-managed Homebrew prefix.
 No release-blocking configuration or terminal issue was reported during this
 initial session.
+
+### Stable release decision
+
+The beta feedback window closed on 2026-07-16 after fourteen beta releases,
+existing-machine use, hosted macOS and Ubuntu lifecycle coverage, and a real
+minimal Ubuntu 24.04 container installation. No open release-blocking issue was
+reported. The maintainer approved `v0.1.0` for stable publication.
