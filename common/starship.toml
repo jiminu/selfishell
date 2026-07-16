@@ -4,10 +4,10 @@
 add_newline = true
 
 # Left prompt
-format = '$directory$git_branch$git_status$character'
+format = '$directory$git_branch$git_state$git_status$character'
 
 # Right prompt
-right_format = '$status$cmd_duration$aws$kubernetes$python$nodejs$java$time'
+right_format = '$status$cmd_duration$jobs$aws$kubernetes$python$nodejs$java$time'
 
 
 # ─────────────────────────────
@@ -31,6 +31,15 @@ home_symbol = '~'
 format = '[$branch]($style) '
 style = 'bold fg:#5fd700'
 symbol = ''
+
+
+# ─────────────────────────────
+# Git operation state
+# Display only during rebase, merge, cherry-pick, etc.
+# ─────────────────────────────
+[git_state]
+format = '\([$state( $progress_current/$progress_total)]($style)\) '
+style = 'bold fg:#ffaf00'
 
 
 # ─────────────────────────────
@@ -86,6 +95,18 @@ min_time = 1000
 show_milliseconds = false
 format = '[$duration]($style) '
 style = 'bold fg:#aab2bf'
+
+
+# ─────────────────────────────
+# Background jobs
+# Hidden when there are no jobs in the current shell
+# ─────────────────────────────
+[jobs]
+format = '[$symbol$number]($style) '
+symbol = '✦'
+style = 'bold fg:#5fd7ff'
+symbol_threshold = 1
+number_threshold = 2
 
 
 # ─────────────────────────────
