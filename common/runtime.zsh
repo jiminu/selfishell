@@ -16,7 +16,7 @@ if [[ -d "$PYENV_ROOT/shims" ]]; then
   path=("$PYENV_ROOT/shims" $path)
 fi
 
-if (( $+commands[pyenv] )); then
+if _selfishell_command_path pyenv >/dev/null; then
   load_pyenv() {
     local virtualenv_init
 

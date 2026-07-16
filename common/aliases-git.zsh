@@ -1,7 +1,7 @@
 # Git aliases kept compatible with the commonly used Oh My Zsh git aliases.
 # Git completion itself is provided by Zsh's built-in _git function.
 
-if (( $+commands[git] )); then
+if _selfishell_command_path git >/dev/null; then
   alias g='git'
   alias ga='git add'
   alias gaa='git add --all'

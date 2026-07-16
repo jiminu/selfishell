@@ -35,10 +35,10 @@ load_nvm() {
   fi
 }
 
-if (( $+commands[brew] )); then
+if BREW_PATH="$(whence -p brew 2>/dev/null)"; then
   # Keep standard installations fast and ask Homebrew only when the executable
   # comes from a custom prefix or a wrapper.
-  BREW_PATH="${commands[brew]:A}"
+  BREW_PATH="${BREW_PATH:A}"
 
   if [[ -n "$HOMEBREW_PREFIX" ]]; then
     BREW_PREFIX="$HOMEBREW_PREFIX"
