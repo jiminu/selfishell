@@ -20,6 +20,7 @@ bash_files=(
   lib/platform.sh
   lib/profiles.sh
   lib/dependencies.sh
+  lib/tool_status.sh
   lib/releases.sh
   lib/package_managers/apt.sh
   lib/package_managers/homebrew.sh
@@ -43,6 +44,7 @@ bash_files=(
   tests/platform_test.bash
   tests/profiles_test.bash
   tests/proxy_test.bash
+  tests/tool_status_test.bash
   tests/release_bootstrap_test.bash
   tests/run.bash
   tests/test_helper.bash

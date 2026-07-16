@@ -43,9 +43,8 @@ command_status() {
   local check_updates=0
   local current_version="unknown"
   local available_version="not checked"
-  local dependency_platform architecture
-  local type name version entry_platform entry_architecture _
-  local installed key=""
+  local platform profile_platform dependency_platform architecture
+  local profile index package manager requirement key=""
   local resource
 
   while (("$#" > 0)); do
@@ -74,24 +73,41 @@ command_status() {
   fi
   printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
 
-  case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
-  architecture="$(detect_architecture)"
-  while read -r type name version entry_platform entry_architecture _; do
-    [[ -n "$type" && "${type#\#}" == "$type" ]] || continue
-    [[ "$entry_platform" == all || "$entry_platform" == "$dependency_platform" ]] || continue
-    [[ "$entry_architecture" == all || "$entry_architecture" == "$architecture" ]] || continue
-    [[ "$key" != *"|$name|"* ]] || continue
-    key="${key}|${name}|"
-    installed="$(dependency_installed_version "$name")"
-    [[ -n "$installed" ]] || installed="not managed"
-    printf '[TOOL] %s | Current: %s | Approved: %s\n' "$name" "$installed" "$version"
-  done <"$(dependencies_manifest_path)"
-
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
 
+  platform="$(detect_platform)"
+  case "$platform" in
+    ubuntu | ubuntu-wsl)
+      dependency_platform=linux
+      profile_platform=ubuntu
+      ;;
+    *)
+      dependency_platform="$platform"
+      profile_platform="$platform"
+      ;;
+  esac
+  architecture="$(detect_architecture)"
+
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
-    printf '[INFO] Profile: %s\n' "$(<"$SELFISHELL_STATE_DIR/profile")"
+    profile="$(<"$SELFISHELL_STATE_DIR/profile")"
+    printf '[INFO] Profile: %s\n' "$profile"
+    profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
+
+    for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
+      [[ "${PROFILE_PLATFORMS[$index]}" == all || "${PROFILE_PLATFORMS[$index]}" == "$profile_platform" ]] || continue
+      package="${PROFILE_PACKAGES[$index]}"
+      [[ "$key" != *"|$package|"* ]] || continue
+      key="${key}|${package}|"
+      manager="${PROFILE_MANAGERS[$index]}"
+      requirement="${PROFILE_REQUIREMENTS[$index]}"
+      tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
+      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
+        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
+      if [[ "$requirement" == required && "$TOOL_STATUS_INSTALLED" == missing ]]; then
+        SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+      fi
+    done
   fi
 
   for resource in \

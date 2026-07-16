@@ -16,8 +16,11 @@ selfishell status
 selfishell status --check-updates
 ```
 
-`status` returns nonzero when managed configuration is missing or changed. It
-does not modify files.
+`status` reports tools from the active profile as Selfishell-managed, Homebrew,
+apt, external, or missing. Package-manager versions are reported without an
+exact approved version because those repositories control resolution. The
+command returns nonzero when required tools are missing or managed
+configuration is missing or changed. It does not modify files.
 
 ## Restricted Network
 
