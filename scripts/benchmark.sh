@@ -18,6 +18,10 @@ case "$(uname -s)" in
 esac
 
 ln -s "$ROOT_DIR/common/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
+ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
+ln -s "$ROOT_DIR/common/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
+ln -s "$ROOT_DIR/common/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
+ln -s "$ROOT_DIR/common/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
 ln -s "$ROOT_DIR/common/aliases-common.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-common.zsh"
 ln -s "$ROOT_DIR/common/aliases-git.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-git.zsh"
 ln -s "$ROOT_DIR/common/aliases-kubectl.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-kubectl.zsh"

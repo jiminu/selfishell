@@ -41,13 +41,21 @@ test_install_copies_configuration_and_tracks_resources() {
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$HOME/.vimrc"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
+  cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
+    fail "Runtime Zsh module was not copied"
+  cmp -s "$ROOT_DIR/common/completion.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh" ||
+    fail "Completion Zsh module was not copied"
+  cmp -s "$ROOT_DIR/common/interactive.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/interactive.zsh" ||
+    fail "Interactive Zsh module was not copied"
+  cmp -s "$ROOT_DIR/common/update-notice.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ||
+    fail "Update notice Zsh module was not copied"
   [[ -n "$(find "$HOME" -maxdepth 1 -name '.zshrc.backup.*' -print -quit)" ]] ||
     fail "Original Zsh configuration was not backed up"
   [[ "$(sed -n '6p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == "$HOME"/.zshrc.backup.* ]] ||
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  [[ "$state_count" -eq 10 ]] || fail "Expected state for every managed Ubuntu resource"
+  [[ "$state_count" -eq 14 ]] || fail "Expected state for every managed Ubuntu resource"
 }
 
 test_macos_install_includes_ghostty_configuration() {
@@ -234,6 +242,11 @@ test_install_does_not_depend_on_checkout() {
     fail "User configuration still points to the checkout"
   [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ]] ||
     fail "Common configuration was not retained"
+  [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ]] ||
+    fail "Common configuration modules were not retained"
+  HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME" \
+    PATH="/usr/bin:/bin" zsh -dfc 'source "$HOME/.zshrc"' >/dev/null 2>&1 ||
+    fail "Zsh configuration depended on the removed checkout"
 }
 
 run_test() {

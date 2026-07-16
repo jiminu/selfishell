@@ -1,0 +1,73 @@
+# Zinit contributes additional definitions, but standard completion does not
+# depend on it being installed.
+ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
+
+if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
+  source "$ZINIT_HOME/zinit.zsh"
+  zinit ice blockf atpull'zinit creinstall -q .'
+  zinit light zsh-users/zsh-completions
+else
+  print -u2 "Zinit not found: $ZINIT_HOME"
+fi
+
+zstyle ':completion:*' matcher-list \
+  '' \
+  'm:{a-zA-Z}={A-Za-z}' \
+  'l:|=* r:|=*'
+
+autoload -Uz compinit
+ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
+SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
+[[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
+
+if [[ ! -o interactive ]]; then
+  compinit -C -d "$ZCOMPDUMP"
+elif [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
+  compinit -d "$ZCOMPDUMP"
+else
+  compinit -C -d "$ZCOMPDUMP"
+fi
+
+if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
+  zcompile "$ZCOMPDUMP"
+fi
+
+if (( $+functions[zinit] )); then
+  zinit cdreplay -q
+fi
+
+if (( $+commands[kubectl] )); then
+  if [[ -r "$SELFISHELL_COMPLETION_DIR/_kubectl" ]]; then
+    autoload -Uz _kubectl
+    compdef _kubectl kubectl k
+  else
+    _selfishell_kubectl_completion() {
+      local completion_source
+
+      if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
+         [[ -n "$completion_source" ]]; then
+        if eval "$completion_source" && (( $+functions[_kubectl] )); then
+          unfunction _selfishell_kubectl_completion
+          compdef _kubectl kubectl k
+          _kubectl "$@"
+          return
+        fi
+      fi
+      return 1
+    }
+    compdef _selfishell_kubectl_completion kubectl k
+  fi
+fi
+
+if (( $+commands[aws] && $+commands[aws_completer] )); then
+  autoload -Uz bashcompinit
+  bashcompinit
+  complete -C aws_completer aws
+fi
+
+if (( $+functions[zinit] )); then
+  autoload -Uz _zinit
+  compdef _zinit zinit
+fi
+
+unset SELFISHELL_COMPLETION_DIR

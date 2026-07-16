@@ -187,7 +187,8 @@ command_uninstall() {
   for resource in \
     user-ghostty user-vim user-starship user-zshrc \
     ghostty-config vim-config starship-config aliases-kubectl aliases-git \
-    aliases-common zsh-common zshrc-config; do
+    aliases-common zsh-update-notice zsh-interactive zsh-completion zsh-runtime \
+    zsh-common zshrc-config; do
     managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
   done
 
@@ -204,7 +205,8 @@ command_uninstall() {
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
 
-  for resource in ghostty-config vim-config starship-config aliases-kubectl aliases-git aliases-common zsh-common zshrc-config; do
+  for resource in ghostty-config vim-config starship-config aliases-kubectl aliases-git aliases-common \
+    zsh-update-notice zsh-interactive zsh-completion zsh-runtime zsh-common zshrc-config; do
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
 

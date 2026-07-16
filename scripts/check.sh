@@ -59,6 +59,10 @@ zsh_files=(
   mac/.zshrc
   ubuntu/.zshrc
   common/common.zsh
+  common/runtime.zsh
+  common/completion.zsh
+  common/interactive.zsh
+  common/update-notice.zsh
   common/aliases-common.zsh
   common/aliases-git.zsh
   common/aliases-kubectl.zsh
