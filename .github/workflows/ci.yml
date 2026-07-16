@@ -18,7 +18,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            interactive_p95_budget_ms: 150
+          - os: macos-latest
+            interactive_p95_budget_ms: 200
 
     steps:
       - name: Check out repository
@@ -36,6 +40,21 @@ jobs:
 
       - name: Run checks
         run: bash scripts/check.sh
+
+      - name: Measure interactive shell performance
+        env:
+          SELFISHELL_BENCHMARK_COMMON_P95_MAX_MS: 50
+          SELFISHELL_BENCHMARK_HELP_P95_MAX_MS: 50
+          SELFISHELL_BENCHMARK_INTERACTIVE_P95_MAX_MS: ${{ matrix.interactive_p95_budget_ms }}
+          SELFISHELL_BENCHMARK_RESULTS_FILE: ${{ runner.temp }}/selfishell-benchmark.tsv
+          SELFISHELL_BENCHMARK_VERSION_P95_MAX_MS: 50
+        run: bash scripts/benchmark.sh
+
+      - name: Upload performance result
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-performance-${{ runner.os }}
+          path: ${{ runner.temp }}/selfishell-benchmark.tsv
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E

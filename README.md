@@ -264,6 +264,7 @@ bash scripts/check.sh
 - [Installation](docs/INSTALLATION.md)
 - [Profiles](docs/PROFILES.md)
 - [Updates and rollback](docs/UPDATES.md)
+- [Shell performance](docs/PERFORMANCE.md)
 - [Company deployment](docs/COMPANY.md)
 - [Security model](docs/SECURITY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
