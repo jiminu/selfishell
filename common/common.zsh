@@ -26,8 +26,13 @@ fi
 
 if (( $+commands[pyenv] )); then
   load_pyenv() {
+    local virtualenv_init
+
     unfunction pyenv load_pyenv 2>/dev/null
     eval "$(command pyenv init - --no-rehash zsh)"
+    if virtualenv_init="$(command pyenv virtualenv-init - 2>/dev/null)"; then
+      eval "$virtualenv_init"
+    fi
   }
 
   pyenv() {

@@ -10,6 +10,10 @@ role.
 | `kubernetes` | Developer plus kubectl and context tooling |
 | `full` | Kubernetes plus supported desktop, font, and Java integrations |
 
+The `developer` profile installs both pyenv and pyenv-virtualenv. Shell
+initialization stays lazy and enables virtualenv auto-activation when pyenv is
+first used.
+
 Preview without changing the machine:
 
 ```sh
