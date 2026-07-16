@@ -12,8 +12,8 @@ selfishell install
 The default prefix is `~/.local`. Add `~/.local/bin` to `PATH` if the installer
 reports that it is missing. The bootstrap installs only the CLI unless `--setup`
 is explicitly supplied. Version discovery prefers the latest stable release and
-falls back to the most recently published pre-release when no stable release is
-available.
+otherwise uses the newest version tag only after its exact `VERSION` release
+asset is published.
 
 Use an exact release in controlled environments:
 

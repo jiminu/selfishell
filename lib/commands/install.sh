@@ -132,6 +132,9 @@ command_install() {
   fi
 
   install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
+  if [[ "$skip_packages" == "0" ]]; then
+    install_vim_plugins "$dry_run"
+  fi
 
   if [[ "$dry_run" == "0" ]]; then
     local profile_state

@@ -26,3 +26,19 @@ install_direct_package() {
       ;;
   esac
 }
+
+install_vim_plugins() {
+  local dry_run="$1"
+
+  [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || return 0
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would install declared Vim plugins.\n'
+    return
+  fi
+  if ! have_command vim; then
+    cli_error "Vim is required to install declared plugins."
+    return 1
+  fi
+
+  vim +PluginInstall +qall
+}

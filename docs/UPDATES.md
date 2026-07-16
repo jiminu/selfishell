@@ -13,16 +13,17 @@ selfishell rollback --yes
 
 The tools/configuration phase reapplies the installed profile's configuration
 and installs directly managed tools at the approved versions in
-`dependencies.conf`. System packages installed by apt or Homebrew continue to
+`dependencies.conf`. It also installs Vim plugins declared by the managed
+vimrc. System packages installed by apt or Homebrew continue to
 follow those package managers; this command does not perform a general
 operating-system package upgrade. A CLI-only installation skips this phase.
 
 The CLI phase downloads a versioned platform archive, verifies its published
 SHA-256 checksum, retains the active release, and switches `current` only after
-validation. Automatic version discovery prefers the latest stable release and
-falls back to the most recently published pre-release when no stable release is
-available. Use `--version VERSION` to select an exact release. `--version` cannot
-be combined with `--tools-only`.
+validation. Automatic version discovery prefers the latest stable release. If
+there is no stable release, it checks the newest version tag and accepts it only
+when that exact release's `VERSION` asset is available. Use `--version VERSION`
+to select an exact release. `--version` cannot be combined with `--tools-only`.
 
 `--dry-run` previews every selected phase without changing tools,
 configuration, or the active CLI release.
