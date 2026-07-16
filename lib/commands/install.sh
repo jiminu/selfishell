@@ -32,6 +32,11 @@ install_managed_configuration() {
   esac
 
   managed_install_file zshrc-config "$zsh_source" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
+  managed_install_file zsh-runtime "$SELFISHELL_ROOT/common/runtime.zsh" "$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh" "$dry_run"
+  managed_install_file zsh-completion "$SELFISHELL_ROOT/common/completion.zsh" "$SELFISHELL_CONFIG_DIR/zsh/completion.zsh" "$dry_run"
+  managed_install_file zsh-interactive "$SELFISHELL_ROOT/common/interactive.zsh" "$SELFISHELL_CONFIG_DIR/zsh/interactive.zsh" "$dry_run"
+  managed_install_file zsh-update-notice "$SELFISHELL_ROOT/common/update-notice.zsh" "$SELFISHELL_CONFIG_DIR/zsh/update-notice.zsh" "$dry_run"
+  # Switch the entrypoint only after every module it sources is available.
   managed_install_file zsh-common "$SELFISHELL_ROOT/common/common.zsh" "$SELFISHELL_CONFIG_DIR/zsh/common.zsh" "$dry_run"
   managed_install_file aliases-common "$SELFISHELL_ROOT/common/aliases-common.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-common.zsh" "$dry_run"
   managed_install_file aliases-git "$SELFISHELL_ROOT/common/aliases-git.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh" "$dry_run"
