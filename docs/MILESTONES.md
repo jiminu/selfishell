@@ -152,7 +152,8 @@ Acceptance criteria:
 Goal: add package-manager convenience only after the core release channel is
 stable.
 
-- [ ] Evaluate usage and demand for a Homebrew Tap.
+- [x] Evaluate usage and demand for a Homebrew Tap; defer until demonstrated
+      post-stable demand (`docs/DISTRIBUTION.md`).
 - [ ] Reuse the same signed/checksummed release artifacts in any formula.
 - [ ] Evaluate `.deb`, PPA, or an APT repository only if maintenance demand exists.
 - [ ] Keep package installation separate from modifying user configuration.
