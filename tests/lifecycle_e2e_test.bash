@@ -14,6 +14,10 @@ test_complete_release_lifecycle() {
 
   setup_test_home
   trap teardown_test_home EXIT
+  mkdir -p "$TEST_ROOT/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/starship"
+  chmod +x "$TEST_ROOT/bin/starship"
+  export PATH="$TEST_ROOT/bin:$PATH"
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"
   export XDG_CONFIG_HOME="$HOME/.config"
