@@ -68,7 +68,10 @@ ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
 SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
 [[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
 
-if [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
+if [[ ! -o interactive ]]; then
+  # Automated checks and scripts have no terminal for compaudit prompts.
+  compinit -C -d "$ZCOMPDUMP"
+elif [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
   compinit -d "$ZCOMPDUMP"
 else
   compinit -C -d "$ZCOMPDUMP"
