@@ -251,6 +251,23 @@ test_bootstrap_installs_cli_only_by_default() {
     fail "Default bootstrap changed shell startup files"
 }
 
+test_bootstrap_upgrade_retains_rollback_and_prunes_inactive_release() {
+  local version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1"
+
+  run_bootstrap --version 0.2.0 >/dev/null
+
+  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1" ]] ||
+    fail "Bootstrap upgrade retained an inactive release"
+  SELFISHELL_RELEASE_ROOT='file:///unavailable' \
+    "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
 test_add_to_path_updates_bashrc_once() {
   local count output
 
@@ -263,6 +280,35 @@ test_add_to_path_updates_bashrc_once() {
   [[ "$count" -eq 1 ]] || fail "Bash PATH entry was added more than once"
   PATH=/usr/bin:/bin bash -c 'source "$1"; [[ ":$PATH:" == *":$2:"* ]]' \
     _ "$HOME/.bashrc" "$TEST_ROOT/prefix/bin" || fail "Bash startup did not activate the CLI path"
+}
+
+test_purge_removes_installer_path_entry() {
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --purge --yes >/dev/null
+
+  [[ -r "$HOME/.bashrc" ]] || fail "Purge removed the user startup file"
+  [[ "$(<"$HOME/.bashrc")" != *'# Added by Selfishell installer'* ]] ||
+    fail "Purge retained the installer PATH marker"
+  [[ "$(<"$HOME/.bashrc")" != *"$TEST_ROOT/prefix/bin"* ]] ||
+    fail "Purge retained the installer PATH entry"
+}
+
+test_purge_preserves_modified_path_entry() {
+  local status
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+  printf '# user change\n' >>"$HOME/.bashrc"
+  sed -i.bak 's/export PATH=/export MODIFIED_PATH=/' "$HOME/.bashrc"
+  rm "$HOME/.bashrc.bak"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --purge --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Purge should reject a modified PATH entry"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected PATH purge removed the CLI"
+  grep -Fq 'MODIFIED_PATH=' "$HOME/.bashrc" || fail "Rejected PATH purge changed the startup file"
 }
 
 test_add_to_path_selects_zshrc() {

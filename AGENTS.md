@@ -28,15 +28,12 @@ Do not add a dead production URL to executable code.
 
 ## Current State
 
-The repository currently contains Bash bootstrap scripts, shared Zsh settings,
+The repository currently contains a Bash release bootstrap, shared Zsh settings,
 Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 
-- `bootstrap.sh` is the source-only legacy full-setup entrypoint.
-- `legacy/macos.sh` installs packages with Homebrew.
-- `legacy/ubuntu.sh` installs packages with apt and direct downloads.
-- `legacy/common.sh` contains shared legacy installation helpers.
+- `install.sh` is the public versioned release bootstrap.
 - `common/common.zsh` contains shared interactive shell initialization.
-- Configuration files are currently linked directly from the checkout.
+- Managed configuration is copied out of the source checkout.
 
 The `selfishell` CLI, managed configuration lifecycle, declarative profiles, and
 managed apt/Homebrew/direct package installation now exist. The versioned release
@@ -45,9 +42,8 @@ artifact builder also exist. Tagged release publication is automated; public
 beta verification remains a manual release gate.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-`update`, `rollback`, and `uninstall`. Legacy installation is not part of the
-versioned CLI; `bootstrap.sh` directly dispatches to source-only compatibility
-scripts.
+`update`, `rollback`, and `uninstall`. The former checkout-linked legacy
+bootstrap has been retired.
 
 ## Product Decisions
 
@@ -56,7 +52,9 @@ scripts.
 - The bootstrap installs only the Selfishell CLI. It must not silently replace
   user configuration or install the full development environment.
 - The bootstrap must not modify shell startup files by default. An explicit
-  `--add-to-path` option may add one idempotent Bash or Zsh PATH entry.
+  `--add-to-path` option may add one idempotent, tracked Bash or Zsh PATH entry.
+  Purge may remove only that exact installer-managed entry and must preserve a
+  startup file when the entry was changed.
 - The canonical command is `selfishell`. Also provide `sfs` as an optional
   convenience symlink for interactive use.
 - Do not use `sf` as a command name because it is too generic and has a higher
@@ -189,6 +187,8 @@ when unavailable. Ghostty is the only separate saved installation choice.
 with macOS Bash 3.2. It selects an exact platform/architecture archive, verifies
 that archive against `SHA256SUMS`, extracts into a versioned release directory,
 then atomically switches `current` and CLI links.
+Bootstrap upgrades retain the former active release as `previous` and prune
+older inactive releases, matching the CLI update lifecycle.
 
 Release assets and naming are defined in `docs/RELEASING.md`. A requested version
 must use only its `releases/download/v<version>` path and must never fall back to
@@ -201,7 +201,7 @@ existing GitHub Release.
 Every shell change should receive the checks applicable to it:
 
 ```sh
-bash -n bootstrap.sh legacy/common.sh legacy/macos.sh legacy/ubuntu.sh
+bash -n install.sh bin/selfishell lib/*.sh lib/commands/*.sh
 zsh -n mac/.zshrc ubuntu/.zshrc common/*.zsh
 ```
 

@@ -72,7 +72,7 @@ EOF
 
 test_detects_apt_package_version() {
   setup_tool_status_home
-  printf '#!/usr/bin/env bash\nprintf "2.43.0-1ubuntu7\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
+  printf '#!/usr/bin/env bash\nprintf "git\\t2.43.0-1ubuntu7\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
   chmod +x "$TEST_ROOT/bin/dpkg-query"
 
   tool_status_detect apt git linux amd64
@@ -80,6 +80,26 @@ test_detects_apt_package_version() {
   [[ "$TOOL_STATUS_INSTALLED" == 2.43.0-1ubuntu7 ]] || fail "Apt version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == apt ]] || fail "Apt source was not reported"
   teardown_tool_status_home
+}
+
+test_reuses_apt_inventory() {
+  setup_tool_status_home
+  export MOCK_DPKG_LOG="$TEST_ROOT/dpkg.log"
+  cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
+#!/usr/bin/env bash
+printf 'query\n' >>"$MOCK_DPKG_LOG"
+printf 'git\t2.43.0\ncurl\t8.5.0\n'
+EOF
+  chmod +x "$TEST_ROOT/bin/dpkg-query"
+
+  tool_status_detect apt git linux amd64
+  tool_status_detect apt curl linux amd64
+
+  [[ "$(wc -l <"$MOCK_DPKG_LOG" | tr -d ' ')" == 1 ]] ||
+    fail "Apt inventory should be loaded once"
+  [[ "$TOOL_STATUS_INSTALLED" == 8.5.0 ]] || fail "Cached Apt inventory returned the wrong version"
+  teardown_tool_status_home
+  unset MOCK_DPKG_LOG
 }
 
 test_detects_selfishell_managed_direct_dependency() {
@@ -131,6 +151,8 @@ main() {
   printf 'PASS: test_detects_homebrew_formula_version\n'
   test_reuses_homebrew_inventory
   printf 'PASS: test_reuses_homebrew_inventory\n'
+  test_reuses_apt_inventory
+  printf 'PASS: test_reuses_apt_inventory\n'
   test_detects_selfishell_managed_direct_dependency
   printf 'PASS: test_detects_selfishell_managed_direct_dependency\n'
   test_distinguishes_external_and_missing_direct_dependencies

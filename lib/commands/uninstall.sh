@@ -43,6 +43,82 @@ uninstall_prepare_purge() {
   fi
 }
 
+uninstall_path_entry_values() {
+  local prefix="$1"
+  local state_file="$SELFISHELL_SHARE_DIR/path-startup-file"
+  local bin_state_file="$SELFISHELL_SHARE_DIR/path-bin-dir"
+  local bin_dir="$prefix/bin"
+  local escaped_bin_dir
+
+  SELFISHELL_PATH_STARTUP_FILE=""
+  SELFISHELL_PATH_ENTRY=""
+  [[ -r "$state_file" ]] || return 0
+  SELFISHELL_PATH_STARTUP_FILE="$(<"$state_file")"
+  case "$SELFISHELL_PATH_STARTUP_FILE" in
+    "$HOME/.bashrc" | "$HOME/.zshrc") ;;
+    *)
+      cli_error "Invalid recorded PATH startup file: $SELFISHELL_PATH_STARTUP_FILE"
+      return "$SELFISHELL_EXIT_ERROR"
+      ;;
+  esac
+  if [[ -r "$bin_state_file" ]]; then
+    bin_dir="$(<"$bin_state_file")"
+    if [[ "$(cd "$(dirname "$bin_dir")" && pwd -P)/$(basename "$bin_dir")" != "$(cd "$(dirname "$prefix/bin")" && pwd -P)/$(basename "$prefix/bin")" ]]; then
+      cli_error "Invalid recorded Selfishell PATH directory: $bin_dir"
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
+  fi
+  printf -v escaped_bin_dir '%q' "$bin_dir"
+  SELFISHELL_PATH_ENTRY="export PATH=${escaped_bin_dir}:\"\$PATH\""
+}
+
+uninstall_validate_path_entry() {
+  local prefix="$1"
+  local marker='# Added by Selfishell installer'
+
+  uninstall_path_entry_values "$prefix" || return
+  [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
+  if [[ ! -r "$SELFISHELL_PATH_STARTUP_FILE" ]] || ! awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
+    $0 == marker {
+      if ((getline following) > 0 && following == entry) found = 1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$SELFISHELL_PATH_STARTUP_FILE"; then
+    cli_error "Recorded Selfishell PATH entry was modified; preserving: $SELFISHELL_PATH_STARTUP_FILE"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+}
+
+uninstall_remove_path_entry() {
+  local prefix="$1"
+  local dry_run="$2"
+  local marker='# Added by Selfishell installer'
+  local temporary
+
+  uninstall_path_entry_values "$prefix" || return
+  [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
+  if [[ "$dry_run" == 1 ]]; then
+    printf 'Would remove Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
+    return
+  fi
+
+  temporary="$(mktemp "${SELFISHELL_PATH_STARTUP_FILE}.tmp.XXXXXX")"
+  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary"
+  awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
+    $0 == marker {
+      if ((getline following) > 0) {
+        if (following == entry) next
+        print
+        print following
+        next
+      }
+    }
+    { print }
+  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary"
+  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE"
+  printf 'Removed Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
+}
+
 uninstall_purge() {
   local dry_run="$1"
   local prefix bin_dir
@@ -100,6 +176,7 @@ command_uninstall() {
     prefix="$(dirname "$(dirname "$SELFISHELL_SHARE_DIR")")"
     uninstall_prepare_purge "$prefix/bin/selfishell" "$SELFISHELL_SHARE_DIR/current/bin/selfishell" || return
     uninstall_prepare_purge "$prefix/bin/sfs" selfishell || return
+    uninstall_validate_path_entry "$prefix" || return
   fi
   if [[ "$purge" == 1 ]]; then
     confirm_action "Uninstall and purge Selfishell?" "$assume_yes" "$dry_run" || return
@@ -117,6 +194,10 @@ command_uninstall() {
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall cancelled because managed resources were changed."
     return "$result"
+  fi
+
+  if [[ "$purge" == 1 ]]; then
+    uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
   for resource in user-ghostty user-vim user-starship user-zshrc; do

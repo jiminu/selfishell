@@ -12,8 +12,8 @@ selfishell install
 The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
 installer prints commands for the current shell and an absolute command that
 works immediately. It does not modify shell startup files by default. Pass
-`--add-to-path` to add an idempotent entry to `~/.bashrc` or `~/.zshrc` based on
-the current default shell:
+`--add-to-path` to add an idempotent, tracked entry to `~/.bashrc` or `~/.zshrc`
+based on the current default shell:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
@@ -35,7 +35,8 @@ selfishell install --profile minimal --yes
 The archive is downloaded to a temporary directory, checked against the
 release's `SHA256SUMS`, and then installed under
 `~/.local/share/selfishell/releases/<version>`. Existing non-symbolic CLI paths
-are never replaced.
+are never replaced. A later bootstrap installation retains the former active
+release for offline rollback and removes older inactive releases.
 
 For offline configuration after the CLI is provisioned:
 
@@ -53,7 +54,9 @@ selfishell uninstall --restore
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and
 state. Personal `local.zsh` configuration and packages installed through Apt,
-Homebrew, or direct tool installers are preserved.
+Homebrew, or direct tool installers are preserved. If `--add-to-path` was used,
+purge removes the installer's unchanged PATH entry; a modified entry is
+preserved and stops the purge for review.
 
 ```sh
 selfishell uninstall --restore --purge

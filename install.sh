@@ -141,29 +141,66 @@ bootstrap_validate_link_path() {
   fi
 }
 
+bootstrap_prune_releases() {
+  local releases_dir="$1"
+  local current_target="$2"
+  local previous_target="$3"
+  local release_dir release_name
+
+  current_target="${current_target##*/}"
+  previous_target="${previous_target##*/}"
+  for release_dir in "$releases_dir"/*; do
+    [[ -d "$release_dir" && ! -L "$release_dir" ]] || continue
+    release_name="${release_dir##*/}"
+    [[ "$release_name" == "$current_target" || "$release_name" == "$previous_target" ]] && continue
+    rm -rf "$release_dir"
+    printf 'Removed inactive Selfishell release: %s\n' "$release_name"
+  done
+}
+
 bootstrap_add_to_path() {
   local bin_dir="$1"
+  local share_dir="$2"
   local shell_name="${SELFISHELL_BOOTSTRAP_SHELL:-${SHELL:-bash}}"
   local startup_file
   local escaped_bin_dir
+  local path_entry
+  local state_file="$share_dir/path-startup-file"
+  local bin_state_file="$share_dir/path-bin-dir"
+  local temporary_state
+  local temporary_bin_state
 
   case "${shell_name##*/}" in
     zsh) startup_file="$HOME/.zshrc" ;;
     *) startup_file="$HOME/.bashrc" ;;
   esac
 
-  if [[ -r "$startup_file" ]] && grep -Fq "$bin_dir" "$startup_file"; then
+  printf -v escaped_bin_dir '%q' "$bin_dir"
+  path_entry="export PATH=${escaped_bin_dir}:\"\$PATH\""
+
+  if [[ -r "$startup_file" ]] && grep -Fqx "$path_entry" "$startup_file"; then
     printf 'PATH already configured in %s\n' "$startup_file"
+    if grep -Fqx '# Added by Selfishell installer' "$startup_file"; then
+      temporary_state="$(mktemp "${state_file}.tmp.XXXXXX")"
+      printf '%s\n' "$startup_file" >"$temporary_state"
+      mv "$temporary_state" "$state_file"
+      temporary_bin_state="$(mktemp "${bin_state_file}.tmp.XXXXXX")"
+      printf '%s\n' "$bin_dir" >"$temporary_bin_state"
+      mv "$temporary_bin_state" "$bin_state_file"
+    fi
     return
   fi
 
-  printf -v escaped_bin_dir '%q' "$bin_dir"
   {
     printf '\n# Added by Selfishell installer\n'
-    # $PATH must expand when the startup file is sourced, not during installation.
-    # shellcheck disable=SC2016
-    printf 'export PATH=%s:"$PATH"\n' "$escaped_bin_dir"
+    printf '%s\n' "$path_entry"
   } >>"$startup_file"
+  temporary_state="$(mktemp "${state_file}.tmp.XXXXXX")"
+  printf '%s\n' "$startup_file" >"$temporary_state"
+  mv "$temporary_state" "$state_file"
+  temporary_bin_state="$(mktemp "${bin_state_file}.tmp.XXXXXX")"
+  printf '%s\n' "$bin_dir" >"$temporary_bin_state"
+  mv "$temporary_bin_state" "$bin_state_file"
   printf 'Added %s to PATH in %s\n' "$bin_dir" "$startup_file"
 }
 
@@ -202,6 +239,8 @@ main() {
   local staging_dir
   local bin_dir
   local setup_args=()
+  local current_target=""
+  local previous_target=""
 
   while (("$#" > 0)); do
     case "$1" in
@@ -288,6 +327,7 @@ main() {
   release_dir="$releases_dir/$version"
   bin_dir="$prefix/bin"
   bootstrap_validate_link_path "$share_dir/current"
+  bootstrap_validate_link_path "$share_dir/previous"
   bootstrap_validate_link_path "$bin_dir/selfishell"
   bootstrap_validate_link_path "$bin_dir/sfs"
   mkdir -p "$releases_dir" "$bin_dir"
@@ -315,13 +355,20 @@ main() {
     SELFISHELL_STAGING_DIR=""
   fi
 
+  [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
+  [[ ! -L "$share_dir/previous" ]] || previous_target="$(readlink "$share_dir/previous")"
+  if [[ -n "$current_target" && "$current_target" != "releases/$version" ]]; then
+    bootstrap_atomic_link "$current_target" "$share_dir/previous"
+    previous_target="$current_target"
+  fi
   bootstrap_atomic_link "releases/$version" "$share_dir/current"
   bootstrap_atomic_link "$share_dir/current/bin/selfishell" "$bin_dir/selfishell"
   bootstrap_atomic_link selfishell "$bin_dir/sfs"
+  bootstrap_prune_releases "$releases_dir" "releases/$version" "$previous_target"
 
   printf 'Installed Selfishell %s\n' "$version"
   if [[ "$add_to_path" == 1 ]]; then
-    bootstrap_add_to_path "$bin_dir"
+    bootstrap_add_to_path "$bin_dir" "$share_dir"
   elif [[ ":$PATH:" != *":$bin_dir:"* ]]; then
     bootstrap_print_path_guidance "$bin_dir"
   fi
