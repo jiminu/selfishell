@@ -11,7 +11,9 @@ selfishell install --profile developer
 
 The default prefix is `~/.local`. Add `~/.local/bin` to `PATH` if the installer
 reports that it is missing. The bootstrap installs only the CLI unless `--setup`
-is explicitly supplied.
+is explicitly supplied. Version discovery prefers the latest stable release and
+falls back to the most recently published pre-release when no stable release is
+available.
 
 Use an exact release in controlled environments:
 

@@ -9,6 +9,7 @@ source "$ROOT_DIR/tests/test_helper.bash"
 setup_release_home() {
   local version
   local next_version=0.2.0
+  local prerelease_version=0.3.0-beta.2
 
   setup_test_home
   version="$(<"$ROOT_DIR/VERSION")"
@@ -24,18 +25,22 @@ setup_release_home() {
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux version 6.8.0\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
 
-  mkdir -p "$TEST_ROOT/artifacts" "$TEST_ROOT/next-artifacts" \
+  mkdir -p "$TEST_ROOT/artifacts" "$TEST_ROOT/next-artifacts" "$TEST_ROOT/prerelease-artifacts" \
     "$TEST_ROOT/releases/download/v$version" "$TEST_ROOT/releases/download/v$next_version" \
+    "$TEST_ROOT/releases/download/v$prerelease_version" \
     "$TEST_ROOT/releases/latest/download"
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$TEST_ROOT/artifacts" >/dev/null
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" --output "$TEST_ROOT/next-artifacts" >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" --output "$TEST_ROOT/prerelease-artifacts" >/dev/null
   cp "$TEST_ROOT/artifacts"/* "$TEST_ROOT/releases/download/v$version/"
   cp "$TEST_ROOT/next-artifacts"/* "$TEST_ROOT/releases/download/v$next_version/"
+  cp "$TEST_ROOT/prerelease-artifacts"/* "$TEST_ROOT/releases/download/v$prerelease_version/"
   cp "$TEST_ROOT/next-artifacts/VERSION" "$TEST_ROOT/releases/latest/download/VERSION"
 }
 
 teardown_release_home() {
-  unset SELFISHELL_RELEASE_ROOT SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
+  unset SELFISHELL_RELEASE_ROOT SELFISHELL_RELEASE_API_URL
+  unset SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
   unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
@@ -77,6 +82,61 @@ test_latest_uses_published_version_file() {
   run_bootstrap >/dev/null
   [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.0 ]] ||
     fail "Latest installation selected the wrong version"
+}
+
+test_latest_falls_back_to_published_prerelease() {
+  rm "$TEST_ROOT/releases/latest/download/VERSION"
+  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
+  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+
+  run_bootstrap >/dev/null
+
+  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.3.0-beta.2 ]] ||
+    fail "Prerelease fallback selected the wrong version"
+}
+
+test_update_falls_back_to_published_prerelease() {
+  local version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  rm "$TEST_ROOT/releases/latest/download/VERSION"
+  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
+  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --yes >/dev/null
+
+  assert_symlink_to 'releases/0.3.0-beta.2' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_status_falls_back_to_published_prerelease() {
+  local output version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
+    install --profile minimal --skip-packages --yes >/dev/null
+  rm "$TEST_ROOT/releases/latest/download/VERSION"
+  printf '[{"tag_name":"v0.3.0-beta.2","prerelease":true}]\n' >"$TEST_ROOT/releases-api.json"
+  export SELFISHELL_RELEASE_API_URL="file://$TEST_ROOT/releases-api.json"
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" status --check-updates)" || true
+
+  [[ "$output" == *"[CLI] Current: $version | Available: 0.3.0-beta.2"* ]] ||
+    fail "Status did not report the published prerelease"
+}
+
+test_latest_lookup_failure_is_actionable() {
+  local output status
+  rm "$TEST_ROOT/releases/latest/download/VERSION"
+
+  set +e
+  output="$(run_bootstrap 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Missing release metadata should fail"
+  [[ "$output" == *'Use --version VERSION to select one.'* ]] ||
+    fail "Missing release metadata did not provide version guidance"
+  [[ "$output" != *'curl:'* ]] || fail "Raw curl errors should not leak from release discovery"
 }
 
 test_cli_update_and_offline_rollback() {

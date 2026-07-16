@@ -82,6 +82,30 @@ bootstrap_validate_version() {
   esac
 }
 
+bootstrap_latest_version() {
+  local official_root="https://github.com/jiminu/selfishell/releases"
+  local api_url response version
+
+  if version="$(curl -fsSL "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>/dev/null)"; then
+    version="${version#v}"
+    [[ -n "$version" ]] && {
+      printf '%s\n' "$version"
+      return
+    }
+  fi
+
+  [[ "$SELFISHELL_RELEASE_ROOT" == "$official_root" || -n "${SELFISHELL_RELEASE_API_URL:-}" ]] || return 1
+  api_url="${SELFISHELL_RELEASE_API_URL:-https://api.github.com/repos/jiminu/selfishell/releases?per_page=1}"
+  response="$(curl -fsSL \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    "$api_url" 2>/dev/null)" || return 1
+  version="$(printf '%s\n' "$response" | sed -n \
+    's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
+  [[ -n "$version" ]] || return 1
+  printf '%s\n' "$version"
+}
+
 bootstrap_atomic_link() {
   local link_target="$1"
   local link_path="$2"
@@ -184,8 +208,10 @@ main() {
   architecture="$(bootstrap_architecture)"
 
   if [[ -z "$version" ]]; then
-    version="$(curl -fsSL "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION")"
-    version="${version#v}"
+    version="$(bootstrap_latest_version)" || {
+      bootstrap_error "Unable to determine the latest Selfishell release. Use --version VERSION to select one."
+      return 1
+    }
   fi
   bootstrap_validate_version "$version"
 

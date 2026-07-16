@@ -4,6 +4,31 @@ release_root_url() {
   printf '%s\n' "${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/selfishell/releases}"
 }
 
+release_latest_version() {
+  local official_root="https://github.com/jiminu/selfishell/releases"
+  local root api_url response version
+
+  root="$(release_root_url)"
+  if version="$(curl -fsSL "$root/latest/download/VERSION" 2>/dev/null)"; then
+    version="${version#v}"
+    [[ -n "$version" ]] && {
+      printf '%s\n' "$version"
+      return
+    }
+  fi
+
+  [[ "$root" == "$official_root" || -n "${SELFISHELL_RELEASE_API_URL:-}" ]] || return 1
+  api_url="${SELFISHELL_RELEASE_API_URL:-https://api.github.com/repos/jiminu/selfishell/releases?per_page=1}"
+  response="$(curl -fsSL \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    "$api_url" 2>/dev/null)" || return 1
+  version="$(printf '%s\n' "$response" | sed -n \
+    's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
+  [[ -n "$version" ]] || return 1
+  printf '%s\n' "$version"
+}
+
 release_installation_paths() {
   local releases_dir
 

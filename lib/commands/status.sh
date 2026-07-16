@@ -65,11 +65,10 @@ command_status() {
 
   [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
   if [[ "$check_updates" == 1 ]]; then
-    available_version="$(curl -fsSL "$(release_root_url)/latest/download/VERSION")" || {
+    available_version="$(release_latest_version)" || {
       cli_error "Unable to check the available CLI version."
       available_version="unavailable"
     }
-    available_version="${available_version#v}"
   fi
   printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
 

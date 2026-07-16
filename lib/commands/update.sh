@@ -64,8 +64,10 @@ update_cli_release() {
   local dry_run="$3"
 
   if [[ -z "$version" ]]; then
-    version="$(curl -fsSL "$(release_root_url)/latest/download/VERSION")"
-    version="${version#v}"
+    version="$(release_latest_version)" || {
+      cli_error "Unable to determine the latest Selfishell release. Use --version VERSION to select one."
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
   [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]] || {
     cli_error "Invalid version: $version"
