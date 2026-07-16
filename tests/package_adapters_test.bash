@@ -15,6 +15,7 @@ MOCK_INSTALLED_PACKAGES=""
 MOCK_UID=1000
 MOCK_HAVE_SUDO=1
 MOCK_SUDO_COUNT=0
+MOCK_HOMEBREW_NO_ASK=""
 
 have_command() {
   [[ "$1" != "sudo" || "$MOCK_HAVE_SUDO" == "1" ]]
@@ -51,6 +52,7 @@ sudo() {
 
 brew() {
   if [[ "$1" == "install" ]]; then
+    MOCK_HOMEBREW_NO_ASK="${HOMEBREW_NO_ASK:-}"
     shift
     [[ "${1:-}" == "--cask" ]] && shift
     MOCK_INSTALLED_PACKAGES="$*"
@@ -67,6 +69,7 @@ reset_package_mocks() {
   MOCK_UID=1000
   MOCK_HAVE_SUDO=1
   MOCK_SUDO_COUNT=0
+  MOCK_HOMEBREW_NO_ASK=""
 }
 
 test_apt_non_root_requires_sudo() {
@@ -126,6 +129,15 @@ test_homebrew_optional_failure_is_reported() {
   homebrew_install_packages optional formula 0 optional-tool
   [[ "${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}" == "optional-tool" ]] ||
     fail "Failed optional Homebrew formula was not reported"
+}
+
+test_homebrew_suppresses_duplicate_confirmation() {
+  reset_package_mocks
+
+  homebrew_install_packages required formula 0 required-tool
+
+  [[ "$MOCK_HOMEBREW_NO_ASK" == "1" ]] ||
+    fail "Homebrew package installation did not disable its duplicate prompt"
 }
 
 test_homebrew_required_failure_fails() {
