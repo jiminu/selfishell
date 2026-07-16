@@ -74,6 +74,7 @@ command_status() {
 
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
+  tool_status_reset_cache
 
   platform="$(detect_platform)"
   case "$platform" in
