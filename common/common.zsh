@@ -50,71 +50,80 @@ if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   # Reinstall completion files when the plugin is updated
   zinit ice blockf atpull'zinit creinstall -q .'
   zinit light zsh-users/zsh-completions
+else
+  print -u2 "Zinit not found: $ZINIT_HOME"
+fi
 
-  # Complete by prefix, case-insensitive match, then substring match
-  zstyle ':completion:*' matcher-list \
-    '' \
-    'm:{a-zA-Z}={A-Za-z}' \
-    'l:|=* r:|=*'
+# Completion is part of the minimal profile. Zinit only contributes additional
+# definitions for larger profiles, so the standard completion system must not
+# depend on Zinit being installed.
+zstyle ':completion:*' matcher-list \
+  '' \
+  'm:{a-zA-Z}={A-Za-z}' \
+  'l:|=* r:|=*'
 
-  # Initialize completion directly because Oh My Zsh is not loaded
-  autoload -Uz compinit
-  ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
-  SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
-  [[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
+# Initialize completion directly because Oh My Zsh is not loaded
+autoload -Uz compinit
+ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
+SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
+[[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
 
-  if [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
-    compinit -d "$ZCOMPDUMP"
-  else
-    compinit -C -d "$ZCOMPDUMP"
-  fi
+if [[ ! -o interactive ]]; then
+  # Automated checks and scripts have no terminal for compaudit prompts.
+  compinit -C -d "$ZCOMPDUMP"
+elif [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
+  compinit -d "$ZCOMPDUMP"
+else
+  compinit -C -d "$ZCOMPDUMP"
+fi
 
-  # Zsh transparently uses the compiled dump on subsequent startups.
-  if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
-    zcompile "$ZCOMPDUMP"
-  fi
+# Zsh transparently uses the compiled dump on subsequent startups.
+if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
+  zcompile "$ZCOMPDUMP"
+fi
 
+if (( $+functions[zinit] )); then
   # Apply compdef calls deferred while plugins were loading
   zinit cdreplay -q
+fi
 
-  # Prefer the completion generated during setup. If it is missing, defer
-  # generation until the first completion request so startup stays fast.
-  if (( $+commands[kubectl] )); then
-    if [[ -r "$SELFISHELL_COMPLETION_DIR/_kubectl" ]]; then
-      autoload -Uz _kubectl
-      compdef _kubectl kubectl k
-    else
-      _selfishell_kubectl_completion() {
-        local completion_source
+# Prefer the completion generated during setup. If it is missing, defer
+# generation until the first completion request so startup stays fast.
+if (( $+commands[kubectl] )); then
+  if [[ -r "$SELFISHELL_COMPLETION_DIR/_kubectl" ]]; then
+    autoload -Uz _kubectl
+    compdef _kubectl kubectl k
+  else
+    _selfishell_kubectl_completion() {
+      local completion_source
 
-        if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
-           [[ -n "$completion_source" ]]; then
-          if eval "$completion_source" && (( $+functions[_kubectl] )); then
-            unfunction _selfishell_kubectl_completion
-            compdef _kubectl kubectl k
-            _kubectl "$@"
-            return
-          fi
+      if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
+         [[ -n "$completion_source" ]]; then
+        if eval "$completion_source" && (( $+functions[_kubectl] )); then
+          unfunction _selfishell_kubectl_completion
+          compdef _kubectl kubectl k
+          _kubectl "$@"
+          return
         fi
+      fi
 
-        return 1
-      }
-      compdef _selfishell_kubectl_completion kubectl k
-    fi
+      return 1
+    }
+    compdef _selfishell_kubectl_completion kubectl k
   fi
+fi
 
-  # Run aws_completer only when completion is requested
-  if (( $+commands[aws] && $+commands[aws_completer] )); then
-    autoload -Uz bashcompinit
-    bashcompinit
-    complete -C aws_completer aws
-  fi
+# Run aws_completer only when completion is requested
+if (( $+commands[aws] && $+commands[aws_completer] )); then
+  autoload -Uz bashcompinit
+  bashcompinit
+  complete -C aws_completer aws
+fi
 
+if (( $+functions[zinit] )); then
   # Zinit command completion
   autoload -Uz _zinit
   compdef _zinit zinit
-else
-  print -u2 "Zinit not found: $ZINIT_HOME"
 fi
 
 unset SELFISHELL_COMPLETION_DIR

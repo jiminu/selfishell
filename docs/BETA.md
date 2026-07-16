@@ -37,22 +37,46 @@ prefix on 2026-07-16.
 Run these checks on one existing macOS or Ubuntu development machine. A fresh
 user account or temporary `HOME` is preferred but not required.
 
-- [ ] Review `selfishell install --profile minimal --dry-run`.
-- [ ] Install the beta CLI and minimal profile.
+- [x] Review `selfishell install --profile minimal --dry-run`.
+- [x] Install the beta CLI and minimal profile.
 - [ ] Open a new terminal and verify prompt rendering and Git completion.
 - [ ] Run `selfishell status`, `self-update`, and `rollback`.
-- [ ] Run uninstall with restore and confirm the original configuration returns.
-- [ ] Record package-manager prompts, PATH guidance, and any usability issues.
+- [x] Run uninstall with restore and confirm the original configuration returns.
+- [x] Record package-manager prompts, PATH guidance, and any usability issues.
 
 ## Result Record
 
 ```text
-Release:
-Platform and version:
-Architecture:
-Date:
-Tester:
-Automated CI run:
-Result:
+Release: v0.1.0-beta.1
+Platform and version: macOS 26.5.2 (25F84)
+Architecture: arm64
+Date: 2026-07-16
+Tester: Codex-assisted isolated-home smoke test
+Automated CI run: https://github.com/jiminu/selfishell/actions/runs/29426591218
+Result: Follow-up required before completing M6
 Notes or issue links:
+- The public archive installed successfully and printed correct PATH guidance.
+- The minimal dry-run, offline configuration install, doctor, status, and
+  uninstall with restoration passed in an isolated HOME.
+- Exact-version self-update correctly reported that the beta was already active.
+- Rollback correctly reported that no previous release existed in the clean
+  prefix, so a successful retained-release rollback still needs manual coverage.
+- Git completion was unavailable because minimal does not install Zinit while
+  completion initialization depended on Zinit. The completion initialization
+  is now independent of Zinit and has regression coverage; verify it in the next
+  published beta.
+- Package-manager prompts were intentionally not exercised to avoid changing
+  the development machine outside the isolated HOME.
 ```
+
+### Local follow-up candidate
+
+The completion fix was packaged locally as `0.1.0-beta.2` and tested on the
+same machine and isolated home. Updating from the public `0.1.0-beta.1` release
+to that candidate retained beta.1 as `previous`. A new TTY-backed login Zsh
+initialized Starship and mapped Git completion to `_git` without Zinit. An
+offline rollback restored beta.1, and uninstall restored the original `.zshrc`.
+
+These checks validate the candidate behavior but do not replace verification of
+the next published pre-release. Keep the remaining smoke-test items open until
+the candidate is published and installed through the public release path.
