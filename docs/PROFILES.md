@@ -5,10 +5,12 @@ role.
 
 | Profile | Purpose |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, and core configuration |
-| `developer` | Minimal plus navigation, search, runtimes, and Vim tooling |
+| `minimal` | Core shell plus FZF, Zoxide, Eza, Bat, Vim, and Vundle |
+| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, Zinit, and build tooling |
 | `kubernetes` | Developer plus kubectl and context tooling |
 | `full` | Kubernetes plus supported desktop, font, and Java integrations |
+
+`minimal` is selected when `--profile` is omitted.
 
 The `developer` profile installs both pyenv and pyenv-virtualenv. Shell
 initialization stays lazy and enables virtualenv auto-activation when pyenv is

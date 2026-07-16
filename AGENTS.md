@@ -158,7 +158,9 @@ Preserve these invariants when extending the lifecycle:
 Built-in profiles live in `profiles/*.conf` and contain declarative `include` and
 `package` records. Keep profile files free of executable shell code. The profile
 order is `minimal`, `developer`, `kubernetes`, then `full`; each larger profile
-includes the preceding one.
+includes the preceding one. `minimal` is the default and includes the everyday
+interactive shell tools; language runtimes and build dependencies begin in
+`developer`.
 
 Private package additions use `--local-profile FILE` or
 `SELFISHELL_LOCAL_PROFILE`. Local files may contain only package records and may

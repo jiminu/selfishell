@@ -31,13 +31,28 @@ run_profile_dry_run() {
   printf '%s\n' "$output" | awk '/^Would install .* (apt packages|Homebrew|direct package)/'
 }
 
-test_minimal_excludes_developer_and_kubernetes_packages() {
+test_default_profile_is_minimal() {
+  local output
+  output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
+
+  [[ "$output" == *'fzf'* && "$output" == *'direct package: vundle'* ]] ||
+    fail "Default install did not select the minimal profile"
+  [[ "$output" != *'direct package: pyenv'* ]] ||
+    fail "Default install included developer tools"
+}
+
+test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   local output
   output="$(run_profile_dry_run minimal)"
 
-  [[ "$output" == *'zsh git curl ca-certificates'* ]] || fail "Minimal apt packages are incomplete"
+  [[ "$output" == *'zsh git curl ca-certificates fzf zoxide'* ]] ||
+    fail "Minimal required apt packages are incomplete"
+  [[ "$output" == *'optional apt packages: eza bat'* ]] ||
+    fail "Minimal optional apt packages are incomplete"
+  [[ "$output" == *'vim'* ]] || fail "Minimal profile is missing Vim"
   [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
-  [[ "$output" != *'fzf'* ]] || fail "Minimal profile included developer tools"
+  [[ "$output" == *'direct package: vundle'* ]] || fail "Minimal profile is missing Vundle"
+  [[ "$output" != *'direct package: pyenv'* ]] || fail "Minimal profile included developer runtimes"
   [[ "$output" != *'kubectl'* ]] || fail "Minimal profile included Kubernetes tools"
 }
 
@@ -79,7 +94,7 @@ test_local_profile_adds_private_package() {
   printf 'package ubuntu optional apt company-cli\n' >"$local_profile"
   output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --local-profile "$local_profile" --dry-run)"
 
-  [[ "$output" == *'optional apt packages: company-cli'* ]] ||
+  [[ "$output" == *'optional apt packages:'* && "$output" == *'company-cli'* ]] ||
     fail "Local profile package was not included"
 }
 

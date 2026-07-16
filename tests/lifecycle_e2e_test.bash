@@ -18,6 +18,7 @@ test_complete_release_lifecycle() {
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/starship"
   chmod +x "$TEST_ROOT/bin/starship"
   export PATH="$TEST_ROOT/bin:$PATH"
+  mkdir -p "$HOME/.vim/bundle/Vundle.vim/.git"
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"
   export XDG_CONFIG_HOME="$HOME/.config"

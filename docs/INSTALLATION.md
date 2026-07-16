@@ -6,7 +6,7 @@ does not require root access.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
-selfishell install --profile developer
+selfishell install
 ```
 
 The default prefix is `~/.local`. Add `~/.local/bin` to `PATH` if the installer

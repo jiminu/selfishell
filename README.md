@@ -25,7 +25,7 @@ The bootstrap installs only the CLI. Configure the development environment
 explicitly afterward:
 
 ```bash
-selfishell install --profile developer
+selfishell install
 ```
 
 Install a specific release:
@@ -52,7 +52,7 @@ To install the CLI and immediately run setup in one command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --setup --yes --profile developer
+  bash -s -- --setup --yes
 ```
 
 ### Source Bootstrap
@@ -119,12 +119,12 @@ Selfishell separates package selection from installation logic:
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship |
-| `developer` | Minimal plus FZF, Zoxide, Eza, Bat, pyenv, pyenv-virtualenv, NVM, Vim, build tools |
+| `minimal` | Zsh, Git, Curl, Starship, FZF, Zoxide, Eza, Bat, Vim, Vundle |
+| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, Zinit, and build tools |
 | `kubernetes` | Developer plus kubectl and context tools |
 | `full` | Kubernetes plus supported macOS desktop, font, and Java integrations |
 
-`developer` is the default. Preview another profile without changing packages or
+`minimal` is the default. Preview another profile without changing packages or
 files:
 
 ```bash
