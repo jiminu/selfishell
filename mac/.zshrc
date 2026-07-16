@@ -18,7 +18,7 @@ fi
 # --------------------------------------------------
 
 typeset -U path PATH
-path=("$HOME/.rd/bin" $path)
+path=("$HOME/.local/bin" "$HOME/.rd/bin" $path)
 
 
 # --------------------------------------------------
