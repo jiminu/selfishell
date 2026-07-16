@@ -35,3 +35,22 @@ jobs:
 
       - name: Run checks
         run: bash scripts/check.sh
+
+  ubuntu-container-e2e:
+    name: Ubuntu 24.04 container installation E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ubuntu:24.04
+
+    steps:
+      - name: Install container prerequisites
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates curl
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Run real installation lifecycle
+        run: bash scripts/ubuntu-container-e2e.sh

@@ -136,6 +136,8 @@ Goal: make releases routine for maintainers and understandable to new users.
 - [x] Publish installation, profile, security, company, and troubleshooting docs.
 - [x] Add a security policy and vulnerability reporting channel.
 - [x] Run the full lifecycle on clean Ubuntu and macOS hosted runners.
+- [x] Run a real minimal-profile installation lifecycle in an Ubuntu 24.04
+      container without relying on preinstalled runner tools or `sudo`.
 - [x] Publish a GitHub pre-release and verify its public install path.
 - [x] Complete a smoke test on one existing supported development machine.
 
