@@ -31,6 +31,7 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   printf ':\n' >"$HOME/.config/selfishell/zsh/common.zsh"
 
   XDG_CONFIG_HOME="$HOME/.config" \
+    HOMEBREW_PREFIX='' \
     PATH="$fake_bin:/usr/bin:/bin" \
     /bin/zsh -f -c '
       source "$1"

@@ -29,6 +29,7 @@ bash_files=(
   lib/commands/update.sh
   lib/commands/rollback.sh
   scripts/check.sh
+  scripts/benchmark.sh
   scripts/build-release.sh
   scripts/release-check.sh
   scripts/next-patch-version.sh
