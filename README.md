@@ -1,152 +1,221 @@
 # Selfishell
 
-A lightweight and intuitive Zsh environment powered by Starship and Zinit. Selfishell stays fast and readable while providing useful completions, aliases, runtime information, and Git status at a glance.
+Selfishell is an all-in-one Zsh environment for people who want a polished
+terminal without spending hours installing tools, collecting dotfiles, and
+maintaining shell plugins by hand.
 
-## Preview
+It installs a practical set of terminal tools and keeps your Zsh, Starship,
+Vim, aliases, completions, and optional Ghostty configuration consistent across
+macOS and Ubuntu.
 
 ![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/preview.png)
 
-Selfishell keeps the primary prompt focused on the current directory and Git status, while contextual information such as the time appears on the right.
+## Who Is It For?
 
-Git and kubectl integration works without Oh My Zsh. Git uses Zsh's built-in
-completion, while kubectl completion is cached during setup. If the cache is
-unavailable, it is generated on the first completion request without delaying
-shell startup.
+Selfishell is a good fit if you
 
-## Usage
+- want a useful terminal setup that works immediately;
+- use multiple Macs, Ubuntu machines, or Ubuntu on WSL;
+- want Git, kubectl, runtime managers, aliases, and completions configured
+  consistently;
+- prefer a small managed configuration over assembling a large framework such
+  as Oh My Zsh;
+- want updates and rollback without manually replacing dotfiles.
 
-Install the Selfishell CLI on macOS, Ubuntu, or Ubuntu on WSL:
+It may not be the right choice if you already maintain a heavily customized
+shell framework or want every package and configuration file managed
+independently.
+
+## What You Get
+
+- a readable Starship prompt with Git and runtime information;
+- Zsh completion and aliases for common Git, shell, and kubectl workflows;
+- FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and Zinit in the default profile;
+- optional Python, Node.js, Kubernetes, jq, build tools, and OpenJDK support;
+- managed configuration with backups of files that existed before installation;
+- one-command updates, release notifications, checksum verification, and
+  offline rollback.
+
+Selfishell supports:
+
+- macOS on Apple Silicon and Intel;
+- native Ubuntu on AMD64 and ARM64;
+- Ubuntu on WSL.
+
+Other Linux distributions are not currently supported.
+
+## Installation
+
+### 1. Install the CLI
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 ```
 
-The bootstrap installs only the CLI. Configure the development environment
-explicitly afterward:
+The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
+under `~/.local/bin`. If the installer reports that this directory is not in
+`PATH`, follow the command it prints and open a new terminal.
+
+### 2. Install a profile
+
+For a comfortable general-purpose terminal:
 
 ```bash
 selfishell install
 ```
 
-Install a specific release:
+This installs the default `minimal` profile. For a workstation with language
+runtimes, Kubernetes tools, jq, build dependencies, and OpenJDK 17:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --version 1.0.0
+selfishell install --profile developer
 ```
 
-For company or security-sensitive environments, download and review the small
-bootstrap before running it:
+The installer shows what it is doing and asks before changing the environment.
+On macOS, it also asks whether to install and configure Ghostty.
+
+### 3. Open a new terminal
+
+Open a new terminal window after setup, or reload the current Zsh session:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh
-less install.sh
-bash install.sh --version 1.0.0
+exec zsh
 ```
 
-The installer verifies the selected platform archive against the release's
-`SHA256SUMS`, installs it under `~/.local/share/selfishell/releases/<version>`,
-and atomically updates `~/.local/bin/selfishell` and the optional `sfs` shorthand.
+### 4. Verify the installation
 
-To install the CLI and immediately run setup in one command:
+```bash
+sfs doctor
+sfs status
+```
+
+To install the CLI and the default profile non-interactively in one command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --setup --yes
 ```
 
-### Source Bootstrap
-
-The legacy full bootstrap remains available when working from a clone:
-
-```bash
-bash ./bootstrap.sh
-```
-
-`bootstrap.sh` detects the current environment and runs the appropriate legacy
-setup for macOS or Ubuntu on WSL.
-
-The repository also includes the managed configuration CLI:
+For company or security-sensitive environments, download and review the
+bootstrap before running it:
 
 ```bash
-./bin/selfishell help
-./bin/selfishell version
-./bin/selfishell doctor
-./bin/selfishell install --dry-run
-./bin/selfishell install --profile developer --yes
-./bin/selfishell status
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh
+less install.sh
+bash install.sh
 ```
 
-Update the CLI first, then synchronize the installed profile's packages,
-approved direct tools, and managed configuration, or limit the scope explicitly:
-
-```bash
-selfishell status --check-updates
-selfishell update --yes
-selfishell update --cli-only --yes
-selfishell update --tools-only --yes
-selfishell rollback --yes
-```
-
-Direct downloads are pinned and checksum-verified from `dependencies.conf`.
-Git-based plugins are checked out at an approved tag or commit. Selfishell uses
-a cached, non-blocking background check to announce new CLI releases at most
-once per day, but never performs an update during interactive shell startup. See
-[`docs/UPDATES.md`](docs/UPDATES.md) for the update and recovery contract.
-
-`./bin/sfs` is an optional shorthand for the same CLI. The existing `bootstrap.sh`
-entrypoint remains a compatibility wrapper for the current full package
-bootstrap while profiles and managed package installation are developed.
-
-The CLI copies configuration into `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell` and
-links the active user's Zsh, Starship, Vim, and platform-specific configuration
-to those managed copies. It stores recovery metadata under
-`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`, so the source checkout can be
-moved or deleted after managed installation.
-
-Use the following command to remove managed files and restore configuration that
-was backed up during installation:
-
-```bash
-./bin/selfishell uninstall --restore --yes
-```
-
-If a managed file or link was changed after installation, uninstall stops before
-removing anything and preserves both the changed path and its original backup.
+Release archives are checked against their published `SHA256SUMS` before they
+are activated.
 
 ## Profiles
-
-Selfishell separates package selection from installation logic:
 
 | Profile | Included tools |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Minimal plus jq, pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
+| `developer` | Everything in `minimal`, plus jq, pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
 
-`minimal` is the default. Preview another profile without changing packages or
-files:
+`minimal` is the default. Preview a profile without changing anything:
 
 ```bash
-./bin/selfishell install --profile developer --dry-run
+sfs install --profile developer --dry-run
 ```
 
-For restricted networks, configuration can be installed without any package or
-network operation:
+You can change an existing installation from `minimal` to `developer` by
+running the developer installation command. Existing managed settings are
+updated safely.
+
+## Everyday Commands
 
 ```bash
-SELFISHELL_OFFLINE=1 ./bin/selfishell install --yes
+sfs status                   # Show the active profile and managed resources
+sfs status --check-updates   # Also check for a newer Selfishell release
+sfs doctor                   # Diagnose the current installation
+sfs update                   # Update the CLI, profile tools, and configuration
+sfs rollback                 # Return to the previous Selfishell release
+```
+
+`sfs update` activates the latest CLI first and then continues with that
+release's profile, so newly added packages and configuration are applied in the
+same command. Only the active release and one rollback release are retained.
+
+Interactive Zsh sessions use a small local cache to announce new releases at
+most once per day. The network check runs in the background and never installs
+an update automatically.
+
+## Uninstallation
+
+### Remove Selfishell configuration
+
+Preview the operation first:
+
+```bash
+sfs uninstall --restore --dry-run
+```
+
+Then remove managed configuration and restore files backed up during
+installation:
+
+```bash
+sfs uninstall --restore
+```
+
+If a managed file has been modified since installation, Selfishell stops before
+removing anything so that it does not overwrite your changes.
+
+### Remove the CLI and remaining data
+
+After running `sfs uninstall --restore`, remove the CLI, releases, cache, and
+remaining state:
+
+```bash
+rm -f ~/.local/bin/selfishell ~/.local/bin/sfs
+rm -rf ~/.local/share/selfishell
+rm -rf ~/.local/state/selfishell
+rm -rf ~/.cache/selfishell
+```
+
+Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
+as Zinit and Vim plugins. They may be shared with other configurations and
+should be removed separately only if you no longer use them. Also preserve
+`~/.config/selfishell/local.zsh` before deleting it if it contains personal
+configuration.
+
+## Existing Configuration and Safety
+
+During managed installation, existing `.zshrc`, `.vimrc`, Starship, and Ghostty
+configuration is moved to timestamped backups before Selfishell creates its
+managed links. Configuration is copied under
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell`, while recovery metadata is kept
+under `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`.
+
+Package installation may request administrator privileges for Homebrew or APT.
+Network access is required for initial package and plugin downloads.
+
+Direct downloads are version-pinned and checksum-verified. Git dependencies are
+checked out at approved tags or commits defined in `dependencies.conf`.
+
+## Advanced Setup
+
+Install an exact Selfishell release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+  bash -s -- --version 1.0.0
+```
+
+Install configuration without package or network operations:
+
+```bash
+SELFISHELL_OFFLINE=1 sfs install --profile developer --yes
 # or
-./bin/selfishell install --skip-packages --yes
+sfs install --profile developer --skip-packages --yes
 ```
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
-package managers and direct download commands.
+package managers and download commands.
 
-On macOS, interactive installation asks separately whether to install Ghostty
-and manage its configuration. `--yes` accepts the Ghostty choice automatically,
-and later updates reuse the saved choice.
-
-Private or company packages can be added without changing the repository:
+Add private or company packages with a local profile:
 
 ```text
 # company.conf
@@ -155,12 +224,26 @@ package ubuntu required apt company-cli
 ```
 
 ```bash
-./bin/selfishell install --local-profile ./company.conf --yes
+sfs install --profile developer --local-profile ./company.conf --yes
 ```
 
-Private shell configuration can be placed in
+Personal shell configuration can be placed in
 `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
 file but does not overwrite, track, or remove it.
+
+## Development and Legacy Bootstrap
+
+Commands can be run directly from a source checkout while developing:
+
+```bash
+./bin/selfishell help
+./bin/selfishell install --dry-run
+bash scripts/check.sh
+```
+
+The legacy checkout-linked bootstrap remains available as `bash ./bootstrap.sh`
+for compatibility. New installations should use the managed CLI instructions
+above because they do not require keeping the source checkout in a fixed path.
 
 ## Documentation
 
@@ -174,67 +257,10 @@ file but does not overwrite, track, or remove it.
 - [Public beta verification](docs/BETA.md)
 - [Vulnerability reporting](SECURITY.md)
 
-## Supported Environments
+## Platform Notes
 
-The current bootstrap officially supports:
-
-- macOS on Apple Silicon or Intel, using Homebrew
-- Native Ubuntu on AMD64 or ARM64
-- Ubuntu running on WSL
-
-Native Ubuntu, Ubuntu on WSL, and macOS are supported by the managed CLI. Other
-Linux distributions are not currently supported.
-
-## Before You Run It
-
-The bootstrap changes the current user's development environment. In particular,
-it may:
-
-- install system packages and request administrator privileges;
-- change the default login shell to Zsh on Ubuntu WSL;
-- move existing `.zshrc`, `.vimrc`, Starship, and Ghostty configuration files to
-  timestamped backups;
-- replace those paths with symbolic links into this repository checkout;
-- download and execute third-party installers and clone plugin repositories.
-
-Keep the checkout in a stable location after running the legacy `bootstrap.sh`
-bootstrap because its links still point into the checkout. Configuration created
-with `selfishell install` is copied to the managed XDG directory and does not have
-this limitation.
-
-On Ubuntu WSL, missing required packages stop setup with a nonzero exit status.
-Unavailable optional convenience tools such as FZF, Zoxide, Eza, or Bat are
-reported at the end without failing the rest of setup.
-
-## What It Installs
-
-### macOS
-
-- Homebrew
-- Zsh tools: Starship, Zinit, Zoxide, FZF
-- CLI tools: Git, Eza, Bat, kubectl, kubectx
-- Runtime tools: pyenv, pyenv-virtualenv, NVM, OpenJDK 17
-- Vim and Vundle configuration
-- Ghostty
-- Meslo Nerd Font and Noto Sans CJK KR
-
-### Ubuntu on WSL
-
-- Zsh, Git, Curl, Unzip, and build tools
-- Starship, Zinit, Zoxide, FZF
-- Eza, Bat, Vim
-- pyenv, pyenv-virtualenv, and NVM
-- Vundle and Vim plugins
-- Zsh as the default shell
-
-The setup also links the shared Zsh, Starship, and Vim configuration files into the appropriate locations under the home directory.
-
-## Notes
-
-- Only macOS and Ubuntu on WSL are supported.
-- The setup may request administrator privileges for Homebrew, apt packages, or changing the default shell.
-- Existing configuration files and symbolic links are backed up with a timestamp before replacement.
-- Network access is required to download packages and plugins.
-- Open a new terminal after installation, or run `source ~/.zshrc`.
-- On WSL, fonts are rendered by the Windows terminal application. Install a Nerd Font on Windows and select it in Windows Terminal or VS Code to display Starship icons correctly.
+- On WSL, install and select a Nerd Font in Windows Terminal or VS Code so
+  Starship icons render correctly.
 - On macOS, restart Ghostty after installation to apply its configuration.
+- Optional packages unavailable on a distribution are reported without
+  stopping required setup; missing required packages stop installation.
