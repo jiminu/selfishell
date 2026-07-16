@@ -30,7 +30,6 @@ bash_files=(
   lib/commands/uninstall.sh
   lib/commands/version.sh
   lib/commands/update.sh
-  lib/commands/self-update.sh
   lib/commands/rollback.sh
   lib/platforms/macos.sh
   lib/platforms/ubuntu.sh

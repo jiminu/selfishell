@@ -40,7 +40,7 @@ user account or temporary `HOME` is preferred but not required.
 - [x] Review `selfishell install --profile minimal --dry-run`.
 - [x] Install the beta CLI and minimal profile.
 - [x] Open a new terminal and verify prompt rendering and Git completion.
-- [x] Run `selfishell status`, `self-update`, and `rollback`.
+- [x] Run `selfishell status`, CLI update, and `rollback`.
 - [x] Run uninstall with restore and confirm the original configuration returns.
 - [x] Record package-manager prompts, PATH guidance, and any usability issues.
 
@@ -58,7 +58,7 @@ Notes or issue links:
 - The public archive installed successfully and printed correct PATH guidance.
 - The minimal dry-run, offline configuration install, doctor, status, and
   uninstall with restoration passed in an isolated HOME.
-- Exact-version self-update correctly reported that the beta was already active.
+- Exact-version CLI update correctly reported that the beta was already active.
 - Rollback correctly reported that no previous release existed in the clean
   prefix, so a successful retained-release rollback still needs manual coverage.
 - Git completion was unavailable because minimal does not install Zinit while

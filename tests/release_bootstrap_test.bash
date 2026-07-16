@@ -79,12 +79,12 @@ test_latest_uses_published_version_file() {
     fail "Latest installation selected the wrong version"
 }
 
-test_self_update_and_offline_rollback() {
+test_cli_update_and_offline_rollback() {
   local version
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
 
-  "$TEST_ROOT/prefix/bin/selfishell" self-update --version 0.2.0 --yes >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.0 --yes >/dev/null
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
 
@@ -92,6 +92,34 @@ test_self_update_and_offline_rollback() {
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/previous"
+}
+
+test_default_update_skips_missing_configuration_and_updates_cli() {
+  local output
+  local version
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --yes)"
+  [[ "$output" == *'skipping tools and configuration'* ]] ||
+    fail "Default update did not skip an uninstalled configuration"
+  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_update_dry_run_preserves_active_release() {
+  local output
+  local version
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --dry-run)"
+  [[ "$output" == *'Would update Selfishell CLI to 0.2.0.'* ]] ||
+    fail "Update dry-run did not preview the CLI release"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.2.0" ]] ||
+    fail "Update dry-run installed a CLI release"
 }
 
 test_checksum_mismatch_preserves_active_release() {

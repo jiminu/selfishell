@@ -33,7 +33,6 @@ source "$SELFISHELL_ROOT/lib/commands/status.sh"
 source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
 source "$SELFISHELL_ROOT/lib/releases.sh"
 source "$SELFISHELL_ROOT/lib/commands/update.sh"
-source "$SELFISHELL_ROOT/lib/commands/self-update.sh"
 source "$SELFISHELL_ROOT/lib/commands/rollback.sh"
 
 main() {
@@ -64,9 +63,6 @@ main() {
       ;;
     update)
       command_update "$@"
-      ;;
-    self-update)
-      command_self_update "$@"
       ;;
     rollback)
       command_rollback "$@"

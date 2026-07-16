@@ -114,7 +114,7 @@ Goal: make updates deliberate, observable, and recoverable.
 - [x] Pin and checksum direct release downloads.
 - [x] Pin Git-based plugins by tag or commit where reproducibility requires it.
 - [x] Implement `selfishell update` for managed tools and configuration.
-- [x] Implement `selfishell self-update` for the CLI release.
+- [x] Implement CLI release updates through `selfishell update`.
 - [x] Retain prior releases and implement `selfishell rollback`.
 - [x] Prevent automatic network updates during interactive shell startup.
 
