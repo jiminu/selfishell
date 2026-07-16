@@ -5,8 +5,8 @@ role.
 
 | Profile | Purpose |
 | --- | --- |
-| `minimal` | Core shell, Zinit, FZF, Zoxide, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, build tooling, Kubernetes tools, and OpenJDK 17 |
+| `minimal` | Core shell, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
+| `developer` | Minimal plus jq, pyenv, pyenv-virtualenv, NVM, build tooling, Kubernetes tools, and OpenJDK 17 |
 
 `minimal` is selected when `--profile` is omitted.
 

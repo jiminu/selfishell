@@ -53,6 +53,13 @@ tool_status_brew_version() {
 
 tool_status_reset_cache
 
+tool_status_executable() {
+  case "$1" in
+    ripgrep) printf 'rg\n' ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
 tool_status_detect() {
   local manager="$1"
   local package="$2"
@@ -119,7 +126,7 @@ tool_status_detect() {
       ;;
   esac
 
-  if have_command "$package"; then
+  if have_command "$(tool_status_executable "$package")"; then
     TOOL_STATUS_INSTALLED="detected"
     TOOL_STATUS_SOURCE="external"
   fi

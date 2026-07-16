@@ -120,8 +120,8 @@ Selfishell separates package selection from installation logic:
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Minimal plus pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
+| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
+| `developer` | Minimal plus jq, pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
 
 `minimal` is the default. Preview another profile without changing packages or
 files:
