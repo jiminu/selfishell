@@ -89,8 +89,9 @@ selfishell rollback --yes
 ```
 
 Direct downloads are pinned and checksum-verified from `dependencies.conf`.
-Git-based plugins are checked out at an approved tag or commit. Selfishell never
-performs network updates during interactive shell startup. See
+Git-based plugins are checked out at an approved tag or commit. Selfishell uses
+a cached, non-blocking background check to announce new CLI releases at most
+once per day, but never performs an update during interactive shell startup. See
 [`docs/UPDATES.md`](docs/UPDATES.md) for the update and recovery contract.
 
 `./bin/sfs` is an optional shorthand for the same CLI. The existing `bootstrap.sh`

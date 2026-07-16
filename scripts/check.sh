@@ -39,6 +39,7 @@ bash_files=(
   scripts/release-check.sh
   tests/cli_test.bash
   tests/common_test.bash
+  tests/common_zsh_test.bash
   tests/managed_install_test.bash
   tests/package_adapters_test.bash
   tests/platform_test.bash

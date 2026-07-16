@@ -32,5 +32,19 @@ does not use the network. An exact retained version can be selected with
 `selfishell rollback VERSION`.
 
 Direct download and Git dependency versions are changed only by reviewing and
-updating `dependencies.conf` in a new Selfishell release. Interactive shell
-startup never checks the network or updates tools.
+updating `dependencies.conf` in a new Selfishell release.
+
+Interactive Zsh sessions show a cached notification when a newer Selfishell CLI
+release is available. The cache is refreshed in the background at most once per
+day, so the network request does not block shell startup. The notification never
+installs an update automatically. Disable it or change its interval in
+`~/.config/selfishell/local.zsh`:
+
+```zsh
+export SELFISHELL_UPDATE_NOTICE=0
+# Or keep notices enabled and check every 12 hours.
+export SELFISHELL_UPDATE_CHECK_INTERVAL=43200
+```
+
+The default interval is 86400 seconds. Restricted-network and offline users
+should disable the notice explicitly.
