@@ -42,6 +42,34 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   teardown_test_home
 }
 
+test_wsl_defers_windows_path_during_initialization() {
+  local output
+  local test_home
+
+  setup_test_home
+  test_home="$HOME"
+  mkdir -p "$HOME/.config/selfishell/zsh"
+  # The expression must be evaluated by the generated Zsh fixture.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '[[ ${path[(I)/mnt/[a-zA-Z]/*]} -eq 0 ]] || return 1' \
+    'SELFISHELL_TEST_INITIALIZED=1' >"$HOME/.config/selfishell/zsh/common.zsh"
+
+  output="$(
+    HOME="$test_home" XDG_CONFIG_HOME="$test_home/.config" \
+      WSL_DISTRO_NAME=Ubuntu-24.04 PATH="/usr/bin:/mnt/c/Windows:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        [[ "$SELFISHELL_TEST_INITIALIZED" == 1 ]]
+        print -r -- "${(j.:.)path}"
+      ' zsh "$ROOT_DIR/ubuntu/.zshrc"
+  )"
+
+  [[ "$output" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/mnt/c/Windows:/bin" ]] ||
+    fail "WSL PATH was not restored after initialization: $output"
+  teardown_test_home
+}
+
 test_update_notice_reads_installed_version_file() {
   local fake_root output
 
@@ -121,6 +149,8 @@ test_minimal_profile_initializes_git_completion_without_zinit
 printf 'PASS: test_minimal_profile_initializes_git_completion_without_zinit\n'
 test_macos_managed_zsh_adds_default_cli_prefix_to_path
 printf 'PASS: test_macos_managed_zsh_adds_default_cli_prefix_to_path\n'
+test_wsl_defers_windows_path_during_initialization
+printf 'PASS: test_wsl_defers_windows_path_during_initialization\n'
 test_update_notice_reads_installed_version_file
 printf 'PASS: test_update_notice_reads_installed_version_file\n'
 test_update_notice_uses_cache_and_refreshes_in_background_format

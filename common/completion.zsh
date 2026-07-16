@@ -36,7 +36,7 @@ if (( $+functions[zinit] )); then
   zinit cdreplay -q
 fi
 
-if (( $+commands[kubectl] )); then
+if _selfishell_command_path kubectl >/dev/null; then
   if [[ -r "$SELFISHELL_COMPLETION_DIR/_kubectl" ]]; then
     autoload -Uz _kubectl
     compdef _kubectl kubectl k
@@ -59,7 +59,7 @@ if (( $+commands[kubectl] )); then
   fi
 fi
 
-if (( $+commands[aws] && $+commands[aws_completer] )); then
+if _selfishell_command_path aws >/dev/null && _selfishell_command_path aws_completer >/dev/null; then
   autoload -Uz bashcompinit
   bashcompinit
   complete -C aws_completer aws

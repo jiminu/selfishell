@@ -49,11 +49,11 @@ _selfishell_version_is_newer() {
 }
 
 _selfishell_current_version() {
-  local executable="${commands[selfishell]:-}"
+  local executable
   local version_file
   local current_output
 
-  if [[ -n "$executable" ]]; then
+  if executable="$(_selfishell_command_path selfishell)"; then
     executable="${executable:A}"
     version_file="${executable:h:h}/VERSION"
     if [[ -r "$version_file" ]]; then
@@ -77,7 +77,7 @@ _selfishell_update_notice() {
   case "${enabled:l}" in
     0 | false | no | off) return ;;
   esac
-  (( $+commands[selfishell] )) || return
+  _selfishell_command_path selfishell >/dev/null || return
 
   case "$interval" in
     "" | *[!0-9]*) interval=86400 ;;
