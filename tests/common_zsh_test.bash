@@ -41,6 +41,29 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   teardown_test_home
 }
 
+test_update_notice_reads_installed_version_file() {
+  local fake_root output
+
+  setup_test_home
+  fake_root="$TEST_ROOT/releases/1.2.3"
+  mkdir -p "$fake_root/bin"
+  printf '1.2.3\n' >"$fake_root/VERSION"
+  printf '#!/usr/bin/env bash\nprintf "selfishell 9.9.9\\n"\n' >"$fake_root/bin/selfishell"
+  chmod +x "$fake_root/bin/selfishell"
+
+  output="$(
+    PATH="$fake_root/bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        load_nvm() { :; }
+        source "$1"
+        _selfishell_current_version
+      ' zsh "$ROOT_DIR/common/common.zsh"
+  )"
+
+  [[ "$output" == 1.2.3 ]] || fail "Update notice did not read the installed VERSION file"
+  teardown_test_home
+}
+
 test_update_notice_uses_cache_and_refreshes_in_background_format() {
   local fake_bin cache_dir output now
 
@@ -68,6 +91,10 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
       /bin/zsh -f -c '
         load_nvm() { :; }
         source "$1"
+        ! _selfishell_version_is_newer 0.1.0-beta.9 0.1.0-beta.12
+        _selfishell_version_is_newer 0.1.0-beta.13 0.1.0-beta.12
+        _selfishell_version_is_newer 0.1.0 0.1.0-beta.12
+        ! _selfishell_version_is_newer 0.1.0-beta.12 0.1.0
         _selfishell_update_notice
         SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice
         command rm -f "$2/available-version" "$2/update-checked-at"
@@ -93,5 +120,7 @@ test_minimal_profile_initializes_git_completion_without_zinit
 printf 'PASS: test_minimal_profile_initializes_git_completion_without_zinit\n'
 test_macos_managed_zsh_adds_default_cli_prefix_to_path
 printf 'PASS: test_macos_managed_zsh_adds_default_cli_prefix_to_path\n'
+test_update_notice_reads_installed_version_file
+printf 'PASS: test_update_notice_reads_installed_version_file\n'
 test_update_notice_uses_cache_and_refreshes_in_background_format
 printf 'PASS: test_update_notice_uses_cache_and_refreshes_in_background_format\n'

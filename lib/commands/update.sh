@@ -6,8 +6,9 @@ Usage:
   selfishell update [--cli-only | --tools-only] [--version VERSION]
                      [--dry-run] [--yes]
 
-By default, update approved tools and managed configuration first, then update
-the Selfishell CLI release. Use --cli-only or --tools-only to limit the scope.
+By default, update the Selfishell CLI release first, then synchronize all
+profile packages, approved tools, and managed configuration. Use --cli-only or
+--tools-only to limit the scope.
 --version selects an exact CLI release and cannot be used with --tools-only.
 EOF
 }
@@ -16,7 +17,7 @@ update_tools_and_configuration() {
   local assume_yes="$1"
   local dry_run="$2"
   local require_configuration="$3"
-  local profile platform profile_platform dependency_platform architecture index package ghostty_enabled=0
+  local profile platform ghostty_enabled=0
 
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
@@ -31,31 +32,13 @@ update_tools_and_configuration() {
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
   platform="$(detect_platform)"
-  architecture="$(detect_architecture)"
-  case "$platform" in
-    ubuntu | ubuntu-wsl)
-      dependency_platform=linux
-      profile_platform=ubuntu
-      ;;
-    *)
-      dependency_platform="$platform"
-      profile_platform="$platform"
-      ;;
-  esac
   profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
-  confirm_action "Update approved tools and $profile configuration?" "$assume_yes" "$dry_run" || return
+  confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return
 
-  for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
-    [[ "${PROFILE_MANAGERS[$index]}" == direct ]] || continue
-    [[ "${PROFILE_PLATFORMS[$index]}" == all || "${PROFILE_PLATFORMS[$index]}" == "$profile_platform" ]] || continue
-    package="${PROFILE_PACKAGES[$index]}"
-    if [[ "$dry_run" == 1 ]]; then
-      dependency_load "$package" "$dependency_platform" "$architecture"
-      printf 'Would ensure approved dependency: %s %s\n' "$package" "$DEPENDENCY_VERSION"
-    else
-      dependency_install "$package" "$dependency_platform" "$architecture"
-    fi
-  done
+  packages_install_profile "$platform" "$dry_run"
+  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
+    homebrew_install_packages optional cask "$dry_run" ghostty
+  fi
   install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
   install_vim_plugins "$dry_run"
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
@@ -86,6 +69,15 @@ update_cli_release() {
   fi
   confirm_action "Update Selfishell CLI to $version?" "$assume_yes" 0 || return
   release_install "$version"
+  SELFISHELL_CLI_UPDATED=1
+}
+
+continue_update_with_new_cli() {
+  local assume_yes="$1"
+  local arguments=(update --continue-after-cli-update)
+
+  [[ "$assume_yes" == 0 ]] || arguments+=(--yes)
+  exec "$SELFISHELL_SHARE_DIR/current/bin/selfishell" "${arguments[@]}"
 }
 
 command_update() {
@@ -93,6 +85,9 @@ command_update() {
   local dry_run=0
   local mode=all
   local version=""
+  local continuation=0
+
+  SELFISHELL_CLI_UPDATED=0
 
   while (("$#" > 0)); do
     case "$1" in
@@ -120,6 +115,10 @@ command_update() {
         ;;
       --dry-run) dry_run=1 ;;
       --yes) assume_yes=1 ;;
+      --continue-after-cli-update)
+        continuation=1
+        mode=tools
+        ;;
       help | --help | -h)
         print_update_help
         return
@@ -137,15 +136,18 @@ command_update() {
     return "$SELFISHELL_EXIT_USAGE"
   }
 
+  if [[ "$mode" != tools ]]; then
+    update_cli_release "$version" "$assume_yes" "$dry_run" || return
+    if [[ "$mode" == all && "$dry_run" == 0 && "$SELFISHELL_CLI_UPDATED" == 1 ]]; then
+      continue_update_with_new_cli "$assume_yes"
+    fi
+  fi
+
   if [[ "$mode" != cli ]]; then
-    if [[ "$mode" == tools ]]; then
+    if [[ "$mode" == tools && "$continuation" == 0 ]]; then
       update_tools_and_configuration "$assume_yes" "$dry_run" 1 || return
     else
       update_tools_and_configuration "$assume_yes" "$dry_run" 0 || return
     fi
-  fi
-
-  if [[ "$mode" != tools ]]; then
-    update_cli_release "$version" "$assume_yes" "$dry_run"
   fi
 }

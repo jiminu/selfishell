@@ -17,10 +17,24 @@ setup_update_home() {
 }
 
 teardown_update_home() {
-  unset XDG_STATE_HOME SELFISHELL_DEPENDENCIES_FILE
+  unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_DEPENDENCIES_FILE
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
   teardown_test_home
+}
+
+test_tools_update_synchronizes_profile_packages() {
+  local output
+  setup_update_home
+  export XDG_CONFIG_HOME="$HOME/.config"
+  mkdir -p "$XDG_STATE_HOME/selfishell"
+  printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
+
+  output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --dry-run)"
+  [[ "$output" == *'Would install required apt packages:'* ]] ||
+    fail "Tools update did not synchronize package-manager packages"
+  [[ "$output" == *'ripgrep'* ]] || fail "Tools update did not include the current profile packages"
+  teardown_update_home
 }
 
 test_download_dependency_is_checksum_verified_and_recorded() {
@@ -60,6 +74,8 @@ test_checksum_failure_preserves_existing_managed_tool() {
 }
 
 main() {
+  test_tools_update_synchronizes_profile_packages
+  printf 'PASS: test_tools_update_synchronizes_profile_packages\n'
   test_download_dependency_is_checksum_verified_and_recorded
   printf 'PASS: test_download_dependency_is_checksum_verified_and_recorded\n'
   test_checksum_failure_preserves_existing_managed_tool

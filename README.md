@@ -77,8 +77,8 @@ The repository also includes the managed configuration CLI:
 ./bin/selfishell status
 ```
 
-Update the CLI, approved direct tools, and managed configuration together, or
-limit the update scope explicitly:
+Update the CLI first, then synchronize the installed profile's packages,
+approved direct tools, and managed configuration, or limit the scope explicitly:
 
 ```bash
 selfishell status --check-updates

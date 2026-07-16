@@ -228,6 +228,49 @@ _selfishell_update_notice_refresh() {
   command rmdir "$lock_dir" 2>/dev/null
 }
 
+_selfishell_version_is_newer() {
+  local candidate="$1"
+  local current="$2"
+  local version_pattern='^([0-9]+)\.([0-9]+)\.([0-9]+)(-([A-Za-z]+)\.([0-9]+))?$'
+  local -a candidate_parts current_parts
+  local index
+
+  [[ "$candidate" =~ "$version_pattern" ]] || return 1
+  candidate_parts=("${match[@]}")
+  [[ "$current" =~ "$version_pattern" ]] || return 1
+  current_parts=("${match[@]}")
+
+  for index in 1 2 3; do
+    (( candidate_parts[index] > current_parts[index] )) && return 0
+    (( candidate_parts[index] < current_parts[index] )) && return 1
+  done
+
+  # A stable release is newer than a prerelease with the same core version.
+  [[ -z "${candidate_parts[4]}" && -n "${current_parts[4]}" ]] && return 0
+  [[ -n "${candidate_parts[4]}" && -z "${current_parts[4]}" ]] && return 1
+  [[ -z "${candidate_parts[4]}" ]] && return 1
+  [[ "${candidate_parts[5]}" == "${current_parts[5]}" ]] || return 1
+  (( candidate_parts[6] > current_parts[6] ))
+}
+
+_selfishell_current_version() {
+  local executable="${commands[selfishell]:-}"
+  local version_file
+  local current_output
+
+  if [[ -n "$executable" ]]; then
+    executable="${executable:A}"
+    version_file="${executable:h:h}/VERSION"
+    if [[ -r "$version_file" ]]; then
+      print -r -- "$(<"$version_file")"
+      return
+    fi
+  fi
+
+  current_output="$(command selfishell version 2>/dev/null)" || return 1
+  print -r -- "${current_output#selfishell }"
+}
+
 _selfishell_update_notice() {
   local enabled="${SELFISHELL_UPDATE_NOTICE:-1}"
   local interval="${SELFISHELL_UPDATE_CHECK_INTERVAL:-86400}"
@@ -245,12 +288,13 @@ _selfishell_update_notice() {
     "" | *[!0-9]*) interval=86400 ;;
   esac
 
-  current="$(command selfishell version 2>/dev/null)" || return
-  current="${current#selfishell }"
+  current="$(_selfishell_current_version)" || return
   if [[ -r "$available_file" ]]; then
     available="$(<"$available_file")"
-    if [[ -n "$available" && "$available" != "$current" ]]; then
+    if [[ -n "$available" ]] && _selfishell_version_is_newer "$available" "$current"; then
       print -r -- "[Selfishell] $available is available. Run: sfs update"
+    elif [[ -n "$available" ]]; then
+      command rm -f "$available_file"
     fi
   fi
 

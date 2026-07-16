@@ -157,10 +157,16 @@ test_cli_update_and_offline_rollback() {
   local version
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
+  mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin"
+  printf '#!/usr/bin/env bash\n' >"$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin/selfishell"
 
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.0 --yes >/dev/null
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1" ]] ||
+    fail "CLI update did not prune an inactive release"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
+    fail "CLI update pruned the rollback release"
 
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
@@ -170,6 +176,7 @@ test_cli_update_and_offline_rollback() {
 
 test_default_update_skips_missing_configuration_and_updates_cli() {
   local output
+  local cli_line skip_line
   local version
 
   version="$(<"$ROOT_DIR/VERSION")"
@@ -178,6 +185,10 @@ test_default_update_skips_missing_configuration_and_updates_cli() {
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --yes)"
   [[ "$output" == *'skipping tools and configuration'* ]] ||
     fail "Default update did not skip an uninstalled configuration"
+  cli_line="$(printf '%s\n' "$output" | awk '/CLI updated to/ { print NR; exit }')"
+  skip_line="$(printf '%s\n' "$output" | awk '/skipping tools and configuration/ { print NR; exit }')"
+  [[ -n "$cli_line" && -n "$skip_line" && "$cli_line" -lt "$skip_line" ]] ||
+    fail "Default update did not continue with the new CLI after switching releases"
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 
