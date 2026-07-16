@@ -17,6 +17,7 @@ setup_tool_status_home() {
   ORIGINAL_PATH="$PATH"
   export PATH="$TEST_ROOT/bin:/usr/bin:/bin"
   selfishell_initialize_paths
+  tool_status_reset_cache
 }
 
 teardown_tool_status_home() {
@@ -36,6 +37,37 @@ test_detects_homebrew_formula_version() {
   [[ "$TOOL_STATUS_SOURCE" == homebrew ]] || fail "Homebrew source was not reported"
   [[ "$TOOL_STATUS_APPROVED" == package-manager ]] || fail "Formula approval source was incorrect"
   teardown_tool_status_home
+}
+
+test_reuses_homebrew_inventory() {
+  setup_tool_status_home
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --formula --versions')
+    printf 'starship 1.26.0\nfzf 0.74.0\n'
+    ;;
+  'list --cask --versions')
+    printf 'ghostty 1.3.1\nfont-meslo-lg-nerd-font 3.4.0\n'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  tool_status_detect formula starship macos arm64
+  tool_status_detect formula fzf macos arm64
+  tool_status_detect cask ghostty macos arm64
+  tool_status_detect cask font-meslo-lg-nerd-font macos arm64
+
+  [[ "$(wc -l <"$MOCK_BREW_LOG" | tr -d ' ')" == 2 ]] ||
+    fail "Homebrew inventory should be loaded once per package type"
+  teardown_tool_status_home
+  unset MOCK_BREW_LOG
 }
 
 test_detects_apt_package_version() {
@@ -92,6 +124,8 @@ main() {
   printf 'PASS: test_detects_apt_package_version\n'
   test_detects_homebrew_formula_version
   printf 'PASS: test_detects_homebrew_formula_version\n'
+  test_reuses_homebrew_inventory
+  printf 'PASS: test_reuses_homebrew_inventory\n'
   test_detects_selfishell_managed_direct_dependency
   printf 'PASS: test_detects_selfishell_managed_direct_dependency\n'
   test_distinguishes_external_and_missing_direct_dependencies

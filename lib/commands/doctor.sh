@@ -67,6 +67,7 @@ command_doctor() {
 
   selfishell_initialize_paths
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]] && platform_is_supported "$platform"; then
+    tool_status_reset_cache
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
     doctor_info "Profile: $profile"
     case "$platform" in

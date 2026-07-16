@@ -3,6 +3,56 @@
 # These globals are outputs consumed by separately sourced command modules.
 # shellcheck disable=SC2034
 
+tool_status_reset_cache() {
+  TOOL_STATUS_BREW_FORMULAE=""
+  TOOL_STATUS_BREW_CASKS=""
+  TOOL_STATUS_BREW_FORMULAE_READY=0
+  TOOL_STATUS_BREW_CASKS_READY=0
+}
+
+tool_status_brew_version() {
+  local manager="$1"
+  local package="$2"
+  local cache name output versions
+
+  TOOL_STATUS_BREW_VERSION=""
+
+  case "$manager" in
+    formula)
+      if [[ "$TOOL_STATUS_BREW_FORMULAE_READY" == 0 ]]; then
+        TOOL_STATUS_BREW_FORMULAE="$(brew list --formula --versions 2>/dev/null)" ||
+          TOOL_STATUS_BREW_FORMULAE=""
+        TOOL_STATUS_BREW_FORMULAE_READY=1
+      fi
+      cache="$TOOL_STATUS_BREW_FORMULAE"
+      ;;
+    cask)
+      if [[ "$TOOL_STATUS_BREW_CASKS_READY" == 0 ]]; then
+        TOOL_STATUS_BREW_CASKS="$(brew list --cask --versions 2>/dev/null)" ||
+          TOOL_STATUS_BREW_CASKS=""
+        TOOL_STATUS_BREW_CASKS_READY=1
+      fi
+      cache="$TOOL_STATUS_BREW_CASKS"
+      ;;
+  esac
+
+  while IFS=' ' read -r name versions; do
+    if [[ "$name" == "$package" && -n "$versions" ]]; then
+      TOOL_STATUS_BREW_VERSION="$versions"
+      return
+    fi
+  done <<<"$cache"
+
+  if [[ "$manager" == cask ]]; then
+    return 1
+  fi
+  output="$(brew list --versions "$package" 2>/dev/null)" || return 1
+  [[ -n "$output" ]] || return 1
+  TOOL_STATUS_BREW_VERSION="${output#* }"
+}
+
+tool_status_reset_cache
+
 tool_status_detect() {
   local manager="$1"
   local package="$2"
@@ -17,9 +67,10 @@ tool_status_detect() {
   case "$manager" in
     formula)
       if have_command brew; then
-        output="$(brew list --versions "$package" 2>/dev/null)" || output=""
+        tool_status_brew_version formula "$package" || true
+        output="$TOOL_STATUS_BREW_VERSION"
         if [[ -n "$output" ]]; then
-          TOOL_STATUS_INSTALLED="${output#* }"
+          TOOL_STATUS_INSTALLED="$output"
           TOOL_STATUS_SOURCE="homebrew"
           return
         fi
@@ -27,9 +78,10 @@ tool_status_detect() {
       ;;
     cask)
       if have_command brew; then
-        output="$(brew list --cask --versions "$package" 2>/dev/null)" || output=""
+        tool_status_brew_version cask "$package" || true
+        output="$TOOL_STATUS_BREW_VERSION"
         if [[ -n "$output" ]]; then
-          TOOL_STATUS_INSTALLED="${output#* }"
+          TOOL_STATUS_INSTALLED="$output"
           TOOL_STATUS_SOURCE="homebrew-cask"
           return
         fi
