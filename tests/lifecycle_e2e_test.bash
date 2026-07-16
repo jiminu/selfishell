@@ -11,12 +11,15 @@ test_complete_release_lifecycle() {
   local prefix
   local release_store
   local artifacts
+  local tool
 
   setup_test_home
   trap teardown_test_home EXIT
   mkdir -p "$TEST_ROOT/bin"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/starship"
-  chmod +x "$TEST_ROOT/bin/starship"
+  for tool in starship fzf zoxide vim; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
+    chmod +x "$TEST_ROOT/bin/$tool"
+  done
   export PATH="$TEST_ROOT/bin:$PATH"
   mkdir -p "$HOME/.vim/bundle/Vundle.vim/.git"
   prefix="$TEST_ROOT/prefix"
