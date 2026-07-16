@@ -3,7 +3,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SELFISHELL_ROOT="$ROOT_DIR"
 
 source "$ROOT_DIR/tests/test_helper.bash"
 source "$ROOT_DIR/lib/common.sh"

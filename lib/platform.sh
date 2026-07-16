@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-source "$SELFISHELL_ROOT/lib/platforms/macos.sh"
-source "$SELFISHELL_ROOT/lib/platforms/ubuntu.sh"
-
 platform_system_name() {
   if [[ -n "${SELFISHELL_TEST_SYSTEM_NAME:-}" ]]; then
     printf '%s\n' "$SELFISHELL_TEST_SYSTEM_NAME"
@@ -126,8 +123,8 @@ platform_is_supported() {
 
 platform_package_manager() {
   case "$1" in
-    macos) macos_package_manager ;;
-    ubuntu | ubuntu-wsl) ubuntu_package_manager ;;
+    macos) printf 'brew\n' ;;
+    ubuntu | ubuntu-wsl) printf 'apt-get\n' ;;
     *) printf 'unknown\n' ;;
   esac
 }

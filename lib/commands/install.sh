@@ -158,22 +158,3 @@ command_install() {
     printf 'Selfishell configuration installed.\n'
   fi
 }
-
-command_legacy_install() {
-  local platform
-  platform="$(detect_platform)"
-
-  case "$platform" in
-    macos) macos_legacy_install "$@" ;;
-    ubuntu-wsl) ubuntu_wsl_legacy_install "$@" ;;
-    ubuntu)
-      cli_error "Native Ubuntu bootstrap is not implemented yet."
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
-    *)
-      cli_error "Installation is unavailable on $(platform_label "$platform")."
-      cli_error "Run 'selfishell doctor' for supported platform details."
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
-  esac
-}

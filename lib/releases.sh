@@ -67,6 +67,26 @@ release_platform() {
   esac
 }
 
+release_prune_inactive() {
+  local current_version previous_version release_dir release_version
+
+  current_version="$(readlink "$SELFISHELL_SHARE_DIR/current")"
+  current_version="${current_version##*/}"
+  previous_version=""
+  if [[ -L "$SELFISHELL_SHARE_DIR/previous" ]]; then
+    previous_version="$(readlink "$SELFISHELL_SHARE_DIR/previous")"
+    previous_version="${previous_version##*/}"
+  fi
+
+  for release_dir in "$SELFISHELL_RELEASES_DIR"/*; do
+    [[ -d "$release_dir" && ! -L "$release_dir" ]] || continue
+    release_version="${release_dir##*/}"
+    [[ "$release_version" == "$current_version" || "$release_version" == "$previous_version" ]] && continue
+    rm -rf "$release_dir"
+    printf 'Removed inactive Selfishell release: %s.\n' "$release_version"
+  done
+}
+
 release_install() {
   local version="$1"
   local platform architecture archive_name release_url temporary_dir archive checksum_file expected actual staging
@@ -111,4 +131,5 @@ release_install() {
   release_atomic_link "$(readlink "$SELFISHELL_SHARE_DIR/current")" "$SELFISHELL_SHARE_DIR/previous"
   release_atomic_link "releases/$version" "$SELFISHELL_SHARE_DIR/current"
   printf 'Selfishell CLI updated to %s.\n' "$version"
+  release_prune_inactive
 }

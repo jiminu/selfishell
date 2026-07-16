@@ -23,7 +23,7 @@ bootstrap_help() {
   cat <<'EOF'
 Usage:
   install.sh [--version VERSION] [--prefix PATH] [--setup] [--yes]
-             [--profile NAME] [--skip-packages]
+             [--profile NAME] [--skip-packages] [--add-to-path]
 
 Options:
   --version VERSION  Install an exact Selfishell release
@@ -32,6 +32,7 @@ Options:
   --yes              Skip setup confirmation when used with --setup
   --profile NAME     Profile passed to setup (default: minimal)
   --skip-packages    Pass configuration-only mode to setup
+  --add-to-path      Persist the CLI directory in Bash or Zsh PATH
   --help             Show this help
 EOF
 }
@@ -140,6 +141,45 @@ bootstrap_validate_link_path() {
   fi
 }
 
+bootstrap_add_to_path() {
+  local bin_dir="$1"
+  local shell_name="${SELFISHELL_BOOTSTRAP_SHELL:-${SHELL:-bash}}"
+  local startup_file
+  local escaped_bin_dir
+
+  case "${shell_name##*/}" in
+    zsh) startup_file="$HOME/.zshrc" ;;
+    *) startup_file="$HOME/.bashrc" ;;
+  esac
+
+  if [[ -r "$startup_file" ]] && grep -Fq "$bin_dir" "$startup_file"; then
+    printf 'PATH already configured in %s\n' "$startup_file"
+    return
+  fi
+
+  printf -v escaped_bin_dir '%q' "$bin_dir"
+  {
+    printf '\n# Added by Selfishell installer\n'
+    # $PATH must expand when the startup file is sourced, not during installation.
+    # shellcheck disable=SC2016
+    printf 'export PATH=%s:"$PATH"\n' "$escaped_bin_dir"
+  } >>"$startup_file"
+  printf 'Added %s to PATH in %s\n' "$bin_dir" "$startup_file"
+}
+
+bootstrap_print_path_guidance() {
+  local bin_dir="$1"
+
+  printf '\nSelfishell is installed, but %s is not in PATH.\n' "$bin_dir"
+  printf 'Run this in the current shell:\n'
+  # Print a command for the user; do not expand the installer's PATH here.
+  # shellcheck disable=SC2016
+  printf '  export PATH="%s:$PATH"\n' "$bin_dir"
+  printf 'To configure future Bash or Zsh sessions automatically, reinstall with --add-to-path.\n'
+  printf 'Or continue without changing PATH:\n'
+  printf '  %s/selfishell install\n' "$bin_dir"
+}
+
 main() {
   local version=""
   local prefix="${HOME}/.local"
@@ -147,6 +187,7 @@ main() {
   local assume_yes=0
   local profile=minimal
   local skip_packages=0
+  local add_to_path=0
   local platform
   local architecture
   local release_url
@@ -191,6 +232,7 @@ main() {
         profile="$1"
         ;;
       --skip-packages) skip_packages=1 ;;
+      --add-to-path) add_to_path=1 ;;
       help | --help | -h)
         bootstrap_help
         return
@@ -278,8 +320,10 @@ main() {
   bootstrap_atomic_link selfishell "$bin_dir/sfs"
 
   printf 'Installed Selfishell %s\n' "$version"
-  if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
-    printf 'Add %s to PATH to use selfishell from a new shell.\n' "$bin_dir"
+  if [[ "$add_to_path" == 1 ]]; then
+    bootstrap_add_to_path "$bin_dir"
+  elif [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+    bootstrap_print_path_guidance "$bin_dir"
   fi
 
   if [[ "$setup" == "1" ]]; then

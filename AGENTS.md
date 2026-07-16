@@ -1,7 +1,7 @@
 # Selfishell Agent Guide
 
 This file is the durable project context for coding agents. Read it before
-changing the repository, then read `docs/MILESTONES.md` to find the current
+changing the repository, then read `docs/project/MILESTONES.md` to find the current
 delivery stage.
 
 ## Project Intent
@@ -31,7 +31,7 @@ Do not add a dead production URL to executable code.
 The repository currently contains Bash bootstrap scripts, shared Zsh settings,
 Starship configuration, aliases, Vim configuration, and Ghostty configuration.
 
-- `bootstrap.sh` is the temporary legacy full-setup entrypoint.
+- `bootstrap.sh` is the source-only legacy full-setup entrypoint.
 - `legacy/macos.sh` installs packages with Homebrew.
 - `legacy/ubuntu.sh` installs packages with apt and direct downloads.
 - `legacy/common.sh` contains shared legacy installation helpers.
@@ -45,9 +45,9 @@ artifact builder also exist. Tagged release publication is automated; public
 beta verification remains a manual release gate.
 
 Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-`update`, `rollback`, and `uninstall`. `bootstrap.sh` intentionally
-remains a legacy full-bootstrap wrapper while the managed package/profile layer
-is developed.
+`update`, `rollback`, and `uninstall`. Legacy installation is not part of the
+versioned CLI; `bootstrap.sh` directly dispatches to source-only compatibility
+scripts.
 
 ## Product Decisions
 
@@ -55,6 +55,8 @@ is developed.
   bootstrap script backed by versioned GitHub Release archives.
 - The bootstrap installs only the Selfishell CLI. It must not silently replace
   user configuration or install the full development environment.
+- The bootstrap must not modify shell startup files by default. An explicit
+  `--add-to-path` option may add one idempotent Bash or Zsh PATH entry.
 - The canonical command is `selfishell`. Also provide `sfs` as an optional
   convenience symlink for interactive use.
 - Do not use `sf` as a command name because it is too generic and has a higher
@@ -100,7 +102,8 @@ Keep command names and responsibilities narrow:
 - `selfishell doctor`: diagnose platform, dependencies, and configuration.
 - `selfishell status`: report installed versions and managed files.
 - `selfishell rollback`: switch to a retained Selfishell release.
-- `selfishell uninstall`: remove managed files and optionally restore backups.
+- `selfishell uninstall`: remove managed files, optionally restore backups, and
+  purge the installed CLI when explicitly requested.
 - `selfishell version`: print the CLI version.
 
 `sfs <command>` must resolve to the same implementation and behavior as
@@ -176,6 +179,10 @@ Package adapters must inherit proxy environment variables. `--skip-packages` and
 `SELFISHELL_OFFLINE=1` must perform configuration-only installation without any
 package or network command.
 
+The profile requirement `optional` means recommended and non-fatal, not
+interactive opt-in. Optional packages are attempted automatically and reported
+when unavailable. Ghostty is the only separate saved installation choice.
+
 ## Release Contract
 
 `install.sh` is the public, curl-delivered bootstrap. Keep it small and compatible
@@ -226,7 +233,7 @@ Address these through the milestones instead of hiding them with documentation.
 
 ## Working Process
 
-1. Read this file and `docs/MILESTONES.md`.
+1. Read this file and `docs/project/MILESTONES.md`.
 2. Check the worktree before editing and preserve unrelated user changes.
 3. Select the earliest incomplete milestone whose prerequisites are complete.
 4. Keep changes scoped to one reviewable milestone or a clearly identified slice.

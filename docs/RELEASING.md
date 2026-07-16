@@ -39,7 +39,8 @@ After the workflow completes:
 
 1. Verify all expected assets are attached to the GitHub Release.
 2. Verify `releases/latest/download/VERSION` resolves to the stable version.
-3. Run the exact-version bootstrap on the beta machines in `docs/BETA.md`.
+3. Run the exact-version bootstrap on the beta machines in
+   `docs/project/BETA.md`.
 4. Record failures as issues and publish a new patch release after fixes.
 
 Do not replace assets on an existing release. Publish a new patch version so the

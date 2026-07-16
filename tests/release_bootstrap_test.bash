@@ -157,10 +157,16 @@ test_cli_update_and_offline_rollback() {
   local version
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
+  mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin"
+  printf '#!/usr/bin/env bash\n' >"$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin/selfishell"
 
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.0 --yes >/dev/null
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1" ]] ||
+    fail "CLI update did not prune an inactive release"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
+    fail "CLI update pruned the rollback release"
 
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
@@ -170,6 +176,7 @@ test_cli_update_and_offline_rollback() {
 
 test_default_update_skips_missing_configuration_and_updates_cli() {
   local output
+  local cli_line skip_line
   local version
 
   version="$(<"$ROOT_DIR/VERSION")"
@@ -178,6 +185,10 @@ test_default_update_skips_missing_configuration_and_updates_cli() {
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --yes)"
   [[ "$output" == *'skipping tools and configuration'* ]] ||
     fail "Default update did not skip an uninstalled configuration"
+  cli_line="$(printf '%s\n' "$output" | awk '/CLI updated to/ { print NR; exit }')"
+  skip_line="$(printf '%s\n' "$output" | awk '/skipping tools and configuration/ { print NR; exit }')"
+  [[ -n "$cli_line" && -n "$skip_line" && "$cli_line" -lt "$skip_line" ]] ||
+    fail "Default update did not continue with the new CLI after switching releases"
   assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 
@@ -236,6 +247,30 @@ test_bootstrap_installs_cli_only_by_default() {
 
   [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "CLI was not installed"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Bootstrap changed user configuration"
+  [[ ! -e "$HOME/.bashrc" && ! -e "$HOME/.zshrc" ]] ||
+    fail "Default bootstrap changed shell startup files"
+}
+
+test_add_to_path_updates_bashrc_once() {
+  local count output
+
+  output="$(SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path)"
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  [[ "$output" == *"Added $TEST_ROOT/prefix/bin to PATH in $HOME/.bashrc"* ]] ||
+    fail "Bash PATH installation was not reported"
+  count="$(grep -Fc '# Added by Selfishell installer' "$HOME/.bashrc")"
+  [[ "$count" -eq 1 ]] || fail "Bash PATH entry was added more than once"
+  PATH=/usr/bin:/bin bash -c 'source "$1"; [[ ":$PATH:" == *":$2:"* ]]' \
+    _ "$HOME/.bashrc" "$TEST_ROOT/prefix/bin" || fail "Bash startup did not activate the CLI path"
+}
+
+test_add_to_path_selects_zshrc() {
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/zsh run_bootstrap --add-to-path >/dev/null
+
+  [[ -r "$HOME/.zshrc" ]] || fail "Zsh PATH installation did not create .zshrc"
+  [[ ! -e "$HOME/.bashrc" ]] || fail "Zsh PATH installation changed .bashrc"
+  grep -Fq "$TEST_ROOT/prefix/bin" "$HOME/.zshrc" || fail "Zsh PATH entry is missing"
 }
 
 test_setup_is_explicit_and_can_run_offline() {
@@ -249,8 +284,54 @@ test_missing_bin_path_prints_actionable_message() {
   local output
   output="$(PATH=/usr/bin:/bin run_bootstrap)"
 
-  [[ "$output" == *"Add $TEST_ROOT/prefix/bin to PATH"* ]] ||
-    fail "Missing PATH guidance was not printed"
+  [[ "$output" == *"export PATH=\"$TEST_ROOT/prefix/bin:\$PATH\""* ]] ||
+    fail "Missing PATH guidance did not include a current-shell command"
+  [[ "$output" == *'reinstall with --add-to-path'* ]] ||
+    fail "Missing PATH guidance did not explain persistent setup"
+  [[ "$output" == *"$TEST_ROOT/prefix/bin/selfishell install"* ]] ||
+    fail "Missing PATH guidance did not include the absolute CLI command"
+}
+
+test_purge_dry_run_preserves_installation() {
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --dry-run >/dev/null
+
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Purge dry-run removed the CLI"
+  [[ -L "$HOME/.zshrc" ]] || fail "Purge dry-run removed managed configuration"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge dry-run removed releases"
+}
+
+test_purge_removes_cli_releases_cache_and_state() {
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+  mkdir -p "$HOME/.cache/selfishell"
+  printf 'cache\n' >"$HOME/.cache/selfishell/test"
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes >/dev/null
+
+  [[ ! -e "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Purge retained the CLI link"
+  [[ ! -e "$TEST_ROOT/prefix/bin/sfs" ]] || fail "Purge retained the sfs link"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge retained releases"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Purge retained state"
+  [[ ! -e "$HOME/.cache/selfishell" ]] || fail "Purge retained cache"
+  [[ ! -e "$HOME/.zshrc" ]] || fail "Purge retained managed configuration"
+}
+
+test_purge_refuses_non_managed_cli_path_before_uninstall() {
+  local status
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+  rm "$TEST_ROOT/prefix/bin/sfs"
+  printf 'user command\n' >"$TEST_ROOT/prefix/bin/sfs"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Purge should reject a non-managed CLI path"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected purge removed the CLI"
+  [[ -L "$HOME/.zshrc" ]] || fail "Rejected purge removed managed configuration"
+  assert_file_content 'user command' "$TEST_ROOT/prefix/bin/sfs"
 }
 
 test_refuses_to_replace_non_link_cli_path() {

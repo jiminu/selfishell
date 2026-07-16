@@ -19,6 +19,7 @@ apt_install_managed_packages() {
   local dry_run="$2"
   shift 2
   local package
+  local missing_packages=()
   local available_packages=()
   local unavailable_packages=()
 
@@ -38,15 +39,23 @@ apt_install_managed_packages() {
     return 1
   fi
 
+  for package in "$@"; do
+    if dpkg -s "$package" >/dev/null 2>&1; then
+      printf 'Already installed: %s\n' "$package"
+    else
+      missing_packages+=("$package")
+    fi
+  done
+
+  ((${#missing_packages[@]} > 0)) || return 0
+
   if ((SELFISHELL_APT_UPDATED == 0)); then
     apt_run_privileged update || return 1
     SELFISHELL_APT_UPDATED=1
   fi
 
-  for package in "$@"; do
-    if dpkg -s "$package" >/dev/null 2>&1; then
-      printf 'Already installed: %s\n' "$package"
-    elif apt-cache show "$package" >/dev/null 2>&1; then
+  for package in "${missing_packages[@]}"; do
+    if apt-cache show "$package" >/dev/null 2>&1; then
       available_packages+=("$package")
     else
       unavailable_packages+=("$package")
