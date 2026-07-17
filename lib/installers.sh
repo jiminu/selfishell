@@ -11,7 +11,7 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | mise | zinit | vundle)
+    starship | mise | zinit)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
@@ -62,29 +62,19 @@ install_mise_tools() {
 
 install_vim_plugins() {
   local dry_run="$1"
-  local plugin plugin_dir
-  local plugins_missing=0
 
   [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || return 0
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install declared Vim plugins.\n'
+    printf 'Would install declared Neovim plugins.\n'
     return
   fi
-  if ! have_command vim; then
-    cli_error "Vim is required to install declared plugins."
+  if ! have_command nvim; then
+    cli_error "Neovim is required to install declared plugins."
     return 1
   fi
 
-  while IFS= read -r plugin; do
-    [[ -n "$plugin" ]] || continue
-    plugin_dir="${plugin##*/}"
-    if [[ ! -d "$HOME/.vim/bundle/$plugin_dir" ]]; then
-      plugins_missing=1
-      break
-    fi
-  done < <(awk -F"'" '/^[[:space:]]*Plugin / { print $2 }' "$SELFISHELL_ROOT/common/.vimrc")
-
-  [[ "$plugins_missing" == 1 ]] || return 0
-
-  vim +PluginInstall +qall
+  if ! nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
+    cli_error "Could not install Neovim plugins."
+    return 1
+  fi
 }

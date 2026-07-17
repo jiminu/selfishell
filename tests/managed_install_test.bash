@@ -38,7 +38,7 @@ test_install_copies_configuration_and_tracks_resources() {
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$HOME/.vimrc"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" "$XDG_CONFIG_HOME/nvim/init.lua"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
   cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||

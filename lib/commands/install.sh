@@ -43,7 +43,7 @@ install_managed_configuration() {
   managed_install_file aliases-git "$SELFISHELL_ROOT/common/aliases-git.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh" "$dry_run"
   managed_install_file aliases-kubectl "$SELFISHELL_ROOT/common/aliases-kubectl.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh" "$dry_run"
   managed_install_file starship-config "$SELFISHELL_ROOT/common/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
-  managed_install_file vim-config "$SELFISHELL_ROOT/common/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
+  managed_install_file nvim-config "$SELFISHELL_ROOT/common/init.lua" "$SELFISHELL_CONFIG_DIR/nvim/init.lua" "$dry_run"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_file ghostty-config "$SELFISHELL_ROOT/mac/config.ghostty" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
@@ -51,7 +51,7 @@ install_managed_configuration() {
 
   managed_install_link user-zshrc "$HOME/.zshrc" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
   managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
-  managed_install_link user-vim "$HOME/.vimrc" "$SELFISHELL_CONFIG_DIR/vim/vimrc" "$dry_run"
+  managed_install_link user-nvim "${XDG_CONFIG_HOME:-$HOME/.config}/nvim/init.lua" "$SELFISHELL_CONFIG_DIR/nvim/init.lua" "$dry_run"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"

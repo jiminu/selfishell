@@ -16,12 +16,12 @@ test_complete_release_lifecycle() {
   setup_test_home
   trap teardown_test_home EXIT
   mkdir -p "$TEST_ROOT/bin"
-  for tool in starship fzf zoxide rg vim; do
+  for tool in starship fzf zoxide rg nvim; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
   done
   export PATH="$TEST_ROOT/bin:$PATH"
-  mkdir -p "$HOME/.vim/bundle/Vundle.vim/.git" "$HOME/.local/share/zinit/zinit.git"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"

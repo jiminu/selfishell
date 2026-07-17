@@ -36,6 +36,8 @@ if (( $+functions[zinit] )); then
   zinit light zsh-users/zsh-autosuggestions
   zinit ice wait'0' lucid
   zinit light zdharma-continuum/fast-syntax-highlighting
+  zinit ice wait'0' lucid
+  zinit light Aloxaf/fzf-tab
 fi
 
 if command -v starship >/dev/null 2>&1; then
