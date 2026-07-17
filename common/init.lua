@@ -16,11 +16,11 @@ vim.opt.rtp:prepend(lazypath)
 require("lazy").setup({
   -- Theme
   {
-    "tomasiser/vim-code-dark",
+    "mofiqul/vscode.nvim",
     lazy = false,
     priority = 1000,
     config = function()
-      vim.cmd([[colorscheme codedark]])
+      vim.cmd([[colorscheme vscode]])
     end,
   },
   -- File explorer (replacement for NERDTree)
@@ -30,6 +30,27 @@ require("lazy").setup({
     config = function()
       require("nvim-tree").setup()
       vim.keymap.set("n", "<C-n>", ":NvimTreeToggle<CR>", { silent = true })
+    end,
+  },
+  -- Auto pairs (lazy loaded on InsertEnter)
+  {
+    "windwp/nvim-autopairs",
+    event = "InsertEnter",
+    config = function()
+      require("nvim-autopairs").setup({})
+    end,
+  },
+  -- Statusline
+  {
+    "nvim-lualine/lualine.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      require("lualine").setup({
+        options = {
+          theme = "vscode",
+          icons_enabled = true,
+        },
+      })
     end,
   },
 })
@@ -44,9 +65,15 @@ vim.opt.softtabstop = 2
 vim.opt.shiftwidth = 2
 vim.opt.expandtab = true
 vim.opt.laststatus = 2
+vim.opt.ignorecase = true -- Required for smartcase to work
 vim.opt.smartcase = true
+vim.opt.mouse = "a" -- Enable mouse support
+vim.opt.clipboard = "unnamedplus" -- Share system clipboard
 vim.opt.ruler = true
 vim.opt.fileencodings = "utf-8,euc-kr"
+
+-- Keymaps
+vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>", { silent = true })
 
 -- Restore cursor position
 vim.api.nvim_create_autocmd("BufReadPost", {

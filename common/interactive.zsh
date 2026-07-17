@@ -32,12 +32,12 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 if (( $+functions[zinit] )); then
+  # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
+  zinit light Aloxaf/fzf-tab
   zinit ice wait'0' lucid
   zinit light zsh-users/zsh-autosuggestions
   zinit ice wait'0' lucid
   zinit light zdharma-continuum/fast-syntax-highlighting
-  zinit ice wait'0' lucid
-  zinit light Aloxaf/fzf-tab
 fi
 
 if command -v starship >/dev/null 2>&1; then
