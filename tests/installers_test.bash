@@ -7,12 +7,12 @@ source "$ROOT_DIR/tests/test_helper.bash"
 source "$ROOT_DIR/lib/common.sh"
 source "$ROOT_DIR/lib/installers.sh"
 
-VIM_ARGUMENTS=""
+NVIM_ARGUMENTS=""
 MISE_ARGUMENTS=""
 MISE_CONFIG=""
 
-vim() {
-  VIM_ARGUMENTS="$*"
+nvim() {
+  NVIM_ARGUMENTS="$*"
 }
 
 mise() {
@@ -30,33 +30,25 @@ test_installs_declared_mise_tools_with_managed_config() {
     fail "mise install did not use the Selfishell config"
 }
 
-test_installs_declared_vim_plugins() {
+test_installs_declared_neovim_plugins() {
+  NVIM_ARGUMENTS=""
   install_vim_plugins 0
-  [[ "$VIM_ARGUMENTS" == "+PluginInstall +qall" ]] ||
-    fail "Vim plugin installation was not invoked"
+  [[ "$NVIM_ARGUMENTS" == "--headless +Lazy! sync +qa" ]] ||
+    fail "Neovim plugin installation was not invoked"
 }
 
-test_skips_vim_when_declared_plugins_exist() {
-  VIM_ARGUMENTS=""
-  mkdir -p "$HOME/.vim/bundle/Vundle.vim" "$HOME/.vim/bundle/nerdtree" "$HOME/.vim/bundle/vim-code-dark"
-
-  install_vim_plugins 0
-
-  [[ -z "$VIM_ARGUMENTS" ]] || fail "Installed Vim plugins triggered PluginInstall"
-}
-
-test_offline_mode_skips_vim_plugins() {
-  VIM_ARGUMENTS=""
+test_offline_mode_skips_neovim_plugins() {
+  NVIM_ARGUMENTS=""
   SELFISHELL_OFFLINE=1 install_vim_plugins 0
-  [[ -z "$VIM_ARGUMENTS" ]] || fail "Offline mode invoked Vim plugin installation"
+  [[ -z "$NVIM_ARGUMENTS" ]] || fail "Offline mode invoked Neovim plugin installation"
 }
 
-test_vim_plugin_dry_run_is_non_mutating() {
+test_neovim_plugin_dry_run_is_non_mutating() {
   local output
-  VIM_ARGUMENTS=""
+  NVIM_ARGUMENTS=""
   output="$(install_vim_plugins 1)"
-  [[ "$output" == "Would install declared Vim plugins." ]] || fail "Vim plugin dry run was not reported"
-  [[ -z "$VIM_ARGUMENTS" ]] || fail "Vim plugin dry run invoked Vim"
+  [[ "$output" == "Would install declared Neovim plugins." ]] || fail "Neovim plugin dry run was not reported"
+  [[ -z "$NVIM_ARGUMENTS" ]] || fail "Neovim plugin dry run invoked Neovim"
 }
 
 setup_test_home
@@ -64,13 +56,11 @@ export SELFISHELL_ROOT="$ROOT_DIR"
 
 test_installs_declared_mise_tools_with_managed_config
 printf 'PASS: test_installs_declared_mise_tools_with_managed_config\n'
-test_installs_declared_vim_plugins
-printf 'PASS: test_installs_declared_vim_plugins\n'
-test_skips_vim_when_declared_plugins_exist
-printf 'PASS: test_skips_vim_when_declared_plugins_exist\n'
-test_offline_mode_skips_vim_plugins
-printf 'PASS: test_offline_mode_skips_vim_plugins\n'
-test_vim_plugin_dry_run_is_non_mutating
-printf 'PASS: test_vim_plugin_dry_run_is_non_mutating\n'
+test_installs_declared_neovim_plugins
+printf 'PASS: test_installs_declared_neovim_plugins\n'
+test_offline_mode_skips_neovim_plugins
+printf 'PASS: test_offline_mode_skips_neovim_plugins\n'
+test_neovim_plugin_dry_run_is_non_mutating
+printf 'PASS: test_neovim_plugin_dry_run_is_non_mutating\n'
 
 teardown_test_home
