@@ -56,6 +56,10 @@ install_managed_configuration() {
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
   fi
+
+  if [[ "$dry_run" == "0" ]]; then
+    rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
+  fi
 }
 
 command_install() {
