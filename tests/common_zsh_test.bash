@@ -87,7 +87,10 @@ EOF
   printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
 
   developer_config="$(
-    PATH="$fake_bin:/usr/bin:/bin" /bin/zsh -f -c '
+    PATH="$fake_bin:/usr/bin:/bin" \
+      XDG_CONFIG_HOME="$HOME/.config" \
+      ZDOTDIR="" \
+      /bin/zsh -f -c '
       _selfishell_command_path() { command -v "$1"; }
       source "$1"
       [[ "$SELFISHELL_TEST_MISE_ACTIVATED" == 1 ]]
@@ -97,7 +100,10 @@ EOF
 
   printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
   minimal_config="$(
-    PATH="$fake_bin:/usr/bin:/bin" MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml" \
+    PATH="$fake_bin:/usr/bin:/bin" \
+      XDG_CONFIG_HOME="$HOME/.config" \
+      ZDOTDIR="" \
+      MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
