@@ -5,7 +5,7 @@ terminal without spending hours installing tools, collecting dotfiles, and
 maintaining shell plugins by hand.
 
 It installs a practical set of terminal tools and keeps your Zsh, Starship,
-Vim, aliases, completions, and optional Ghostty configuration consistent across
+Neovim, aliases, completions, and optional Ghostty configuration consistent across
 macOS and Ubuntu.
 
 ![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/preview.png)
@@ -29,8 +29,8 @@ independently.
 ## What You Get
 
 - a readable Starship prompt with Git and runtime information;
-- Zsh completion and aliases for common Git, shell, and kubectl workflows;
-- FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and Zinit in the default profile;
+- Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and kubectl workflows;
+- FZF, Zoxide, Ripgrep, Eza, Bat, Neovim (configured with lazy.nvim), and Zinit in the default profile;
 - optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
 - managed configuration with backups of files that existed before installation;
 - one-command updates, release notifications, checksum verification, and
@@ -124,7 +124,7 @@ are activated.
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
+| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, Neovim (with lazy.nvim), and macOS terminal fonts |
 | `developer` | Everything in `minimal`, plus mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
 
 `minimal` is the default. Preview a profile without changing anything:
@@ -193,7 +193,7 @@ selfishell uninstall --restore --purge
 ```
 
 Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
-as Zinit and Vim plugins. They may be shared with other configurations and
+as Zinit and Neovim plugins. They may be shared with other configurations and
 should be removed separately only if you no longer use them. Personal
 `~/.config/selfishell/local.zsh` configuration is preserved. If installation
 used `--add-to-path`, purge also removes the unchanged PATH entry created by the

@@ -136,6 +136,7 @@ tool_status_reset_cache
 tool_status_executable() {
   case "$1" in
     ripgrep) printf 'rg\n' ;;
+    neovim) printf 'nvim\n' ;;
     *@*) printf '%s\n' "${1%%@*}" ;;
     *) printf '%s\n' "$1" ;;
   esac
