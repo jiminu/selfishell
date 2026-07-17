@@ -21,11 +21,11 @@ SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completion
 [[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
 
 if [[ ! -o interactive ]]; then
-  compinit -C -d "$ZCOMPDUMP"
+  compinit -u -C -d "$ZCOMPDUMP"
 elif [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
-  compinit -d "$ZCOMPDUMP"
+  compinit -u -d "$ZCOMPDUMP"
 else
-  compinit -C -d "$ZCOMPDUMP"
+  compinit -u -C -d "$ZCOMPDUMP"
 fi
 
 if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then

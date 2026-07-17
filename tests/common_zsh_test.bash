@@ -9,6 +9,7 @@ test_minimal_profile_initializes_git_completion_without_zinit() {
   setup_test_home
 
   XDG_CACHE_HOME="$HOME/.cache" \
+    ZDOTDIR="" \
     PATH="/usr/bin:/bin" \
     /bin/zsh -f -c '
       load_nvm() { :; }
@@ -123,6 +124,7 @@ test_update_notice_reads_installed_version_file() {
 
   output="$(
     PATH="$fake_root/bin:/usr/bin:/bin" \
+      ZDOTDIR="" \
       /bin/zsh -f -c '
         load_nvm() { :; }
         source "$1"
@@ -157,6 +159,7 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
 
   output="$(
     XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="" \
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
         load_nvm() { :; }
