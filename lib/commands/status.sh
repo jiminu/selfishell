@@ -119,7 +119,7 @@ command_status() {
   fi
 
   for resource in \
-    zshrc-config zsh-common zsh-runtime zsh-completion zsh-interactive zsh-update-notice \
+    zshrc-config zsh-common zsh-runtime mise-config zsh-completion zsh-interactive zsh-update-notice \
     aliases-common aliases-git aliases-kubectl \
     starship-config vim-config ghostty-config \
     user-zshrc user-starship user-vim user-ghostty; do

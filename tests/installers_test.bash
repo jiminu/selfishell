@@ -8,9 +8,26 @@ source "$ROOT_DIR/lib/common.sh"
 source "$ROOT_DIR/lib/installers.sh"
 
 VIM_ARGUMENTS=""
+MISE_ARGUMENTS=""
+MISE_CONFIG=""
 
 vim() {
   VIM_ARGUMENTS="$*"
+}
+
+mise() {
+  MISE_ARGUMENTS="$*"
+  MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
+}
+
+test_installs_declared_mise_tools_with_managed_config() {
+  SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
+  install_mise_tools required 0 node@24.18.0 python@3.13.14
+
+  [[ "$MISE_ARGUMENTS" == 'install node@24.18.0 python@3.13.14' ]] ||
+    fail "mise tools were not installed together"
+  [[ "$MISE_CONFIG" == "$ROOT_DIR/common/mise.toml" ]] ||
+    fail "mise install did not use the Selfishell config"
 }
 
 test_installs_declared_vim_plugins() {
@@ -45,6 +62,8 @@ test_vim_plugin_dry_run_is_non_mutating() {
 setup_test_home
 export SELFISHELL_ROOT="$ROOT_DIR"
 
+test_installs_declared_mise_tools_with_managed_config
+printf 'PASS: test_installs_declared_mise_tools_with_managed_config\n'
 test_installs_declared_vim_plugins
 printf 'PASS: test_installs_declared_vim_plugins\n'
 test_skips_vim_when_declared_plugins_exist

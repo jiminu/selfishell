@@ -136,6 +136,7 @@ tool_status_reset_cache
 tool_status_executable() {
   case "$1" in
     ripgrep) printf 'rg\n' ;;
+    *@*) printf '%s\n' "${1%%@*}" ;;
     *) printf '%s\n' "$1" ;;
   esac
 }
@@ -203,6 +204,25 @@ tool_status_detect() {
         TOOL_STATUS_INSTALLED="detected"
         TOOL_STATUS_SOURCE="external"
         return
+      fi
+      ;;
+    mise)
+      local mise_tool="${package%%@*}"
+      local mise_version="${package#*@}"
+      local mise_command=""
+      TOOL_STATUS_APPROVED="$mise_version"
+      if have_command mise; then
+        mise_command="$(command -v mise)"
+      elif [[ -x "$HOME/.local/bin/mise" ]]; then
+        mise_command="$HOME/.local/bin/mise"
+      fi
+      if [[ -n "$mise_command" ]]; then
+        output="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/config.toml" "$mise_command" current "$mise_tool" 2>/dev/null)" || output=""
+        if [[ -n "$output" ]]; then
+          TOOL_STATUS_INSTALLED="$output"
+          TOOL_STATUS_SOURCE="mise"
+          return
+        fi
       fi
       ;;
   esac

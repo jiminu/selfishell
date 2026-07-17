@@ -142,6 +142,27 @@ test_distinguishes_external_and_missing_direct_dependencies() {
 test_maps_package_name_to_executable() {
   [[ "$(tool_status_executable ripgrep)" == "rg" ]] ||
     fail "Ripgrep package name was not mapped to the rg executable"
+  [[ "$(tool_status_executable kubectl@1.36.2)" == "kubectl" ]] ||
+    fail "mise selector was not mapped to its executable"
+}
+
+test_detects_mise_tool_version() {
+  setup_tool_status_home
+  cat >"$TEST_ROOT/bin/mise" <<'EOF'
+#!/usr/bin/env bash
+[[ "$*" == 'current node' ]] || exit 1
+[[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_CONFIG_DIR/mise/config.toml" ]] || exit 1
+printf '24.18.0\n'
+EOF
+  chmod +x "$TEST_ROOT/bin/mise"
+  export SELFISHELL_CONFIG_DIR
+
+  tool_status_detect mise node@24.18.0 linux amd64
+
+  [[ "$TOOL_STATUS_INSTALLED" == 24.18.0 ]] || fail "mise tool version was not detected"
+  [[ "$TOOL_STATUS_SOURCE" == mise ]] || fail "mise tool source was not reported"
+  [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise selector was not reported"
+  teardown_tool_status_home
 }
 
 test_reports_package_manager_updates_without_upgrading() {
@@ -191,6 +212,8 @@ main() {
   printf 'PASS: test_distinguishes_external_and_missing_direct_dependencies\n'
   test_maps_package_name_to_executable
   printf 'PASS: test_maps_package_name_to_executable\n'
+  test_detects_mise_tool_version
+  printf 'PASS: test_detects_mise_tool_version\n'
   test_reports_package_manager_updates_without_upgrading
   printf 'PASS: test_reports_package_manager_updates_without_upgrading\n'
 }

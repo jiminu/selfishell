@@ -46,8 +46,8 @@ record_download() {
 }
 
 discover_metadata() {
-  local starship_tag starship_version kubectl_tag kubectl_version
-  local name repository tag commit platform architecture asset source checksum
+  local starship_tag starship_version mise_tag mise_version asset_architecture
+  local name repository tag commit platform architecture asset source
 
   command -v curl >/dev/null 2>&1 || {
     printf 'curl is required.\n' >&2
@@ -62,16 +62,10 @@ discover_metadata() {
     return 1
   }
 
-  for name in nvm pyenv pyenv-virtualenv zinit; do
-    case "$name" in
-      nvm) repository=nvm-sh/nvm ;;
-      pyenv) repository=pyenv/pyenv ;;
-      pyenv-virtualenv) repository=pyenv/pyenv-virtualenv ;;
-      zinit) repository=zdharma-continuum/zinit ;;
-    esac
-    tag="$(github_latest_tag "$repository")"
-    printf 'git %s %s\n' "$name" "$tag" >>"$metadata"
-  done
+  name=zinit
+  repository=zdharma-continuum/zinit
+  tag="$(github_latest_tag "$repository")"
+  printf 'git %s %s\n' "$name" "$tag" >>"$metadata"
 
   commit="$(git ls-remote https://github.com/VundleVim/Vundle.vim.git HEAD | awk 'NR == 1 { print $1 }')"
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
@@ -95,17 +89,14 @@ discover_metadata() {
     done
   done
 
-  kubectl_tag="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"
-  kubectl_version="${kubectl_tag#v}"
-  for architecture in amd64 arm64; do
-    source="https://dl.k8s.io/release/$kubectl_tag/bin/linux/$architecture/kubectl"
-    checksum="$(curl -fsSL "$source.sha256")"
-    [[ "$checksum" =~ ^[0-9a-fA-F]{64}$ ]] || {
-      printf 'Invalid kubectl checksum for %s.\n' "$architecture" >&2
-      return 1
-    }
-    printf 'download kubectl %s linux %s %s %s\n' \
-      "$kubectl_version" "$architecture" "$source" "$checksum" >>"$metadata"
+  mise_tag="$(github_latest_tag jdx/mise)"
+  mise_version="${mise_tag#v}"
+  for platform in linux macos; do
+    for architecture in amd64 arm64; do
+      case "$architecture" in amd64) asset_architecture=x64 ;; arm64) asset_architecture=arm64 ;; esac
+      source="https://github.com/jdx/mise/releases/download/$mise_tag/mise-$mise_tag-$platform-$asset_architecture"
+      record_download mise "$mise_version" "$platform" "$architecture" "$source"
+    done
   done
 }
 

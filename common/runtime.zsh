@@ -1,34 +1,12 @@
-# Runtime environments. load_nvm is defined by each platform .zshrc.
-export NVM_DIR="$HOME/.nvm"
-
-nvm() { load_nvm; nvm "$@" }
-node() { load_nvm; command node "$@" }
-npm() { load_nvm; command npm "$@" }
-npx() { load_nvm; command npx "$@" }
-
-export PYENV_ROOT="$HOME/.pyenv"
-
-if [[ -d "$PYENV_ROOT/bin" ]]; then
-  path=("$PYENV_ROOT/bin" $path)
-fi
-
-if [[ -d "$PYENV_ROOT/shims" ]]; then
-  path=("$PYENV_ROOT/shims" $path)
-fi
-
-if _selfishell_command_path pyenv >/dev/null; then
-  load_pyenv() {
-    local virtualenv_init
-
-    unfunction pyenv load_pyenv 2>/dev/null
-    eval "$(command pyenv init - --no-rehash zsh)"
-    if virtualenv_init="$(command pyenv virtualenv-init - 2>/dev/null)"; then
-      eval "$virtualenv_init"
-    fi
-  }
-
-  pyenv() {
-    load_pyenv
-    pyenv "$@"
-  }
+# Runtime and versioned development tools are managed by mise. Project-local
+# mise.toml files override these Selfishell defaults.
+if _selfishell_command_path mise >/dev/null; then
+  _selfishell_profile_state="${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/profile"
+  if [[ -r "$_selfishell_profile_state" && "$(<"$_selfishell_profile_state")" == developer ]]; then
+    export MISE_GLOBAL_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/config.toml"
+  elif [[ "${MISE_GLOBAL_CONFIG_FILE:-}" == "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/config.toml" ]]; then
+    unset MISE_GLOBAL_CONFIG_FILE
+  fi
+  eval "$(command mise activate zsh)"
+  unset _selfishell_profile_state
 fi

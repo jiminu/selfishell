@@ -144,6 +144,35 @@ test_doctor_rejects_unsupported_platform() {
     fail "Doctor should provide an actionable platform message"
 }
 
+test_doctor_reports_preserved_legacy_runtime_managers() {
+  local output
+
+  setup_test_home
+  mkdir -p "$HOME/.nvm" "$HOME/.pyenv" "$HOME/.local/state/selfishell" "$TEST_ROOT/bin"
+  printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+
+  set +e
+  output="$(
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+  )"
+  set -e
+
+  [[ "$output" == *"Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"* ]] ||
+    fail "Doctor did not report preserved NVM data"
+  [[ "$output" == *"Legacy runtime manager detected: $HOME/.pyenv (preserved; mise is active)"* ]] ||
+    fail "Doctor did not report preserved pyenv data"
+  teardown_test_home
+}
+
 test_commands_reject_extra_arguments() {
   local status
 

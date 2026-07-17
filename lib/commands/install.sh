@@ -33,6 +33,7 @@ install_managed_configuration() {
 
   managed_install_file zshrc-config "$zsh_source" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
   managed_install_file zsh-runtime "$SELFISHELL_ROOT/common/runtime.zsh" "$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh" "$dry_run"
+  managed_install_file mise-config "$SELFISHELL_ROOT/common/mise.toml" "$SELFISHELL_CONFIG_DIR/mise/config.toml" "$dry_run"
   managed_install_file zsh-completion "$SELFISHELL_ROOT/common/completion.zsh" "$SELFISHELL_CONFIG_DIR/zsh/completion.zsh" "$dry_run"
   managed_install_file zsh-interactive "$SELFISHELL_ROOT/common/interactive.zsh" "$SELFISHELL_CONFIG_DIR/zsh/interactive.zsh" "$dry_run"
   managed_install_file zsh-update-notice "$SELFISHELL_ROOT/common/update-notice.zsh" "$SELFISHELL_CONFIG_DIR/zsh/update-notice.zsh" "$dry_run"

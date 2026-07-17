@@ -11,7 +11,7 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | nvm | pyenv | pyenv-virtualenv | kubectl | zinit | vundle)
+    starship | mise | zinit | vundle)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
@@ -25,6 +25,39 @@ install_direct_package() {
       return 1
       ;;
   esac
+}
+
+install_mise_tools() {
+  local requirement="$1"
+  local dry_run="$2"
+  local mise_command
+  shift 2
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would install %s mise tools: %s\n' "$requirement" "$*"
+    return
+  fi
+  if have_command mise; then
+    mise_command="$(command -v mise)"
+  elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    mise_command="$HOME/.local/bin/mise"
+  else
+    cli_error "mise is required to install mise-managed tools."
+    if [[ "$requirement" == "optional" ]]; then
+      SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
+      return 0
+    fi
+    return 1
+  fi
+
+  if ! MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" "$mise_command" install "$@"; then
+    cli_error "Could not install $requirement mise tools: $*"
+    if [[ "$requirement" == "optional" ]]; then
+      SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
+      return 0
+    fi
+    return 1
+  fi
 }
 
 install_vim_plugins() {

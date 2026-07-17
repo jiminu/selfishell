@@ -77,7 +77,7 @@ profile_read_file() {
           return 1
           ;;
         esac
-        case "$third" in apt | formula | cask | direct) ;; *)
+        case "$third" in apt | formula | cask | direct | mise) ;; *)
           cli_error "Invalid package manager: $third"
           return 1
           ;;

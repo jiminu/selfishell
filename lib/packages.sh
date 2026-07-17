@@ -13,6 +13,8 @@ packages_install_profile() {
   local optional_cask=()
   local required_direct=()
   local optional_direct=()
+  local required_mise=()
+  local optional_mise=()
 
   # Consumed by the apt adapter after this module is sourced.
   # shellcheck disable=SC2034
@@ -43,6 +45,8 @@ packages_install_profile() {
       optional:cask) optional_cask+=("${PROFILE_PACKAGES[$index]}") ;;
       required:direct) required_direct+=("${PROFILE_PACKAGES[$index]}") ;;
       optional:direct) optional_direct+=("${PROFILE_PACKAGES[$index]}") ;;
+      required:mise) required_mise+=("${PROFILE_PACKAGES[$index]}") ;;
+      optional:mise) optional_mise+=("${PROFILE_PACKAGES[$index]}") ;;
     esac
   done
 
@@ -63,6 +67,9 @@ packages_install_profile() {
       install_direct_package optional "$index" "$dry_run"
     done
   fi
+
+  ((${#required_mise[@]} == 0)) || install_mise_tools required "$dry_run" "${required_mise[@]}"
+  ((${#optional_mise[@]} == 0)) || install_mise_tools optional "$dry_run" "${optional_mise[@]}"
 
   if ((${#SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[@]} > 0)); then
     cli_error "Skipped optional packages: ${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}"

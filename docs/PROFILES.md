@@ -6,13 +6,19 @@ role.
 | Profile | Purpose |
 | --- | --- |
 | `minimal` | Core shell, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Minimal plus jq, pyenv, pyenv-virtualenv, NVM, build tooling, Kubernetes tools, and OpenJDK 17 |
+| `developer` | Minimal plus mise-managed Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, and kubectx 0.9.5; jq and build tooling remain OS packages |
 
 `minimal` is selected when `--profile` is omitted.
 
-The `developer` profile installs both pyenv and pyenv-virtualenv. Shell
-initialization stays lazy and enables virtualenv auto-activation when pyenv is
-first used.
+The `developer` profile installs a pinned mise binary and activates it for
+interactive Zsh. Selfishell keeps its defaults in
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/config.toml`; a project's
+`mise.toml` can select different tool versions. Existing NVM, pyenv, and
+system-Java installations are not removed.
+
+Built-in mise tools use exact reviewed versions. Projects remain free to
+override them in a local `mise.toml`. Updating these defaults requires a normal
+Selfishell release and never happens during shell startup.
 
 Preview without changing the machine:
 

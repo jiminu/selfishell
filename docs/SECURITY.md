@@ -7,6 +7,8 @@ release provenance and preservation of existing files are security boundaries.
 - GitHub Release assets have signed Sigstore build-provenance attestations bound
   to the release workflow and artifact digests.
 - Direct dependency versions are approved in `dependencies.conf`.
+- mise-managed tool selectors are reviewed in `common/mise.toml`; mise verifies
+  checksums or stronger provenance when supported by the selected backend.
 - Git dependencies use an approved tag or commit.
 - Existing configuration is backed up and tracked before managed replacement.
 - Interactive shell startup performs no network update.

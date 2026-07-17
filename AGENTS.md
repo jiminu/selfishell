@@ -45,6 +45,11 @@ Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
 `update`, `rollback`, and `uninstall`. The former checkout-linked legacy
 bootstrap has been retired.
 
+The `developer` profile uses a pinned mise binary for Node.js, Python, Temurin,
+kubectl, and kubectx. jq, Starship, build libraries, and core shell tools remain
+under the existing Selfishell or operating-system package lifecycle. Do not
+delete legacy NVM or pyenv user data during migration.
+
 ## Product Decisions
 
 - Use one installation method for macOS and Ubuntu: a small curl-delivered

@@ -70,6 +70,14 @@ command_doctor() {
     tool_status_reset_cache
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
     doctor_info "Profile: $profile"
+    if [[ "$profile" == developer ]]; then
+      if [[ -d "$HOME/.nvm" ]]; then
+        doctor_info "Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"
+      fi
+      if [[ -d "$HOME/.pyenv" ]]; then
+        doctor_info "Legacy runtime manager detected: $HOME/.pyenv (preserved; mise is active)"
+      fi
+    fi
     case "$platform" in
       ubuntu | ubuntu-wsl)
         dependency_platform=linux

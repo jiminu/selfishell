@@ -15,7 +15,7 @@ selfishell rollback --yes
 
 The tools/configuration phase synchronizes apt or Homebrew packages from the
 installed profile, installs directly managed tools at the approved versions in
-`dependencies.conf`, reapplies managed configuration, and installs Vim plugins
+`dependencies.conf`, synchronizes mise-managed developer tools, reapplies managed configuration, and installs Vim plugins
 declared by the managed vimrc. Already installed operating-system packages
 remain managed by apt or Homebrew; this command does not perform a general
 package upgrade. A CLI-only installation skips this phase.
@@ -44,10 +44,14 @@ does not use the network. An exact retained version can be selected with
 
 Direct download and Git dependency versions are changed only by reviewing and
 updating `dependencies.conf` in a new Selfishell release.
+The exact mise-managed defaults in `profiles/developer.conf` and
+`common/mise.toml` are updated together through the same review-and-release
+boundary. Individual project `mise.toml` files remain outside Selfishell's
+update lifecycle.
 
 Maintainers can run `scripts/update-dependencies.sh` to discover current
-upstream releases, download platform artifacts, calculate Starship checksums,
-and read published kubectl checksums. The weekly `Dependency updates` workflow
+upstream releases, download platform artifacts, and calculate Starship and mise
+checksums. The weekly `Dependency updates` workflow
 uses the same script and opens or refreshes a review PR only when the manifest
 changes. It never merges the PR or publishes a Selfishell release. Review
 upstream release notes and the generated checksums before merging, then publish

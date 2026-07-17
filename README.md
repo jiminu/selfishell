@@ -16,7 +16,7 @@ Selfishell is a good fit if you
 
 - want a useful terminal setup that works immediately;
 - use multiple Macs, Ubuntu machines, or Ubuntu on WSL;
-- want Git, kubectl, runtime managers, aliases, and completions configured
+- want Git, kubectl, mise-managed runtimes, aliases, and completions configured
   consistently;
 - prefer a small managed configuration over assembling a large framework such
   as Oh My Zsh;
@@ -31,7 +31,7 @@ independently.
 - a readable Starship prompt with Git and runtime information;
 - Zsh completion and aliases for common Git, shell, and kubectl workflows;
 - FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and Zinit in the default profile;
-- optional Python, Node.js, Kubernetes, jq, build tools, and OpenJDK support;
+- optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
 - managed configuration with backups of files that existed before installation;
 - one-command updates, release notifications, checksum verification, and
   offline rollback.
@@ -125,7 +125,7 @@ are activated.
 | Profile | Included tools |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus jq, pyenv, pyenv-virtualenv, NVM, build tools, Kubernetes tools, and OpenJDK 17 |
+| `developer` | Everything in `minimal`, plus mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
 
 `minimal` is the default. Preview a profile without changing anything:
 
@@ -212,6 +212,9 @@ Network access is required for initial package and plugin downloads.
 
 Direct downloads are version-pinned and checksum-verified. Git dependencies are
 checked out at approved tags or commits defined in `dependencies.conf`.
+Developer runtimes and versioned Kubernetes tools are installed by mise from a
+Selfishell-managed global config. Project `mise.toml` files can override those
+defaults. Existing NVM and pyenv directories are left untouched.
 
 ## Advanced Setup
 

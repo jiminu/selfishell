@@ -94,7 +94,7 @@ record_result() {
 
 run_common_zsh() {
   HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" PATH=/usr/bin:/bin \
-    /bin/zsh -f -c 'load_nvm() { :; }; source "$1"' \
+    /bin/zsh -f -c 'source "$1"' \
     zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
 }
 

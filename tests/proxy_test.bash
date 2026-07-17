@@ -17,11 +17,11 @@ test_direct_installer_preserves_proxy_environment() {
 
   mkdir -p "$fake_bin"
   local payload checksum
-  payload="$TEST_ROOT/nvm.tar"
-  printf 'nvm fixture' >"$payload"
+  payload="$TEST_ROOT/mise"
+  printf 'mise fixture' >"$payload"
   checksum="$(fixture_sha256 "$payload")"
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
-  printf 'download nvm 1.0 linux amd64 file://%s %s .nvm/nvm.sh raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  printf 'download mise 1.0 linux amd64 file://%s %s .local/bin/mise raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 
   cat >"$fake_bin/curl" <<'EOF'
 #!/bin/sh
@@ -39,7 +39,7 @@ EOF
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux version\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
-  install_direct_package required nvm 0
+  install_direct_package required mise 0
 
   assert_file_content "$HTTPS_PROXY" "$HOME/proxy-observed"
 }

@@ -43,6 +43,8 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Common Zsh configuration was not copied"
   cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
     fail "Runtime Zsh module was not copied"
+  cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/config.toml" ||
+    fail "mise configuration was not copied"
   cmp -s "$ROOT_DIR/common/completion.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh" ||
     fail "Completion Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/interactive.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/interactive.zsh" ||
@@ -55,7 +57,7 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  [[ "$state_count" -eq 14 ]] || fail "Expected state for every managed Ubuntu resource"
+  [[ "$state_count" -eq 15 ]] || fail "Expected state for every managed Ubuntu resource"
 }
 
 test_macos_install_includes_ghostty_configuration() {

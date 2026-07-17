@@ -15,22 +15,22 @@ test_updates_only_matching_manifest_fields() {
   cat >"$manifest" <<'EOF'
 # type name version platform architecture source checksum target marker
 download starship 1.0.0 linux amd64 https://old/starship.tar.gz oldsum .local/bin/starship starship
-download kubectl 1.30.0 linux arm64 https://old/kubectl oldkubectl .local/bin/kubectl raw
-git nvm v0.1.0 all all https://github.com/nvm-sh/nvm.git - .nvm nvm.sh
+download mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw
+git zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh
 EOF
   cat >"$metadata" <<'EOF'
 download starship 2.0.0 linux amd64 https://new/starship.tar.gz newsum
-download kubectl 1.31.0 linux arm64 https://new/kubectl newkubectl
-git nvm v0.2.0
+download mise 2.0.0 linux arm64 https://new/mise newmise
+git zinit v0.2.0
 EOF
 
   bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata"
 
   grep -Fqx 'download starship 2.0.0 linux amd64 https://new/starship.tar.gz newsum .local/bin/starship starship' "$manifest" ||
     fail "Starship metadata was not applied"
-  grep -Fqx 'download kubectl 1.31.0 linux arm64 https://new/kubectl newkubectl .local/bin/kubectl raw' "$manifest" ||
-    fail "kubectl metadata was not applied"
-  grep -Fqx 'git nvm v0.2.0 all all https://github.com/nvm-sh/nvm.git - .nvm nvm.sh' "$manifest" ||
+  grep -Fqx 'download mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw' "$manifest" ||
+    fail "mise metadata was not applied"
+  grep -Fqx 'git zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh' "$manifest" ||
     fail "Git dependency metadata was not applied"
 }
 
@@ -41,7 +41,7 @@ test_rejects_metadata_without_manifest_entry() {
   trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
-  printf 'git nvm v0.1.0 all all https://example.invalid/nvm.git - .nvm nvm.sh\n' >"$manifest"
+  printf 'git zinit v0.1.0 all all https://example.invalid/zinit.git - .zinit zinit.zsh\n' >"$manifest"
   printf 'git missing v1.0.0\n' >"$metadata"
 
   set +e
@@ -50,7 +50,7 @@ test_rejects_metadata_without_manifest_entry() {
   set -e
 
   [[ "$status" -ne 0 ]] || fail "Unmatched metadata should fail"
-  grep -Fqx 'git nvm v0.1.0 all all https://example.invalid/nvm.git - .nvm nvm.sh' "$manifest" ||
+  grep -Fqx 'git zinit v0.1.0 all all https://example.invalid/zinit.git - .zinit zinit.zsh' "$manifest" ||
     fail "Rejected metadata changed the manifest"
 }
 

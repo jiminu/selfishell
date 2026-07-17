@@ -65,8 +65,49 @@ test_wsl_defers_windows_path_during_initialization() {
       ' zsh "$ROOT_DIR/ubuntu/.zshrc"
   )"
 
-  [[ "$output" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/mnt/c/Windows:/bin" ]] ||
+  [[ "$output" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/bin:/mnt/c/Windows" ]] ||
     fail "WSL PATH was not restored after initialization: $output"
+  teardown_test_home
+}
+
+test_mise_uses_selfishell_config_only_for_developer_profile() {
+  local fake_bin developer_config minimal_config
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin" "$HOME/.local/state/selfishell"
+  cat >"$fake_bin/mise" <<'EOF'
+#!/bin/sh
+if [ "$1" = activate ]; then
+  printf 'export SELFISHELL_TEST_MISE_ACTIVATED=1\n'
+fi
+EOF
+  chmod +x "$fake_bin/mise"
+  printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
+
+  developer_config="$(
+    PATH="$fake_bin:/usr/bin:/bin" /bin/zsh -f -c '
+      _selfishell_command_path() { command -v "$1"; }
+      source "$1"
+      [[ "$SELFISHELL_TEST_MISE_ACTIVATED" == 1 ]]
+      print -r -- "$MISE_GLOBAL_CONFIG_FILE"
+    ' zsh "$ROOT_DIR/common/runtime.zsh"
+  )"
+
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  minimal_config="$(
+    PATH="$fake_bin:/usr/bin:/bin" MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        print -r -- "$MISE_GLOBAL_CONFIG_FILE"
+      ' zsh "$ROOT_DIR/common/runtime.zsh"
+  )"
+
+  [[ "$developer_config" == "$HOME/.config/selfishell/mise/config.toml" ]] ||
+    fail "Developer profile did not select the Selfishell mise config"
+  [[ "$minimal_config" == "$HOME/personal-mise.toml" ]] ||
+    fail "Minimal profile replaced the user's mise config"
   teardown_test_home
 }
 
@@ -151,6 +192,8 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path
 printf 'PASS: test_macos_managed_zsh_adds_default_cli_prefix_to_path\n'
 test_wsl_defers_windows_path_during_initialization
 printf 'PASS: test_wsl_defers_windows_path_during_initialization\n'
+test_mise_uses_selfishell_config_only_for_developer_profile
+printf 'PASS: test_mise_uses_selfishell_config_only_for_developer_profile\n'
 test_update_notice_reads_installed_version_file
 printf 'PASS: test_update_notice_reads_installed_version_file\n'
 test_update_notice_uses_cache_and_refreshes_in_background_format

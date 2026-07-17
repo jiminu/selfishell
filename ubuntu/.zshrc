@@ -9,19 +9,9 @@ path=("$HOME/.local/bin" "$HOME/.rd/bin" $path)
 # Windows PATH entries remain available after startup, but probing them while
 # initializing Linux tools is expensive on WSL's mounted filesystem.
 if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
-  SELFISHELL_ORIGINAL_PATH=("${path[@]}")
+  SELFISHELL_WINDOWS_PATH=("${(@M)path:#/mnt/[a-zA-Z]/*}")
   path=("${(@)path:#/mnt/[a-zA-Z]/*}")
 fi
-
-
-# --------------------------------------------------
-# Runtime environments
-# --------------------------------------------------
-
-load_nvm() {
-  unfunction nvm node npm npx 2>/dev/null
-  [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
-}
 
 
 # --------------------------------------------------
@@ -39,7 +29,7 @@ else
   print -u2 "Common Zsh configuration not found: $COMMON_ZSH"
 fi
 
-if (( ${#SELFISHELL_ORIGINAL_PATH[@]} )); then
-  path=("${SELFISHELL_ORIGINAL_PATH[@]}")
+if (( ${#SELFISHELL_WINDOWS_PATH[@]} )); then
+  path+=("${SELFISHELL_WINDOWS_PATH[@]}")
 fi
-unset SELFISHELL_ORIGINAL_PATH
+unset SELFISHELL_WINDOWS_PATH
