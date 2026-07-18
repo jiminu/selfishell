@@ -52,7 +52,7 @@ install_managed_nvim_config() {
 # Both state records conflict with the new layout and must be cleared so
 # that managed_install_link and managed_install_file can proceed cleanly.
 migrate_nvim_state() {
-  [[ "$1" == "0" ]] || return 0  # skip during dry-run
+  [[ "$1" == "0" ]] || return 0 # skip during dry-run
   if managed_read_state "user-nvim" 2>/dev/null; then
     if [[ "$MANAGED_STATE_TARGET" == */nvim/init.lua ]]; then
       managed_remove_state "user-nvim"
