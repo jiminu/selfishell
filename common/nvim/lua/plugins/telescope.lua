@@ -9,9 +9,33 @@ return {
         desc = "Find files",
       },
       {
+        "<leader>fF",
+        function()
+          require("telescope.builtin").find_files({
+            hidden = true,
+          })
+        end,
+        desc = "Find all files",
+      },
+      {
         "<leader>fg",
         "<cmd>Telescope live_grep<CR>",
         desc = "Live grep",
+      },
+      {
+        "<leader>fG",
+        function()
+          require("telescope.builtin").live_grep({
+            additional_args = function()
+              return {
+                "--hidden",
+                "--glob",
+                "!**/.git/**",
+              }
+            end,
+          })
+        end,
+        desc = "Live grep all files",
       },
       {
         "<leader>fb",
