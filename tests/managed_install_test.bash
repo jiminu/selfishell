@@ -37,10 +37,13 @@ test_install_copies_configuration_and_tracks_resources() {
   run_selfishell install --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" "$XDG_CONFIG_HOME/nvim/init.lua"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
+  cmp -s "$ROOT_DIR/common/zshenv" "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" ||
+    fail "zshenv was not copied"
   cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
     fail "Runtime Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/config.toml" ||
@@ -57,7 +60,7 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  [[ "$state_count" -eq 15 ]] || fail "Expected state for every managed Ubuntu resource"
+  [[ "$state_count" -eq 17 ]] || fail "Expected state for every managed Ubuntu resource"
 }
 
 test_macos_install_includes_ghostty_configuration() {

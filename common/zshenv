@@ -1,0 +1,3 @@
+# skip_global_compinit=1 prevents Ubuntu's system-wide /etc/zsh/zshrc from
+# running compinit. Selfishell manages compinit on its own.
+skip_global_compinit=1

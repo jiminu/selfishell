@@ -185,10 +185,10 @@ command_uninstall() {
   fi
 
   for resource in \
-    user-ghostty user-nvim user-starship user-zshrc \
+    user-ghostty user-nvim user-starship user-zshrc user-zshenv \
     ghostty-config nvim-config starship-config aliases-kubectl aliases-git \
     aliases-common zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime \
-    zsh-common zshrc-config; do
+    zsh-common zshenv-config zshrc-config; do
     managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
   done
 
@@ -201,12 +201,12 @@ command_uninstall() {
     uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
-  for resource in user-ghostty user-nvim user-starship user-zshrc; do
+  for resource in user-ghostty user-nvim user-starship user-zshrc user-zshenv; do
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
 
   for resource in ghostty-config nvim-config starship-config aliases-kubectl aliases-git aliases-common \
-    zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime zsh-common zshrc-config; do
+    zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime zsh-common zshenv-config zshrc-config; do
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
 

@@ -32,6 +32,7 @@ install_managed_configuration() {
   esac
 
   managed_install_file zshrc-config "$zsh_source" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
+  managed_install_file zshenv-config "$SELFISHELL_ROOT/common/zshenv" "$SELFISHELL_CONFIG_DIR/zsh/zshenv" "$dry_run"
   managed_install_file zsh-runtime "$SELFISHELL_ROOT/common/runtime.zsh" "$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh" "$dry_run"
   managed_install_file mise-config "$SELFISHELL_ROOT/common/mise.toml" "$SELFISHELL_CONFIG_DIR/mise/config.toml" "$dry_run"
   managed_install_file zsh-completion "$SELFISHELL_ROOT/common/completion.zsh" "$SELFISHELL_CONFIG_DIR/zsh/completion.zsh" "$dry_run"
@@ -50,6 +51,7 @@ install_managed_configuration() {
   fi
 
   managed_install_link user-zshrc "$HOME/.zshrc" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
+  managed_install_link user-zshenv "$HOME/.zshenv" "$SELFISHELL_CONFIG_DIR/zsh/zshenv" "$dry_run"
   managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
   managed_install_link user-nvim "${XDG_CONFIG_HOME:-$HOME/.config}/nvim/init.lua" "$SELFISHELL_CONFIG_DIR/nvim/init.lua" "$dry_run"
 
