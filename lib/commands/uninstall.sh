@@ -186,7 +186,12 @@ command_uninstall() {
 
   for resource in \
     user-ghostty user-nvim user-starship user-zshrc user-zshenv \
-    ghostty-config nvim-config starship-config aliases-kubectl aliases-git \
+    ghostty-config \
+    nvim-init nvim-lua-config-options nvim-lua-config-keymaps \
+    nvim-lua-config-autocmds nvim-lua-config-lazy nvim-lua-config-languages \
+    nvim-lua-plugins-ui nvim-lua-plugins-editor nvim-lua-plugins-lsp \
+    nvim-lua-plugins-completion nvim-lua-plugins-telescope nvim-after-lsp-lua_ls \
+    starship-config aliases-kubectl aliases-git \
     aliases-common zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime \
     zsh-common zshenv-config zshrc-config; do
     managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
@@ -205,7 +210,12 @@ command_uninstall() {
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
 
-  for resource in ghostty-config nvim-config starship-config aliases-kubectl aliases-git aliases-common \
+  for resource in ghostty-config \
+    nvim-init nvim-lua-config-options nvim-lua-config-keymaps \
+    nvim-lua-config-autocmds nvim-lua-config-lazy nvim-lua-config-languages \
+    nvim-lua-plugins-ui nvim-lua-plugins-editor nvim-lua-plugins-lsp \
+    nvim-lua-plugins-completion nvim-lua-plugins-telescope nvim-after-lsp-lua_ls \
+    starship-config aliases-kubectl aliases-git aliases-common \
     zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime zsh-common zshenv-config zshrc-config; do
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done
@@ -213,6 +223,12 @@ command_uninstall() {
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_STATE_DIR/profile" "$SELFISHELL_STATE_DIR/ghostty"
     rmdir "$SELFISHELL_CONFIG_DIR/ghostty" 2>/dev/null || true
+    # Remove nvim subdirectories depth-first then the top-level nvim dir.
+    rmdir "$SELFISHELL_CONFIG_DIR/nvim/after/lsp" 2>/dev/null || true
+    rmdir "$SELFISHELL_CONFIG_DIR/nvim/after" 2>/dev/null || true
+    rmdir "$SELFISHELL_CONFIG_DIR/nvim/lua/config" 2>/dev/null || true
+    rmdir "$SELFISHELL_CONFIG_DIR/nvim/lua/plugins" 2>/dev/null || true
+    rmdir "$SELFISHELL_CONFIG_DIR/nvim/lua" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/nvim" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/mise" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/zsh" 2>/dev/null || true

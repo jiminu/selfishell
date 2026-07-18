@@ -39,7 +39,14 @@ test_install_copies_configuration_and_tracks_resources() {
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" "$XDG_CONFIG_HOME/nvim/init.lua"
+  # The nvim directory itself is now the managed symlink target.
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
+  cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
+    fail "Neovim init.lua was not installed"
+  cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
+    fail "Neovim options module was not installed"
+  cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
+    fail "Neovim lsp plugin was not installed"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
   cmp -s "$ROOT_DIR/common/zshenv" "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" ||
@@ -60,7 +67,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  [[ "$state_count" -eq 17 ]] || fail "Expected state for every managed Ubuntu resource"
+  # 16 zsh/starship/mise/aliases resources + 12 nvim file resources + 1 user-nvim link resource
+  # = 28 state files for a fresh Ubuntu install (ghostty is macOS-only).
+  [[ "$state_count" -eq 28 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
 }
 
 test_macos_install_includes_ghostty_configuration() {

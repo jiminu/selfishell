@@ -16,6 +16,51 @@ Options:
 EOF
 }
 
+# Install all Neovim configuration files as individual managed resources.
+# Each file path under common/nvim/ maps to a resource name derived from the
+# relative path (slashes and dots replaced with hyphens).
+install_managed_nvim_config() {
+  local dry_run="$1"
+  local src="$SELFISHELL_ROOT/common/nvim"
+  local dst="$SELFISHELL_CONFIG_DIR/nvim"
+  local files
+  files=(
+    init.lua
+    lua/config/options.lua
+    lua/config/keymaps.lua
+    lua/config/autocmds.lua
+    lua/config/lazy.lua
+    lua/config/languages.lua
+    lua/plugins/ui.lua
+    lua/plugins/editor.lua
+    lua/plugins/lsp.lua
+    lua/plugins/completion.lua
+    lua/plugins/telescope.lua
+    after/lsp/lua_ls.lua
+  )
+
+  local f resource
+  for f in "${files[@]}"; do
+    resource="nvim-$(printf '%s' "${f%.lua}" | tr '/.' '--')"
+    managed_install_file "$resource" "$src/$f" "$dst/$f" "$dry_run"
+  done
+}
+
+# Migrate a pre-directory-symlink nvim installation produced by an older
+# Selfishell release.  The old layout managed a single init.lua file
+# (nvim-config) and a symlink to that file (user-nvim -> nvim/init.lua).
+# Both state records conflict with the new layout and must be cleared so
+# that managed_install_link and managed_install_file can proceed cleanly.
+migrate_nvim_state() {
+  [[ "$1" == "0" ]] || return 0 # skip during dry-run
+  if managed_read_state "user-nvim" 2>/dev/null; then
+    if [[ "$MANAGED_STATE_TARGET" == */nvim/init.lua ]]; then
+      managed_remove_state "user-nvim"
+      managed_remove_state "nvim-config"
+    fi
+  fi
+}
+
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
@@ -44,7 +89,10 @@ install_managed_configuration() {
   managed_install_file aliases-git "$SELFISHELL_ROOT/common/aliases-git.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh" "$dry_run"
   managed_install_file aliases-kubectl "$SELFISHELL_ROOT/common/aliases-kubectl.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh" "$dry_run"
   managed_install_file starship-config "$SELFISHELL_ROOT/common/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
-  managed_install_file nvim-config "$SELFISHELL_ROOT/common/init.lua" "$SELFISHELL_CONFIG_DIR/nvim/init.lua" "$dry_run"
+
+  # Migrate old single-file nvim state before installing the new layout.
+  migrate_nvim_state "$dry_run"
+  install_managed_nvim_config "$dry_run"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_file ghostty-config "$SELFISHELL_ROOT/mac/config.ghostty" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
@@ -53,7 +101,8 @@ install_managed_configuration() {
   managed_install_link user-zshrc "$HOME/.zshrc" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
   managed_install_link user-zshenv "$HOME/.zshenv" "$SELFISHELL_CONFIG_DIR/zsh/zshenv" "$dry_run"
   managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
-  managed_install_link user-nvim "${XDG_CONFIG_HOME:-$HOME/.config}/nvim/init.lua" "$SELFISHELL_CONFIG_DIR/nvim/init.lua" "$dry_run"
+  # user-nvim now links the whole nvim directory, not a single init.lua file.
+  managed_install_link user-nvim "${XDG_CONFIG_HOME:-$HOME/.config}/nvim" "$SELFISHELL_CONFIG_DIR/nvim" "$dry_run"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
