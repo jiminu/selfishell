@@ -10,3 +10,11 @@ if _selfishell_command_path mise >/dev/null; then
   eval "$(command mise activate zsh)"
   unset _selfishell_profile_state
 fi
+
+# On Linux systems without FUSE support (e.g. Docker containers), run AppImage
+# by extracting to a temporary directory instead of mounting. Has no effect on
+# macOS or Linux environments where /dev/fuse is available.
+if [[ "$(uname -s)" == "Linux" && ! -c /dev/fuse ]]; then
+  export APPIMAGE_EXTRACT_AND_RUN=1
+fi
+
