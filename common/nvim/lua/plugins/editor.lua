@@ -55,4 +55,11 @@ return {
       }
     end,
   },
+
+  -- Keymap guide: helpful for Space leader mappings.
+  {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+    opts = {},
+  },
 }
