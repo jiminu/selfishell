@@ -121,7 +121,12 @@ command_status() {
   for resource in \
     zshrc-config zshenv-config zsh-common zsh-runtime mise-config zsh-completion zsh-interactive zsh-update-notice \
     aliases-common aliases-git aliases-kubectl \
-    starship-config vim-config nvim-config ghostty-config \
+    starship-config vim-config \
+    nvim-init nvim-lua-config-options nvim-lua-config-keymaps \
+    nvim-lua-config-autocmds nvim-lua-config-lazy nvim-lua-config-languages \
+    nvim-lua-plugins-ui nvim-lua-plugins-editor nvim-lua-plugins-lsp \
+    nvim-lua-plugins-completion nvim-lua-plugins-telescope nvim-after-lsp-lua_ls \
+    ghostty-config \
     user-zshrc user-zshenv user-starship user-vim user-nvim user-ghostty; do
     status_resource "$resource"
   done
