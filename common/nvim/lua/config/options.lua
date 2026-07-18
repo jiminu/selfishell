@@ -2,6 +2,7 @@ local opt = vim.opt
 
 -- UI
 opt.number = true
+opt.relativenumber = true
 opt.hlsearch = true
 opt.laststatus = 2
 opt.ruler = false
