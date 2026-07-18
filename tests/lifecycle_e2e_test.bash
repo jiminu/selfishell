@@ -16,7 +16,7 @@ test_complete_release_lifecycle() {
   setup_test_home
   trap teardown_test_home EXIT
   mkdir -p "$TEST_ROOT/bin"
-  for tool in starship fzf zoxide rg nvim tree-sitter gcc; do
+  for tool in starship fzf zoxide rg nvim tree-sitter gcc build-essential; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
   done
