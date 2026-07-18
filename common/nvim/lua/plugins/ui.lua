@@ -21,7 +21,7 @@ return {
     },
     keys = {
       {
-        "<C-n>",
+        "<leader>e",
         "<cmd>NvimTreeToggle<CR>",
         desc = "Toggle file explorer",
       },

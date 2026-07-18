@@ -6,6 +6,20 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
   desc = "Clear search highlight",
 })
 
+-- Window navigation
+map("n", "<C-h>", "<C-w>h", {
+  desc = "Go to left window"
+})
+map("n", "<C-l>", "<C-w>l", {
+  desc = "Go to right window"
+})
+map("n", "<C-j>", "<C-w>j", {
+  desc = "Go to lower window"
+})
+map("n", "<C-k>", "<C-w>k", {
+  desc = "Go to upper window"
+})
+
 -- Diagnostic navigation
 map("n", "[d", function()
   vim.diagnostic.jump({ count = -1, float = true })
@@ -33,6 +47,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
     lsp_map("K", vim.lsp.buf.hover, "Hover documentation")
     lsp_map("<leader>rn", vim.lsp.buf.rename, "Rename symbol")
     lsp_map("<leader>ca", vim.lsp.buf.code_action, "Code action")
-    lsp_map("<leader>e", vim.diagnostic.open_float, "Show line diagnostics")
+    lsp_map("<leader>d", vim.diagnostic.open_float, "Show line diagnostics")
   end,
 })
