@@ -58,6 +58,15 @@ require("lazy").setup({
     "nvim-treesitter/nvim-treesitter",
     build = ":TSUpdate",
     lazy = false,
+    config = function()
+      local ts_config = pcall(require, "nvim-treesitter.configs") and require("nvim-treesitter.configs")
+        or pcall(require, "nvim-treesitter.config") and require("nvim-treesitter.config")
+      if ts_config then
+        ts_config.setup({
+          auto_install = true,
+        })
+      end
+    end,
   },
   -- Rainbow delimiters (VS Code Style Bracket Colorizer)
   {
