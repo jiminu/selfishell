@@ -53,9 +53,16 @@ require("lazy").setup({
       })
     end,
   },
+  -- Treesitter for syntax highlighting and bracket colorizer
+  {
+    "nvim-treesitter/nvim-treesitter",
+    build = ":TSUpdate",
+    lazy = false,
+  },
   -- Rainbow delimiters (VS Code Style Bracket Colorizer)
   {
     "HiPhish/rainbow-delimiters.nvim",
+    dependencies = { "nvim-treesitter/nvim-treesitter" },
     event = "BufReadPost",
     config = function()
       local rainbow_delimiters = require('rainbow-delimiters')
@@ -67,6 +74,120 @@ require("lazy").setup({
           [''] = 'rainbow-delimiters',
         },
       }
+    end,
+  },
+  -- Mason for managing LSP/linters/formatters
+  {
+    "williamboman/mason.nvim",
+    lazy = false,
+    config = function()
+      require("mason").setup()
+    end,
+  },
+  {
+    "williamboman/mason-lspconfig.nvim",
+    lazy = false,
+    dependencies = { "williamboman/mason.nvim" },
+    config = function()
+      require("mason-lspconfig").setup({
+        ensure_installed = { "lua_ls", "pyright", "bashls" },
+      })
+    end,
+  },
+  {
+    "neovim/nvim-lspconfig",
+    lazy = false,
+    dependencies = { "williamboman/mason-lspconfig.nvim", "hrsh7th/cmp-nvim-lsp" },
+    config = function()
+      local lspconfig = require("lspconfig")
+      local capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+      local function setup_server(name, opts)
+        opts = opts or {}
+        opts.capabilities = capabilities
+        if vim.lsp.config then
+          vim.lsp.config(name, opts)
+          vim.lsp.enable(name)
+        else
+          lspconfig[name].setup(opts)
+        end
+      end
+
+      -- Setup standard LSP servers
+      setup_server("lua_ls", {
+        settings = {
+          Lua = {
+            diagnostics = {
+              globals = { "vim" },
+            },
+          },
+        },
+      })
+      setup_server("pyright")
+      setup_server("bashls")
+
+      -- Global LSP mappings
+      vim.keymap.set('n', 'gd', vim.lsp.buf.definition, { desc = "Go to Definition" })
+      vim.keymap.set('n', 'K', vim.lsp.buf.hover, { desc = "Hover Documentation" })
+      vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, { desc = "Rename Symbol" })
+      vim.keymap.set('n', '<leader>ca', vim.lsp.buf.code_action, { desc = "Code Action" })
+      vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, { desc = "Go to previous diagnostic" })
+      vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = "Go to next diagnostic" })
+    end,
+  },
+  -- Autocompletion
+  {
+    "hrsh7th/nvim-cmp",
+    lazy = false,
+    dependencies = {
+      "hrsh7th/cmp-nvim-lsp",
+      "hrsh7th/cmp-buffer",
+      "hrsh7th/cmp-path",
+      "L3MON4D3/LuaSnip",
+      "saadparwaiz1/cmp_luasnip",
+    },
+    config = function()
+      local cmp = require("cmp")
+      local luasnip = require("luasnip")
+
+      cmp.setup({
+        snippet = {
+          expand = function(args)
+            luasnip.lsp_expand(args.body)
+          end,
+        },
+        mapping = cmp.mapping.preset.insert({
+          ["<C-b>"] = cmp.mapping.scroll_docs(-4),
+          ["<C-f>"] = cmp.mapping.scroll_docs(4),
+          ["<C-Space>"] = cmp.mapping.complete(),
+          ["<CR>"] = cmp.mapping.confirm({ select = true }),
+          ["<Tab>"] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              cmp.select_next_item()
+            elseif luasnip.expand_or_jumpable() then
+              luasnip.expand_or_jump()
+            else
+              fallback()
+            end
+          end, { "i", "s" }),
+          ["<S-Tab>"] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              cmp.select_prev_item()
+            elseif luasnip.jumpable(-1) then
+              luasnip.jump(-1)
+            else
+              fallback()
+            end
+          end, { "i", "s" }),
+        }),
+        sources = cmp.config.sources({
+          { name = "nvim_lsp" },
+          { name = "luasnip" },
+        }, {
+          { name = "buffer" },
+          { name = "path" },
+        }),
+      })
     end,
   },
 })
