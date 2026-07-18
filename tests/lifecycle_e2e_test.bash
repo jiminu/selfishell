@@ -16,7 +16,7 @@ test_complete_release_lifecycle() {
   setup_test_home
   trap teardown_test_home EXIT
   mkdir -p "$TEST_ROOT/bin"
-  for tool in starship fzf zoxide rg nvim; do
+  for tool in starship fzf zoxide rg nvim tree-sitter gcc build-essential; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
   done
@@ -39,7 +39,7 @@ test_complete_release_lifecycle() {
 
   bash "$ROOT_DIR/install.sh" --version "$initial_version" --prefix "$prefix" \
     --setup --yes --profile minimal --skip-packages >/dev/null
-  "$prefix/bin/selfishell" doctor >/dev/null
+  "$prefix/bin/selfishell" doctor
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $initial_version" ]] || fail "Clean install failed"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
 

@@ -61,8 +61,9 @@ require("lazy").setup({
     config = function()
       local ts_config = pcall(require, "nvim-treesitter.configs") and require("nvim-treesitter.configs")
         or pcall(require, "nvim-treesitter.config") and require("nvim-treesitter.config")
-      if ts_config then
+      if ts_config and type(ts_config.setup) == "function" then
         ts_config.setup({
+          ensure_installed = { "c", "cpp", "python", "java", "bash", "json", "yaml", "html", "css", "javascript", "typescript" },
           auto_install = true,
         })
       end

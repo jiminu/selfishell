@@ -11,7 +11,7 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | mise | zinit)
+    starship | mise | zinit | neovim)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
@@ -62,18 +62,23 @@ install_mise_tools() {
 
 install_vim_plugins() {
   local dry_run="$1"
+  local nvim_command
 
   [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || return 0
   if [[ "$dry_run" == "1" ]]; then
     printf 'Would install declared Neovim plugins.\n'
     return
   fi
-  if ! have_command nvim; then
+  if have_command nvim; then
+    nvim_command="nvim"
+  elif [[ -x "$HOME/.local/bin/nvim" ]]; then
+    nvim_command="$HOME/.local/bin/nvim"
+  else
     cli_error "Neovim is required to install declared plugins."
     return 1
   fi
 
-  if ! nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
+  if ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
     cli_error "Could not install Neovim plugins."
     return 1
   fi

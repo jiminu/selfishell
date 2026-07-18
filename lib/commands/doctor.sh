@@ -65,6 +65,20 @@ command_doctor() {
     result="$SELFISHELL_EXIT_ERROR"
   fi
 
+  if have_command gcc; then
+    doctor_ok "C compiler: gcc ($(gcc --version | head -n 1))"
+  elif have_command clang; then
+    doctor_ok "C compiler: clang ($(clang --version | head -n 1))"
+  else
+    doctor_error "C compiler: gcc or clang was not found (required for compiling Treesitter parsers)"
+    if [[ "$platform" == "macos" ]]; then
+      printf "        Install Xcode Command Line Tools by running: xcode-select --install\n"
+    else
+      printf "        Install build tools by running: sudo apt install build-essential\n"
+    fi
+    result="$SELFISHELL_EXIT_ERROR"
+  fi
+
   selfishell_initialize_paths
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]] && platform_is_supported "$platform"; then
     tool_status_reset_cache
