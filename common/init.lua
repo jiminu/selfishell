@@ -140,8 +140,21 @@ require("lazy").setup({
       vim.keymap.set('n', 'K', vim.lsp.buf.hover, { desc = "Hover Documentation" })
       vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, { desc = "Rename Symbol" })
       vim.keymap.set('n', '<leader>ca', vim.lsp.buf.code_action, { desc = "Code Action" })
+      vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, { desc = "Show Line Diagnostics" })
       vim.keymap.set('n', '[d', vim.diagnostic.goto_prev, { desc = "Go to previous diagnostic" })
       vim.keymap.set('n', ']d', vim.diagnostic.goto_next, { desc = "Go to next diagnostic" })
+
+      -- Diagnostic display configurations (VS Code Error Lens style)
+      vim.diagnostic.config({
+        virtual_text = {
+          prefix = "●",
+          spacing = 4,
+        },
+        signs = true,
+        underline = true,
+        update_in_insert = false,
+        severity_sort = true,
+      })
     end,
   },
   -- Autocompletion
