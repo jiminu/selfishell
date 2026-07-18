@@ -11,7 +11,7 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | mise | zinit)
+    starship | mise | zinit | neovim)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
