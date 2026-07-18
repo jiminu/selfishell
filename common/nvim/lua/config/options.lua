@@ -8,6 +8,7 @@ opt.laststatus = 2
 opt.ruler = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
+opt.cursorline = true
 
 -- Editing
 opt.autoindent = true
