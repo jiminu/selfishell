@@ -39,7 +39,7 @@ test_complete_release_lifecycle() {
 
   bash "$ROOT_DIR/install.sh" --version "$initial_version" --prefix "$prefix" \
     --setup --yes --profile minimal --skip-packages >/dev/null
-  "$prefix/bin/selfishell" doctor >/dev/null
+  "$prefix/bin/selfishell" doctor
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $initial_version" ]] || fail "Clean install failed"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
 
