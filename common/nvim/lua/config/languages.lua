@@ -1,43 +1,7 @@
 return {
-  treesitter = {
-    "lua",
-    "vim",
-    "vimdoc",
-    "query",
-
-    "c",
-    "cpp",
-    "python",
-    "java",
-    "bash",
-    "zsh",
-
-    "javascript",
-    "typescript",
-    "tsx",
-    "html",
-    "css",
-
-    "json",
-    "jsonc",
-    "yaml",
-    "toml",
-    "properties",
-    "xml",
-
-    "dockerfile",
-    "hcl",
-    "terraform",
-    "helm",
-
-    "markdown",
-    "markdown_inline",
-    "sql",
-  },
-
   lsp = {
-    "lua_ls",
-    "pyright",
-    "bashls",
+    "lua_ls@3.18.2",
+    "pyright@1.1.411",
+    "bashls@5.6.0",
   },
 }

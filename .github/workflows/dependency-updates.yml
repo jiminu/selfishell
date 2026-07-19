@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: write
   issues: write
   pull-requests: write
@@ -23,7 +22,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Install shell tooling
         run: |
@@ -59,7 +58,6 @@ jobs:
             --head "$BRANCH" \
             --title 'Update approved dependencies' \
             --body 'Updates pinned direct dependencies and verified download checksums. Review release notes and CI results before merging. This workflow never merges or releases automatically.'
-          gh workflow run ci.yml --ref "$BRANCH"
 
       - name: Create or resolve failure issue
         if: always()

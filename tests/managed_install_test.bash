@@ -122,6 +122,8 @@ test_macos_install_reuses_declined_ghostty_choice() {
 
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config" ]] ||
     fail "A saved declined Ghostty choice was ignored"
+  [[ ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+    fail "A saved declined Ghostty choice created a dangling user link"
   assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
@@ -241,6 +243,36 @@ test_uninstall_preserves_user_modifications() {
   assert_file_content 'user modification' "$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
   [[ -n "$(find "$HOME" -maxdepth 1 -name '.zshrc.backup.*' -print -quit)" ]] ||
     fail "Original backup should be preserved after conflict"
+}
+
+test_uninstall_preserves_state_when_removal_fails() {
+  local fake_bin="$TEST_ROOT/bin"
+  local status
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/rm" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */selfishell/zsh/zshrc) exit 1 ;;
+  esac
+done
+exec /bin/rm "$@"
+EOF
+  chmod +x "$fake_bin/rm"
+
+  set +e
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell uninstall --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "A managed resource removal failure should fail uninstall"
+  [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" ]] ||
+    fail "Failed managed file removal was not preserved"
+  [[ -r "$XDG_STATE_HOME/selfishell/resources/zshrc-config.state" ]] ||
+    fail "Failed managed resource state was removed"
+  assert_file_content 'minimal' "$XDG_STATE_HOME/selfishell/profile"
 }
 
 test_pending_link_state_recovers_on_reinstall() {

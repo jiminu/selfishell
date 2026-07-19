@@ -126,7 +126,7 @@ are activated.
 | Profile | Included tools |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus Neovim (with lazy.nvim), mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
+| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and compiler tools |
 
 `minimal` is the default and uses Vim for the base editor. Preview the
 developer profile without changing anything:

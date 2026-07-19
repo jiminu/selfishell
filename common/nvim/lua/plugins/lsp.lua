@@ -1,9 +1,9 @@
 local languages = require("config.languages")
+local plugin = require("config.plugin_versions").spec
 
 return {
   -- Mason UI can also be opened before any source file is read.
-  {
-    "mason-org/mason.nvim",
+  plugin("mason-org/mason.nvim", {
     cmd = {
       "Mason",
       "MasonInstall",
@@ -12,19 +12,18 @@ return {
       "MasonLog",
     },
     opts = {},
-  },
+  }),
 
-  {
-    "mason-org/mason-lspconfig.nvim",
+  plugin("mason-org/mason-lspconfig.nvim", {
     event = "FileType",
     cmd = {
       "LspInstall",
       "LspUninstall",
     },
     dependencies = {
-      "mason-org/mason.nvim",
-      "neovim/nvim-lspconfig",
-      "hrsh7th/cmp-nvim-lsp",
+      plugin("mason-org/mason.nvim"),
+      plugin("neovim/nvim-lspconfig"),
+      plugin("hrsh7th/cmp-nvim-lsp"),
     },
     config = function()
       -- Apply completion capabilities to every LSP config.
@@ -37,5 +36,5 @@ return {
         ensure_installed = languages.lsp,
       })
     end,
-  },
+  }),
 }

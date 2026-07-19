@@ -15,10 +15,11 @@ selfishell rollback --yes
 
 The tools/configuration phase synchronizes apt or Homebrew packages from the
 installed profile, installs directly managed tools at the approved versions in
-`dependencies.conf`, synchronizes mise-managed developer tools, reapplies managed configuration, and installs Vim plugins
-declared by the managed vimrc. Already installed operating-system packages
-remain managed by apt or Homebrew; this command does not perform a general
-package upgrade. A CLI-only installation skips this phase.
+`dependencies.conf`, synchronizes mise-managed developer tools, reapplies
+managed configuration, and synchronizes Neovim plugins and Tree-sitter parsers
+for the developer profile. Already installed operating-system packages remain
+managed by apt or Homebrew; this command does not perform a general package
+upgrade. A CLI-only installation skips this phase.
 
 `status --check-package-updates` reads Homebrew's outdated inventory or Apt's
 local upgradable inventory and reports `Update: available` without installing
@@ -44,6 +45,10 @@ does not use the network. An exact retained version can be selected with
 
 Direct download and Git dependency versions are changed only by reviewing and
 updating `dependencies.conf` in a new Selfishell release.
+That manifest is also the source of truth for exact Neovim plugin commits, so a
+repository `lazy-lock.json` is intentionally unnecessary. lazy.nvim may write a
+runtime lock under the Selfishell state directory, but updates cannot move a
+plugin beyond the commit approved in the release manifest.
 The exact mise-managed defaults in `profiles/developer.conf` and
 `common/mise.toml` are updated together through the same review-and-release
 boundary. Individual project `mise.toml` files remain outside Selfishell's

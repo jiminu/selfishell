@@ -47,7 +47,8 @@ record_download() {
 
 discover_metadata() {
   local starship_tag starship_version mise_tag mise_version asset_architecture
-  local name repository tag commit platform architecture asset source
+  local type name source
+  local repository tag commit asset
 
   command -v curl >/dev/null 2>&1 || {
     printf 'curl is required.\n' >&2
@@ -61,18 +62,20 @@ discover_metadata() {
     printf 'git is required.\n' >&2
     return 1
   }
-
   name=zinit
   repository=zdharma-continuum/zinit
   tag="$(github_latest_tag "$repository")"
   printf 'git %s %s\n' "$name" "$tag" >>"$metadata"
 
-  commit="$(git ls-remote https://github.com/VundleVim/Vundle.vim.git HEAD | awk 'NR == 1 { print $1 }')"
-  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
-    printf 'Invalid Vundle commit: %s\n' "$commit" >&2
-    return 1
-  }
-  printf 'git vundle %s\n' "$commit" >>"$metadata"
+  while read -r type name _ _ _ source _; do
+    [[ "$type" == nvim-plugin ]] || continue
+    commit="$(git ls-remote "$source" HEAD | awk 'NR == 1 { print $1 }')"
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
+      printf 'Invalid Neovim plugin commit for %s: %s\n' "$name" "$commit" >&2
+      return 1
+    }
+    printf 'nvim-plugin %s %s\n' "$name" "$commit" >>"$metadata"
+  done <"$manifest"
 
   starship_tag="$(github_latest_tag starship/starship)"
   starship_version="${starship_tag#v}"
@@ -108,6 +111,9 @@ apply_metadata() {
       if ($1 == "git") {
         git_version[$2] = $3
         expected_git[$2] = 1
+      } else if ($1 == "nvim-plugin") {
+        nvim_plugin_version[$2] = $3
+        expected_nvim_plugin[$2] = 1
       } else if ($1 == "download") {
         key = $2 SUBSEP $4 SUBSEP $5
         download_version[key] = $3
@@ -124,6 +130,10 @@ apply_metadata() {
     $1 == "git" && ($2 in git_version) {
       $3 = git_version[$2]
       matched_git[$2] = 1
+    }
+    $1 == "nvim-plugin" && ($2 in nvim_plugin_version) {
+      $3 = nvim_plugin_version[$2]
+      matched_nvim_plugin[$2] = 1
     }
     $1 == "download" {
       key = $2 SUBSEP $4 SUBSEP $5
@@ -146,6 +156,12 @@ apply_metadata() {
         if (!(key in matched_download)) {
           split(key, fields, SUBSEP)
           print "Dependency metadata did not match manifest download entry: " fields[1] "/" fields[2] "/" fields[3] > "/dev/stderr"
+          invalid = 1
+        }
+      }
+      for (name in expected_nvim_plugin) {
+        if (!(name in matched_nvim_plugin)) {
+          print "Dependency metadata did not match manifest Neovim plugin entry: " name > "/dev/stderr"
           invalid = 1
         }
       }

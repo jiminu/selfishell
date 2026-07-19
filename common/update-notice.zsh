@@ -87,7 +87,7 @@ _selfishell_update_notice() {
   if [[ -r "$available_file" ]]; then
     available="$(<"$available_file")"
     if [[ -n "$available" ]] && _selfishell_version_is_newer "$available" "$current"; then
-      print -r -- "[Selfishell] $available is available. Run: sfs update"
+      print -r -- "[Selfishell] $available is available. Run: selfishell update"
     elif [[ -n "$available" ]]; then
       command rm -f "$available_file"
     fi

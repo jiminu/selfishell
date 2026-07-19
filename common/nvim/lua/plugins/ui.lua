@@ -1,17 +1,17 @@
+local plugin = require("config.plugin_versions").spec
+
 return {
   -- Theme: must be available during startup.
-  {
-    "mofiqul/vscode.nvim",
+  plugin("mofiqul/vscode.nvim", {
     lazy = false,
     priority = 1000,
     config = function()
       vim.cmd.colorscheme("vscode")
     end,
-  },
+  }),
 
   -- File explorer: loaded only when its command or keymap is used.
-  {
-    "nvim-tree/nvim-tree.lua",
+  plugin("nvim-tree/nvim-tree.lua", {
     main = "nvim-tree",
     cmd = {
       "NvimTreeToggle",
@@ -27,17 +27,16 @@ return {
       },
     },
     dependencies = {
-      "nvim-tree/nvim-web-devicons",
+      plugin("nvim-tree/nvim-web-devicons"),
     },
     opts = {},
-  },
+  }),
 
   -- Statusline: not required for the critical startup path.
-  {
-    "nvim-lualine/lualine.nvim",
+  plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
     dependencies = {
-      "nvim-tree/nvim-web-devicons",
+      plugin("nvim-tree/nvim-web-devicons"),
     },
     opts = {
       options = {
@@ -45,5 +44,5 @@ return {
         icons_enabled = true,
       },
     },
-  },
+  }),
 }

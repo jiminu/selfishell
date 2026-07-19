@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -51,7 +51,7 @@ jobs:
         run: bash scripts/benchmark.sh
 
       - name: Upload performance result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shell-performance-${{ runner.os }}
           path: ${{ runner.temp }}/selfishell-benchmark.tsv
@@ -70,7 +70,36 @@ jobs:
           apt-get install -y ca-certificates curl
 
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Run real installation lifecycle
         run: bash scripts/ubuntu-container-e2e.sh
+
+  neovim-developer-e2e:
+    name: Pinned Neovim developer E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Install pinned mise
+        run: |
+          SELFISHELL_ROOT="$GITHUB_WORKSPACE"
+          export SELFISHELL_ROOT
+          source lib/common.sh
+          source lib/paths.sh
+          source lib/dependencies.sh
+          dependency_install mise linux amd64
+
+      - name: Install pinned Neovim toolchain
+        run: ~/.local/bin/mise install neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0
+
+      - name: Run real Neovim lifecycle
+        run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash scripts/neovim-e2e.sh

@@ -16,6 +16,29 @@ export SELFISHELL_ROOT
 unset SELFISHELL_SOURCE SELFISHELL_SOURCE_DIR
 
 source "$SELFISHELL_ROOT/lib/common.sh"
+
+# Keep the two startup-only commands independent of the package, platform, and
+# managed-resource modules. `version --available` still needs release metadata
+# and therefore follows the full command path below.
+case "${1:-help}" in
+  help | --help | -h)
+    source "$SELFISHELL_ROOT/lib/commands/help.sh"
+    if (("$#" > 0)); then
+      shift
+    fi
+    command_help "$@"
+    exit
+    ;;
+  version | --version | -v)
+    if [[ "${2:-}" != --available ]]; then
+      source "$SELFISHELL_ROOT/lib/commands/version.sh"
+      shift
+      command_version "$@"
+      exit
+    fi
+    ;;
+esac
+
 source "$SELFISHELL_ROOT/lib/paths.sh"
 source "$SELFISHELL_ROOT/lib/platform.sh"
 source "$SELFISHELL_ROOT/lib/resources.sh"

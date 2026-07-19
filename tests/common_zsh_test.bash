@@ -195,7 +195,7 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
       ' zsh "$ROOT_DIR/common/common.zsh" "$cache_dir"
   )"
 
-  [[ "$output" == '[Selfishell] 1.1.0 is available. Run: sfs update' ]] ||
+  [[ "$output" == '[Selfishell] 1.1.0 is available. Run: selfishell update' ]] ||
     fail "Default update notice did not use cached version metadata"
   teardown_test_home
 }

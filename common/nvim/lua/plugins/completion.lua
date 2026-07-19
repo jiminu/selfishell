@@ -1,16 +1,14 @@
+local plugin = require("config.plugin_versions").spec
+
 return {
-  {
-    "hrsh7th/nvim-cmp",
+  plugin("hrsh7th/nvim-cmp", {
     event = "InsertEnter",
     dependencies = {
-      "hrsh7th/cmp-nvim-lsp",
-      "hrsh7th/cmp-buffer",
-      "hrsh7th/cmp-path",
-      {
-        "L3MON4D3/LuaSnip",
-        version = "v2.*",
-      },
-      "saadparwaiz1/cmp_luasnip",
+      plugin("hrsh7th/cmp-nvim-lsp"),
+      plugin("hrsh7th/cmp-buffer"),
+      plugin("hrsh7th/cmp-path"),
+      plugin("L3MON4D3/LuaSnip"),
+      plugin("saadparwaiz1/cmp_luasnip"),
     },
     config = function()
       local cmp = require("cmp")
@@ -63,5 +61,5 @@ return {
         }),
       })
     end,
-  },
+  }),
 }

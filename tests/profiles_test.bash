@@ -42,8 +42,9 @@ test_default_profile_is_minimal() {
 }
 
 test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
-  local output
+  local output full_output
   output="$(run_profile_dry_run minimal)"
+  full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
   [[ "$output" == *'zsh git curl ca-certificates fzf zoxide ripgrep'* ]] ||
     fail "Minimal required apt packages are incomplete"
@@ -55,19 +56,26 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"
   [[ "$output" != *'direct package: mise'* ]] || fail "Minimal profile included developer runtimes"
   [[ "$output" != *'kubectl'* ]] || fail "Minimal profile included Kubernetes tools"
+  [[ "$output" != *'build-essential'* ]] || fail "Minimal profile included compiler tooling"
+  [[ "$output" != *'tree-sitter-cli'* ]] || fail "Minimal profile included Tree-sitter tooling"
+  [[ "$full_output" != *'Neovim plugins'* ]] || fail "Minimal profile included Neovim plugin setup"
 }
 
 test_developer_includes_development_kubernetes_and_java_tools() {
-  local output
+  local output full_output
   output="$(run_profile_dry_run developer)"
+  full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
 
   [[ "$output" == *'fzf'* && "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *'required mise tools: neovim@0.12.4 node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
+  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
     fail "Developer profile is missing mise runtimes"
   [[ "$output" == *'kubectl@1.36.2'* && "$output" == *'kubectx@0.9.5'* ]] ||
     fail "Developer profile is missing Kubernetes or Java tools"
   [[ "$output" == *'jq'* ]] || fail "Developer profile is missing jq"
+  [[ "$output" == *'build-essential'* && "$output" == *'tree-sitter@0.26.11'* ]] ||
+    fail "Developer profile is missing Tree-sitter build tooling"
+  [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
 
 test_developer_mise_profile_matches_managed_config() {

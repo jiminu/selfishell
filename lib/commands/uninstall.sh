@@ -102,8 +102,8 @@ uninstall_remove_path_entry() {
     return
   fi
 
-  temporary="$(mktemp "${SELFISHELL_PATH_STARTUP_FILE}.tmp.XXXXXX")"
-  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary"
+  temporary="$(mktemp "${SELFISHELL_PATH_STARTUP_FILE}.tmp.XXXXXX")" || return
+  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary" || return
   awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
     $0 == marker {
       if ((getline following) > 0) {
@@ -114,8 +114,8 @@ uninstall_remove_path_entry() {
       }
     }
     { print }
-  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary"
-  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE"
+  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary" || return
+  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE" || return
   printf 'Removed Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
 }
 
@@ -138,8 +138,8 @@ uninstall_purge() {
     return
   fi
 
-  rm -f "$bin_dir/sfs" "$bin_dir/selfishell"
-  rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR"
+  rm -f "$bin_dir/sfs" "$bin_dir/selfishell" || return
+  rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
   printf 'Selfishell CLI and remaining data removed.\n'
 }
 
@@ -200,6 +200,11 @@ command_uninstall() {
   while IFS= read -r resource; do
     managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done < <(selfishell_managed_resource_names)
+
+  if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
+    cli_error "Uninstall was incomplete; preserved remaining state for a retry."
+    return "$result"
+  fi
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_STATE_DIR/profile" "$SELFISHELL_STATE_DIR/ghostty"

@@ -33,6 +33,7 @@ done
 staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
 payload_dir="$staging_root/payload"
+archive_files="$staging_root/archive-files"
 mkdir -p "$payload_dir" "$output_dir"
 
 cp -R \
@@ -45,11 +46,32 @@ cp -R \
   "$payload_dir/"
 cp "$ROOT_DIR/dependencies.conf" "$payload_dir/"
 printf '%s\n' "$version" >"$payload_dir/VERSION"
+chmod 0644 "$payload_dir/VERSION"
+
+# Normalize archive inputs so builds do not depend on checkout ownership,
+# staging timestamps, filesystem traversal order, or gzip headers.
+TZ=UTC find "$payload_dir" -exec touch -h -t 200001010000 {} +
+(
+  cd "$payload_dir"
+  find . \( -type f -o -type l \) -print | LC_ALL=C sort >"$archive_files"
+)
+
+create_release_archive() {
+  local destination="$1"
+
+  if tar --version 2>/dev/null | head -n 1 | grep -q 'GNU tar'; then
+    tar --format=ustar --owner=0 --group=0 --numeric-owner --mtime=@946684800 \
+      -cf - -C "$payload_dir" -T "$archive_files" | gzip -n >"$destination"
+  else
+    COPYFILE_DISABLE=1 tar --format=ustar --uid 0 --gid 0 --uname root --gname root \
+      -cf - -C "$payload_dir" -T "$archive_files" | gzip -n >"$destination"
+  fi
+}
 
 for platform in linux macos; do
   for architecture in amd64 arm64; do
     archive="selfishell-${version}-${platform}-${architecture}.tar.gz"
-    tar -czf "$output_dir/$archive" -C "$payload_dir" .
+    create_release_archive "$output_dir/$archive"
   done
 done
 

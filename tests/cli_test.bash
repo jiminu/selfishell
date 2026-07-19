@@ -23,6 +23,17 @@ test_version_reads_version_file() {
   [[ "$output" == "selfishell $expected" ]] || fail "Unexpected version output: $output"
 }
 
+test_help_and_local_version_skip_full_cli_loading() {
+  local help_trace
+  local version_trace
+
+  help_trace="$(bash -x "$ROOT_DIR/bin/selfishell" help 2>&1 >/dev/null)"
+  version_trace="$(bash -x "$ROOT_DIR/bin/selfishell" version 2>&1 >/dev/null)"
+
+  [[ "$help_trace" != *'/lib/paths.sh'* ]] || fail "Help eagerly loaded the full CLI"
+  [[ "$version_trace" != *'/lib/paths.sh'* ]] || fail "Local version eagerly loaded the full CLI"
+}
+
 test_version_available_reads_release_metadata() {
   local release_root output
 
@@ -119,6 +130,20 @@ test_update_rejects_version_for_tools_only() {
   [[ "$status" -eq 2 ]] || fail "Tools-only version selection should return exit code 2"
 }
 
+test_update_propagates_cli_install_failure() {
+  local output
+  local status
+
+  set +e
+  output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only --version 9.9.9 --yes 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Failed CLI update should return exit code 1"
+  [[ "$output" == *'This command requires a versioned Selfishell installation.'* ]] ||
+    fail "Failed CLI update did not report the installation requirement"
+}
+
 test_doctor_rejects_unsupported_platform() {
   local output
   local status
@@ -173,31 +198,29 @@ test_doctor_reports_preserved_legacy_runtime_managers() {
   teardown_test_home
 }
 
-test_doctor_reports_legacy_neovim_installation() {
+test_doctor_does_not_require_compiler_for_minimal_profile() {
   local output
 
   setup_test_home
-  mkdir -p "$HOME/.local/bin" "$HOME/.local/state/selfishell/dependencies" "$TEST_ROOT/bin"
-  printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
-  printf '0.2.1\n' >"$HOME/.local/state/selfishell/dependencies/neovim"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/nvim"
-  chmod +x "$HOME/.local/bin/nvim"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
   printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
   printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
   chmod +x "$TEST_ROOT/bin/apt"
 
+  set +e
   output="$(
     PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
       SELFISHELL_TEST_SYSTEM_NAME=Linux \
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
   )"
+  set -e
 
-  [[ "$output" == *'Legacy Neovim installation detected:'* ]] ||
-    fail "Doctor did not report legacy Neovim cleanup guidance"
+  [[ "$output" != *'C compiler:'* ]] || fail "Minimal profile should not require a C compiler"
   teardown_test_home
 }
 

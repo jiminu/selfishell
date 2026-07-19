@@ -40,8 +40,9 @@ update_tools_and_configuration() {
     homebrew_install_packages optional cask "$dry_run" ghostty
   fi
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
-  install_vim_plugins "$dry_run"
-  migrate_legacy_neovim_installation "$dry_run"
+  if [[ "$profile" == "developer" ]]; then
+    install_neovim_plugins "$dry_run"
+  fi
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
 }
 
@@ -137,7 +138,9 @@ command_update() {
   }
 
   if [[ "$mode" != tools ]]; then
-    update_cli_release "$version" "$assume_yes" "$dry_run" || return
+    # Keep update operations out of conditional command contexts. Bash disables
+    # errexit inside functions used by `if`, `!`, `&&`, or `||`.
+    update_cli_release "$version" "$assume_yes" "$dry_run"
     if [[ "$mode" == all && "$dry_run" == 0 && "$SELFISHELL_CLI_UPDATED" == 1 ]]; then
       continue_update_with_new_cli "$assume_yes"
     fi
@@ -145,9 +148,9 @@ command_update() {
 
   if [[ "$mode" != cli ]]; then
     if [[ "$mode" == tools && "$continuation" == 0 ]]; then
-      update_tools_and_configuration "$assume_yes" "$dry_run" 1 || return
+      update_tools_and_configuration "$assume_yes" "$dry_run" 1
     else
-      update_tools_and_configuration "$assume_yes" "$dry_run" 0 || return
+      update_tools_and_configuration "$assume_yes" "$dry_run" 0
     fi
   fi
 }

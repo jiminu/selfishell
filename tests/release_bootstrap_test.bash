@@ -65,6 +65,23 @@ test_builds_all_platform_architecture_artifacts() {
   [[ -s "$TEST_ROOT/artifacts/SHA256SUMS" ]] || fail "Missing release checksums"
 }
 
+test_release_artifacts_are_reproducible() {
+  local version artifact
+  local second_output="$TEST_ROOT/reproducible-artifacts"
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  mkdir -p "$second_output"
+  sleep 1
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" >/dev/null
+
+  for artifact in "$TEST_ROOT/artifacts"/*.tar.gz; do
+    cmp -s "$artifact" "$second_output/$(basename "$artifact")" ||
+      fail "Release artifact is not reproducible: $(basename "$artifact")"
+  done
+  cmp -s "$TEST_ROOT/artifacts/SHA256SUMS" "$second_output/SHA256SUMS" ||
+    fail "Reproducible artifacts produced different checksums"
+}
+
 test_installs_exact_version_and_cli_links() {
   local version
   version="$(<"$ROOT_DIR/VERSION")"

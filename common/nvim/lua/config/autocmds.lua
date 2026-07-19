@@ -2,14 +2,13 @@ local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true 
 
 -- Neovim 0.12 uses the built-in Tree-sitter highlighter. The current
 -- nvim-treesitter plugin no longer enables it through setup()/opts.
+vim.treesitter.language.register("terraform", "tf")
+
 vim.api.nvim_create_autocmd("FileType", {
   group = group,
-  pattern = require("config.languages").treesitter,
+  pattern = "*",
   callback = function(args)
-    local ok = pcall(vim.treesitter.start, args.buf)
-    if not ok then
-      vim.bo[args.buf].syntax = "on"
-    end
+    pcall(vim.treesitter.start, args.buf)
   end,
 })
 

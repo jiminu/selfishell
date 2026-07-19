@@ -23,6 +23,8 @@ file	nvim-lua-config-keymaps	$SELFISHELL_CONFIG_DIR/nvim/lua/config/keymaps.lua	
 file	nvim-lua-config-autocmds	$SELFISHELL_CONFIG_DIR/nvim/lua/config/autocmds.lua	$SELFISHELL_ROOT/common/nvim/lua/config/autocmds.lua
 file	nvim-lua-config-lazy	$SELFISHELL_CONFIG_DIR/nvim/lua/config/lazy.lua	$SELFISHELL_ROOT/common/nvim/lua/config/lazy.lua
 file	nvim-lua-config-languages	$SELFISHELL_CONFIG_DIR/nvim/lua/config/languages.lua	$SELFISHELL_ROOT/common/nvim/lua/config/languages.lua
+file	nvim-lua-config-plugin-versions	$SELFISHELL_CONFIG_DIR/nvim/lua/config/plugin_versions.lua	$SELFISHELL_ROOT/common/nvim/lua/config/plugin_versions.lua
+file	nvim-plugin-versions	$SELFISHELL_CONFIG_DIR/nvim/plugin-versions.conf	$SELFISHELL_ROOT/dependencies.conf
 file	nvim-lua-plugins-ui	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/ui.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/ui.lua
 file	nvim-lua-plugins-editor	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/editor.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/editor.lua
 file	nvim-lua-plugins-lsp	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/lsp.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/lsp.lua
@@ -39,39 +41,9 @@ EOF
 }
 
 selfishell_managed_resource_names() {
-  cat <<'EOF'
-zshrc-config
-zshenv-config
-zsh-runtime
-mise-config
-zsh-completion
-zsh-interactive
-zsh-update-notice
-zsh-common
-aliases-common
-aliases-editor
-aliases-git
-aliases-kubectl
-starship-config
-vimrc
-ghostty-config
-nvim-init
-nvim-lua-config-options
-nvim-lua-config-keymaps
-nvim-lua-config-autocmds
-nvim-lua-config-lazy
-nvim-lua-config-languages
-nvim-lua-plugins-ui
-nvim-lua-plugins-editor
-nvim-lua-plugins-lsp
-nvim-lua-plugins-completion
-nvim-lua-plugins-telescope
-nvim-after-lsp-lua_ls
-user-zshrc
-user-zshenv
-user-starship
-user-vimrc
-user-nvim
-user-ghostty
-EOF
+  local resource_kind resource_name resource_target resource_source
+
+  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
+    printf '%s\n' "$resource_name"
+  done < <(selfishell_managed_resources)
 }

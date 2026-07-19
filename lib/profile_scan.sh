@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
 
-selfishell_profile_platforms() {
-  case "$1" in
-    ubuntu | ubuntu-wsl)
-      printf 'linux\nubuntu\n'
-      ;;
-    *)
-      printf '%s\n%s\n' "$1" "$1"
-      ;;
-  esac
-}
-
 selfishell_scan_profile_packages() {
   local profile="$1"
   local dependency_platform="$2"

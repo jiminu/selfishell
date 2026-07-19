@@ -34,10 +34,12 @@ bash_files=(
   scripts/release-check.sh
   scripts/next-patch-version.sh
   scripts/update-dependencies.sh
+  scripts/neovim-e2e.sh
   scripts/ubuntu-container-e2e.sh
   scripts/workflow-failure-issue.sh
   tests/cli_test.bash
   tests/common_zsh_test.bash
+  tests/neovim_config_test.bash
   tests/managed_install_test.bash
   tests/installers_test.bash
   tests/package_adapters_test.bash

@@ -206,7 +206,7 @@ managed_uninstall_resource() {
         if [[ "$dry_run" == "1" ]]; then
           printf 'Would remove managed link: %s\n' "$MANAGED_STATE_TARGET"
         else
-          rm "$MANAGED_STATE_TARGET"
+          rm "$MANAGED_STATE_TARGET" || return
         fi
       elif [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
         cli_error "Managed link was replaced; preserving it: $MANAGED_STATE_TARGET"
@@ -215,7 +215,7 @@ managed_uninstall_resource() {
       ;;
     file)
       if [[ -f "$MANAGED_STATE_TARGET" ]]; then
-        current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
+        current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")" || return
         if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
           cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
           return "$SELFISHELL_EXIT_ERROR"
@@ -223,7 +223,7 @@ managed_uninstall_resource() {
         if [[ "$dry_run" == "1" ]]; then
           printf 'Would remove managed file: %s\n' "$MANAGED_STATE_TARGET"
         else
-          rm "$MANAGED_STATE_TARGET"
+          rm "$MANAGED_STATE_TARGET" || return
         fi
       elif [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
         cli_error "Managed file path changed type; preserving it: $MANAGED_STATE_TARGET"
@@ -244,13 +244,13 @@ managed_uninstall_resource() {
     if [[ "$dry_run" == "1" ]]; then
       printf 'Would restore: %s -> %s\n' "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET"
     else
-      mkdir -p "$(dirname "$MANAGED_STATE_TARGET")"
-      mv "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET"
+      mkdir -p "$(dirname "$MANAGED_STATE_TARGET")" || return
+      mv "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET" || return
     fi
   fi
 
   if [[ "$dry_run" == "0" ]]; then
-    managed_remove_state "$resource"
+    managed_remove_state "$resource" || return
   fi
 }
 

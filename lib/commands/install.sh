@@ -16,24 +16,6 @@ Options:
 EOF
 }
 
-# Install all Neovim configuration files as individual managed resources.
-# Each file path under common/nvim/ maps to a resource name derived from the
-# relative path (slashes and dots replaced with hyphens).
-# Migrate a pre-directory-symlink nvim installation produced by an older
-# Selfishell release.  The old layout managed a single init.lua file
-# (nvim-config) and a symlink to that file (user-nvim -> nvim/init.lua).
-# Both state records conflict with the new layout and must be cleared so
-# that managed_install_link and managed_install_file can proceed cleanly.
-migrate_nvim_state() {
-  [[ "$1" == "0" ]] || return 0 # skip during dry-run
-  if managed_read_state "user-nvim" 2>/dev/null; then
-    if [[ "$MANAGED_STATE_TARGET" == */nvim/init.lua ]]; then
-      managed_remove_state "user-nvim"
-      managed_remove_state "nvim-config"
-    fi
-  fi
-}
-
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
@@ -69,16 +51,13 @@ install_managed_configuration() {
         if [[ "$profile" != "developer" && "$resource_name" == user-nvim ]]; then
           continue
         fi
-        if [[ "$platform" != "macos" && "$resource_name" == user-ghostty ]]; then
-          continue
+        if [[ "$resource_name" == user-ghostty ]]; then
+          [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
         managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
     esac
   done < <(selfishell_managed_resources)
-
-  # Migrate old single-file nvim state before installing the new layout.
-  migrate_nvim_state "$dry_run"
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
@@ -204,8 +183,8 @@ command_install() {
   fi
 
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
-  if [[ "$skip_packages" == "0" ]]; then
-    install_vim_plugins "$dry_run"
+  if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
+    install_neovim_plugins "$dry_run"
   fi
   install_default_shell "$dry_run" "$assume_yes"
 
