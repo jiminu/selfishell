@@ -22,6 +22,23 @@ test_treesitter_autocmd_uses_detected_filetypes() {
     fail "Tree-sitter autocmd did not use FileType values and Terraform mapping: $output"
 }
 
+test_treesitter_install_rejects_false_and_missing_results() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    printf 'SKIP: test_treesitter_install_rejects_false_and_missing_results (Neovim unavailable)\n'
+    return
+  fi
+
+  output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
+    --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
+    '+lua local function run(install_result, installed) package.loaded["nvim-treesitter"] = nil; package.preload["nvim-treesitter"] = function() return { install = function() return { wait = function() return install_result end } end, get_installed = function() return installed end } end; package.loaded["config.treesitter"] = nil; return pcall(require("config.treesitter").install, { "lua", "python" }) end; local ok, message = run(false, {}); assert(not ok and tostring(message):find("failed to install", 1, true), "false install result was accepted: " .. tostring(message)); ok, message = run(true, { "lua" }); assert(not ok and tostring(message):find("python", 1, true), "missing parser was accepted: " .. tostring(message)); ok, message = run(true, { "lua", "python" }); assert(ok, tostring(message)); print("Tree-sitter install verification: OK")' \
+    +qa 2>&1)"
+
+  [[ "$output" == *'Tree-sitter install verification: OK'* ]] ||
+    fail "Tree-sitter install verification is incomplete: $output"
+}
+
 test_every_neovim_plugin_has_an_approved_revision() {
   local repository revision
   local plugin_count=0
@@ -68,7 +85,7 @@ test_editor_workflow_options_and_keymaps() {
   cp "$ROOT_DIR/dependencies.conf" "$XDG_CONFIG_HOME/nvim/plugin-versions.conf"
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
     --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
-    '+lua vim.g.mapleader = " "; require("config.options"); require("config.keymaps"); assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured"); assert(vim.o.scrolloff == 4, "scrolloff is not configured"); assert(vim.o.confirm, "confirmation is not enabled"); assert(vim.o.inccommand == "split", "substitution preview is not configured"); local function assert_map(mode, lhs, rhs) local mapping = vim.fn.maparg(lhs, mode, false, true); assert(mapping.rhs == rhs, "unexpected mapping for " .. lhs .. ": " .. vim.inspect(mapping)) end; assert_map("n", "<leader>bd", "<cmd>confirm bdelete<CR>"); assert_map("x", "<", "<gv"); assert_map("x", ">", ">gv"); local function plugin_key(module, repository, lhs) for _, spec in ipairs(require(module)) do if spec[1] == repository then for _, key in ipairs(spec.keys or {}) do if key[1] == lhs then return key[2] end end end end end; local telescope = { ["<leader>fd"] = "<cmd>Telescope diagnostics<CR>", ["<leader>fs"] = "<cmd>Telescope lsp_document_symbols<CR>", ["<leader>fS"] = "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>", ["<leader>fr"] = "<cmd>Telescope resume<CR>" }; for lhs, rhs in pairs(telescope) do assert(plugin_key("plugins.telescope", "nvim-telescope/telescope.nvim", lhs) == rhs, "missing Telescope mapping: " .. lhs) end; assert(plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>", "missing current-file tree mapping"); print("editor workflows: OK")' \
+    '+lua vim.g.mapleader = " "; require("config.options"); require("config.keymaps"); assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured"); assert(vim.o.scrolloff == 4, "scrolloff is not configured"); assert(vim.o.confirm, "confirmation is not enabled"); assert(vim.o.inccommand == "split", "substitution preview is not configured"); local function assert_map(mode, lhs, rhs) local mapping = vim.fn.maparg(lhs, mode, false, true); assert(mapping.rhs == rhs, "unexpected mapping for " .. lhs .. ": " .. vim.inspect(mapping)) end; assert_map("n", "<leader>bd", "<cmd>confirm bdelete<CR>"); assert_map("x", "<", "<gv"); assert_map("x", ">", ">gv"); local function plugin_spec(module, repository) for _, spec in ipairs(require(module)) do if spec[1] == repository then return spec end end end; local function plugin_key(module, repository, lhs) local spec = plugin_spec(module, repository); for _, key in ipairs(spec and spec.keys or {}) do if key[1] == lhs then return key[2] end end end; local telescope = { ["<leader>fd"] = "<cmd>Telescope diagnostics<CR>", ["<leader>fs"] = "<cmd>Telescope lsp_document_symbols<CR>", ["<leader>fS"] = "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>", ["<leader>fr"] = "<cmd>Telescope resume<CR>" }; for lhs, rhs in pairs(telescope) do assert(plugin_key("plugins.telescope", "nvim-telescope/telescope.nvim", lhs) == rhs, "missing Telescope mapping: " .. lhs) end; assert(plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>", "missing current-file tree mapping"); local rainbow = assert(plugin_spec("plugins.editor", "HiPhish/rainbow-delimiters.nvim"), "rainbow-delimiters spec is missing"); assert(vim.deep_equal(rainbow.event, { "BufReadPre", "BufNewFile" }), "rainbow-delimiters loads after the initial FileType event"); print("editor workflows: OK")' \
     +qa 2>&1)"
 
   [[ "$output" == *'editor workflows: OK'* ]] || fail "Editor workflow configuration is invalid: $output"
@@ -164,6 +181,8 @@ mkdir -p "$TEST_ROOT/tmp" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" 
 
 test_treesitter_autocmd_uses_detected_filetypes
 printf 'PASS: test_treesitter_autocmd_uses_detected_filetypes\n'
+test_treesitter_install_rejects_false_and_missing_results
+printf 'PASS: test_treesitter_install_rejects_false_and_missing_results\n'
 test_every_neovim_plugin_has_an_approved_revision
 printf 'PASS: test_every_neovim_plugin_has_an_approved_revision\n'
 test_pinned_neovim_plugin_specs_load

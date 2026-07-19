@@ -20,7 +20,8 @@ return {
 
   -- VS Code-style colored delimiters.
   plugin("HiPhish/rainbow-delimiters.nvim", {
-    event = "VeryLazy",
+    -- Load before the initial buffer's FileType event so the plugin can attach.
+    event = { "BufReadPre", "BufNewFile" },
     dependencies = {
       plugin("nvim-treesitter/nvim-treesitter"),
     },

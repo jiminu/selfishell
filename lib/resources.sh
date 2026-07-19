@@ -23,6 +23,7 @@ file	nvim-lua-config-keymaps	$SELFISHELL_CONFIG_DIR/nvim/lua/config/keymaps.lua	
 file	nvim-lua-config-autocmds	$SELFISHELL_CONFIG_DIR/nvim/lua/config/autocmds.lua	$SELFISHELL_ROOT/common/nvim/lua/config/autocmds.lua
 file	nvim-lua-config-lazy	$SELFISHELL_CONFIG_DIR/nvim/lua/config/lazy.lua	$SELFISHELL_ROOT/common/nvim/lua/config/lazy.lua
 file	nvim-lua-config-languages	$SELFISHELL_CONFIG_DIR/nvim/lua/config/languages.lua	$SELFISHELL_ROOT/common/nvim/lua/config/languages.lua
+file	nvim-lua-config-treesitter	$SELFISHELL_CONFIG_DIR/nvim/lua/config/treesitter.lua	$SELFISHELL_ROOT/common/nvim/lua/config/treesitter.lua
 file	nvim-lua-config-plugin-versions	$SELFISHELL_CONFIG_DIR/nvim/lua/config/plugin_versions.lua	$SELFISHELL_ROOT/common/nvim/lua/config/plugin_versions.lua
 file	nvim-plugin-versions	$SELFISHELL_CONFIG_DIR/nvim/plugin-versions.conf	$SELFISHELL_ROOT/dependencies.conf
 file	nvim-lua-plugins-ui	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/ui.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/ui.lua

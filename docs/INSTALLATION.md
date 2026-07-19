@@ -5,7 +5,7 @@ The public bootstrap installs the CLI in the current user's home directory and
 does not require root access.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh | bash
 selfishell install
 ```
 
@@ -16,7 +16,7 @@ works immediately. It does not modify shell startup files by default. Pass
 based on the current default shell:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
   bash -s -- --add-to-path
 ```
 
@@ -29,8 +29,8 @@ Zsh when Zsh is installed and the session is interactive.
 Use an exact release in controlled environments:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh |
-  bash -s -- --version 0.2.5
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+  bash -s -- --version 0.2.6
 selfishell install --profile minimal --yes
 ```
 

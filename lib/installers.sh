@@ -37,11 +37,7 @@ install_mise_tools() {
     printf 'Would install %s mise tools: %s\n' "$requirement" "$*"
     return
   fi
-  if have_command mise; then
-    mise_command="$(command -v mise)"
-  elif [[ -x "$HOME/.local/bin/mise" ]]; then
-    mise_command="$HOME/.local/bin/mise"
-  else
+  if ! mise_command="$(selfishell_mise_command)"; then
     cli_error "mise is required to install mise-managed tools."
     if [[ "$requirement" == "optional" ]]; then
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
@@ -56,6 +52,16 @@ install_mise_tools() {
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
       return 0
     fi
+    return 1
+  fi
+}
+
+selfishell_mise_command() {
+  if have_command mise; then
+    command -v mise
+  elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    printf '%s\n' "$HOME/.local/bin/mise"
+  else
     return 1
   fi
 }
@@ -121,6 +127,46 @@ install_lazy_nvim() {
   printf 'Installed approved lazy.nvim revision: %s\n' "$revision"
 }
 
+verify_neovim_plugins() {
+  local data_home
+  local manifest
+  local plugin_dir
+  local plugin_name
+  local repository
+  local revision
+  local source
+  local type
+  local current_revision
+
+  data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  manifest="$(dependencies_manifest_path)"
+
+  while read -r type repository revision _ _ source _; do
+    [[ "$type" == "nvim-plugin" ]] || continue
+
+    if [[ "$repository" == "folke/lazy.nvim" ]]; then
+      plugin_dir="$data_home/selfishell/nvim/lazy/lazy.nvim"
+    else
+      plugin_name="${source##*/}"
+      plugin_name="${plugin_name%.git}"
+      plugin_dir="$data_home/nvim/lazy/$plugin_name"
+    fi
+
+    if [[ ! -d "$plugin_dir/.git" ]]; then
+      cli_error "Neovim plugin checkout is missing after sync: $repository"
+      return 1
+    fi
+    current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" || {
+      cli_error "Could not inspect Neovim plugin after sync: $repository"
+      return 1
+    }
+    if [[ "$current_revision" != "$revision" ]]; then
+      cli_error "Neovim plugin revision does not match after sync: $repository"
+      return 1
+    fi
+  done <"$manifest"
+}
+
 install_neovim_plugins() {
   local dry_run="$1"
   local log_file
@@ -146,7 +192,7 @@ install_neovim_plugins() {
   install_lazy_nvim "$lazypath" || return
   log_file="$(mktemp "${TMPDIR:-/tmp}/selfishell-nvim.XXXXXX")" || return 1
 
-  if ! "$nvim_command" --headless \
+  if ! selfishell_run_nvim "$nvim_command" --headless \
     '+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
     +qa >"$log_file" 2>&1; then
     cat "$log_file" >&2
@@ -154,11 +200,16 @@ install_neovim_plugins() {
     cli_error "Could not install Neovim plugins."
     return 1
   fi
+  if ! verify_neovim_plugins; then
+    cat "$log_file" >&2
+    rm -f "$log_file"
+    return 1
+  fi
 
   treesitter_languages="$(selfishell_nvim_treesitter_languages)"
   if [[ -n "$treesitter_languages" ]] &&
-    ! SELFISHELL_NVIM_TREESITTER_LANGUAGES="$treesitter_languages" "$nvim_command" --headless \
-      '+lua local ok, message = xpcall(function() local languages = vim.split(vim.env.SELFISHELL_NVIM_TREESITTER_LANGUAGES, "%s+", { trimempty = true }); require("nvim-treesitter").install(languages):wait(300000) end, debug.traceback); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
+    ! SELFISHELL_NVIM_TREESITTER_LANGUAGES="$treesitter_languages" selfishell_run_nvim "$nvim_command" --headless \
+      '+lua local ok, message = xpcall(function() local languages = vim.split(vim.env.SELFISHELL_NVIM_TREESITTER_LANGUAGES, "%s+", { trimempty = true }); require("config.treesitter").install(languages) end, debug.traceback); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
       +qa >"$log_file" 2>&1; then
     cat "$log_file" >&2
     rm -f "$log_file"
@@ -177,11 +228,7 @@ selfishell_nvim_command() {
   local mise_command=""
   local resolved
 
-  if have_command mise; then
-    mise_command="$(command -v mise)"
-  elif [[ -x "$HOME/.local/bin/mise" ]]; then
-    mise_command="$HOME/.local/bin/mise"
-  fi
+  mise_command="$(selfishell_mise_command)" || mise_command=""
 
   if [[ -n "$mise_command" ]]; then
     resolved="$(MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" \
@@ -203,4 +250,18 @@ selfishell_nvim_command() {
   fi
 
   return 1
+}
+
+selfishell_run_nvim() {
+  local nvim_command="$1"
+  local mise_command=""
+  shift
+
+  mise_command="$(selfishell_mise_command)" || mise_command=""
+  if [[ -n "$mise_command" ]]; then
+    MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" \
+      "$mise_command" exec -- "$nvim_command" "$@"
+  else
+    "$nvim_command" "$@"
+  fi
 }
