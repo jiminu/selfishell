@@ -105,6 +105,7 @@ command_doctor() {
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
     doctor_info "Installed profile: $profile"
     if [[ "$profile" == developer ]]; then
+      doctor_info "Developer profile active: Neovim and mise-managed runtimes are enabled."
       if [[ -d "$HOME/.nvm" ]]; then
         doctor_info "Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"
       fi

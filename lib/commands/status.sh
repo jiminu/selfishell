@@ -144,7 +144,7 @@ command_status() {
   fi
 
   if [[ "$verbose" == 0 ]]; then
-    printf '[SUMMARY] Resources: %s | Tools: %s present, %s missing\n' \
+    printf '[SUMMARY] Managed paths: %s | Tools: %s present, %s missing\n' \
       "$SELFISHELL_STATUS_RESOURCE_COUNT" \
       "$SELFISHELL_STATUS_PACKAGES_PRESENT" \
       "$SELFISHELL_STATUS_PACKAGES_MISSING"
