@@ -25,6 +25,11 @@ return {
         "<cmd>NvimTreeToggle<CR>",
         desc = "Toggle file explorer",
       },
+      {
+        "<leader>E",
+        "<cmd>NvimTreeFindFile<CR>",
+        desc = "Reveal current file",
+      },
     },
     dependencies = {
       plugin("nvim-tree/nvim-web-devicons"),

@@ -9,6 +9,9 @@ opt.ruler = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
 opt.cursorline = true
+opt.scrolloff = 4
+opt.splitbelow = true
+opt.splitright = true
 
 -- Editing
 opt.autoindent = true
@@ -18,10 +21,12 @@ opt.softtabstop = 2
 opt.shiftwidth = 2
 opt.expandtab = true
 opt.undofile = true
+opt.confirm = true
 
 -- Search
 opt.ignorecase = true
 opt.smartcase = true
+opt.inccommand = "split"
 
 -- Integration
 opt.mouse = "a"

@@ -201,8 +201,8 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
 }
 
 test_neovim_plugin_specs_delay_noncritical_plugins() {
-  grep -Fqx '    event = "FileType",' "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" ||
-    fail "LSP plugin was not deferred to FileType"
+  grep -Fqx '    ft = languages.lsp_filetypes,' "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" ||
+    fail "LSP plugin was not limited to supported filetypes"
   grep -Fqx '    event = "VeryLazy",' "$ROOT_DIR/common/nvim/lua/plugins/editor.lua" ||
     fail "Rainbow delimiters was not deferred to VeryLazy"
 }

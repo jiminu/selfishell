@@ -15,7 +15,7 @@ return {
   }),
 
   plugin("mason-org/mason-lspconfig.nvim", {
-    event = "FileType",
+    ft = languages.lsp_filetypes,
     cmd = {
       "LspInstall",
       "LspUninstall",
