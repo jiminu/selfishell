@@ -130,7 +130,7 @@ command_status() {
 
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
-    printf '[INFO] Profile: %s\n' "$profile"
+    printf '[INFO] Installed profile: %s\n' "$profile"
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" status_report_package "$profile_platform"
   fi
 

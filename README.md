@@ -77,7 +77,7 @@ selfishell install
 ```
 
 This installs the default `minimal` profile. For a workstation with language
-runtimes, Kubernetes tools, jq, build dependencies, and OpenJDK 17:
+runtimes, Kubernetes tools, jq, build dependencies, OpenJDK 17, and Neovim:
 
 ```bash
 selfishell install --profile developer
@@ -124,10 +124,11 @@ are activated.
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, Vim, and macOS terminal fonts |
+| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, and macOS terminal fonts |
 | `developer` | Everything in `minimal`, plus Neovim (with lazy.nvim), mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
 
-`minimal` is the default and uses Vim for the base editor. Preview a profile without changing anything:
+`minimal` is the default and uses Vim for the base editor. Preview the
+developer profile without changing anything:
 
 ```bash
 selfishell install --profile developer --dry-run

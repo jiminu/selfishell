@@ -103,7 +103,7 @@ command_doctor() {
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]] && platform_is_supported "$platform"; then
     tool_status_reset_cache
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
-    doctor_info "Profile: $profile"
+    doctor_info "Installed profile: $profile"
     if [[ "$profile" == developer ]]; then
       if [[ -d "$HOME/.nvm" ]]; then
         doctor_info "Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"
