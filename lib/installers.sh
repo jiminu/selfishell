@@ -108,7 +108,7 @@ selfishell_nvim_treesitter_languages() {
 selfishell_nvim_command() {
   if have_command mise; then
     local resolved
-    resolved="$(command mise which neovim 2>/dev/null)" || true
+    resolved="$(command mise which nvim 2>/dev/null)" || true
     if [[ -n "$resolved" && -x "$resolved" ]]; then
       printf '%s\n' "$resolved"
       return 0

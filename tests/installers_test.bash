@@ -22,7 +22,7 @@ nvim() {
 mise() {
   MISE_ARGUMENTS="$*"
   MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
-  if [[ "$1" == "which" && "$2" == "neovim" ]]; then
+  if [[ "$1" == "which" && "$2" == "nvim" ]]; then
     printf '%s\n' "$FAKE_NVIM_PATH"
   fi
 }
@@ -121,7 +121,7 @@ test_installs_neovim_plugins_via_mise_resolution() {
   chmod +x "$FAKE_NVIM_PATH"
   cat >"$fake_bin/mise" <<EOF
 #!/bin/sh
-if [ "\$1" = "which" ] && [ "\$2" = "neovim" ]; then
+if [ "\$1" = "which" ] && [ "\$2" = "nvim" ]; then
   printf '%s\n' "$FAKE_NVIM_PATH"
 fi
 EOF
