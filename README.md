@@ -51,7 +51,7 @@ Other Linux distributions are not currently supported.
 ### 1. Install the CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh | bash
 ```
 
 The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
@@ -62,7 +62,7 @@ shell startup files unless explicitly requested.
 To add the CLI directory to `~/.bashrc` or `~/.zshrc` automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
   bash -s -- --add-to-path
 ```
 
@@ -107,7 +107,7 @@ selfishell status
 To install the CLI and the default profile non-interactively in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
   bash -s -- --setup --yes
 ```
 
@@ -115,7 +115,7 @@ For company or security-sensitive environments, download and review the
 bootstrap before running it:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh
 less install.sh
 bash install.sh
 ```
@@ -246,8 +246,8 @@ directories are left untouched.
 Install an exact Selfishell release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
-  bash -s -- --version 0.2.6
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
+  bash -s -- --version 0.3.0
 ```
 
 Install configuration without package or network operations:
