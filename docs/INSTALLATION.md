@@ -23,6 +23,8 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.1/install.sh
 The bootstrap installs only the CLI unless `--setup` is explicitly supplied.
 Version discovery prefers the latest stable release and otherwise uses the
 newest version tag only after its exact `VERSION` release asset is published.
+The managed install step can also offer to set the current user's login shell to
+Zsh when Zsh is installed and the session is interactive.
 
 Use an exact release in controlled environments:
 

@@ -75,6 +75,45 @@ install_managed_configuration() {
   fi
 }
 
+install_default_shell() {
+  local dry_run="$1"
+  local assume_yes="$2"
+  local zsh_path
+  local current_shell
+  local answer
+  local current_user
+
+  zsh_path="$(command -v zsh 2>/dev/null)" || return 0
+  current_shell="${SHELL:-}"
+  [[ "$current_shell" == "$zsh_path" ]] && return 0
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would set login shell to: %s\n' "$zsh_path"
+    return
+  fi
+
+  if [[ "$assume_yes" == "1" ]]; then
+    :
+  elif [[ -t 0 ]]; then
+    printf 'Set login shell to Zsh? [Y/n] '
+    IFS= read -r answer
+    case "$answer" in
+      n | N | no | NO)
+        return 0
+        ;;
+    esac
+  else
+    return 0
+  fi
+
+  current_user="$(id -un)"
+  if chsh -s "$zsh_path" "$current_user" >/dev/null 2>&1; then
+    printf 'Set login shell to: %s\n' "$zsh_path"
+  else
+    printf 'Could not set login shell to Zsh.\n'
+  fi
+}
+
 command_install() {
   local assume_yes=0
   local dry_run=0
@@ -158,6 +197,7 @@ command_install() {
   if [[ "$skip_packages" == "0" ]]; then
     install_vim_plugins "$dry_run"
   fi
+  install_default_shell "$dry_run" "$assume_yes"
 
   if [[ "$dry_run" == "0" ]]; then
     local profile_state

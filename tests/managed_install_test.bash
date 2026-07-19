@@ -75,6 +75,28 @@ test_install_copies_configuration_and_tracks_resources() {
   [[ "$state_count" -eq 32 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
 }
 
+test_install_switches_login_shell_to_zsh() {
+  local fake_bin
+  local chsh_arguments
+
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/chsh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >"$HOME/chsh-args"
+EOF
+  chmod +x "$fake_bin/chsh"
+
+  printf 'original zshrc' >"$HOME/.zshrc"
+  export SHELL="/bin/bash"
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes >/dev/null
+
+  chsh_arguments="$(<"$HOME/chsh-args")"
+  [[ "$chsh_arguments" == -s* ]] || fail "Install did not request a Zsh login shell"
+  [[ "$chsh_arguments" == *zsh* ]] || fail "Install did not request a Zsh login shell"
+}
+
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 

@@ -85,6 +85,7 @@ selfishell install --profile developer
 
 The installer shows what it is doing and asks before changing the environment.
 On macOS, it also asks whether to install and configure Ghostty.
+If Zsh is installed, it also offers to set it as the current user's login shell.
 
 ### 3. Open a new terminal
 
