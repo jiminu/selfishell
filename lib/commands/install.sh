@@ -56,6 +56,9 @@ install_managed_configuration() {
         fi
         managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
+      block)
+        managed_install_zsh_loader "$resource_name" "$resource_target" "$dry_run"
+        ;;
     esac
   done < <(selfishell_managed_resources)
 
@@ -154,6 +157,7 @@ command_install() {
 
   confirm_action "Install Selfishell configuration?" "$assume_yes" "$dry_run" || return
   selfishell_initialize_paths
+  managed_preflight_zsh_loader || return
   profile_load "$profile" "$local_profile"
 
   if [[ "$platform" == "macos" ]]; then

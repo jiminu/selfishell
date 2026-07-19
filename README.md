@@ -34,7 +34,7 @@ independently.
 - FZF, Zoxide, Ripgrep, Eza, Bat, and Vim in the default profile; Neovim
   (configured with lazy.nvim) is in the developer profile;
 - optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
-- managed configuration with backups of files that existed before installation;
+- managed configuration with safe backups where Selfishell replaces existing paths;
 - one-command updates, release notifications, checksum verification, and
   offline rollback.
 
@@ -51,7 +51,7 @@ Other Linux distributions are not currently supported.
 ### 1. Install the CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh | bash
 ```
 
 The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
@@ -62,7 +62,7 @@ shell startup files unless explicitly requested.
 To add the CLI directory to `~/.bashrc` or `~/.zshrc` automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
   bash -s -- --add-to-path
 ```
 
@@ -107,7 +107,7 @@ selfishell status
 To install the CLI and the default profile non-interactively in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
   bash -s -- --setup --yes
 ```
 
@@ -115,7 +115,7 @@ For company or security-sensitive environments, download and review the
 bootstrap before running it:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh
 less install.sh
 bash install.sh
 ```
@@ -215,18 +215,21 @@ selfishell uninstall --restore --purge
 
 Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
 as Zinit and Neovim plugins. They may be shared with other configurations and
-should be removed separately only if you no longer use them. Personal
-`~/.config/selfishell/local.zsh` configuration is preserved. If installation
-used `--add-to-path`, purge also removes the unchanged PATH entry created by the
-installer. It stops and preserves the startup file if that entry was edited.
+should be removed separately only if you no longer use them. Personal Zsh
+configuration in `~/.zshrc` is preserved; only the intact Selfishell loader
+block is removed. If installation used `--add-to-path`, purge also removes the
+unchanged PATH entry created by the installer. It stops and preserves the
+startup file if that entry was edited.
 
 ## Existing Configuration and Safety
 
-During managed installation, existing `.zshrc`, `.vimrc`, Starship, and Ghostty
-configuration is moved to timestamped backups before Selfishell creates its
-managed links. Configuration is copied under
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell`, while recovery metadata is kept
-under `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`.
+During managed installation, `~/.zshrc` remains a regular, user-owned file.
+Selfishell adds one marked loader block and manages only that block, so aliases,
+exports, functions, PATH entries, and third-party installer changes can be added
+directly to `.zshrc`. Existing Vim, Starship, and Ghostty paths are moved to
+timestamped backups before Selfishell creates managed links. Configuration is
+copied under `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell`, while recovery
+metadata is kept under `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`.
 
 Package installation may request administrator privileges for Homebrew or APT.
 Network access is required for initial package and plugin downloads.
@@ -243,8 +246,8 @@ directories are left untouched.
 Install an exact Selfishell release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
-  bash -s -- --version 0.2.6
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
+  bash -s -- --version 0.3.0
 ```
 
 Install configuration without package or network operations:
@@ -270,9 +273,9 @@ package ubuntu required apt company-cli
 selfishell install --profile developer --local-profile ./company.conf --yes
 ```
 
-Personal shell configuration can be placed in
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`. Selfishell loads this
-file but does not overwrite, track, or remove it.
+Add personal shell configuration directly to `~/.zshrc`, outside the marked
+Selfishell loader block. Selfishell does not checksum or manage the rest of the
+file.
 
 ## Development
 

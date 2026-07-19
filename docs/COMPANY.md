@@ -17,9 +17,9 @@ selfishell install --profile developer \
 ```
 
 Set `SELFISHELL_LOCAL_PROFILE` when the same private profile should also be used
-by subsequent updates. Put private shell initialization in
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`; Selfishell sources but
-does not manage or remove this file.
+by subsequent updates. Put private shell initialization directly in the user's
+`~/.zshrc`, outside the marked Selfishell loader block. Selfishell manages only
+that loader block.
 
 Recommended deployment controls:
 

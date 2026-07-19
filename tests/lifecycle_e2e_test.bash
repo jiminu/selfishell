@@ -41,7 +41,8 @@ test_complete_release_lifecycle() {
     --setup --yes --profile minimal --skip-packages >/dev/null
   "$prefix/bin/selfishell" doctor
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $initial_version" ]] || fail "Clean install failed"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Install did not preserve a user-owned .zshrc"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Install did not add the Zsh loader"
 
   "$prefix/bin/selfishell" update --cli-only --version "$next_version" --yes >/dev/null
   [[ "$("$prefix/bin/selfishell" version)" == "selfishell $next_version" ]] || fail "Upgrade failed"

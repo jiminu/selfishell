@@ -17,6 +17,19 @@ status_resource() {
   fi
 
   case "$MANAGED_STATE_TYPE" in
+    block)
+      if [[ -f "$MANAGED_STATE_TARGET" && ! -L "$MANAGED_STATE_TARGET" ]]; then
+        managed_inspect_zsh_loader "$MANAGED_STATE_TARGET" || return
+      else
+        MANAGED_ZSH_LOADER_STATUS=absent
+      fi
+      if [[ "$MANAGED_ZSH_LOADER_STATUS" == intact && "$MANAGED_ZSH_LOADER_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
+        printf '[OK] %s (Selfishell loader)\n' "$MANAGED_STATE_TARGET"
+      else
+        printf '[CHANGED] %s (Selfishell loader)\n' "$MANAGED_STATE_TARGET"
+        SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+      fi
+      ;;
     link)
       if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
         printf '[OK] %s -> %s\n' "$MANAGED_STATE_TARGET" "$MANAGED_STATE_REFERENCE"

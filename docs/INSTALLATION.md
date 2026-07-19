@@ -5,7 +5,7 @@ The public bootstrap installs the CLI in the current user's home directory and
 does not require root access.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh | bash
 selfishell install
 ```
 
@@ -16,7 +16,7 @@ works immediately. It does not modify shell startup files by default. Pass
 based on the current default shell:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
   bash -s -- --add-to-path
 ```
 
@@ -29,8 +29,8 @@ Zsh when Zsh is installed and the session is interactive.
 Use an exact release in controlled environments:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.6/install.sh |
-  bash -s -- --version 0.2.6
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.3.0/install.sh |
+  bash -s -- --version 0.3.0
 selfishell install --profile minimal --yes
 ```
 
@@ -48,6 +48,22 @@ SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
 
 This skips all package and direct dependency network operations.
 
+## Pre-stable Zsh transition
+
+Selfishell no longer replaces `~/.zshrc` with a managed symbolic link or loads
+`~/.config/selfishell/local.zsh`. Existing installations using that legacy model
+are intentionally not migrated automatically. Before reinstalling the new
+configuration:
+
+```sh
+selfishell uninstall --restore --yes
+```
+
+Review the preserved `~/.config/selfishell/local.zsh`, copy any settings you
+still want directly into the restored `~/.zshrc`, then run `selfishell install`
+again. Selfishell will add one marked loader block and leave the rest of
+`.zshrc` user-owned. It does not delete `local.zsh`.
+
 Remove managed configuration and restore backups with:
 
 ```sh
@@ -55,10 +71,11 @@ selfishell uninstall --restore
 ```
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and
-state. Personal `local.zsh` configuration and packages installed through Apt,
-Homebrew, or direct tool installers are preserved. If `--add-to-path` was used,
-purge removes the installer's unchanged PATH entry; a modified entry is
-preserved and stops the purge for review.
+state. Personal aliases, exports, functions, and PATH entries in `~/.zshrc` are
+preserved; uninstall removes only the intact marked Selfishell loader block.
+Packages installed through Apt, Homebrew, or direct tool installers are also
+preserved. If `--add-to-path` was used, purge removes the installer's unchanged
+PATH entry; a modified entry is preserved and stops the purge for review.
 
 ```sh
 selfishell uninstall --restore --purge

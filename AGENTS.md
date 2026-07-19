@@ -126,8 +126,10 @@ delay startup or install an update.
 ## Managed Resource State
 
 Managed configuration is copied under `~/.config/selfishell`; user-facing paths
-link to those copies, never to a source checkout. Each managed file and link has
-an individual versioned state record under
+link to those copies, never to a source checkout. `~/.zshrc` is the exception: it
+remains user-owned and contains one bounded loader block that sources the managed
+platform entrypoint. Each managed file, link, and loader block has an individual
+versioned state record under
 `~/.local/state/selfishell/resources`. State is written through a temporary file
 and atomic rename.
 
@@ -179,9 +181,14 @@ whose selection is retained in state for later updates.
 
 Private package additions use `--local-profile FILE` or
 `SELFISHELL_LOCAL_PROFILE`. Local files may contain only package records and may
-not include another profile. Private shell customization belongs in
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/local.zsh`; it is sourced but never
-tracked, replaced, or deleted by managed resource state.
+not include another profile. The target shell model keeps `~/.zshrc` user-owned
+and manages only one bounded loader block that sources Selfishell configuration.
+Personal aliases, exports, PATH entries, and functions belong directly in the
+user's `~/.zshrc`. `local.zsh` is being retired; migrate existing contents once
+manually before reinstalling. This is an intentional pre-stable breaking change:
+do not add automatic migration for the former managed `.zshrc` symlink, its
+backup state, or `local.zsh`. Detect legacy state and stop without changing user
+files. See M8 in `docs/project/MILESTONES.md`.
 
 Package adapters must inherit proxy environment variables. `--skip-packages` and
 `SELFISHELL_OFFLINE=1` must perform configuration-only installation without any
