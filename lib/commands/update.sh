@@ -41,7 +41,7 @@ update_tools_and_configuration() {
   fi
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
   if [[ "$profile" == "developer" ]]; then
-    install_neovim_plugins "$dry_run"
+    install_neovim_plugins "$dry_run" || return
   fi
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
 }
