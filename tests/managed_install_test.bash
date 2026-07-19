@@ -39,6 +39,7 @@ test_install_copies_configuration_and_tracks_resources() {
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
   # The nvim directory itself is now the managed symlink target.
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
   cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
@@ -55,6 +56,8 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Runtime Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/config.toml" ||
     fail "mise configuration was not copied"
+  cmp -s "$ROOT_DIR/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+    fail "Vim configuration was not copied"
   cmp -s "$ROOT_DIR/common/completion.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh" ||
     fail "Completion Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/interactive.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/interactive.zsh" ||
@@ -67,9 +70,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 13 zsh/starship/mise/aliases resources + 12 nvim file resources + 4 user link resources
-  # = 29 state files for a fresh Ubuntu install (ghostty is macOS-only).
-  [[ "$state_count" -eq 29 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
+  # 15 zsh/starship/mise/vim resources + 12 nvim file resources + 5 user link resources
+  # = 32 state files for a fresh Ubuntu install (ghostty is macOS-only).
+  [[ "$state_count" -eq 32 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
 }
 
 test_macos_install_includes_ghostty_configuration() {
@@ -168,8 +171,8 @@ test_status_uses_current_resource_list() {
 
   [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/zsh/zshrc'* ]] ||
     fail "Status did not report the current Neovim resource list"
-  [[ "$output" != *'vim-config'* ]] ||
-    fail "Status still reports a removed legacy resource name"
+  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/vim/vimrc'* ]] ||
+    fail "Status did not report the Vim resource list"
 }
 
 test_uninstall_restores_original_files() {
@@ -270,6 +273,8 @@ test_install_does_not_depend_on_checkout() {
     fail "Common configuration was not retained"
   [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ]] ||
     fail "Common configuration modules were not retained"
+  [[ -r "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ]] ||
+    fail "Vim configuration was not retained"
   HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" XDG_CACHE_HOME="$XDG_CACHE_HOME" \
     PATH="/usr/bin:/bin" zsh -dfc 'source "$HOME/.zshrc"' >/dev/null 2>&1 ||
     fail "Zsh configuration depended on the removed checkout"

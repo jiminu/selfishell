@@ -5,8 +5,8 @@ terminal without spending hours installing tools, collecting dotfiles, and
 maintaining shell plugins by hand.
 
 It installs a practical set of terminal tools and keeps your Zsh, Starship,
-Neovim, aliases, completions, and optional Ghostty configuration consistent across
-macOS and Ubuntu.
+editor, aliases, completions, and optional Ghostty configuration consistent
+across macOS and Ubuntu.
 
 ![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/preview.png)
 
@@ -30,7 +30,7 @@ independently.
 
 - a readable Starship prompt with Git and runtime information;
 - Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and kubectl workflows;
-- FZF, Zoxide, Ripgrep, Eza, Bat, Neovim (configured with lazy.nvim), and Zinit in the default profile;
+- FZF, Zoxide, Ripgrep, Eza, Bat, Vim in the default profile, plus Neovim (configured with lazy.nvim) in the developer profile;
 - optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
 - managed configuration with backups of files that existed before installation;
 - one-command updates, release notifications, checksum verification, and
@@ -124,10 +124,10 @@ are activated.
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, Neovim (with lazy.nvim), and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
+| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, Vim, and macOS terminal fonts |
+| `developer` | Everything in `minimal`, plus Neovim (with lazy.nvim), mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and build tools |
 
-`minimal` is the default. Preview a profile without changing anything:
+`minimal` is the default and uses Vim for the base editor. Preview a profile without changing anything:
 
 ```bash
 selfishell install --profile developer --dry-run
@@ -135,7 +135,7 @@ selfishell install --profile developer --dry-run
 
 You can change an existing installation from `minimal` to `developer` by
 running the developer installation command. Existing managed settings are
-updated safely.
+updated safely. In `developer`, `vim` and `vi` resolve to Neovim.
 
 Packages marked optional by a profile are recommended packages: Selfishell
 attempts to install them automatically but continues if they are unavailable.
@@ -212,9 +212,10 @@ Network access is required for initial package and plugin downloads.
 
 Direct downloads are version-pinned and checksum-verified. Git dependencies are
 checked out at approved tags or commits defined in `dependencies.conf`.
-Developer runtimes and versioned Kubernetes tools are installed by mise from a
-Selfishell-managed global config. Project `mise.toml` files can override those
-defaults. Existing NVM and pyenv directories are left untouched.
+Developer runtimes, Neovim, and versioned Kubernetes tools are installed by
+mise or the platform package manager from Selfishell-managed configuration.
+Project `mise.toml` files can override those defaults. Existing NVM and pyenv
+directories are left untouched.
 
 ## Advanced Setup
 

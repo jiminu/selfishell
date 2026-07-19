@@ -60,6 +60,24 @@ test_offline_mode_skips_neovim_plugins() {
   [[ -z "$NVIM_ARGUMENTS" ]] || fail "Offline mode invoked Neovim plugin installation"
 }
 
+test_minimal_profile_installs_vimrc() {
+  local vimrc_path="$HOME/.config/selfishell/vim/vimrc"
+
+  export SELFISHELL_ROOT="$ROOT_DIR"
+  source "$ROOT_DIR/lib/common.sh"
+  source "$ROOT_DIR/lib/paths.sh"
+  source "$ROOT_DIR/lib/resources.sh"
+  source "$ROOT_DIR/lib/installers.sh"
+
+  selfishell_initialize_paths
+  install_managed_configuration "ubuntu" 0 0
+
+  cmp -s "$ROOT_DIR/common/vimrc" "$vimrc_path" ||
+    fail "Vim configuration was not installed for the minimal profile"
+  [[ -L "$HOME/.config/vim/vimrc" ]] ||
+    fail "User vimrc link was not created"
+}
+
 test_neovim_plugin_dry_run_is_non_mutating() {
   local output
   NVIM_ARGUMENTS=""

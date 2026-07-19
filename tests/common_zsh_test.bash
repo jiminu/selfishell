@@ -207,6 +207,52 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
     fail "Rainbow delimiters was not deferred to VeryLazy"
 }
 
+test_editor_aliases_stay_with_neovim() {
+  local fake_bin output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/nvim" <<'EOF'
+#!/usr/bin/env sh
+exit 0
+EOF
+  chmod +x "$fake_bin/nvim"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      ZDOTDIR="" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        alias vi
+        alias vim
+      ' zsh "$ROOT_DIR/common/aliases-editor.zsh"
+  )"
+
+  [[ "$output" == *'vi=nvim'* ]] || fail "vi was not redirected to Neovim"
+  [[ "$output" == *'vim=nvim'* ]] || fail "vim was not redirected to Neovim"
+  teardown_test_home
+}
+
+test_minimal_profile_keeps_system_vim() {
+  local output
+
+  setup_test_home
+  output="$(
+    PATH="$TEST_ROOT/empty-bin" \
+      ZDOTDIR="" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        alias vim 2>/dev/null || true
+      ' zsh "$ROOT_DIR/common/aliases-editor.zsh"
+  )"
+
+  [[ "$output" != *'nvim'* ]] || fail "Vim alias should not be forced without Neovim"
+  teardown_test_home
+}
+
 test_minimal_profile_initializes_git_completion_without_zinit
 printf 'PASS: test_minimal_profile_initializes_git_completion_without_zinit\n'
 test_macos_managed_zsh_adds_default_cli_prefix_to_path
@@ -221,3 +267,7 @@ test_update_notice_uses_cache_and_refreshes_in_background_format
 printf 'PASS: test_update_notice_uses_cache_and_refreshes_in_background_format\n'
 test_neovim_plugin_specs_delay_noncritical_plugins
 printf 'PASS: test_neovim_plugin_specs_delay_noncritical_plugins\n'
+test_editor_aliases_stay_with_neovim
+printf 'PASS: test_editor_aliases_stay_with_neovim\n'
+test_minimal_profile_keeps_system_vim
+printf 'PASS: test_minimal_profile_keeps_system_vim\n'

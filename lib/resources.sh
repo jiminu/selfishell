@@ -11,8 +11,10 @@ file	zsh-interactive	$SELFISHELL_CONFIG_DIR/zsh/interactive.zsh	$SELFISHELL_ROOT
 file	zsh-update-notice	$SELFISHELL_CONFIG_DIR/zsh/update-notice.zsh	$SELFISHELL_ROOT/common/update-notice.zsh
 file	zsh-common	$SELFISHELL_CONFIG_DIR/zsh/common.zsh	$SELFISHELL_ROOT/common/common.zsh
 file	aliases-common	$SELFISHELL_CONFIG_DIR/zsh/aliases-common.zsh	$SELFISHELL_ROOT/common/aliases-common.zsh
+file	aliases-editor	$SELFISHELL_CONFIG_DIR/zsh/aliases-editor.zsh	$SELFISHELL_ROOT/common/aliases-editor.zsh
 file	aliases-git	$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh	$SELFISHELL_ROOT/common/aliases-git.zsh
 file	aliases-kubectl	$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh	$SELFISHELL_ROOT/common/aliases-kubectl.zsh
+file	vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc	$SELFISHELL_ROOT/common/vimrc
 file	starship-config	$SELFISHELL_CONFIG_DIR/starship.toml	$SELFISHELL_ROOT/common/starship.toml
 file	ghostty-config	$SELFISHELL_CONFIG_DIR/ghostty/config	$SELFISHELL_ROOT/mac/config.ghostty
 file	nvim-init	$SELFISHELL_CONFIG_DIR/nvim/init.lua	$SELFISHELL_ROOT/common/nvim/init.lua
@@ -30,6 +32,7 @@ file	nvim-after-lsp-lua_ls	$SELFISHELL_CONFIG_DIR/nvim/after/lsp/lua_ls.lua	$SEL
 link	user-zshrc	$HOME/.zshrc	$SELFISHELL_CONFIG_DIR/zsh/zshrc
 link	user-zshenv	$HOME/.zshenv	$SELFISHELL_CONFIG_DIR/zsh/zshenv
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
+link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
 link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvim
 link	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config	$SELFISHELL_CONFIG_DIR/ghostty/config
 EOF
@@ -46,9 +49,11 @@ zsh-interactive
 zsh-update-notice
 zsh-common
 aliases-common
+aliases-editor
 aliases-git
 aliases-kubectl
 starship-config
+vimrc
 ghostty-config
 nvim-init
 nvim-lua-config-options
@@ -65,6 +70,7 @@ nvim-after-lsp-lua_ls
 user-zshrc
 user-zshenv
 user-starship
+user-vimrc
 user-nvim
 user-ghostty
 EOF

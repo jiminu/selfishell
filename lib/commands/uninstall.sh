@@ -211,6 +211,7 @@ command_uninstall() {
     rmdir "$SELFISHELL_CONFIG_DIR/nvim/lua/plugins" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/nvim/lua" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/nvim" 2>/dev/null || true
+    rmdir "$SELFISHELL_CONFIG_DIR/vim" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/mise" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/zsh" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR" 2>/dev/null || true

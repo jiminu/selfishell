@@ -9,8 +9,3 @@ fi
 if _selfishell_command_path eza >/dev/null; then
   alias ls='eza --icons=auto'
 fi
-
-if _selfishell_command_path nvim >/dev/null; then
-  alias vi='nvim'
-  alias vim='nvim'
-fi
