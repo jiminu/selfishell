@@ -75,16 +75,17 @@ install_vim_plugins() {
     printf 'Would install Tree-sitter parsers.\n'
     return
   fi
+
+  if ! nvim_command="$(selfishell_nvim_command)"; then
+    return 0
+  fi
+
   if [[ ! -d "$lazypath" ]]; then
     command mkdir -p "$(dirname "$lazypath")"
     git clone --filter=blob:none --branch=stable https://github.com/folke/lazy.nvim.git "$lazypath" >/dev/null 2>&1 || {
       cli_error "Could not install lazy.nvim."
       return 1
     }
-  fi
-  nvim_command="$(selfishell_nvim_command)"
-  if [[ -z "$nvim_command" ]]; then
-    return 0
   fi
 
   if ! "$nvim_command" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then

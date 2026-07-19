@@ -140,6 +140,22 @@ EOF
   PATH="$original_path"
 }
 
+test_skips_neovim_plugins_when_neovim_is_unavailable() {
+  local lazy_path
+
+  lazy_path="$HOME/.local/share/nvim/lazy/lazy.nvim"
+  rm -rf "$HOME/.local/share/nvim"
+  GIT_ARGUMENTS=""
+  selfishell_nvim_command() {
+    return 1
+  }
+
+  install_vim_plugins 0
+
+  [[ -z "$GIT_ARGUMENTS" ]] || fail "Missing Neovim still cloned lazy.nvim"
+  [[ ! -e "$lazy_path" ]] || fail "Missing Neovim still prepared lazy.nvim"
+}
+
 setup_test_home
 export SELFISHELL_ROOT="$ROOT_DIR"
 
@@ -155,5 +171,7 @@ test_installs_lazy_nvim_before_syncing_plugins
 printf 'PASS: test_installs_lazy_nvim_before_syncing_plugins\n'
 test_installs_neovim_plugins_via_mise_resolution
 printf 'PASS: test_installs_neovim_plugins_via_mise_resolution\n'
+test_skips_neovim_plugins_when_neovim_is_unavailable
+printf 'PASS: test_skips_neovim_plugins_when_neovim_is_unavailable\n'
 
 teardown_test_home
