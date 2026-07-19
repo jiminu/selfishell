@@ -184,18 +184,9 @@ command_uninstall() {
     confirm_action "Uninstall Selfishell configuration?" "$assume_yes" "$dry_run" || return
   fi
 
-  for resource in \
-    user-ghostty user-nvim user-starship user-zshrc user-zshenv \
-    ghostty-config \
-    nvim-init nvim-lua-config-options nvim-lua-config-keymaps \
-    nvim-lua-config-autocmds nvim-lua-config-lazy nvim-lua-config-languages \
-    nvim-lua-plugins-ui nvim-lua-plugins-editor nvim-lua-plugins-lsp \
-    nvim-lua-plugins-completion nvim-lua-plugins-telescope nvim-after-lsp-lua_ls \
-    starship-config aliases-kubectl aliases-git \
-    aliases-common zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime \
-    zsh-common zshenv-config zshrc-config; do
-    managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
-  done
+  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
+    managed_validate_uninstall_resource "$resource_name" || result="$SELFISHELL_EXIT_ERROR"
+  done < <(selfishell_managed_resources)
 
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall cancelled because managed resources were changed."
@@ -206,19 +197,9 @@ command_uninstall() {
     uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
-  for resource in user-ghostty user-nvim user-starship user-zshrc user-zshenv; do
-    managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
-  done
-
-  for resource in ghostty-config \
-    nvim-init nvim-lua-config-options nvim-lua-config-keymaps \
-    nvim-lua-config-autocmds nvim-lua-config-lazy nvim-lua-config-languages \
-    nvim-lua-plugins-ui nvim-lua-plugins-editor nvim-lua-plugins-lsp \
-    nvim-lua-plugins-completion nvim-lua-plugins-telescope nvim-after-lsp-lua_ls \
-    starship-config aliases-kubectl aliases-git aliases-common \
-    zsh-update-notice zsh-interactive zsh-completion mise-config zsh-runtime zsh-common zshenv-config zshrc-config; do
-    managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
-  done
+  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
+    managed_uninstall_resource "$resource_name" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
+  done < <(selfishell_managed_resources)
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_STATE_DIR/profile" "$SELFISHELL_STATE_DIR/ghostty"

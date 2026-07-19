@@ -67,9 +67,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 16 zsh/starship/mise/aliases resources + 12 nvim file resources + 1 user-nvim link resource
-  # = 28 state files for a fresh Ubuntu install (ghostty is macOS-only).
-  [[ "$state_count" -eq 28 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
+  # 13 zsh/starship/mise/aliases resources + 12 nvim file resources + 4 user link resources
+  # = 29 state files for a fresh Ubuntu install (ghostty is macOS-only).
+  [[ "$state_count" -eq 29 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
 }
 
 test_macos_install_includes_ghostty_configuration() {
@@ -158,6 +158,18 @@ test_status_detects_modified_managed_file() {
   set -e
 
   [[ "$status" -eq 1 ]] || fail "Changed managed file should make status fail"
+}
+
+test_status_uses_current_resource_list() {
+  local output
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  output="$(run_selfishell status)"
+
+  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/nvim/init.lua'* ]] ||
+    fail "Status did not report the current Neovim resource list"
+  [[ "$output" != *'vim-config'* ]] ||
+    fail "Status still reports a removed legacy resource name"
 }
 
 test_uninstall_restores_original_files() {

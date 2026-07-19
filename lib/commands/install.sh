@@ -19,33 +19,6 @@ EOF
 # Install all Neovim configuration files as individual managed resources.
 # Each file path under common/nvim/ maps to a resource name derived from the
 # relative path (slashes and dots replaced with hyphens).
-install_managed_nvim_config() {
-  local dry_run="$1"
-  local src="$SELFISHELL_ROOT/common/nvim"
-  local dst="$SELFISHELL_CONFIG_DIR/nvim"
-  local files
-  files=(
-    init.lua
-    lua/config/options.lua
-    lua/config/keymaps.lua
-    lua/config/autocmds.lua
-    lua/config/lazy.lua
-    lua/config/languages.lua
-    lua/plugins/ui.lua
-    lua/plugins/editor.lua
-    lua/plugins/lsp.lua
-    lua/plugins/completion.lua
-    lua/plugins/telescope.lua
-    after/lsp/lua_ls.lua
-  )
-
-  local f resource
-  for f in "${files[@]}"; do
-    resource="nvim-$(printf '%s' "${f%.lua}" | tr '/.' '--')"
-    managed_install_file "$resource" "$src/$f" "$dst/$f" "$dry_run"
-  done
-}
-
 # Migrate a pre-directory-symlink nvim installation produced by an older
 # Selfishell release.  The old layout managed a single init.lua file
 # (nvim-config) and a symlink to that file (user-nvim -> nvim/init.lua).
@@ -66,6 +39,7 @@ install_managed_configuration() {
   local dry_run="$2"
   local ghostty_enabled="${3:-0}"
   local zsh_source
+  local resource_kind resource_name resource_target resource_source
 
   case "$platform" in
     macos) zsh_source="$SELFISHELL_ROOT/mac/.zshrc" ;;
@@ -76,37 +50,25 @@ install_managed_configuration() {
       ;;
   esac
 
-  managed_install_file zshrc-config "$zsh_source" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
-  managed_install_file zshenv-config "$SELFISHELL_ROOT/common/zshenv" "$SELFISHELL_CONFIG_DIR/zsh/zshenv" "$dry_run"
-  managed_install_file zsh-runtime "$SELFISHELL_ROOT/common/runtime.zsh" "$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh" "$dry_run"
-  managed_install_file mise-config "$SELFISHELL_ROOT/common/mise.toml" "$SELFISHELL_CONFIG_DIR/mise/config.toml" "$dry_run"
-  managed_install_file zsh-completion "$SELFISHELL_ROOT/common/completion.zsh" "$SELFISHELL_CONFIG_DIR/zsh/completion.zsh" "$dry_run"
-  managed_install_file zsh-interactive "$SELFISHELL_ROOT/common/interactive.zsh" "$SELFISHELL_CONFIG_DIR/zsh/interactive.zsh" "$dry_run"
-  managed_install_file zsh-update-notice "$SELFISHELL_ROOT/common/update-notice.zsh" "$SELFISHELL_CONFIG_DIR/zsh/update-notice.zsh" "$dry_run"
-  # Switch the entrypoint only after every module it sources is available.
-  managed_install_file zsh-common "$SELFISHELL_ROOT/common/common.zsh" "$SELFISHELL_CONFIG_DIR/zsh/common.zsh" "$dry_run"
-  managed_install_file aliases-common "$SELFISHELL_ROOT/common/aliases-common.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-common.zsh" "$dry_run"
-  managed_install_file aliases-git "$SELFISHELL_ROOT/common/aliases-git.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh" "$dry_run"
-  managed_install_file aliases-kubectl "$SELFISHELL_ROOT/common/aliases-kubectl.zsh" "$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh" "$dry_run"
-  managed_install_file starship-config "$SELFISHELL_ROOT/common/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
+  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
+    case "$resource_kind" in
+      file)
+        if [[ "$resource_name" == "zshrc-config" ]]; then
+          resource_source="$zsh_source"
+        fi
+        if [[ "$resource_name" == ghostty-config || "$resource_name" == user-ghostty ]]; then
+          [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
+        fi
+        managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run"
+        ;;
+      link)
+        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
+        ;;
+    esac
+  done < <(selfishell_managed_resources)
 
   # Migrate old single-file nvim state before installing the new layout.
   migrate_nvim_state "$dry_run"
-  install_managed_nvim_config "$dry_run"
-
-  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
-    managed_install_file ghostty-config "$SELFISHELL_ROOT/mac/config.ghostty" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
-  fi
-
-  managed_install_link user-zshrc "$HOME/.zshrc" "$SELFISHELL_CONFIG_DIR/zsh/zshrc" "$dry_run"
-  managed_install_link user-zshenv "$HOME/.zshenv" "$SELFISHELL_CONFIG_DIR/zsh/zshenv" "$dry_run"
-  managed_install_link user-starship "${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml" "$SELFISHELL_CONFIG_DIR/starship.toml" "$dry_run"
-  # user-nvim now links the whole nvim directory, not a single init.lua file.
-  managed_install_link user-nvim "${XDG_CONFIG_HOME:-$HOME/.config}/nvim" "$SELFISHELL_CONFIG_DIR/nvim" "$dry_run"
-
-  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
-    managed_install_link user-ghostty "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config" "$SELFISHELL_CONFIG_DIR/ghostty/config" "$dry_run"
-  fi
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null

@@ -6,8 +6,6 @@ if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
   zinit ice blockf atpull'zinit creinstall -q .'
   zinit light zsh-users/zsh-completions
-else
-  print -u2 "Zinit not found: $ZINIT_HOME"
 fi
 
 zstyle ':completion:*' matcher-list \

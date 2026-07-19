@@ -7,16 +7,21 @@ source "$ROOT_DIR/tests/test_helper.bash"
 
 test_minimal_profile_initializes_git_completion_without_zinit() {
   setup_test_home
+  local output
 
-  XDG_CACHE_HOME="$HOME/.cache" \
-    ZDOTDIR="" \
-    PATH="/usr/bin:/bin" \
-    /bin/zsh -f -c '
-      load_nvm() { :; }
-      source "$1"
-      (( $+functions[_git] ))
-      [[ -s "$HOME/.zcompdump" ]]
-    ' zsh "$ROOT_DIR/common/common.zsh"
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        load_nvm() { :; }
+        source "$1"
+        (( $+functions[_git] ))
+        [[ -s "$HOME/.zcompdump" ]]
+      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+  )"
+
+  [[ -z "$output" ]] || fail "Missing zinit should not emit stderr noise"
 
   teardown_test_home
 }
