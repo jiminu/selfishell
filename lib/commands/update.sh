@@ -31,6 +31,7 @@ update_tools_and_configuration() {
   profile="$(<"$SELFISHELL_STATE_DIR/profile")"
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
+  managed_preflight_zsh_loader || return
   platform="$(detect_platform)"
   profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
   confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return

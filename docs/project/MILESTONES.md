@@ -167,6 +167,59 @@ Acceptance criteria:
 - Installing or removing the package never silently rewrites user dotfiles.
 - Additional distribution channels do not introduce a separate version source.
 
+## M8 - User-Owned Zsh Startup
+
+Goal: let users and third-party installers edit `~/.zshrc` without creating
+Selfishell managed-file conflicts.
+
+- [x] Replace the managed `~/.zshrc` symlink with a regular, user-owned startup
+      file containing one bounded Selfishell loader block.
+- [x] Give the loader stable begin/end markers and manage only the exact contents
+      between those markers.
+- [x] Keep the platform entrypoint and shared Zsh configuration under
+      `~/.config/selfishell`; the loader block must only source that managed
+      entrypoint.
+- [x] Make loader installation, update, dry-run, and removal atomic and
+      idempotent without checksumming or claiming ownership of the rest of
+      `~/.zshrc`.
+- [x] Treat the change as a pre-stable breaking transition. Do not automatically
+      migrate an existing Selfishell-managed `.zshrc` symlink, its backup state,
+      or `local.zsh` contents.
+- [x] Detect the legacy `user-zshrc` symlink/state before making changes and stop
+      with concise manual uninstall/reinstall instructions.
+- [x] Retire `local.zsh` as an active extension mechanism without deleting it.
+      Document how the current user can copy any wanted contents into `~/.zshrc`
+      before reinstalling.
+- [x] Detect modified, duplicated, partial, or malformed loader markers before
+      changing `~/.zshrc`; preserve the file and report one actionable conflict
+      instead of guessing at user intent.
+- [x] Update managed resource state for block ownership and increment its format
+      version before changing field meaning or order.
+- [x] Make uninstall remove only an intact installer-managed loader block while
+      preserving every other byte of the user's startup file.
+- [x] Document `~/.zshrc` as the supported location for personal aliases,
+      exports, PATH entries, functions, and third-party installer changes.
+
+Acceptance criteria:
+
+- A clean install creates a regular `~/.zshrc` with exactly one loader block,
+  and two consecutive installs do not change or duplicate it.
+- Installing over an existing regular file preserves all existing content and
+  adds exactly one loader block.
+- An existing Selfishell-managed `.zshrc` symlink or legacy `user-zshrc` state
+  stops installation with actionable cleanup instructions and no file changes.
+- `local.zsh` is no longer sourced, migrated, tracked, changed, or deleted.
+- An unrelated `.zshrc` symlink, directory, or other non-regular path stops
+  installation with an actionable error and no file changes.
+- User and third-party changes before or after the loader block do not block
+  `selfishell update` and survive update and uninstall byte-for-byte.
+- A modified loader block stops replacement or removal with an actionable error;
+  no unrelated user content is changed.
+- Dry-run creates no startup file, backup, state record, or loader block.
+- Tests cover empty files, files without a trailing newline, CRLF files, existing
+  markers, malformed markers, rejected legacy and unrelated symlinks,
+  directories, interrupted writes, and exact uninstall preservation.
+
 ## Release Readiness Checklist
 
 A public stable release should not be declared until all of the following hold:

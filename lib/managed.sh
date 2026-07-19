@@ -24,7 +24,7 @@ managed_read_state() {
     IFS= read -r MANAGED_STATE_CHECKSUM
   } <"$state_file"
 
-  [[ "$MANAGED_STATE_VERSION" == "1" ]]
+  case "$MANAGED_STATE_VERSION" in 1 | 2) ;; *) return 1 ;; esac
 }
 
 managed_write_state() {
@@ -43,7 +43,7 @@ managed_write_state() {
   temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")"
 
   {
-    printf '1\n'
+    printf '2\n'
     printf '%s\n' "$type"
     printf '%s\n' "$status"
     printf '%s\n' "$target"
@@ -86,6 +86,198 @@ managed_atomic_copy() {
   cp "$source_file" "$temporary_file"
   chmod 0644 "$temporary_file"
   mv "$temporary_file" "$target_file"
+}
+
+managed_zsh_loader_begin() {
+  printf '%s\n' '# >>> Selfishell initialize >>>'
+}
+
+managed_zsh_loader_end() {
+  printf '%s\n' '# <<< Selfishell initialize <<<'
+}
+
+managed_zsh_loader_block() {
+  cat <<'EOF'
+# >>> Selfishell initialize >>>
+if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc" ]]; then
+  source "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc"
+fi
+# <<< Selfishell initialize <<<
+EOF
+}
+
+managed_inspect_zsh_loader() {
+  local target_file="$1"
+  local begin_marker end_marker metadata
+  local begin_count end_count related_count start finish
+  local expected_checksum actual_checksum
+
+  MANAGED_ZSH_LOADER_STATUS=absent
+  MANAGED_ZSH_LOADER_START=0
+  MANAGED_ZSH_LOADER_LENGTH=0
+  MANAGED_ZSH_LOADER_CHECKSUM=""
+
+  [[ -f "$target_file" && ! -L "$target_file" ]] || return 0
+  begin_marker="$(managed_zsh_loader_begin)"
+  end_marker="$(managed_zsh_loader_end)"
+  metadata="$(LC_ALL=C awk -v begin="$begin_marker" -v end="$end_marker" '
+    BEGIN { offset = 0; begin_count = 0; end_count = 0; related_count = 0; start = 0; finish = 0 }
+    {
+      if (index($0, "Selfishell initialize") > 0) related_count++
+      if ($0 == begin) {
+        begin_count++
+        start = offset
+      }
+      offset += length($0) + 1
+      if ($0 == end) {
+        end_count++
+        finish = offset
+      }
+    }
+    END { print begin_count, end_count, related_count, start, finish }
+  ' "$target_file")" || return 1
+  read -r begin_count end_count related_count start finish <<<"$metadata"
+
+  if [[ "$begin_count" == 0 && "$end_count" == 0 && "$related_count" == 0 ]]; then
+    return 0
+  fi
+  if [[ "$begin_count" != 1 || "$end_count" != 1 || "$related_count" != 2 || "$finish" -le "$start" ]]; then
+    MANAGED_ZSH_LOADER_STATUS=malformed
+    return 0
+  fi
+
+  MANAGED_ZSH_LOADER_START="$start"
+  MANAGED_ZSH_LOADER_LENGTH=$((finish - start))
+  expected_checksum="$(managed_zsh_loader_block | cksum | awk '{print $1 ":" $2}')"
+  actual_checksum="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_ZSH_LOADER_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
+  MANAGED_ZSH_LOADER_CHECKSUM="$actual_checksum"
+  if [[ "$actual_checksum" == "$expected_checksum" ]]; then
+    MANAGED_ZSH_LOADER_STATUS=intact
+  else
+    MANAGED_ZSH_LOADER_STATUS=modified
+  fi
+}
+
+managed_zsh_loader_error() {
+  cli_error "Cannot manage the Selfishell loader in: $HOME/.zshrc"
+  cli_error "Preserving the startup file. Remove conflicting Selfishell markers and retry."
+}
+
+managed_preflight_zsh_loader() {
+  local target_file="$HOME/.zshrc"
+  local state_file legacy_version legacy_type
+
+  state_file="$(managed_state_path user-zshrc)"
+  if [[ -r "$state_file" ]]; then
+    legacy_version="$(sed -n '1p' "$state_file")"
+    legacy_type="$(sed -n '2p' "$state_file")"
+    if [[ "$legacy_version" != 2 || "$legacy_type" != block ]]; then
+      cli_error "Legacy Selfishell .zshrc management was detected."
+      cli_error "Run 'selfishell uninstall --restore --yes', move any wanted local.zsh settings into ~/.zshrc, then reinstall."
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
+  fi
+
+  if [[ -L "$target_file" ]]; then
+    cli_error "Refusing to modify symbolic link: $target_file"
+    cli_error "Replace it with a regular user-owned .zshrc, then retry."
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  if [[ -e "$target_file" && ! -f "$target_file" ]]; then
+    cli_error "Refusing to modify non-regular startup path: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  managed_inspect_zsh_loader "$target_file" || return
+  case "$MANAGED_ZSH_LOADER_STATUS" in
+    malformed | modified)
+      managed_zsh_loader_error
+      return "$SELFISHELL_EXIT_ERROR"
+      ;;
+    intact)
+      if [[ ! -r "$state_file" ]]; then
+        cli_error "An untracked Selfishell loader already exists in: $target_file"
+        cli_error "Remove the loader block, then retry."
+        return "$SELFISHELL_EXIT_ERROR"
+      fi
+      ;;
+  esac
+}
+
+managed_install_zsh_loader() {
+  local resource="$1"
+  local target_file="$2"
+  local dry_run="$3"
+  local expected_checksum temporary_file
+
+  expected_checksum="$(managed_zsh_loader_block | cksum | awk '{print $1 ":" $2}')"
+  managed_inspect_zsh_loader "$target_file" || return
+
+  if managed_read_state "$resource"; then
+    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
+      cli_error "State conflict for managed loader block: $resource"
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
+    if [[ "$MANAGED_ZSH_LOADER_STATUS" == intact && "$MANAGED_ZSH_LOADER_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
+      if [[ "$dry_run" == 0 ]]; then
+        managed_write_state "$resource" block active "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
+      fi
+      printf 'Unchanged loader block: %s\n' "$target_file"
+      return 0
+    fi
+    if [[ "$MANAGED_STATE_STATUS" != pending || "$MANAGED_ZSH_LOADER_STATUS" != absent ]]; then
+      managed_zsh_loader_error
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
+  elif [[ "$MANAGED_ZSH_LOADER_STATUS" != absent ]]; then
+    managed_zsh_loader_error
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if [[ "$dry_run" == 1 ]]; then
+    printf 'Would add Selfishell loader block: %s\n' "$target_file"
+    return 0
+  fi
+
+  managed_write_state "$resource" block pending "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
+  if [[ -f "$target_file" ]]; then
+    cp -p "$target_file" "$temporary_file" || return
+    : >"$temporary_file"
+  else
+    chmod 0644 "$temporary_file"
+  fi
+  managed_zsh_loader_block >"$temporary_file" || return
+  if [[ -f "$target_file" ]]; then
+    cat "$target_file" >>"$temporary_file" || return
+  fi
+  mv "$temporary_file" "$target_file" || return
+  managed_write_state "$resource" block active "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
+  printf 'Added Selfishell loader block: %s\n' "$target_file"
+}
+
+managed_remove_zsh_loader() {
+  local target_file="$1"
+  local temporary_file file_size suffix_start
+
+  managed_inspect_zsh_loader "$target_file" || return
+  if [[ "$MANAGED_ZSH_LOADER_STATUS" != intact || "$MANAGED_ZSH_LOADER_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
+    managed_zsh_loader_error
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
+  cp -p "$target_file" "$temporary_file" || return
+  : >"$temporary_file"
+  if ((MANAGED_ZSH_LOADER_START > 0)); then
+    dd if="$target_file" bs=1 count="$MANAGED_ZSH_LOADER_START" 2>/dev/null >"$temporary_file" || return
+  fi
+  file_size="$(LC_ALL=C wc -c <"$target_file")"
+  suffix_start=$((MANAGED_ZSH_LOADER_START + MANAGED_ZSH_LOADER_LENGTH))
+  if ((suffix_start < file_size)); then
+    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || return
+  fi
+  mv "$temporary_file" "$target_file" || return
 }
 
 managed_install_file() {
@@ -201,6 +393,13 @@ managed_uninstall_resource() {
   managed_read_state "$resource" || return 0
 
   case "$MANAGED_STATE_TYPE" in
+    block)
+      if [[ "$dry_run" == 1 ]]; then
+        printf 'Would remove Selfishell loader block: %s\n' "$MANAGED_STATE_TARGET"
+      else
+        managed_remove_zsh_loader "$MANAGED_STATE_TARGET" || return
+      fi
+      ;;
     link)
       if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
         if [[ "$dry_run" == "1" ]]; then
@@ -261,6 +460,17 @@ managed_validate_uninstall_resource() {
   managed_read_state "$resource" || return 0
 
   case "$MANAGED_STATE_TYPE" in
+    block)
+      if [[ ! -f "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
+        cli_error "Managed loader path changed type; preserving it: $MANAGED_STATE_TARGET"
+        return "$SELFISHELL_EXIT_ERROR"
+      fi
+      managed_inspect_zsh_loader "$MANAGED_STATE_TARGET" || return
+      if [[ "$MANAGED_ZSH_LOADER_STATUS" != intact || "$MANAGED_ZSH_LOADER_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
+        managed_zsh_loader_error
+        return "$SELFISHELL_EXIT_ERROR"
+      fi
+      ;;
     link)
       if [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
         if [[ ! -L "$MANAGED_STATE_TARGET" || "$(readlink "$MANAGED_STATE_TARGET")" != "$MANAGED_STATE_REFERENCE" ]]; then

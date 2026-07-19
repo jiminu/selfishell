@@ -340,7 +340,8 @@ test_setup_is_explicit_and_can_run_offline() {
   export SELFISHELL_OFFLINE=1
   run_bootstrap --setup --yes >/dev/null
 
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Setup did not create a user-owned .zshrc"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Setup did not add the Zsh loader"
 }
 
 test_missing_bin_path_prints_actionable_message() {
@@ -361,7 +362,8 @@ test_purge_dry_run_preserves_installation() {
   "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --dry-run >/dev/null
 
   [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Purge dry-run removed the CLI"
-  [[ -L "$HOME/.zshrc" ]] || fail "Purge dry-run removed managed configuration"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Purge dry-run changed .zshrc"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Purge dry-run removed the loader"
   [[ -d "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge dry-run removed releases"
 }
 
@@ -377,7 +379,7 @@ test_purge_removes_cli_releases_cache_and_state() {
   [[ ! -e "$TEST_ROOT/prefix/share/selfishell" ]] || fail "Purge retained releases"
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Purge retained state"
   [[ ! -e "$HOME/.cache/selfishell" ]] || fail "Purge retained cache"
-  [[ ! -e "$HOME/.zshrc" ]] || fail "Purge retained managed configuration"
+  [[ -f "$HOME/.zshrc" && ! -s "$HOME/.zshrc" ]] || fail "Purge did not leave an empty user-owned .zshrc"
 }
 
 test_purge_refuses_non_managed_cli_path_before_uninstall() {
@@ -393,7 +395,8 @@ test_purge_refuses_non_managed_cli_path_before_uninstall() {
 
   [[ "$status" -eq 1 ]] || fail "Purge should reject a non-managed CLI path"
   [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected purge removed the CLI"
-  [[ -L "$HOME/.zshrc" ]] || fail "Rejected purge removed managed configuration"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Rejected purge changed .zshrc"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Rejected purge removed the loader"
   assert_file_content 'user command' "$TEST_ROOT/prefix/bin/sfs"
 }
 

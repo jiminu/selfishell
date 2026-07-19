@@ -74,8 +74,8 @@ Interactive Zsh sessions read the installed `VERSION` file and show a cached
 notification when a newer Selfishell CLI release is available. The cache is
 refreshed in the background at most once per day, so neither a CLI process nor
 the network request blocks shell startup. The notification never installs an
-update automatically. Disable it or change its interval in
-`~/.config/selfishell/local.zsh`:
+update automatically. Disable it or change its interval in `~/.zshrc`, outside
+the marked Selfishell loader block:
 
 ```zsh
 export SELFISHELL_UPDATE_NOTICE=0

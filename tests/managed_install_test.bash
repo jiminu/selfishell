@@ -53,7 +53,9 @@ test_install_copies_configuration_and_tracks_resources() {
   printf 'original zshrc' >"$HOME/.zshrc"
   run_selfishell install --skip-packages --yes >/dev/null
 
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Zsh startup file is not user-owned"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Zsh loader start marker is missing"
+  grep -Fqx 'original zshrc' "$HOME/.zshrc" || fail "Original Zsh configuration was not preserved"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
@@ -73,10 +75,10 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Interactive Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/update-notice.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ||
     fail "Update notice Zsh module was not copied"
-  [[ -n "$(find "$HOME" -maxdepth 1 -name '.zshrc.backup.*' -print -quit)" ]] ||
-    fail "Original Zsh configuration was not backed up"
-  [[ "$(sed -n '6p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == "$HOME"/.zshrc.backup.* ]] ||
-    fail "Zsh backup path was not recorded in state"
+  [[ "$(sed -n '1p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == 2 ]] ||
+    fail "Zsh loader state version was not recorded"
+  [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == block ]] ||
+    fail "Zsh loader was not recorded as a managed block"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
   # 14 zsh/starship/mise/vim resources + 4 user link resources
@@ -146,15 +148,15 @@ test_macos_install_reuses_declined_ghostty_choice() {
   assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
-test_local_zsh_extension_is_preserved() {
+test_local_zsh_extension_is_retired_and_preserved() {
   local output
 
   mkdir -p "$XDG_CONFIG_HOME/selfishell"
   printf 'export SELFISHELL_COMPANY_TEST=loaded\n' >"$XDG_CONFIG_HOME/selfishell/local.zsh"
   run_selfishell install --skip-packages --yes >/dev/null
 
-  output="$(HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" zsh -dfc 'source "$HOME/.zshrc" >/dev/null 2>&1; print "$SELFISHELL_COMPANY_TEST"')"
-  [[ "$output" == "loaded" ]] || fail "Local Zsh extension was not loaded"
+  output="$(HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" zsh -dfc 'source "$HOME/.zshrc" >/dev/null 2>&1; print "${SELFISHELL_COMPANY_TEST-}"')"
+  [[ -z "$output" ]] || fail "Retired local.zsh was still loaded"
   assert_file_content 'export SELFISHELL_COMPANY_TEST=loaded' "$XDG_CONFIG_HOME/selfishell/local.zsh"
 }
 
@@ -170,6 +172,162 @@ test_install_is_idempotent() {
 
   [[ "$second_backup_count" -eq "$first_backup_count" ]] ||
     fail "A second installation must not create more backups"
+  [[ "$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")" -eq 1 ]] ||
+    fail "A second installation duplicated the Zsh loader"
+}
+
+test_user_zsh_changes_survive_reinstall_and_uninstall_exactly() {
+  local expected="$TEST_ROOT/expected-zshrc"
+  local modified="$TEST_ROOT/modified-zshrc"
+
+  printf 'export BEFORE=1\r\nalias tail=true' >"$HOME/.zshrc"
+  run_selfishell install --skip-packages --yes >/dev/null
+  printf 'alias PREFIX=true\n' >"$modified"
+  cat "$HOME/.zshrc" >>"$modified"
+  mv "$modified" "$HOME/.zshrc"
+  printf '\nexport AFTER=1' >>"$HOME/.zshrc"
+  printf 'alias PREFIX=true\nexport BEFORE=1\r\nalias tail=true\nexport AFTER=1' >"$expected"
+
+  run_selfishell update --tools-only --dry-run >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
+  run_selfishell uninstall --yes >/dev/null
+
+  cmp -s "$expected" "$HOME/.zshrc" || fail "Uninstall changed user Zsh bytes outside the loader"
+}
+
+test_malformed_loader_is_rejected_without_changes() {
+  local original="$TEST_ROOT/original-zshrc"
+  local status
+
+  printf '# >>> Selfishell initialize >>>\nuser content\n' >"$HOME/.zshrc"
+  cp "$HOME/.zshrc" "$original"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Malformed loader should stop installation"
+  cmp -s "$original" "$HOME/.zshrc" || fail "Rejected malformed loader was changed"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected loader created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected loader created state"
+}
+
+test_unrelated_zshrc_symlink_is_rejected_without_changes() {
+  local status
+
+  printf 'dotfiles zshrc\n' >"$TEST_ROOT/dotfiles-zshrc"
+  ln -s "$TEST_ROOT/dotfiles-zshrc" "$HOME/.zshrc"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Zsh symlink should stop installation"
+  assert_symlink_to "$TEST_ROOT/dotfiles-zshrc" "$HOME/.zshrc"
+  assert_file_content 'dotfiles zshrc' "$TEST_ROOT/dotfiles-zshrc"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
+}
+
+test_legacy_zshrc_state_is_rejected_without_changes() {
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local status
+
+  mkdir -p "$(dirname "$state_file")" "$XDG_CONFIG_HOME/selfishell/zsh"
+  printf 'legacy managed zshrc\n' >"$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
+  ln -s "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  printf '1\nlink\nactive\n%s\n%s\n-\n-\n' \
+    "$HOME/.zshrc" "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" >"$state_file"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Legacy Zsh state should stop installation"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ "$(sed -n '1p' "$state_file")" == 1 ]] || fail "Legacy state was changed"
+}
+
+test_legacy_zshrc_can_be_uninstalled_for_manual_transition() {
+  local backup="$HOME/.zshrc.backup.legacy"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+
+  mkdir -p "$(dirname "$state_file")" "$XDG_CONFIG_HOME/selfishell/zsh"
+  printf 'restored user zshrc\n' >"$backup"
+  printf 'legacy managed zshrc\n' >"$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
+  ln -s "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  printf '1\nlink\nactive\n%s\n%s\n%s\n-\n' \
+    "$HOME/.zshrc" "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$backup" >"$state_file"
+
+  run_selfishell uninstall --restore --yes >/dev/null
+
+  assert_file_content 'restored user zshrc' "$HOME/.zshrc"
+  [[ ! -e "$state_file" ]] || fail "Legacy Zsh link state was not removed"
+}
+
+test_untracked_and_duplicate_loaders_are_rejected() {
+  local loader="$TEST_ROOT/loader"
+  local status
+
+  bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" >"$loader"
+  cp "$loader" "$HOME/.zshrc"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "Untracked loader should stop installation"
+
+  cat "$loader" "$loader" >"$HOME/.zshrc"
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "Duplicate loaders should stop installation"
+  [[ "$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")" -eq 2 ]] ||
+    fail "Rejected duplicate loaders were changed"
+}
+
+test_zshrc_directory_is_rejected_without_changes() {
+  local status
+
+  mkdir "$HOME/.zshrc"
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Zsh startup directory should stop installation"
+  [[ -d "$HOME/.zshrc" ]] || fail "Rejected Zsh startup directory was changed"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected directory created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected directory created state"
+}
+
+test_modified_loader_blocks_reinstall_and_uninstall() {
+  local modified="$TEST_ROOT/modified-zshrc"
+  local status
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  sed 's/# <<< Selfishell initialize <<</# <<< Selfishell initialize changed <<</' \
+    "$HOME/.zshrc" >"$modified"
+  mv "$modified" "$HOME/.zshrc"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "Modified loader should block reinstall"
+
+  set +e
+  run_selfishell uninstall --yes >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "Modified loader should block uninstall"
+  grep -Fqx '# <<< Selfishell initialize changed <<<' "$HOME/.zshrc" ||
+    fail "Modified loader was not preserved"
 }
 
 test_dry_run_changes_nothing() {
@@ -240,7 +398,8 @@ test_uninstall_dry_run_changes_nothing() {
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
   run_selfishell uninstall --restore --dry-run >/dev/null
 
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Uninstall dry run changed .zshrc type"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Uninstall dry run removed the loader"
   [[ "$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)" -eq "$state_count" ]] ||
     fail "Uninstall dry run changed state"
 }
@@ -258,10 +417,8 @@ test_uninstall_preserves_user_modifications() {
   set -e
 
   [[ "$status" -eq 1 ]] || fail "Modified managed configuration should block uninstall"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Rejected uninstall changed .zshrc type"
   assert_file_content 'user modification' "$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
-  [[ -n "$(find "$HOME" -maxdepth 1 -name '.zshrc.backup.*' -print -quit)" ]] ||
-    fail "Original backup should be preserved after conflict"
 }
 
 test_uninstall_preserves_state_when_removal_fails() {
@@ -294,20 +451,19 @@ EOF
   assert_file_content 'minimal' "$XDG_STATE_HOME/selfishell/profile"
 }
 
-test_pending_link_state_recovers_on_reinstall() {
+test_pending_loader_state_recovers_on_reinstall() {
   local state_file
-  local temporary_state
+  local checksum
 
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --skip-packages --yes >/dev/null
+  mkdir -p "$XDG_STATE_HOME/selfishell/resources"
   state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-  temporary_state="${state_file}.test"
-  awk 'NR == 3 { print "pending"; next } { print }' "$state_file" >"$temporary_state"
-  mv "$temporary_state" "$state_file"
-  rm "$HOME/.zshrc"
+  checksum="$(bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" | cksum | awk '{print $1 ":" $2}')"
+  printf '2\nblock\npending\n%s\nselfishell-zsh-loader-v1\n-\n%s\n' "$HOME/.zshrc" "$checksum" >"$state_file"
 
   run_selfishell install --skip-packages --yes >/dev/null
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
+  [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Pending loader did not create regular .zshrc"
+  grep -Fqx 'original zshrc' "$HOME/.zshrc" || fail "Pending loader recovery lost user content"
   [[ "$(sed -n '3p' "$state_file")" == "active" ]] || fail "Pending state was not completed"
 }
 
@@ -345,8 +501,7 @@ test_install_does_not_depend_on_checkout() {
   rm -rf "$release_root"
 
   [[ -r "$HOME/.zshrc" ]] || fail "Zsh configuration broke after checkout removal"
-  [[ "$(readlink "$HOME/.zshrc")" == "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" ]] ||
-    fail "User configuration still points to the checkout"
+  [[ ! -L "$HOME/.zshrc" ]] || fail "User Zsh configuration is still a managed link"
   [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ]] ||
     fail "Common configuration was not retained"
   [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ]] ||

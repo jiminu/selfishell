@@ -32,7 +32,7 @@ file	nvim-lua-plugins-lsp	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/lsp.lua	$SELFI
 file	nvim-lua-plugins-completion	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/completion.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/completion.lua
 file	nvim-lua-plugins-telescope	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/telescope.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/telescope.lua
 file	nvim-after-lsp-lua_ls	$SELFISHELL_CONFIG_DIR/nvim/after/lsp/lua_ls.lua	$SELFISHELL_ROOT/common/nvim/after/lsp/lua_ls.lua
-link	user-zshrc	$HOME/.zshrc	$SELFISHELL_CONFIG_DIR/zsh/zshrc
+block	user-zshrc	$HOME/.zshrc	-
 link	user-zshenv	$HOME/.zshenv	$SELFISHELL_CONFIG_DIR/zsh/zshenv
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
 link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
