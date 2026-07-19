@@ -12,13 +12,33 @@ doctor_info() {
   printf '[INFO] %s\n' "$*"
 }
 
+doctor_report_package() {
+  local package="$1"
+  local manager="$2"
+  local requirement="$3"
+  local dependency_platform="$4"
+  local architecture="$5"
+
+  tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
+  if [[ "$TOOL_STATUS_INSTALLED" == missing ]]; then
+    if [[ "$requirement" == required ]]; then
+      doctor_error "Tool: $package is missing ($manager)"
+      DOCTOR_RESULT="$SELFISHELL_EXIT_ERROR"
+    else
+      doctor_info "Optional tool: $package is not installed ($manager)"
+    fi
+  else
+    doctor_ok "Tool: $package $TOOL_STATUS_INSTALLED ($TOOL_STATUS_SOURCE)"
+  fi
+}
+
 command_doctor() {
   require_no_arguments doctor "$@" || return
 
   local platform
   local architecture
   local package_manager
-  local profile profile_platform dependency_platform index package manager requirement key=""
+  local profile profile_platform dependency_platform
   local result="$SELFISHELL_EXIT_OK"
 
   platform="$(detect_platform)"
@@ -102,27 +122,9 @@ command_doctor() {
         profile_platform="$platform"
         ;;
     esac
-    profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
-
-    for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
-      [[ "${PROFILE_PLATFORMS[$index]}" == all || "${PROFILE_PLATFORMS[$index]}" == "$profile_platform" ]] || continue
-      package="${PROFILE_PACKAGES[$index]}"
-      [[ "$key" != *"|$package|"* ]] || continue
-      key="${key}|${package}|"
-      manager="${PROFILE_MANAGERS[$index]}"
-      requirement="${PROFILE_REQUIREMENTS[$index]}"
-      tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
-      if [[ "$TOOL_STATUS_INSTALLED" == missing ]]; then
-        if [[ "$requirement" == required ]]; then
-          doctor_error "Tool: $package is missing ($manager)"
-          result="$SELFISHELL_EXIT_ERROR"
-        else
-          doctor_info "Optional tool: $package is not installed ($manager)"
-        fi
-      else
-        doctor_ok "Tool: $package $TOOL_STATUS_INSTALLED ($TOOL_STATUS_SOURCE)"
-      fi
-    done
+    DOCTOR_RESULT="$result"
+    selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" doctor_report_package "$profile_platform"
+    result="$DOCTOR_RESULT"
   fi
 
   return "$result"

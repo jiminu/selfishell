@@ -39,21 +39,53 @@ status_resource() {
   esac
 }
 
+status_report_package() {
+  local package="$1"
+  local manager="$2"
+  local requirement="$3"
+  local dependency_platform="$4"
+  local architecture="$5"
+
+  tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
+  if [[ "$requirement" == required && "$TOOL_STATUS_INSTALLED" == missing ]]; then
+    SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+  fi
+
+  SELFISHELL_STATUS_PACKAGES_TOTAL=$((SELFISHELL_STATUS_PACKAGES_TOTAL + 1))
+  if [[ "$TOOL_STATUS_INSTALLED" == missing ]]; then
+    SELFISHELL_STATUS_PACKAGES_MISSING=$((SELFISHELL_STATUS_PACKAGES_MISSING + 1))
+  else
+    SELFISHELL_STATUS_PACKAGES_PRESENT=$((SELFISHELL_STATUS_PACKAGES_PRESENT + 1))
+  fi
+
+  if [[ "$SELFISHELL_STATUS_VERBOSE" == 1 ]]; then
+    if [[ "$SELFISHELL_STATUS_CHECK_PACKAGE_UPDATES" == 1 ]]; then
+      tool_status_package_update "$manager" "$package"
+      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s | Update: %s\n' \
+        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED" "$TOOL_STATUS_UPDATE"
+    else
+      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
+        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
+    fi
+  fi
+}
+
 command_status() {
   local check_updates=0
   local check_package_updates=0
+  local verbose=0
   local current_version="unknown"
   local available_version="not checked"
   local platform profile_platform dependency_platform architecture
-  local profile index package manager requirement key=""
   local resource
 
   while (("$#" > 0)); do
     case "$1" in
       --check-updates) check_updates=1 ;;
       --check-package-updates) check_package_updates=1 ;;
+      --verbose) verbose=1 ;;
       help | --help | -h)
-        printf 'Usage: selfishell status [--check-updates] [--check-package-updates]\n'
+        printf 'Usage: selfishell status [--check-updates] [--check-package-updates] [--verbose]\n'
         return
         ;;
       *)
@@ -75,7 +107,12 @@ command_status() {
   printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
 
   SELFISHELL_STATUS_RESOURCE_COUNT=0
+  SELFISHELL_STATUS_PACKAGES_TOTAL=0
+  SELFISHELL_STATUS_PACKAGES_PRESENT=0
+  SELFISHELL_STATUS_PACKAGES_MISSING=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
+  SELFISHELL_STATUS_VERBOSE="$verbose"
+  SELFISHELL_STATUS_CHECK_PACKAGE_UPDATES="$check_package_updates"
   tool_status_reset_cache
 
   platform="$(detect_platform)"
@@ -94,28 +131,7 @@ command_status() {
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
     printf '[INFO] Profile: %s\n' "$profile"
-    profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
-
-    for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
-      [[ "${PROFILE_PLATFORMS[$index]}" == all || "${PROFILE_PLATFORMS[$index]}" == "$profile_platform" ]] || continue
-      package="${PROFILE_PACKAGES[$index]}"
-      [[ "$key" != *"|$package|"* ]] || continue
-      key="${key}|${package}|"
-      manager="${PROFILE_MANAGERS[$index]}"
-      requirement="${PROFILE_REQUIREMENTS[$index]}"
-      tool_status_detect "$manager" "$package" "$dependency_platform" "$architecture"
-      if [[ "$check_package_updates" == 1 ]]; then
-        tool_status_package_update "$manager" "$package"
-        printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s | Update: %s\n' \
-          "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED" "$TOOL_STATUS_UPDATE"
-      else
-        printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
-          "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
-      fi
-      if [[ "$requirement" == required && "$TOOL_STATUS_INSTALLED" == missing ]]; then
-        SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
-      fi
-    done
+    selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" status_report_package "$profile_platform"
   fi
 
   while IFS= read -r resource; do
@@ -125,6 +141,13 @@ command_status() {
   if ((SELFISHELL_STATUS_RESOURCE_COUNT == 0)); then
     printf 'Selfishell configuration is not installed.\n'
     return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if [[ "$verbose" == 0 ]]; then
+    printf '[SUMMARY] Resources: %s | Tools: %s present, %s missing\n' \
+      "$SELFISHELL_STATUS_RESOURCE_COUNT" \
+      "$SELFISHELL_STATUS_PACKAGES_PRESENT" \
+      "$SELFISHELL_STATUS_PACKAGES_MISSING"
   fi
 
   return "$SELFISHELL_STATUS_RESULT"
