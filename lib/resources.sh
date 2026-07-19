@@ -34,3 +34,38 @@ link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvi
 link	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config	$SELFISHELL_CONFIG_DIR/ghostty/config
 EOF
 }
+
+selfishell_managed_resource_names() {
+  cat <<'EOF'
+zshrc-config
+zshenv-config
+zsh-runtime
+mise-config
+zsh-completion
+zsh-interactive
+zsh-update-notice
+zsh-common
+aliases-common
+aliases-git
+aliases-kubectl
+starship-config
+ghostty-config
+nvim-init
+nvim-lua-config-options
+nvim-lua-config-keymaps
+nvim-lua-config-autocmds
+nvim-lua-config-lazy
+nvim-lua-config-languages
+nvim-lua-plugins-ui
+nvim-lua-plugins-editor
+nvim-lua-plugins-lsp
+nvim-lua-plugins-completion
+nvim-lua-plugins-telescope
+nvim-after-lsp-lua_ls
+user-zshrc
+user-zshenv
+user-starship
+user-nvim
+user-ghostty
+EOF
+}

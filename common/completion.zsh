@@ -17,6 +17,15 @@ autoload -Uz compinit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
 SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
 [[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
+SELFISHELL_COMPLETION_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
+SELFISHELL_COMPLETION_CACHE_READY=0
+
+selfishell_completion_prepare_cache() {
+  if [[ "$SELFISHELL_COMPLETION_CACHE_READY" == 0 ]]; then
+    command mkdir -p "$SELFISHELL_COMPLETION_CACHE_DIR" 2>/dev/null
+    SELFISHELL_COMPLETION_CACHE_READY=1
+  fi
+}
 
 if [[ ! -o interactive ]]; then
   compinit -u -C -d "$ZCOMPDUMP"
@@ -68,4 +77,6 @@ if (( $+functions[zinit] )); then
   compdef _zinit zinit
 fi
 
+unset SELFISHELL_COMPLETION_CACHE_READY
+unset SELFISHELL_COMPLETION_CACHE_DIR
 unset SELFISHELL_COMPLETION_DIR

@@ -166,7 +166,7 @@ test_status_uses_current_resource_list() {
   run_selfishell install --skip-packages --yes >/dev/null
   output="$(run_selfishell status)"
 
-  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/nvim/init.lua'* ]] ||
+  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/zsh/zshrc'* ]] ||
     fail "Status did not report the current Neovim resource list"
   [[ "$output" != *'vim-config'* ]] ||
     fail "Status still reports a removed legacy resource name"

@@ -118,9 +118,9 @@ command_status() {
     done
   fi
 
-  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
-    status_resource "$resource_name"
-  done < <(selfishell_managed_resources)
+  while IFS= read -r resource; do
+    status_resource "$resource"
+  done < <(selfishell_managed_resource_names)
 
   if ((SELFISHELL_STATUS_RESOURCE_COUNT == 0)); then
     printf 'Selfishell configuration is not installed.\n'

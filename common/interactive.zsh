@@ -12,7 +12,7 @@ if command -v zoxide >/dev/null 2>&1; then
     command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
     zoxide init zsh >| "$_selfishell_zoxide_cache" 2>/dev/null
   fi
-  source "$_selfishell_zoxide_cache"
+  [[ -s "$_selfishell_zoxide_cache" ]] && source "$_selfishell_zoxide_cache"
   unset _selfishell_zoxide_cache
 fi
 
@@ -46,7 +46,7 @@ if command -v starship >/dev/null 2>&1; then
     command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
     starship init zsh >| "$_selfishell_starship_cache" 2>/dev/null
   fi
-  source "$_selfishell_starship_cache"
+  [[ -s "$_selfishell_starship_cache" ]] && source "$_selfishell_starship_cache"
   unset _selfishell_starship_cache
 fi
 

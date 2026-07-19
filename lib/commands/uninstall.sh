@@ -184,9 +184,9 @@ command_uninstall() {
     confirm_action "Uninstall Selfishell configuration?" "$assume_yes" "$dry_run" || return
   fi
 
-  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
-    managed_validate_uninstall_resource "$resource_name" || result="$SELFISHELL_EXIT_ERROR"
-  done < <(selfishell_managed_resources)
+  while IFS= read -r resource; do
+    managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
+  done < <(selfishell_managed_resource_names)
 
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall cancelled because managed resources were changed."
@@ -197,9 +197,9 @@ command_uninstall() {
     uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
-  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
-    managed_uninstall_resource "$resource_name" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
-  done < <(selfishell_managed_resources)
+  while IFS= read -r resource; do
+    managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
+  done < <(selfishell_managed_resource_names)
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_STATE_DIR/profile" "$SELFISHELL_STATE_DIR/ghostty"
