@@ -63,7 +63,7 @@ test_developer_includes_development_kubernetes_and_java_tools() {
 
   [[ "$output" == *'fzf'* && "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *'required mise tools: node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
+  [[ "$output" == *'required mise tools: neovim@0.12.4 node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
     fail "Developer profile is missing mise runtimes"
   [[ "$output" == *'kubectl@1.36.2'* && "$output" == *'kubectx@0.9.5'* ]] ||
     fail "Developer profile is missing Kubernetes or Java tools"

@@ -77,6 +77,7 @@ command_status() {
   local current_version="unknown"
   local available_version="not checked"
   local platform profile_platform dependency_platform architecture
+  local profile=""
   local resource
 
   while (("$#" > 0)); do
@@ -135,6 +136,12 @@ command_status() {
   fi
 
   while IFS= read -r resource; do
+    if [[ "$profile" != "developer" && ( "$resource" == nvim-* || "$resource" == user-nvim ) ]]; then
+      continue
+    fi
+    if [[ "$platform" != "macos" && "$resource" == user-ghostty ]]; then
+      continue
+    fi
     status_resource "$resource"
   done < <(selfishell_managed_resource_names)
 

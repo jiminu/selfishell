@@ -30,7 +30,7 @@ independently.
 
 - a readable Starship prompt with Git and runtime information;
 - Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and kubectl workflows;
-- FZF, Zoxide, Ripgrep, Eza, Bat, Vim in the default profile, plus Neovim (configured with lazy.nvim) in the developer profile;
+- FZF, Zoxide, Ripgrep, Eza, Bat, and Vim in the default profile; Neovim (configured with lazy.nvim) is in the developer profile;
 - optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
 - managed configuration with backups of files that existed before installation;
 - one-command updates, release notifications, checksum verification, and

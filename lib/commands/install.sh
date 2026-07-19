@@ -37,7 +37,8 @@ migrate_nvim_state() {
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
-  local ghostty_enabled="${3:-0}"
+  local profile="$3"
+  local ghostty_enabled="${4:-0}"
   local zsh_source
   local resource_kind resource_name resource_target resource_source
 
@@ -53,6 +54,9 @@ install_managed_configuration() {
   while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
     case "$resource_kind" in
       file)
+        if [[ "$profile" != "developer" && "$resource_name" == nvim-* ]]; then
+          continue
+        fi
         if [[ "$resource_name" == "zshrc-config" ]]; then
           resource_source="$zsh_source"
         fi
@@ -62,6 +66,12 @@ install_managed_configuration() {
         managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run"
         ;;
       link)
+        if [[ "$profile" != "developer" && "$resource_name" == user-nvim ]]; then
+          continue
+        fi
+        if [[ "$platform" != "macos" && "$resource_name" == user-ghostty ]]; then
+          continue
+        fi
         managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
     esac
@@ -193,7 +203,7 @@ command_install() {
     fi
   fi
 
-  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
+  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
   if [[ "$skip_packages" == "0" ]]; then
     install_vim_plugins "$dry_run"
   fi

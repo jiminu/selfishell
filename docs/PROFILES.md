@@ -5,8 +5,8 @@ role.
 
 | Profile | Purpose |
 | --- | --- |
-| `minimal` | Core shell, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, Vundle, and macOS terminal fonts |
-| `developer` | Minimal plus mise-managed Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, and kubectx 0.9.5; jq and build tooling remain OS packages |
+| `minimal` | Core shell, Zinit, FZF, Zoxide, Ripgrep, Eza, Bat, Vim, and macOS terminal fonts |
+| `developer` | Minimal plus mise-managed Neovim 0.12.4, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, and kubectx 0.9.5; jq and build tooling remain OS packages |
 
 `minimal` is selected when `--profile` is omitted.
 

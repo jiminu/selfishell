@@ -40,14 +40,6 @@ test_install_copies_configuration_and_tracks_resources() {
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
-  # The nvim directory itself is now the managed symlink target.
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
-  cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
-    fail "Neovim init.lua was not installed"
-  cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
-    fail "Neovim options module was not installed"
-  cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
-    fail "Neovim lsp plugin was not installed"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
   cmp -s "$ROOT_DIR/common/zshenv" "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" ||
@@ -70,9 +62,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh backup path was not recorded in state"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 15 zsh/starship/mise/vim resources + 12 nvim file resources + 5 user link resources
-  # = 32 state files for a fresh Ubuntu install (ghostty is macOS-only).
-  [[ "$state_count" -eq 32 ]] || fail "Expected state for every managed Ubuntu resource (got $state_count)"
+  # 14 zsh/starship/mise/vim resources + 4 user link resources
+  # = 18 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
+  [[ "$state_count" -eq 18 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -95,6 +87,19 @@ EOF
   chsh_arguments="$(<"$HOME/chsh-args")"
   [[ "$chsh_arguments" == -s* ]] || fail "Install did not request a Zsh login shell"
   [[ "$chsh_arguments" == *zsh* ]] || fail "Install did not request a Zsh login shell"
+}
+
+test_developer_install_includes_neovim_configuration() {
+  printf 'original zshrc' >"$HOME/.zshrc"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
+  cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
+    fail "Neovim init.lua was not installed for the developer profile"
+  cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
+    fail "Neovim options module was not installed for the developer profile"
+  cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
+    fail "Neovim lsp plugin was not installed for the developer profile"
 }
 
 test_macos_install_includes_ghostty_configuration() {
