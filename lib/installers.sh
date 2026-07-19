@@ -87,8 +87,7 @@ install_vim_plugins() {
   elif [[ -x "$HOME/.local/bin/nvim" ]]; then
     nvim_command="$HOME/.local/bin/nvim"
   else
-    cli_error "Neovim is required to install declared plugins."
-    return 1
+    return 0
   fi
 
   if ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
