@@ -12,6 +12,7 @@ MISE_ARGUMENTS=""
 MISE_CONFIG=""
 GIT_ARGUMENTS=""
 NVIM_CALLS=()
+FAKE_NVIM_PATH=""
 
 nvim() {
   NVIM_ARGUMENTS="$*"
@@ -21,6 +22,9 @@ nvim() {
 mise() {
   MISE_ARGUMENTS="$*"
   MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
+  if [[ "$1" == "which" && "$2" == "neovim" ]]; then
+    printf '%s\n' "$FAKE_NVIM_PATH"
+  fi
 }
 
 git() {
@@ -105,6 +109,37 @@ test_installs_lazy_nvim_before_syncing_plugins() {
   [[ "${NVIM_CALLS[*]}" == *'TSInstallSync lua vim'* ]] || fail "Tree-sitter parsers were not prepared"
 }
 
+test_installs_neovim_plugins_via_mise_resolution() {
+  local fake_bin
+  local original_path
+
+  fake_bin="$HOME/fake-bin"
+  mkdir -p "$fake_bin"
+  FAKE_NVIM_PATH="$HOME/.local/share/mise/installs/neovim/0.12.4/bin/nvim"
+  command mkdir -p "$(dirname "$FAKE_NVIM_PATH")"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$FAKE_NVIM_PATH"
+  chmod +x "$FAKE_NVIM_PATH"
+  cat >"$fake_bin/mise" <<EOF
+#!/bin/sh
+if [ "\$1" = "which" ] && [ "\$2" = "neovim" ]; then
+  printf '%s\n' "$FAKE_NVIM_PATH"
+fi
+EOF
+  chmod +x "$fake_bin/mise"
+  cat >"$fake_bin/nvim" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+  chmod +x "$fake_bin/nvim"
+  original_path="$PATH"
+  PATH="$fake_bin:$PATH"
+  hash -r
+
+  [[ "$(selfishell_nvim_command)" == "$FAKE_NVIM_PATH" ]] ||
+    fail "mise fallback was not used to resolve Neovim"
+  PATH="$original_path"
+}
+
 setup_test_home
 export SELFISHELL_ROOT="$ROOT_DIR"
 
@@ -118,5 +153,7 @@ test_neovim_plugin_dry_run_is_non_mutating
 printf 'PASS: test_neovim_plugin_dry_run_is_non_mutating\n'
 test_installs_lazy_nvim_before_syncing_plugins
 printf 'PASS: test_installs_lazy_nvim_before_syncing_plugins\n'
+test_installs_neovim_plugins_via_mise_resolution
+printf 'PASS: test_installs_neovim_plugins_via_mise_resolution\n'
 
 teardown_test_home

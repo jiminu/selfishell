@@ -82,11 +82,8 @@ install_vim_plugins() {
       return 1
     }
   fi
-  if have_command nvim; then
-    nvim_command="nvim"
-  elif [[ -x "$HOME/.local/bin/nvim" ]]; then
-    nvim_command="$HOME/.local/bin/nvim"
-  else
+  nvim_command="$(selfishell_nvim_command)"
+  if [[ -z "$nvim_command" ]]; then
     return 0
   fi
 
@@ -106,6 +103,29 @@ install_vim_plugins() {
 selfishell_nvim_treesitter_languages() {
   printf '%s\n' \
     'lua vim vimdoc query c cpp python java bash zsh javascript typescript tsx html css json jsonc yaml toml properties xml dockerfile hcl terraform helm markdown markdown_inline sql'
+}
+
+selfishell_nvim_command() {
+  if have_command mise; then
+    local resolved
+    resolved="$(command mise which neovim 2>/dev/null)" || true
+    if [[ -n "$resolved" && -x "$resolved" ]]; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  fi
+
+  if have_command nvim; then
+    printf '%s\n' "$(command -v nvim)"
+    return 0
+  fi
+
+  if [[ -x "$HOME/.local/bin/nvim" ]]; then
+    printf '%s\n' "$HOME/.local/bin/nvim"
+    return 0
+  fi
+
+  return 1
 }
 
 migrate_legacy_neovim_installation() {
