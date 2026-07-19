@@ -4,6 +4,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-neovim-e2e.XXXXXX")"
+MISE_COMMAND="$(command -v mise 2>/dev/null || true)"
+MISE_DATA_ROOT="${MISE_DATA_DIR:-$HOME/.local/share/mise}"
 
 cleanup() {
   rm -rf "$TEST_ROOT"
@@ -18,6 +20,7 @@ trap cleanup EXIT HUP INT TERM
 
 command -v nvim >/dev/null 2>&1 || fail "Neovim is unavailable"
 command -v tree-sitter >/dev/null 2>&1 || fail "Tree-sitter CLI is unavailable"
+[[ -x "$MISE_COMMAND" ]] || fail "mise is unavailable"
 command -v git >/dev/null 2>&1 || fail "Git is unavailable"
 command -v cc >/dev/null 2>&1 || fail "a C compiler is unavailable"
 
@@ -28,7 +31,9 @@ export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_STATE_HOME="$HOME/.local/state"
 export NVIM_LOG_FILE="$TEST_ROOT/nvim.log"
 export TMPDIR="$TEST_ROOT/tmp"
-mkdir -p "$HOME" "$TMPDIR"
+export MISE_DATA_DIR="$MISE_DATA_ROOT"
+mkdir -p "$HOME/.local/bin" "$TMPDIR"
+ln -s "$MISE_COMMAND" "$HOME/.local/bin/mise"
 
 if zsh_path="$(command -v zsh 2>/dev/null)"; then
   export SHELL="$zsh_path"
@@ -36,7 +41,7 @@ fi
 
 bash "$ROOT_DIR/bin/selfishell" install --profile developer --skip-packages --yes >/dev/null
 
-bash -c '
+PATH=/usr/local/bin:/usr/bin:/bin bash -c '
   set -euo pipefail
   SELFISHELL_ROOT="$1"
   export SELFISHELL_ROOT
@@ -65,7 +70,8 @@ done <"$ROOT_DIR/dependencies.conf"
 [[ -r "$XDG_STATE_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim runtime lock is missing"
 [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim lock polluted managed configuration"
 
-for parser in bash gitcommit lua terraform typescript; do
+treesitter_languages="$(bash -c 'source "$1/lib/installers.sh"; selfishell_nvim_treesitter_languages' _ "$ROOT_DIR")"
+for parser in $treesitter_languages; do
   [[ -r "$XDG_DATA_HOME/nvim/site/parser/$parser.so" ]] || fail "Tree-sitter parser is missing: $parser"
 done
 
@@ -79,6 +85,18 @@ fi
 [[ "$smoke_output" == *'Neovim developer smoke: OK'* ]] || {
   printf '%s\n' "$smoke_output" >&2
   fail "Terraform Tree-sitter smoke did not complete"
+}
+
+printf 'def nested(value):\n    return {"items": [(value,)]}\n' >"$TEST_ROOT/main.py"
+if ! python_smoke_output="$(nvim --headless "$TEST_ROOT/main.py" \
+  '+lua local bufnr = vim.api.nvim_get_current_buf(); assert(vim.bo.filetype == "python", "unexpected filetype: " .. vim.bo.filetype); local parser_ok, parser_error = pcall(vim.treesitter.get_parser, bufnr, "python"); assert(parser_ok, tostring(parser_error)); assert(vim.treesitter.highlighter.active[bufnr], "Tree-sitter highlighting is not active for Python"); local rainbow = require("rainbow-delimiters.lib"); local attached = vim.wait(5000, function() local settings = rainbow.buffers[bufnr]; if not settings then return false end; local marks = vim.api.nvim_buf_get_extmarks(bufnr, rainbow.nsids.python, 0, -1, { details = true }); for _, mark in ipairs(marks) do local hl = mark[4].hl_group; if type(hl) == "string" and hl:find("RainbowDelimiter", 1, true) == 1 then return true end end return false end); assert(attached, "rainbow-delimiters did not highlight the initial Python buffer"); print("Python highlighting smoke: OK")' \
+  +qa 2>&1)"; then
+  printf '%s\n' "$python_smoke_output" >&2
+  fail "Python Tree-sitter and rainbow-delimiters smoke failed"
+fi
+[[ "$python_smoke_output" == *'Python highlighting smoke: OK'* ]] || {
+  printf '%s\n' "$python_smoke_output" >&2
+  fail "Python highlighting smoke did not complete"
 }
 
 printf 'PASS: pinned Neovim developer installation\n'

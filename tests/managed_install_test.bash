@@ -30,6 +30,23 @@ run_selfishell() {
   bash "$ROOT_DIR/bin/selfishell" "$@"
 }
 
+test_every_neovim_configuration_file_is_managed() {
+  local declared_sources
+  local source_file
+
+  declared_sources="$(
+    SELFISHELL_CONFIG_DIR="$XDG_CONFIG_HOME/selfishell" SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c 'source "$1/lib/resources.sh"; selfishell_managed_resources' _ "$ROOT_DIR" |
+      cut -f4
+  )"
+
+  while IFS= read -r source_file; do
+    if ! grep -Fqx "$source_file" <<<"$declared_sources"; then
+      fail "Neovim configuration file is not a managed resource: $source_file"
+    fi
+  done < <(find "$ROOT_DIR/common/nvim" -type f -print | sort)
+}
+
 test_install_copies_configuration_and_tracks_resources() {
   local state_count
 
@@ -98,6 +115,8 @@ test_developer_install_includes_neovim_configuration() {
     fail "Neovim init.lua was not installed for the developer profile"
   cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
     fail "Neovim options module was not installed for the developer profile"
+  cmp -s "$ROOT_DIR/common/nvim/lua/config/treesitter.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/treesitter.lua" ||
+    fail "Neovim Tree-sitter module was not installed for the developer profile"
   cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
     fail "Neovim lsp plugin was not installed for the developer profile"
 }
