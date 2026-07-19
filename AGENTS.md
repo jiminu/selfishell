@@ -206,6 +206,12 @@ latest. The bootstrap installs the CLI only unless `--setup` is explicit.
 Semantic version tags are the release version source. Do not replace assets on an
 existing GitHub Release.
 
+Before creating a stable release tag, update every user-facing exact-version
+installation example in `README.md` and `docs/INSTALLATION.md` to the release
+version in the same reviewed change. After publication, verify those versioned
+bootstrap URLs and `releases/latest/download/VERSION`; a release is not complete
+while the primary installation documentation still points at an older version.
+
 ## Verification Expectations
 
 Every shell change should receive the checks applicable to it:

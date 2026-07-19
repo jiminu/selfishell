@@ -29,8 +29,10 @@ independently.
 ## What You Get
 
 - a readable Starship prompt with Git and runtime information;
-- Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and kubectl workflows;
-- FZF, Zoxide, Ripgrep, Eza, Bat, and Vim in the default profile; Neovim (configured with lazy.nvim) is in the developer profile;
+- Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and
+  kubectl workflows;
+- FZF, Zoxide, Ripgrep, Eza, Bat, and Vim in the default profile; Neovim
+  (configured with lazy.nvim) is in the developer profile;
 - optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
 - managed configuration with backups of files that existed before installation;
 - one-command updates, release notifications, checksum verification, and
@@ -49,7 +51,7 @@ Other Linux distributions are not currently supported.
 ### 1. Install the CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh | bash
 ```
 
 The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
@@ -60,7 +62,7 @@ shell startup files unless explicitly requested.
 To add the CLI directory to `~/.bashrc` or `~/.zshrc` automatically:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.2/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh |
   bash -s -- --add-to-path
 ```
 
@@ -105,7 +107,7 @@ selfishell status
 To install the CLI and the default profile non-interactively in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.2/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh |
   bash -s -- --setup --yes
 ```
 
@@ -113,7 +115,7 @@ For company or security-sensitive environments, download and review the
 bootstrap before running it:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.2.2/install.sh
+curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh
 less install.sh
 bash install.sh
 ```
@@ -142,6 +144,23 @@ updated safely. In `developer`, `vim` and `vi` resolve to Neovim.
 Packages marked optional by a profile are recommended packages: Selfishell
 attempts to install them automatically but continues if they are unavailable.
 Ghostty remains a separate interactive choice on macOS.
+
+## Neovim Workflow
+
+The `developer` profile includes a pinned Neovim configuration whose leader key
+is `Space`. In Normal mode, press `Space` and pause to open which-key. The popup
+shows the actions available in the current context; continue typing to narrow
+the list. Every Selfishell mapping has a description, so which-key stays aligned
+with the installed configuration without requiring a separate shortcut list.
+
+LSP actions and symbol searches become available when a configured server is
+attached. Selfishell currently configures Lua, Python, and Bash/sh, while
+Neovim 0.12's standard LSP mappings remain available as well.
+
+The configuration opens new splits to the right and below, keeps four lines of
+context above and below the cursor when possible, confirms commands that would
+discard unsaved changes, and previews `:substitute` results in a split before
+they are applied.
 
 ## Everyday Commands
 
@@ -224,8 +243,8 @@ directories are left untouched.
 Install an exact Selfishell release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.2/install.sh |
-  bash -s -- --version 0.2.2
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v0.2.5/install.sh |
+  bash -s -- --version 0.2.5
 ```
 
 Install configuration without package or network operations:

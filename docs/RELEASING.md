@@ -32,6 +32,11 @@ the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
 Release title is the version tag itself, such as `v0.2.2`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
 
+Before creating the tag, update all exact-version installation examples in
+`README.md` and `docs/INSTALLATION.md` to the version being released. Include
+those documentation updates in the reviewed release commit so the published
+release and the primary installation instructions cannot drift apart.
+
 ```bash
 git tag -a v0.2.2 -m 'Selfishell 0.2.2'
 git push origin v0.2.2
@@ -41,9 +46,11 @@ After the workflow completes:
 
 1. Verify all expected assets are attached to the GitHub Release.
 2. Verify `releases/latest/download/VERSION` resolves to the stable version.
-3. Run the exact-version bootstrap on the beta machines in
+3. Verify the exact-version bootstrap commands in `README.md` and
+   `docs/INSTALLATION.md` resolve to the published installer.
+4. Run the exact-version bootstrap on the beta machines in
    `docs/project/BETA.md`.
-4. Record failures as issues and publish a new patch release after fixes.
+5. Record failures as issues and publish a new patch release after fixes.
 
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.
