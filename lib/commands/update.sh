@@ -39,8 +39,9 @@ update_tools_and_configuration() {
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     homebrew_install_packages optional cask "$dry_run" ghostty
   fi
-  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled"
+  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
   install_vim_plugins "$dry_run"
+  migrate_legacy_neovim_installation "$dry_run"
   [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
 }
 

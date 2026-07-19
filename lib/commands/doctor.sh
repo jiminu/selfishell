@@ -32,6 +32,17 @@ doctor_report_package() {
   fi
 }
 
+doctor_report_legacy_neovim() {
+  local legacy_nvim="$HOME/.local/bin/nvim"
+  local legacy_state="$SELFISHELL_STATE_DIR/dependencies/neovim"
+
+  if [[ -r "$legacy_state" && -e "$legacy_nvim" ]]; then
+    doctor_info "Legacy Neovim installation detected: $legacy_nvim (will be removed by update)"
+  elif [[ -e "$legacy_nvim" ]]; then
+    doctor_info "Neovim present at $legacy_nvim (not managed by Selfishell)"
+  fi
+}
+
 command_doctor() {
   require_no_arguments doctor "$@" || return
 
@@ -106,6 +117,7 @@ command_doctor() {
     doctor_info "Installed profile: $profile"
     if [[ "$profile" == developer ]]; then
       doctor_info "Developer profile active: Neovim and mise-managed runtimes are enabled."
+      doctor_report_legacy_neovim
       if [[ -d "$HOME/.nvm" ]]; then
         doctor_info "Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"
       fi

@@ -90,14 +90,14 @@ install_vim_plugins() {
     return 0
   fi
 
-  if ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
+  if ! "$nvim_command" --headless "+Lazy! sync" +qa >/dev/null 2>&1; then
     cli_error "Could not install Neovim plugins."
     return 1
   fi
 
   treesitter_languages="$(selfishell_nvim_treesitter_languages)"
   if [[ -n "$treesitter_languages" ]] &&
-    ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+TSInstallSync $treesitter_languages" +qa >/dev/null 2>&1; then
+    ! "$nvim_command" --headless "+TSInstallSync $treesitter_languages" +qa >/dev/null 2>&1; then
     cli_error "Could not install Tree-sitter parsers."
     return 1
   fi
@@ -106,4 +106,21 @@ install_vim_plugins() {
 selfishell_nvim_treesitter_languages() {
   printf '%s\n' \
     'lua vim vimdoc query c cpp python java bash zsh javascript typescript tsx html css json jsonc yaml toml properties xml dockerfile hcl terraform helm markdown markdown_inline sql'
+}
+
+migrate_legacy_neovim_installation() {
+  local dry_run="$1"
+  local legacy_nvim="$HOME/.local/bin/nvim"
+  local legacy_state="$SELFISHELL_STATE_DIR/dependencies/neovim"
+
+  [[ -r "$legacy_state" && -e "$legacy_nvim" ]] || return 0
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would remove legacy Neovim installation: %s\n' "$legacy_nvim"
+    return 0
+  fi
+
+  rm -f "$legacy_nvim"
+  rm -f "$legacy_state"
+  printf 'Removed legacy Neovim installation: %s\n' "$legacy_nvim"
 }
