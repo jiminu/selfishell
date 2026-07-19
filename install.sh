@@ -357,7 +357,7 @@ main() {
 
   [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
   [[ ! -L "$share_dir/previous" ]] || previous_target="$(readlink "$share_dir/previous")"
-  if [[ -n "$current_target" && "$current_target" != "releases/$version" ]]; then
+  if [[ -n "$current_target" ]]; then
     bootstrap_atomic_link "$current_target" "$share_dir/previous"
     previous_target="$current_target"
   fi

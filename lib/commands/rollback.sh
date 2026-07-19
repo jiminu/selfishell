@@ -43,8 +43,8 @@ command_rollback() {
     target="$(readlink "$SELFISHELL_SHARE_DIR/previous")"
   fi
   [[ "$target" != "$current_target" ]] || {
-    cli_error "Release is already active: ${target##*/}"
-    return 1
+    printf 'Release is already active: %s\n' "${target##*/}"
+    return 0
   }
   confirm_action "Roll back Selfishell CLI to ${target##*/}?" "$assume_yes" 0 || return
 

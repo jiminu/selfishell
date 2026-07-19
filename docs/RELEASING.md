@@ -9,7 +9,7 @@ are added later.
 Run the release-candidate check with an exact semantic version:
 
 ```bash
-bash scripts/release-check.sh 0.2.1
+bash scripts/release-check.sh 0.2.2
 ```
 
 The output must contain:
@@ -17,24 +17,24 @@ The output must contain:
 ```text
 VERSION
 SHA256SUMS
-selfishell-0.2.1-linux-amd64.tar.gz
-selfishell-0.2.1-linux-arm64.tar.gz
-selfishell-0.2.1-macos-amd64.tar.gz
-selfishell-0.2.1-macos-arm64.tar.gz
+selfishell-0.2.2-linux-amd64.tar.gz
+selfishell-0.2.2-linux-arm64.tar.gz
+selfishell-0.2.2-macos-amd64.tar.gz
+selfishell-0.2.2-macos-arm64.tar.gz
 ```
 
 ## Automated Publish
 
 The `v<major>.<minor>.<patch>` tag is the stable release version source. A suffix
-such as `v0.2.1-beta.1` creates a GitHub pre-release. The release workflow runs
+such as `v0.2.2-beta.1` creates a GitHub pre-release. The release workflow runs
 the full suite, builds every archive, smoke-tests an exact install, and creates
 the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
-Release title is the version tag itself, such as `v0.2.1`; artifact filenames
+Release title is the version tag itself, such as `v0.2.2`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
 
 ```bash
-git tag -a v0.2.1 -m 'Selfishell 0.2.1'
-git push origin v0.2.1
+git tag -a v0.2.2 -m 'Selfishell 0.2.2'
+git push origin v0.2.2
 ```
 
 After the workflow completes:
