@@ -184,7 +184,7 @@ command_install() {
 
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
-    install_neovim_plugins "$dry_run"
+    install_neovim_plugins "$dry_run" || return
   fi
   install_default_shell "$dry_run" "$assume_yes"
 
