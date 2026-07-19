@@ -139,7 +139,8 @@ install_neovim_plugins() {
   fi
 
   if ! nvim_command="$(selfishell_nvim_command)"; then
-    return 0
+    cli_error "Could not locate Neovim after installing the developer profile."
+    return 1
   fi
 
   install_lazy_nvim "$lazypath" || return
@@ -173,9 +174,18 @@ selfishell_nvim_treesitter_languages() {
 }
 
 selfishell_nvim_command() {
+  local mise_command=""
+  local resolved
+
   if have_command mise; then
-    local resolved
-    resolved="$(command mise which nvim 2>/dev/null)" || true
+    mise_command="$(command -v mise)"
+  elif [[ -x "$HOME/.local/bin/mise" ]]; then
+    mise_command="$HOME/.local/bin/mise"
+  fi
+
+  if [[ -n "$mise_command" ]]; then
+    resolved="$(MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" \
+      "$mise_command" which nvim 2>/dev/null)" || true
     if [[ -n "$resolved" && -x "$resolved" ]]; then
       printf '%s\n' "$resolved"
       return 0

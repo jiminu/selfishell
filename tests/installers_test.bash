@@ -168,8 +168,47 @@ EOF
   PATH="$original_path"
 }
 
-test_skips_neovim_plugins_when_neovim_is_unavailable() {
+test_resolves_neovim_with_managed_mise_outside_path() {
+  local config_file
+  local managed_mise
+  local managed_nvim
+  local output
+
+  managed_mise="$HOME/.local/bin/mise"
+  managed_nvim="$HOME/.local/share/mise/installs/neovim/0.12.4/bin/nvim"
+  config_file="$HOME/mise-config-used"
+  command mkdir -p "$(dirname "$managed_mise")" "$(dirname "$managed_nvim")"
+  # Variables in these lines must expand when the generated mise stub runs.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/bin/sh' \
+    'printf '\''%s\n'\'' "$MISE_GLOBAL_CONFIG_FILE" >"$SELFISHELL_TEST_MISE_CONFIG_FILE"' \
+    'printf '\''%s\n'\'' "$SELFISHELL_TEST_NVIM_PATH"' >"$managed_mise"
+  printf '%s\n' '#!/bin/sh' 'exit 0' >"$managed_nvim"
+  chmod +x "$managed_mise" "$managed_nvim"
+
+  output="$(
+    HOME="$HOME" \
+      PATH=/usr/bin:/bin \
+      SELFISHELL_ROOT="$ROOT_DIR" \
+      SELFISHELL_TEST_MISE_CONFIG_FILE="$config_file" \
+      SELFISHELL_TEST_NVIM_PATH="$managed_nvim" \
+      bash -c '
+        source "$SELFISHELL_ROOT/lib/common.sh"
+        source "$SELFISHELL_ROOT/lib/installers.sh"
+        selfishell_nvim_command
+      '
+  )"
+
+  [[ "$output" == "$managed_nvim" ]] ||
+    fail "Managed mise outside PATH did not resolve Neovim: $output"
+  [[ "$(<"$config_file")" == "$ROOT_DIR/common/mise.toml" ]] ||
+    fail "Neovim resolution did not use the Selfishell mise config"
+}
+
+test_fails_neovim_plugins_when_neovim_is_unavailable() {
   local lazy_path
+  local output
 
   lazy_path="$HOME/.local/share/selfishell/nvim/lazy/lazy.nvim"
   rm -rf "$HOME/.local/share/selfishell/nvim"
@@ -178,10 +217,14 @@ test_skips_neovim_plugins_when_neovim_is_unavailable() {
     return 1
   }
 
-  install_neovim_plugins 0
+  if output="$(install_neovim_plugins 0 2>&1)"; then
+    fail "Missing Neovim did not fail plugin installation"
+  fi
 
   [[ -z "$GIT_ARGUMENTS" ]] || fail "Missing Neovim still cloned lazy.nvim"
   [[ ! -e "$lazy_path" ]] || fail "Missing Neovim still prepared lazy.nvim"
+  [[ "$output" == *'Could not locate Neovim after installing the developer profile.'* ]] ||
+    fail "Missing Neovim failure was not actionable: $output"
 }
 
 setup_test_home
@@ -201,7 +244,9 @@ test_installs_lazy_nvim_before_syncing_plugins
 printf 'PASS: test_installs_lazy_nvim_before_syncing_plugins\n'
 test_installs_neovim_plugins_via_mise_resolution
 printf 'PASS: test_installs_neovim_plugins_via_mise_resolution\n'
-test_skips_neovim_plugins_when_neovim_is_unavailable
-printf 'PASS: test_skips_neovim_plugins_when_neovim_is_unavailable\n'
+test_resolves_neovim_with_managed_mise_outside_path
+printf 'PASS: test_resolves_neovim_with_managed_mise_outside_path\n'
+test_fails_neovim_plugins_when_neovim_is_unavailable
+printf 'PASS: test_fails_neovim_plugins_when_neovim_is_unavailable\n'
 
 teardown_test_home
