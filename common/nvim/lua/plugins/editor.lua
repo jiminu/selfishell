@@ -8,17 +8,16 @@ return {
     opts = {},
   },
 
-  -- Tree-sitter parsing is enabled when a buffer is opened; parser installation
-  -- happens during `selfishell install`, not at editor startup.
+  -- nvim-treesitter 1.0+ does not support lazy-loading.
   {
     "nvim-treesitter/nvim-treesitter",
-    event = { "BufReadPost", "BufNewFile" },
+    lazy = false,
     build = ":TSUpdate",
-    opts = {
-      highlight = {
-        enable = true,
-      },
-    },
+    config = function()
+      require("nvim-treesitter").setup({
+        install_dir = vim.fn.stdpath("data") .. "/site",
+      })
+    end,
   },
 
   -- VS Code-style colored delimiters.

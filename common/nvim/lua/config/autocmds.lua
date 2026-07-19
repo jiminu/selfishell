@@ -1,5 +1,18 @@
 local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true })
 
+-- Neovim 0.12 uses the built-in Tree-sitter highlighter. The current
+-- nvim-treesitter plugin no longer enables it through setup()/opts.
+vim.api.nvim_create_autocmd("FileType", {
+  group = group,
+  pattern = require("config.languages").treesitter,
+  callback = function(args)
+    local ok = pcall(vim.treesitter.start, args.buf)
+    if not ok then
+      vim.bo[args.buf].syntax = "on"
+    end
+  end,
+})
+
 -- Restore the last cursor position when reopening a regular file.
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = group,
