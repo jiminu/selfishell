@@ -20,6 +20,20 @@ map("n", "<C-k>", "<C-w>k", {
   desc = "Go to upper window"
 })
 
+-- Buffer management
+map("n", "<leader>bd", "<cmd>confirm bdelete<CR>", {
+  silent = true,
+  desc = "Delete buffer",
+})
+
+-- Keep the selection active while adjusting indentation.
+map("x", "<", "<gv", {
+  desc = "Indent left and reselect",
+})
+map("x", ">", ">gv", {
+  desc = "Indent right and reselect",
+})
+
 -- Diagnostic navigation
 map("n", "[d", function()
   vim.diagnostic.jump({ count = -1, float = true })

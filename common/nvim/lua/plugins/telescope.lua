@@ -48,6 +48,26 @@ return {
         "<cmd>Telescope help_tags<CR>",
         desc = "Help tags",
       },
+      {
+        "<leader>fd",
+        "<cmd>Telescope diagnostics<CR>",
+        desc = "Diagnostics",
+      },
+      {
+        "<leader>fs",
+        "<cmd>Telescope lsp_document_symbols<CR>",
+        desc = "Document symbols",
+      },
+      {
+        "<leader>fS",
+        "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>",
+        desc = "Workspace symbols",
+      },
+      {
+        "<leader>fr",
+        "<cmd>Telescope resume<CR>",
+        desc = "Resume picker",
+      },
     },
     dependencies = {
       plugin("nvim-lua/plenary.nvim"),
