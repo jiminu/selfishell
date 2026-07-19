@@ -16,7 +16,7 @@ return {
 
   {
     "mason-org/mason-lspconfig.nvim",
-    event = { "BufReadPre", "BufNewFile" },
+    event = "FileType",
     cmd = {
       "LspInstall",
       "LspUninstall",

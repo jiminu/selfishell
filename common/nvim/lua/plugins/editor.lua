@@ -24,7 +24,7 @@ return {
   -- VS Code-style colored delimiters.
   {
     "HiPhish/rainbow-delimiters.nvim",
-    event = { "BufReadPost", "BufNewFile" },
+    event = "VeryLazy",
     dependencies = {
       "nvim-treesitter/nvim-treesitter",
     },
