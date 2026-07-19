@@ -112,7 +112,7 @@ test_update_rejects_version_for_tools_only() {
   local status
 
   set +e
-  bash "$ROOT_DIR/bin/selfishell" update --tools-only --version 1.0.0 >/dev/null 2>&1
+  bash "$ROOT_DIR/bin/selfishell" update --tools-only --version 0.2.0 >/dev/null 2>&1
   status=$?
   set -e
 

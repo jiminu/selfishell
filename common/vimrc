@@ -22,6 +22,7 @@ if has("syntax")
 endif
 
 set nu
+set rnu
 set hlsearch
 set autoindent
 set cindent
@@ -30,12 +31,24 @@ set sts=2
 set shiftwidth=2
 set expandtab
 set laststatus=2
+set signcolumn=yes
+set cursorline
+set ignorecase
 set smartcase
 set smarttab
 set smartindent
 set ruler
 set fileencodings=utf8,euc-kr
+set completeopt=menu,menuone,noselect
 set wmnu
+
+if has("mouse")
+	set mouse=a
+endif
+
+if has("clipboard")
+	set clipboard=unnamedplus
+endif
 
 map <C-n> :NERDTreeToggle<CR>
 

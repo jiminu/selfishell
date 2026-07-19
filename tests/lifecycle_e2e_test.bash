@@ -6,8 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
 test_complete_release_lifecycle() {
-  local initial_version=1.0.0
-  local next_version=1.1.0
+  local initial_version=0.2.0
+  local next_version=0.2.1
   local prefix
   local release_store
   local artifacts

@@ -162,7 +162,7 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
     'if [[ "${2:-}" == "--available" ]]; then' \
     '  printf "1.1.0\\n"' \
     'else' \
-    '  printf "selfishell 1.0.0\\n"' \
+    '  printf "selfishell 0.2.0\\n"' \
     'fi' >"$fake_bin/selfishell"
   chmod +x "$fake_bin/selfishell"
   printf '1.1.0\n' >"$cache_dir/available-version"
