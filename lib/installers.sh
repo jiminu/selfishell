@@ -98,7 +98,7 @@ install_vim_plugins() {
 
   treesitter_languages="$(selfishell_nvim_treesitter_languages)"
   if [[ -n "$treesitter_languages" ]] &&
-     ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+TSInstallSync $treesitter_languages" +qa >/dev/null 2>&1; then
+    ! APPIMAGE_EXTRACT_AND_RUN=1 "$nvim_command" --headless "+TSInstallSync $treesitter_languages" +qa >/dev/null 2>&1; then
     cli_error "Could not install Tree-sitter parsers."
     return 1
   fi

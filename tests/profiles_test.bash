@@ -35,7 +35,7 @@ test_default_profile_is_minimal() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
 
-  [[ "$output" == *'fzf'* && "$output" == *'neovim'* ]] ||
+  [[ "$output" == *'fzf'* && "$output" == *'vim'* ]] ||
     fail "Default install did not select the minimal profile"
   [[ "$output" != *'direct package: mise'* ]] ||
     fail "Default install included developer tools"
@@ -49,7 +49,7 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
     fail "Minimal required apt packages are incomplete"
   [[ "$output" == *'optional apt packages: eza bat'* ]] ||
     fail "Minimal optional apt packages are incomplete"
-  [[ "$output" == *'neovim'* ]] || fail "Minimal profile is missing Neovim"
+  [[ "$output" == *'vim'* ]] || fail "Minimal profile is missing Vim"
   [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
   [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
   [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"

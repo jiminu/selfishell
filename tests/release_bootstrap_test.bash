@@ -8,7 +8,7 @@ source "$ROOT_DIR/tests/test_helper.bash"
 
 setup_release_home() {
   local version
-  local next_version=0.2.0
+  local next_version=0.2.1
   local prerelease_version=0.3.0-beta.2
 
   setup_test_home
@@ -80,7 +80,7 @@ test_installs_exact_version_and_cli_links() {
 
 test_latest_uses_published_version_file() {
   run_bootstrap >/dev/null
-  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.0 ]] ||
+  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.1 ]] ||
     fail "Latest installation selected the wrong version"
 }
 
@@ -160,8 +160,8 @@ test_cli_update_and_offline_rollback() {
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin"
   printf '#!/usr/bin/env bash\n' >"$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin/selfishell"
 
-  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.0 --yes >/dev/null
-  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.1 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.1' "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
   [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1" ]] ||
     fail "CLI update did not prune an inactive release"
@@ -171,7 +171,7 @@ test_cli_update_and_offline_rollback() {
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
-  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/previous"
+  assert_symlink_to 'releases/0.2.1' "$TEST_ROOT/prefix/share/selfishell/previous"
 }
 
 test_default_update_skips_missing_configuration_and_updates_cli() {
@@ -182,14 +182,14 @@ test_default_update_skips_missing_configuration_and_updates_cli() {
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
 
-  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --yes)"
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.1 --yes)"
   [[ "$output" == *'skipping tools and configuration'* ]] ||
     fail "Default update did not skip an uninstalled configuration"
   cli_line="$(printf '%s\n' "$output" | awk '/CLI updated to/ { print NR; exit }')"
   skip_line="$(printf '%s\n' "$output" | awk '/skipping tools and configuration/ { print NR; exit }')"
   [[ -n "$cli_line" && -n "$skip_line" && "$cli_line" -lt "$skip_line" ]] ||
     fail "Default update did not continue with the new CLI after switching releases"
-  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to 'releases/0.2.1' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 
 test_update_dry_run_preserves_active_release() {
@@ -199,11 +199,11 @@ test_update_dry_run_preserves_active_release() {
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
 
-  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.0 --dry-run)"
-  [[ "$output" == *'Would update Selfishell CLI to 0.2.0.'* ]] ||
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.1 --dry-run)"
+  [[ "$output" == *'Would update Selfishell CLI to 0.2.1.'* ]] ||
     fail "Update dry-run did not preview the CLI release"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
-  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.2.0" ]] ||
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.2.1" ]] ||
     fail "Update dry-run installed a CLI release"
 }
 
@@ -257,9 +257,9 @@ test_bootstrap_upgrade_retains_rollback_and_prunes_inactive_release() {
   run_bootstrap --version "$version" >/dev/null
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1"
 
-  run_bootstrap --version 0.2.0 >/dev/null
+  run_bootstrap --version 0.2.1 >/dev/null
 
-  assert_symlink_to 'releases/0.2.0' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to 'releases/0.2.1' "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
   [[ ! -e "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1" ]] ||
     fail "Bootstrap upgrade retained an inactive release"
