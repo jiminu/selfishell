@@ -136,7 +136,7 @@ command_status() {
   fi
 
   while IFS= read -r resource; do
-    if [[ "$profile" != "developer" && ( "$resource" == nvim-* || "$resource" == user-nvim ) ]]; then
+    if [[ "$profile" != "developer" && ("$resource" == nvim-* || "$resource" == user-nvim) ]]; then
       continue
     fi
     if [[ "$platform" != "macos" && "$resource" == user-ghostty ]]; then
