@@ -1,16 +1,21 @@
 set nocompatible
 filetype off
 
-set rtp+=~/.vim/bundle/Vundle.vim
-call vundle#begin()
+if isdirectory(expand('~/.vim/bundle/Vundle.vim'))
+	set rtp+=~/.vim/bundle/Vundle.vim
+endif
+
+if exists('*vundle#begin')
+	call vundle#begin()
 " git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
 
-Plugin 'VundleVim/Vundle.vim'
+	Plugin 'VundleVim/Vundle.vim'
 
-Plugin 'preservim/nerdtree'
-Plugin 'tomasiser/vim-code-dark'
+	Plugin 'preservim/nerdtree'
+	Plugin 'tomasiser/vim-code-dark'
 
-call vundle#end()
+	call vundle#end()
+endif
 filetype plugin indent on
 
 if !empty(globpath(&rtp, 'colors/codedark.vim'))
@@ -50,7 +55,9 @@ if has("clipboard")
 	set clipboard=unnamedplus
 endif
 
-map <C-n> :NERDTreeToggle<CR>
+if exists(':NERDTreeToggle')
+	map <C-n> :NERDTreeToggle<CR>
+endif
 
 " inoremap " ""<left>
 " inoremap ' ''<left>
