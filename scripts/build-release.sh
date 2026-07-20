@@ -37,8 +37,6 @@ if [[ -n "$version" ]]; then
   fi
 fi
 
-bash "$ROOT_DIR/scripts/update-readme-version.sh"
-
 staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
 payload_dir="$staging_root/payload"
