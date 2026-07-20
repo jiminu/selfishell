@@ -30,7 +30,7 @@ Use an exact release in controlled environments:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --version 0.3.1
+  bash -s -- --version <version>
 selfishell install --profile minimal --yes
 ```
 

@@ -16,24 +16,21 @@ Selfishell is a good fit if you
 
 - want a useful terminal setup that works immediately;
 - use multiple Macs, Ubuntu machines, or Ubuntu on WSL;
-- want Git, kubectl, mise-managed runtimes, aliases, and completions configured
-  consistently;
+- want Git, aliases, and completions configured consistently;
 - prefer a small managed configuration over assembling a large framework such
   as Oh My Zsh;
 - want updates and rollback without manually replacing dotfiles.
 
 It may not be the right choice if you already maintain a heavily customized
 shell framework or want every package and configuration file managed
-independently.
+directly.
 
 ## What You Get
 
 - a readable Starship prompt with Git and runtime information;
-- Zsh completion (powered by fzf-tab) and aliases for common Git, shell, and
-  kubectl workflows;
-- FZF, Zoxide, Ripgrep, Eza, Bat, and Vim in the default profile; Neovim
-  (configured with lazy.nvim) is in the developer profile;
-- optional mise-managed Python, Node.js, Java, kubectl, and kubectx, plus jq and build tools;
+- Zsh completion (powered by fzf-tab) and aliases for common Git and shell workflows;
+- Vim in the default profile; Neovim (configured with lazy.nvim) and advanced shell tools (FZF, Zoxide, Ripgrep, Eza, Bat) are in the developer profile;
+- optional mise-managed Python and Node.js, plus jq and build tools;
 - managed configuration with safe backups where Selfishell replaces existing paths;
 - one-command updates, release notifications, checksum verification, and
   offline rollback.
@@ -79,7 +76,7 @@ selfishell install
 ```
 
 This installs the default `minimal` profile. For a workstation with language
-runtimes, Kubernetes tools, jq, build dependencies, OpenJDK 17, and Neovim:
+runtimes (Node.js, Python), jq, advanced shell tools, build dependencies, and Neovim:
 
 ```bash
 selfishell install --profile developer
@@ -127,8 +124,8 @@ are activated.
 
 | Profile | Included tools |
 | --- | --- |
-| `minimal` | Zsh, Git, Curl, Starship, Zinit, FZF (with fzf-tab), Zoxide, Ripgrep, Eza, Bat, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, Temurin 17.0.19+10, kubectl 1.36.2, kubectx 0.9.5, jq, and compiler tools |
+| `minimal` | Zsh, Git, Curl, Vim, Starship, Zinit, and macOS terminal fonts |
+| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
 
 `minimal` is the default and uses Vim for the base editor. Preview the
 developer profile without changing anything:
@@ -236,7 +233,7 @@ Network access is required for initial package and plugin downloads.
 
 Direct downloads are version-pinned and checksum-verified. Git dependencies are
 checked out at approved tags or commits defined in `dependencies.conf`.
-Developer runtimes, Neovim, and versioned Kubernetes tools are installed by
+Developer runtimes, Neovim, and shell tools are installed by
 mise or the platform package manager from Selfishell-managed configuration.
 Project `mise.toml` files can override those defaults. Existing NVM and pyenv
 directories are left untouched.
@@ -247,7 +244,7 @@ Install an exact Selfishell release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --version 0.3.1
+  bash -s -- --version <version>
 ```
 
 Install configuration without package or network operations:
