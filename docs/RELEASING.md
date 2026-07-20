@@ -9,7 +9,7 @@ are added later.
 Run the release-candidate check with an exact semantic version:
 
 ```bash
-bash scripts/release-check.sh 0.2.2
+bash scripts/release-check.sh 1.2.3
 ```
 
 The output must contain:
@@ -17,27 +17,26 @@ The output must contain:
 ```text
 VERSION
 SHA256SUMS
-selfishell-0.2.2-linux-amd64.tar.gz
-selfishell-0.2.2-linux-arm64.tar.gz
-selfishell-0.2.2-macos-amd64.tar.gz
-selfishell-0.2.2-macos-arm64.tar.gz
+selfishell-1.2.3-linux-amd64.tar.gz
+selfishell-1.2.3-linux-arm64.tar.gz
+selfishell-1.2.3-macos-amd64.tar.gz
+selfishell-1.2.3-macos-arm64.tar.gz
 ```
 
 ## Automated Publish
 
 The `v<major>.<minor>.<patch>` tag is the stable release version source. A suffix
-such as `v0.2.2-beta.1` creates a GitHub pre-release. The release workflow runs
+such as `v1.2.3-beta.1` creates a GitHub pre-release. The release workflow runs
 the full suite, builds every archive, smoke-tests an exact install, and creates
 the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
-Release title is the version tag itself, such as `v0.2.2`; artifact filenames
+Release title is the version tag itself, such as `v1.2.3`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
 
-Before creating the tag, update the version in `VERSION` and run the version synchronization script to update the installation examples:
+Before creating the tag, update the version in `VERSION` and review the installation examples for any versioned URLs:
 
 ```bash
-# Update target version and sync docs
-echo "0.2.2" > VERSION
-bash scripts/update-readme-version.sh
+# Update target version
+printf '%s\n' '1.2.3' > VERSION
 ```
 
 Ensure the validation check passes:
@@ -49,8 +48,8 @@ bash scripts/check.sh
 Include those documentation updates in the reviewed release commit so the published release and the primary installation instructions cannot drift apart.
 
 ```bash
-git tag -a v0.2.2 -m 'Selfishell 0.2.2'
-git push origin v0.2.2
+git tag -a v1.2.3 -m 'Selfishell 1.2.3'
+git push origin v1.2.3
 ```
 
 After the workflow completes:
