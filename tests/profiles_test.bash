@@ -35,7 +35,7 @@ test_default_profile_is_minimal() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
 
-  [[ "$output" == *'fzf'* && "$output" == *'vim'* ]] ||
+  [[ "$output" == *'vim'* && "$output" == *'starship'* ]] ||
     fail "Default install did not select the minimal profile"
   [[ "$output" != *'direct package: mise'* ]] ||
     fail "Default install included developer tools"
@@ -46,11 +46,12 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   output="$(run_profile_dry_run minimal)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
-  [[ "$output" == *'zsh git curl ca-certificates fzf zoxide ripgrep'* ]] ||
+  [[ "$output" == *'zsh git curl ca-certificates vim'* ]] ||
     fail "Minimal required apt packages are incomplete"
-  [[ "$output" == *'optional apt packages: eza bat'* ]] ||
-    fail "Minimal optional apt packages are incomplete"
-  [[ "$output" == *'vim'* ]] || fail "Minimal profile is missing Vim"
+  [[ "$output" != *'optional apt packages:'* ]] ||
+    fail "Minimal profile should not have optional packages"
+  [[ "$output" != *'fzf'* && "$output" != *'zoxide'* && "$output" != *'ripgrep'* ]] ||
+    fail "Minimal profile should not include advanced shell tools"
   [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
   [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
   [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"
@@ -61,18 +62,21 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$full_output" != *'Neovim plugins'* ]] || fail "Minimal profile included Neovim plugin setup"
 }
 
-test_developer_includes_development_kubernetes_and_java_tools() {
+test_developer_includes_development_tools() {
   local output full_output
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
 
-  [[ "$output" == *'fzf'* && "$output" == *'direct package: mise'* ]] ||
+  [[ "$output" == *'required apt packages: zsh git curl ca-certificates vim fzf zoxide ripgrep jq build-essential'* ]] ||
+    fail "Developer profile required apt packages are incomplete"
+  [[ "$output" == *'optional apt packages: eza bat'* ]] ||
+    fail "Developer profile optional apt packages are incomplete"
+  [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
+  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14'* ]] ||
     fail "Developer profile is missing mise runtimes"
-  [[ "$output" == *'kubectl@1.36.2'* && "$output" == *'kubectx@0.9.5'* ]] ||
-    fail "Developer profile is missing Kubernetes or Java tools"
-  [[ "$output" == *'jq'* ]] || fail "Developer profile is missing jq"
+  [[ "$output" != *'kubectl'* && "$output" != *'java'* && "$output" != *'kubectx'* ]] ||
+    fail "Developer profile still includes Kubernetes or Java tools"
   [[ "$output" == *'build-essential'* && "$output" == *'tree-sitter@0.26.11'* ]] ||
     fail "Developer profile is missing Tree-sitter build tooling"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"

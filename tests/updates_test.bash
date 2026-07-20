@@ -33,7 +33,7 @@ test_tools_update_synchronizes_profile_packages() {
   output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --dry-run)"
   [[ "$output" == *'Would install required apt packages:'* ]] ||
     fail "Tools update did not synchronize package-manager packages"
-  [[ "$output" == *'ripgrep'* ]] || fail "Tools update did not include the current profile packages"
+  [[ "$output" == *'git'* ]] || fail "Tools update did not include the current profile packages"
   [[ "$output" != *'Neovim plugins'* ]] || fail "Minimal tools update included Neovim plugin setup"
   teardown_update_home
 }

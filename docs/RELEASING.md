@@ -32,10 +32,21 @@ the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
 Release title is the version tag itself, such as `v0.2.2`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
 
-Before creating the tag, update all exact-version installation examples in
-`README.md` and `docs/INSTALLATION.md` to the version being released. Include
-those documentation updates in the reviewed release commit so the published
-release and the primary installation instructions cannot drift apart.
+Before creating the tag, update the version in `VERSION` and run the version synchronization script to update the installation examples:
+
+```bash
+# Update target version and sync docs
+echo "0.2.2" > VERSION
+bash scripts/update-readme-version.sh
+```
+
+Ensure the validation check passes:
+
+```bash
+bash scripts/check.sh
+```
+
+Include those documentation updates in the reviewed release commit so the published release and the primary installation instructions cannot drift apart.
 
 ```bash
 git tag -a v0.2.2 -m 'Selfishell 0.2.2'
