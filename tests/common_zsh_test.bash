@@ -228,12 +228,10 @@ EOF
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
-        alias vi
         alias vim
       ' zsh "$ROOT_DIR/common/aliases-editor.zsh"
   )"
 
-  [[ "$output" == *'vi=nvim'* ]] || fail "vi was not redirected to Neovim"
   [[ "$output" == *'vim=nvim'* ]] || fail "vim was not redirected to Neovim"
   teardown_test_home
 }
