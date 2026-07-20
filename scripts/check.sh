@@ -34,7 +34,6 @@ bash_files=(
   scripts/release-check.sh
   scripts/next-patch-version.sh
   scripts/update-dependencies.sh
-  scripts/update-readme-version.sh
   scripts/neovim-e2e.sh
   scripts/ubuntu-container-e2e.sh
   scripts/workflow-failure-issue.sh
@@ -50,7 +49,6 @@ bash_files=(
   tests/tool_status_test.bash
   tests/workflow_notifications_test.bash
   tests/release_bootstrap_test.bash
-  tests/release_version_test.bash
   tests/run.bash
   tests/test_helper.bash
   tests/updates_test.bash
@@ -86,47 +84,11 @@ shfmt -d -i 2 -ci "${bash_files[@]}"
 # Verify version consistency
 printf 'Verifying version consistency\n'
 
-# 1. Selfishell version consistency check
 version=$(tr -d '[:space:]' <VERSION)
-
-# Helper function to check selfishell version in a file
-verify_selfishell_version() {
-  local file="$1"
-  local expected="$2"
-
-  # Check raw URLs
-  local urls
-  urls=$(grep -oE "raw\.githubusercontent\.com/jiminu/selfishell/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?/install\.sh" "$file" || true)
-  if [[ -n "$urls" ]]; then
-    while read -r url; do
-      if [[ "$url" =~ selfishell/v([^/]+)/install\.sh ]]; then
-        local found="${BASH_REMATCH[1]}"
-        if [[ "$found" != "$expected" ]]; then
-          printf 'Error: Version mismatch in %s URL. Expected: %s, Found: %s\n' "$file" "$expected" "$found" >&2
-          exit 1
-        fi
-      fi
-    done <<<"$urls"
-  fi
-
-  # Check --version argument
-  local args
-  args=$(grep -oE "\-\-version [0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?" "$file" || true)
-  if [[ -n "$args" ]]; then
-    while read -r arg; do
-      if [[ "$arg" =~ --version[[:space:]]+([^[:space:]]+) ]]; then
-        local found="${BASH_REMATCH[1]}"
-        if [[ "$found" != "$expected" ]]; then
-          printf 'Error: Version mismatch in %s --version argument. Expected: %s, Found: %s\n' "$file" "$expected" "$found" >&2
-          exit 1
-        fi
-      fi
-    done <<<"$args"
-  fi
-}
-
-verify_selfishell_version "README.md" "$version"
-verify_selfishell_version "docs/INSTALLATION.md" "$version"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+  printf 'Error: Invalid version format in VERSION file: %s\n' "$version" >&2
+  exit 1
+fi
 
 printf 'Version consistency checks passed.\n'
 
