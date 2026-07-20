@@ -11,7 +11,7 @@ if command -v zoxide >/dev/null 2>&1; then
   _selfishell_zoxide_cache="$SELFISHELL_CACHE_DIR/zoxide-init.zsh"
   if [[ ! -s "$_selfishell_zoxide_cache" ]]; then
     command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
-    zoxide init zsh >| "$_selfishell_zoxide_cache" 2>/dev/null
+    zoxide init zsh >|"$_selfishell_zoxide_cache" 2>/dev/null
   fi
   [[ -s "$_selfishell_zoxide_cache" ]] && source "$_selfishell_zoxide_cache"
   unset _selfishell_zoxide_cache
@@ -23,7 +23,7 @@ if command -v fzf >/dev/null 2>&1; then
     command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
     local fzf_init
     if fzf_init="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_init" ]]; then
-      print -r -- "$fzf_init" >| "$_selfishell_fzf_cache"
+      print -r -- "$fzf_init" >|"$_selfishell_fzf_cache"
     elif [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
       command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$_selfishell_fzf_cache"
     fi
@@ -32,9 +32,11 @@ if command -v fzf >/dev/null 2>&1; then
   unset _selfishell_fzf_cache
 fi
 
-if (( $+functions[zinit] )); then
+if (($+functions[zinit])); then
   # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
-  zinit light Aloxaf/fzf-tab
+  if command -v fzf >/dev/null 2>&1; then
+    zinit light Aloxaf/fzf-tab
+  fi
   zinit ice wait'0' lucid
   zinit light zsh-users/zsh-autosuggestions
   zinit ice wait'0' lucid
@@ -45,7 +47,7 @@ if command -v starship >/dev/null 2>&1; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
   if [[ ! -s "$_selfishell_starship_cache" ]]; then
     command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
-    starship init zsh >| "$_selfishell_starship_cache" 2>/dev/null
+    starship init zsh >|"$_selfishell_starship_cache" 2>/dev/null
   fi
   [[ -s "$_selfishell_starship_cache" ]] && source "$_selfishell_starship_cache"
   unset _selfishell_starship_cache
