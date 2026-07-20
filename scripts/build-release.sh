@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 version="$(<"$ROOT_DIR/VERSION")"
 output_dir="$ROOT_DIR/dist"
 
+update_source=1
+
 while (("$#" > 0)); do
   case "$1" in
     --version)
@@ -15,6 +17,9 @@ while (("$#" > 0)); do
     --output)
       shift
       output_dir="${1:-}"
+      ;;
+    --no-update-source)
+      update_source=0
       ;;
     *)
       printf 'Unknown option: %s\n' "$1" >&2
@@ -30,7 +35,7 @@ done
 }
 [[ "$output_dir" == /* ]] || output_dir="$ROOT_DIR/$output_dir"
 
-if [[ -n "$version" ]]; then
+if [[ -n "$version" && "$update_source" == "1" ]]; then
   current_version=$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")
   if [[ "$version" != "$current_version" ]]; then
     printf '%s\n' "$version" >"$ROOT_DIR/VERSION"

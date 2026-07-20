@@ -29,9 +29,9 @@ setup_release_home() {
     "$TEST_ROOT/releases/download/v$version" "$TEST_ROOT/releases/download/v$next_version" \
     "$TEST_ROOT/releases/download/v$prerelease_version" \
     "$TEST_ROOT/releases/latest/download"
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$TEST_ROOT/artifacts" >/dev/null
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" --output "$TEST_ROOT/next-artifacts" >/dev/null
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" --output "$TEST_ROOT/prerelease-artifacts" >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$TEST_ROOT/artifacts" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" --output "$TEST_ROOT/next-artifacts" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" --output "$TEST_ROOT/prerelease-artifacts" --no-update-source >/dev/null
   cp "$TEST_ROOT/artifacts"/* "$TEST_ROOT/releases/download/v$version/"
   cp "$TEST_ROOT/next-artifacts"/* "$TEST_ROOT/releases/download/v$next_version/"
   cp "$TEST_ROOT/prerelease-artifacts"/* "$TEST_ROOT/releases/download/v$prerelease_version/"
@@ -72,7 +72,7 @@ test_release_artifacts_are_reproducible() {
   version="$(<"$ROOT_DIR/VERSION")"
   mkdir -p "$second_output"
   sleep 1
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" --no-update-source >/dev/null
 
   for artifact in "$TEST_ROOT/artifacts"/*.tar.gz; do
     cmp -s "$artifact" "$second_output/$(basename "$artifact")" ||

@@ -33,7 +33,7 @@ test_complete_release_lifecycle() {
   for version in "$initial_version" "$next_version"; do
     artifacts="$TEST_ROOT/artifacts-$version"
     mkdir -p "$artifacts" "$release_store/download/v$version"
-    bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$artifacts" >/dev/null
+    bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$artifacts" --no-update-source >/dev/null
     cp "$artifacts"/* "$release_store/download/v$version/"
   done
 
