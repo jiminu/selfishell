@@ -12,7 +12,7 @@ role.
 
 The `developer` profile installs a pinned mise binary and activates it for
 interactive Zsh. Selfishell keeps its defaults in
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/config.toml`; a project's
+`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/selfishell.toml` (which is symlinked to `~/.config/mise/conf.d/selfishell.toml` so it is automatically loaded by `mise`); a project's
 `mise.toml` can select different tool versions. Existing NVM, pyenv, and
 system-Java installations are not removed.
 

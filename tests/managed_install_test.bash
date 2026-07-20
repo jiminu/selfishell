@@ -65,7 +65,7 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "zshenv was not copied"
   cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
     fail "Runtime Zsh module was not copied"
-  cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/config.toml" ||
+  cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
     fail "mise configuration was not copied"
   cmp -s "$ROOT_DIR/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
     fail "Vim configuration was not copied"
@@ -113,6 +113,7 @@ test_developer_install_includes_neovim_configuration() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
   cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
     fail "Neovim init.lua was not installed for the developer profile"
   cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||

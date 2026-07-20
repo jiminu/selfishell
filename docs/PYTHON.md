@@ -6,7 +6,7 @@ Selfishell manages Python runtimes and packages using a modern, fast toolchain p
 
 * **Runtime Manager (`mise`)**: Handles the installation of global and local Python versions.
 * **Package & Virtualenv Manager (`uv`)**: Handles dependencies, virtual environments, and project bootstrapping at near-instant speed.
-* **Auto-Activation**: When entering a project directory with a `.venv` directory, `mise` automatically sources and activates it.
+* **Auto-Activation**: When configured, entering a project directory with a `.venv` directory will automatically source and activate it.
 
 ---
 
@@ -29,7 +29,14 @@ uv venv --python 3.12
 
 ### 2. Auto-Activation
 
-Since Selfishell configures `mise` with auto-venv enabled, simply entering the directory will activate it:
+To enable auto-activation, add `python.uv_venv_auto = "create|source"` to the `[settings]` section of your project's local `mise.toml` file:
+
+```toml
+[settings]
+python.uv_venv_auto = "create|source"
+```
+
+Once configured, simply entering the directory will activate it:
 
 ```bash
 cd /path/to/project
@@ -66,4 +73,4 @@ uv pip compile pyproject.toml -o requirements.txt
 Selfishell's built-in Neovim configuration integrates with Python LSP and tools. 
 
 To ensure Neovim can resolve your project dependencies, always run `neovim` from the project root after the virtual environment has been created and packages have been installed.
-Because `mise` automatically activates `.venv` when entering the directory, Neovim will inherit the correct path to the local virtualenv Python interpreter.
+Once auto-activation is configured, `mise` will automatically activate `.venv` when entering the directory, allowing Neovim to inherit the correct path to the local virtualenv Python interpreter.
