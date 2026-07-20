@@ -46,6 +46,8 @@ install_mise_tools() {
     return 1
   fi
 
+  selfishell_mise_trust
+
   if ! MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" "$mise_command" install "$@"; then
     cli_error "Could not install $requirement mise tools: $*"
     if [[ "$requirement" == "optional" ]]; then
@@ -63,6 +65,16 @@ selfishell_mise_command() {
     printf '%s\n' "$HOME/.local/bin/mise"
   else
     return 1
+  fi
+}
+
+selfishell_mise_trust() {
+  local mise_command
+  if mise_command="$(selfishell_mise_command)"; then
+    local config_link="${XDG_CONFIG_HOME:-$HOME/.config}/mise/conf.d/selfishell.toml"
+    if [[ -L "$config_link" || -f "$config_link" ]]; then
+      "$mise_command" trust "$config_link" >/dev/null 2>&1 || true
+    fi
   fi
 }
 
