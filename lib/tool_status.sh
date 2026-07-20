@@ -218,7 +218,7 @@ tool_status_detect() {
         mise_command="$HOME/.local/bin/mise"
       fi
       if [[ -n "$mise_command" ]]; then
-        output="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/config.toml" "$mise_command" current "$mise_tool" 2>/dev/null)" || output=""
+        output="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/selfishell.toml" "$mise_command" current "$mise_tool" 2>/dev/null)" || output=""
         if [[ -n "$output" ]]; then
           TOOL_STATUS_INSTALLED="$output"
           TOOL_STATUS_SOURCE="mise"

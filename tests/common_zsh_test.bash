@@ -95,6 +95,7 @@ EOF
     PATH="$fake_bin:/usr/bin:/bin" \
       XDG_CONFIG_HOME="$HOME/.config" \
       ZDOTDIR="" \
+      MISE_GLOBAL_CONFIG_FILE="" \
       /bin/zsh -f -c '
       _selfishell_command_path() { command -v "$1"; }
       source "$1"
@@ -116,8 +117,8 @@ EOF
       ' zsh "$ROOT_DIR/common/runtime.zsh"
   )"
 
-  [[ "$developer_config" == "$HOME/.config/selfishell/mise/config.toml" ]] ||
-    fail "Developer profile did not select the Selfishell mise config"
+  [[ -z "$developer_config" ]] ||
+    fail "Developer profile set MISE_GLOBAL_CONFIG_FILE"
   [[ "$minimal_config" == "$HOME/personal-mise.toml" ]] ||
     fail "Minimal profile replaced the user's mise config"
   teardown_test_home

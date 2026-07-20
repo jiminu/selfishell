@@ -2,7 +2,7 @@ name: Dependency updates
 
 on:
   schedule:
-    - cron: '17 3 * * 1'
+    - cron: '00 0 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
           git add dependencies.conf
           git commit -m 'Update approved dependencies'
           git push --force-with-lease origin "HEAD:$BRANCH"
-          gh pr view "$BRANCH" >/dev/null 2>&1 || gh pr create \
+          gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -q '^0$' && gh pr create \
             --base main \
             --head "$BRANCH" \
             --title 'Update approved dependencies' \

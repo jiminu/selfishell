@@ -151,7 +151,7 @@ test_detects_mise_tool_version() {
   cat >"$TEST_ROOT/bin/mise" <<'EOF'
 #!/usr/bin/env bash
 [[ "$*" == 'current node' ]] || exit 1
-[[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_CONFIG_DIR/mise/config.toml" ]] || exit 1
+[[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_CONFIG_DIR/mise/selfishell.toml" ]] || exit 1
 printf '24.18.0\n'
 EOF
   chmod +x "$TEST_ROOT/bin/mise"

@@ -48,7 +48,7 @@ install_managed_configuration() {
         managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run"
         ;;
       link)
-        if [[ "$profile" != "developer" && "$resource_name" == user-nvim ]]; then
+        if [[ "$profile" != "developer" && ("$resource_name" == user-nvim || "$resource_name" == mise-config-link) ]]; then
           continue
         fi
         if [[ "$resource_name" == user-ghostty ]]; then
