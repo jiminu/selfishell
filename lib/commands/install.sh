@@ -64,6 +64,7 @@ install_managed_configuration() {
 
   if [[ "$dry_run" == "0" ]]; then
     rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
+    selfishell_mise_trust
   fi
 }
 
