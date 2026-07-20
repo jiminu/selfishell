@@ -30,6 +30,15 @@ done
 }
 [[ "$output_dir" == /* ]] || output_dir="$ROOT_DIR/$output_dir"
 
+if [[ -n "$version" ]]; then
+  current_version=$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")
+  if [[ "$version" != "$current_version" ]]; then
+    printf '%s\n' "$version" >"$ROOT_DIR/VERSION"
+  fi
+fi
+
+bash "$ROOT_DIR/scripts/update-readme-version.sh"
+
 staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
 payload_dir="$staging_root/payload"
@@ -84,5 +93,27 @@ done
   fi
 )
 printf '%s\n' "$version" >"$output_dir/VERSION"
+
+# Verify built artifacts
+printf 'Verifying built release artifacts...\n'
+for platform in linux macos; do
+  for architecture in amd64 arm64; do
+    archive="selfishell-${version}-${platform}-${architecture}.tar.gz"
+    if [[ ! -f "$output_dir/$archive" ]]; then
+      printf 'Error: Missing release archive %s\n' "$archive" >&2
+      exit 1
+    fi
+    if ! grep -q "$archive" "$output_dir/SHA256SUMS"; then
+      printf 'Error: Archive %s is not registered in SHA256SUMS\n' "$archive" >&2
+      exit 1
+    fi
+  done
+done
+
+if [[ "$(tr -d '[:space:]' <"$output_dir/VERSION")" != "$version" ]]; then
+  printf 'Error: dist/VERSION content mismatch. Expected: %s\n' "$version" >&2
+  exit 1
+fi
+printf 'Build artifacts verification passed.\n'
 
 printf 'Built Selfishell %s release artifacts in %s\n' "$version" "$output_dir"
