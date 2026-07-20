@@ -1,9 +1,6 @@
 [tools]
 node = "24.18.0"
 python = "3.13.14"
-java = "temurin-17.0.19+10"
-kubectl = "1.36.2"
-kubectx = "0.9.5"
 neovim = "0.12.4"
 tree-sitter = "0.26.11"
 

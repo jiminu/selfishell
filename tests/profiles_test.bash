@@ -62,7 +62,7 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$full_output" != *'Neovim plugins'* ]] || fail "Minimal profile included Neovim plugin setup"
 }
 
-test_developer_includes_development_kubernetes_and_java_tools() {
+test_developer_includes_development_tools() {
   local output full_output
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
@@ -73,10 +73,10 @@ test_developer_includes_development_kubernetes_and_java_tools() {
     fail "Developer profile optional apt packages are incomplete"
   [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14 java@temurin-17.0.19+10 kubectl@1.36.2'* ]] ||
+  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14'* ]] ||
     fail "Developer profile is missing mise runtimes"
-  [[ "$output" == *'kubectl@1.36.2'* && "$output" == *'kubectx@0.9.5'* ]] ||
-    fail "Developer profile is missing Kubernetes or Java tools"
+  [[ "$output" != *'kubectl'* && "$output" != *'java'* && "$output" != *'kubectx'* ]] ||
+    fail "Developer profile still includes Kubernetes or Java tools"
   [[ "$output" == *'build-essential'* && "$output" == *'tree-sitter@0.26.11'* ]] ||
     fail "Developer profile is missing Tree-sitter build tooling"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"

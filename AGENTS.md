@@ -176,8 +176,8 @@ Built-in profiles live in `profiles/*.conf` and contain declarative `include` an
 profiles are `minimal` and `developer`; `developer` includes `minimal`. `minimal`
 is the default and includes only basic interactive shell setup, Zinit, Vim
 configuration, and macOS terminal fonts. Everyday interactive shell tools (fzf,
-zoxide, ripgrep, eza, bat), jq, language runtimes, build dependencies, Kubernetes
-tools, and OpenJDK begin in `developer`. Ghostty is a separate macOS installation choice
+zoxide, ripgrep, eza, bat), jq, Node.js, Python, and compiler tools begin in
+`developer`. Ghostty is a separate macOS installation choice
 whose selection is retained in state for later updates.
 
 Private package additions use `--local-profile FILE` or
