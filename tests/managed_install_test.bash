@@ -595,13 +595,10 @@ test_mise_config_global_uninstall_preservation() {
   run_selfishell uninstall --restore --yes >/dev/null
   assert_file_content 'pre_existing_data' "$XDG_CONFIG_HOME/mise/config.toml"
 
-  cat >"$XDG_CONFIG_HOME/mise/config.toml" <<'EOF'
-# User-defined global mise configuration
-# Selfishell defaults are loaded from conf.d/selfishell.toml
-EOF
+  : >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml with template content was deleted on uninstall"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "empty config.toml was deleted on uninstall"
 }
 
 test_mise_config_global_dry_run_and_directory_error() {

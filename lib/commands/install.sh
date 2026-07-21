@@ -148,10 +148,7 @@ install_mise_global_config() {
 
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
-  if ! cat >"$temporary_file" <<'EOF'; then
-# User-defined global mise configuration
-# Selfishell defaults are loaded from conf.d/selfishell.toml
-EOF
+  if ! : >"$temporary_file"; then
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
