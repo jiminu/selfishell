@@ -43,7 +43,7 @@ install_managed_configuration() {
         if [[ "$resource_name" == "zshrc-config" ]]; then
           resource_source="$zsh_source"
         fi
-        if [[ "$resource_name" == ghostty-config || "$resource_name" == user-ghostty ]]; then
+        if [[ "$resource_name" == ghostty-config ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
         managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes"
@@ -52,13 +52,13 @@ install_managed_configuration() {
         if [[ "$profile" != "developer" && ("$resource_name" == user-nvim || "$resource_name" == mise-config-link) ]]; then
           continue
         fi
-        if [[ "$resource_name" == user-ghostty ]]; then
-          [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
-        fi
         managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
       block)
-        managed_install_zsh_loader "$resource_name" "$resource_target" "$dry_run"
+        if [[ "$resource_name" == user-ghostty ]]; then
+          [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
+        fi
+        managed_install_block "$resource_name" "$resource_target" "$dry_run"
         ;;
     esac
   done < <(selfishell_managed_resources)
