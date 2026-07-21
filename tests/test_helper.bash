@@ -8,9 +8,6 @@ setup_test_home() {
   TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-test.XXXXXX")"
   export HOME="$TEST_ROOT/home"
   mkdir -p "$HOME"
-  source "$ROOT_DIR/lib/paths.sh"
-  selfishell_initialize_paths
-  export SELFISHELL_CONFIG_DIR SELFISHELL_STATE_DIR SELFISHELL_CACHE_DIR SELFISHELL_RESOURCE_STATE_DIR
 }
 
 teardown_test_home() {

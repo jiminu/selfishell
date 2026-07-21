@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
-# Duplicate original stdin (FD 0) to FD 3 for interactive prompts inside loops
+# Duplicate original stdin (FD 0) to FD 3. Command loops such as
+# `while ... done < <(selfishell_managed_resources)` redirect FD 0 to their
+# process substitution for the loop's duration, which would otherwise make
+# real interactive input unreachable from prompts issued inside the loop
+# body (see managed_install_file's conflict prompt in lib/managed.sh).
 exec 3<&0
 
 # These constants are consumed by command modules after this file is sourced.
@@ -28,27 +32,32 @@ require_no_arguments() {
   fi
 }
 
+# FD 3 holds a copy of the real stdin made when this file was sourced (see
+# `exec 3<&0` above). Checking and reading FD 3 instead of FD 0 keeps this
+# check correct even when called from inside a loop that has redirected
+# FD 0 away from the terminal. SELFISHELL_TEST_TTY lets tests drive real
+# prompt/read logic over a piped FD 3 without an actual terminal attached.
+selfishell_is_interactive() {
+  [[ -t 3 || -n "${SELFISHELL_TEST_TTY:-}" ]]
+}
+
 confirm_action() {
   local prompt="$1"
   local assume_yes="$2"
   local dry_run="$3"
-  local answer
-
-  if [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; then
-    return 0
-  fi
+  local answer=""
 
   if [[ "$dry_run" == "1" || "$assume_yes" == "1" ]]; then
     return 0
   fi
 
-  if [[ ! -t 0 ]]; then
+  if ! selfishell_is_interactive; then
     cli_error "Confirmation requires an interactive terminal; use --yes."
     return "$SELFISHELL_EXIT_USAGE"
   fi
 
   printf '%s [y/N] ' "$prompt"
-  IFS= read -r answer
+  IFS= read -r answer <&3
   case "$answer" in
     y | Y | yes | YES) return 0 ;;
     *)

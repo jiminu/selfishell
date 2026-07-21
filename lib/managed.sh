@@ -88,6 +88,22 @@ managed_atomic_copy() {
   mv "$temporary_file" "$target_file"
 }
 
+# Managed regular-file conflicts are handled from inside a
+# `while ... done < <(selfishell_managed_resources)` loop, which redirects
+# FD 0 to the resource list for the duration of the loop. FD 3 is a copy of
+# the real stdin created once in lib/common.sh before that redirection takes
+# effect, so conflict prompts must check and read FD 3, not FD 0.
+managed_conflict_is_interactive() {
+  selfishell_is_interactive
+}
+
+managed_read_conflict_answer() {
+  local answer=""
+
+  IFS= read -r answer <&3 || return "$SELFISHELL_EXIT_ERROR"
+  printf '%s\n' "$answer"
+}
+
 managed_zsh_loader_begin() {
   printf '%s\n' '# >>> Selfishell initialize >>>'
 }
@@ -288,7 +304,9 @@ managed_install_file() {
   local assume_yes="${5:-0}"
   local source_checksum
   local current_checksum=""
-  local backup="-"
+  local original_backup="-"
+  local conflict_backup=""
+  local answer=""
 
   source_checksum="$(managed_checksum "$source_file")"
   if managed_read_state "$resource"; then
@@ -296,34 +314,43 @@ managed_install_file() {
       cli_error "State conflict for managed file: $resource"
       return "$SELFISHELL_EXIT_ERROR"
     fi
-    backup="$MANAGED_STATE_BACKUP"
+    original_backup="$MANAGED_STATE_BACKUP"
 
     if [[ -f "$target_file" ]]; then
       current_checksum="$(managed_checksum "$target_file")"
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
-        if [[ "$MANAGED_STATE_STATUS" == "active" || "$backup" == "-" || -e "$backup" || -L "$backup" ]]; then
-          local answer=""
-          if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
-            printf 'Managed file was modified: %s. Overwrite with default config? [y/N] ' "$target_file"
-            IFS= read -r answer <&3
+        if [[ "$MANAGED_STATE_STATUS" == "active" || "$original_backup" == "-" || -e "$original_backup" || -L "$original_backup" ]]; then
+          if [[ "$dry_run" == "1" ]]; then
+            printf 'Conflict: modified managed file: %s\n' "$target_file"
+            printf 'Would require an overwrite or skip decision.\n'
+            return 0
           fi
+
+          if [[ "$assume_yes" == "1" ]] || ! managed_conflict_is_interactive; then
+            cli_error "Managed file was modified; preserving it: $target_file"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+
+          printf 'Managed file was modified: %s. Overwrite with default config? [y/N] ' "$target_file"
+          if ! answer="$(managed_read_conflict_answer)"; then
+            cli_error "Managed file was modified; preserving it: $target_file"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+
           case "$answer" in
             y | Y | yes | YES)
-              # Always create a new backup for the modified file before overwriting
-              backup_dir="${SELFISHELL_STATE_DIR}/backups"
-              mkdir -p "${backup_dir}"
-              backup="$(managed_unique_backup_path "${backup_dir}/$(basename "$target_file")")"
-              current_checksum=""
-              printf 'Debug: created backup path %s for %s\n' "$backup" "$target_file"
+              conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
+              mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
+              cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
+              printf 'Backed up modified managed file: %s -> %s\n' "$target_file" "$conflict_backup"
+              managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+              managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
+              printf 'Installed managed file: %s\n' "$target_file"
+              return 0
               ;;
             *)
-              if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
-                printf 'Preserved modified file: %s\n' "$target_file"
-                return 0
-              else
-                cli_error "Managed file was modified; preserving it: $target_file"
-                return "$SELFISHELL_EXIT_ERROR"
-              fi
+              printf 'Skipped modified managed file: %s\n' "$target_file"
+              return 0
               ;;
           esac
         else
@@ -335,12 +362,12 @@ managed_install_file() {
       return "$SELFISHELL_EXIT_ERROR"
     fi
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
-    backup="$(managed_unique_backup_path "$target_file")"
+    original_backup="$(managed_unique_backup_path "$target_file")"
   fi
 
   if [[ "$current_checksum" == "$source_checksum" ]]; then
     if [[ "$dry_run" == "0" ]]; then
-      managed_write_state "$resource" file active "$target_file" - "$backup" "$source_checksum"
+      managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
     fi
     printf 'Unchanged: %s\n' "$target_file"
     return
@@ -351,15 +378,13 @@ managed_install_file() {
     return
   fi
 
-  managed_write_state "$resource" file pending "$target_file" - "$backup" "$source_checksum"
-  if [[ "$backup" != "-" && ! -e "$backup" && ! -L "$backup" && (-e "$target_file" || -L "$target_file") ]]; then
-    # Ensure backup directory exists
-    mkdir -p "$(dirname "$backup")"
-    printf 'Debug: moving %s to backup %s\n' "$target_file" "$backup"
-    mv "${target_file}" "${backup}"
+  managed_write_state "$resource" file pending "$target_file" - "$original_backup" "$source_checksum"
+  if [[ "$original_backup" != "-" && ! -e "$original_backup" && ! -L "$original_backup" && (-e "$target_file" || -L "$target_file") ]]; then
+    mkdir -p "$(dirname "$original_backup")" || return "$SELFISHELL_EXIT_ERROR"
+    mv "$target_file" "$original_backup" || return "$SELFISHELL_EXIT_ERROR"
   fi
-  managed_atomic_copy "$source_file" "$target_file"
-  managed_write_state "$resource" file active "$target_file" - "$backup" "$source_checksum"
+  managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+  managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
   printf 'Installed managed file: %s\n' "$target_file"
 }
 
@@ -368,7 +393,6 @@ managed_install_link() {
   local target_file="$2"
   local source_file="$3"
   local dry_run="$4"
-  local assume_yes="${5:-0}"
   local backup="-"
 
   if managed_read_state "$resource"; then
@@ -387,28 +411,8 @@ managed_install_link() {
     fi
 
     if [[ "$MANAGED_STATE_STATUS" == "active" && (-e "$target_file" || -L "$target_file") ]]; then
-      local answer=""
-      if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
-        printf 'Managed link was replaced: %s. Overwrite with default symlink? [y/N] ' "$target_file"
-        IFS= read -r answer <&3
-      fi
-      case "$answer" in
-        y | Y | yes | YES)
-          if [[ "$backup" == "-" ]]; then
-            backup="$(managed_unique_backup_path "$target_file")"
-          fi
-          # 덮어쓰기 계속 진행
-          ;;
-        *)
-          if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
-            printf 'Preserved modified link: %s\n' "$target_file"
-            return 0
-          else
-            cli_error "Managed link was replaced; preserving it: $target_file"
-            return "$SELFISHELL_EXIT_ERROR"
-          fi
-          ;;
-      esac
+      cli_error "Managed link was replaced; preserving it: $target_file"
+      return "$SELFISHELL_EXIT_ERROR"
     fi
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     backup="$(managed_unique_backup_path "$target_file")"

@@ -55,7 +55,7 @@ install_managed_configuration() {
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
-        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run" "$assume_yes"
+        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
       block)
         managed_install_zsh_loader "$resource_name" "$resource_target" "$dry_run"
