@@ -97,6 +97,48 @@ test_download_move_failure_does_not_report_success() {
   teardown_update_home
 }
 
+test_write_version_failure_does_not_report_success() {
+  local payload checksum output status
+  local fake_bin
+  setup_update_home
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+
+  fake_bin="$TEST_ROOT/fakebin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */selfishell/dependencies/tool.tmp.*) exit 1 ;;
+  esac
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  output="$(PATH="$fake_bin:$PATH" bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR" 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "A forced dependency-version-write failure should propagate as an error"
+  [[ "$output" != *'Installed approved dependency'* ]] ||
+    fail "A forced dependency-version-write failure printed a success message"
+  [[ -x "$HOME/.local/bin/tool" ]] ||
+    fail "The downloaded tool should still be usable even though its version record failed"
+  [[ "$(find "$XDG_STATE_HOME/selfishell/dependencies" -maxdepth 1 -name 'tool.tmp.*' 2>/dev/null | wc -l)" -eq 0 ]] ||
+    fail "A forced dependency-version-write failure left a temporary file behind"
+
+  output="$(bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR")"
+  [[ "$output" == *'Externally installed; preserving'* ]] ||
+    fail "Retrying after removing the forced failure did not behave as expected: $output"
+  teardown_update_home
+}
+
 test_git_checkout_failure_preserves_existing_managed_tool() {
   local status
   setup_update_home
@@ -137,6 +179,8 @@ main() {
   printf 'PASS: test_checksum_failure_preserves_existing_managed_tool\n'
   test_download_move_failure_does_not_report_success
   printf 'PASS: test_download_move_failure_does_not_report_success\n'
+  test_write_version_failure_does_not_report_success
+  printf 'PASS: test_write_version_failure_does_not_report_success\n'
   test_git_checkout_failure_preserves_existing_managed_tool
   printf 'PASS: test_git_checkout_failure_preserves_existing_managed_tool\n'
 }
