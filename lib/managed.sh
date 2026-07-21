@@ -117,7 +117,13 @@ fi'
       ;;
     user-ghostty)
       MANAGED_BLOCK_LABEL='Selfishell ghostty'
-      MANAGED_BLOCK_BODY="config-file = $SELFISHELL_CONFIG_DIR/ghostty/config"
+      # config-file directives are processed in declaration order, but always
+      # after every other key in this file. Declaring the optional override
+      # second means user.ghostty (if present) is applied after, and so wins
+      # over, the Selfishell defaults included first.
+      MANAGED_BLOCK_BODY="config-file = $SELFISHELL_CONFIG_DIR/ghostty/config.ghostty
+# To override a Selfishell default above, add it to user.ghostty instead.
+config-file = ?user.ghostty"
       ;;
     *)
       cli_error "Unknown managed block resource: $resource"
@@ -256,11 +262,7 @@ managed_install_block() {
   reference="selfishell-${resource}-block-v1"
 
   if managed_read_state "$resource"; then
-    if [[ "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
-      cli_error "State conflict for managed block: $resource"
-      return "$SELFISHELL_EXIT_ERROR"
-    fi
-    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block ]]; then
+    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "Legacy Selfishell state was detected for: $resource"
       cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
       return "$SELFISHELL_EXIT_ERROR"

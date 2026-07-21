@@ -17,7 +17,7 @@ file	aliases-git	$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh	$SELFISHELL_ROOT/com
 file	aliases-kubectl	$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh	$SELFISHELL_ROOT/common/aliases-kubectl.zsh
 file	vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc	$SELFISHELL_ROOT/common/vimrc
 file	starship-config	$SELFISHELL_CONFIG_DIR/starship.toml	$SELFISHELL_ROOT/common/starship.toml
-file	ghostty-config	$SELFISHELL_CONFIG_DIR/ghostty/config	$SELFISHELL_ROOT/mac/config.ghostty
+file	ghostty-config	$SELFISHELL_CONFIG_DIR/ghostty/config.ghostty	$SELFISHELL_ROOT/mac/config.ghostty
 file	nvim-init	$SELFISHELL_CONFIG_DIR/nvim/init.lua	$SELFISHELL_ROOT/common/nvim/init.lua
 file	nvim-lua-config-options	$SELFISHELL_CONFIG_DIR/nvim/lua/config/options.lua	$SELFISHELL_ROOT/common/nvim/lua/config/options.lua
 file	nvim-lua-config-keymaps	$SELFISHELL_CONFIG_DIR/nvim/lua/config/keymaps.lua	$SELFISHELL_ROOT/common/nvim/lua/config/keymaps.lua
@@ -38,7 +38,7 @@ link	user-zshenv	$HOME/.zshenv	$SELFISHELL_CONFIG_DIR/zsh/zshenv
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
 link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
 link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvim
-block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config	-
+block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty	-
 EOF
 }
 

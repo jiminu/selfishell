@@ -146,19 +146,21 @@ test_developer_install_includes_neovim_configuration() {
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   mkdir -p "$XDG_CONFIG_HOME/ghostty"
-  printf 'font-size = 14\n' >"$XDG_CONFIG_HOME/ghostty/config"
+  printf 'font-size = 14\n' >"$XDG_CONFIG_HOME/ghostty/config.ghostty"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  [[ -f "$XDG_CONFIG_HOME/ghostty/config" && ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+  [[ -f "$XDG_CONFIG_HOME/ghostty/config.ghostty" && ! -L "$XDG_CONFIG_HOME/ghostty/config.ghostty" ]] ||
     fail "Ghostty config is not user-owned"
-  grep -Fqx '# >>> Selfishell ghostty >>>' "$XDG_CONFIG_HOME/ghostty/config" ||
+  grep -Fqx '# >>> Selfishell ghostty >>>' "$XDG_CONFIG_HOME/ghostty/config.ghostty" ||
     fail "Ghostty include start marker is missing"
-  grep -Fqx "config-file = $XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config" ||
-    fail "Ghostty include line is missing"
-  grep -Fqx 'font-size = 14' "$XDG_CONFIG_HOME/ghostty/config" ||
+  grep -Fqx "config-file = $XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" "$XDG_CONFIG_HOME/ghostty/config.ghostty" ||
+    fail "Ghostty managed include line is missing"
+  grep -Fqx 'config-file = ?user.ghostty' "$XDG_CONFIG_HOME/ghostty/config.ghostty" ||
+    fail "Ghostty optional override include line is missing"
+  grep -Fqx 'font-size = 14' "$XDG_CONFIG_HOME/ghostty/config.ghostty" ||
     fail "Original Ghostty configuration was not preserved"
-  cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config" ||
+  cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" ||
     fail "Ghostty configuration was not copied"
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
 }
@@ -172,7 +174,7 @@ test_legacy_ghostty_link_state_is_rejected_without_changes() {
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  rm "$target"
+  rm -f "$XDG_CONFIG_HOME/ghostty/config.ghostty"
   ln -s "$managed_source" "$target"
   printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
 
@@ -190,22 +192,23 @@ test_legacy_ghostty_link_state_is_rejected_without_changes() {
 
 test_legacy_ghostty_link_can_be_uninstalled_for_manual_transition() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local legacy_target="$XDG_CONFIG_HOME/ghostty/config"
   local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  rm "$target"
-  ln -s "$managed_source" "$target"
-  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
+  rm -f "$XDG_CONFIG_HOME/ghostty/config.ghostty"
+  ln -s "$managed_source" "$legacy_target"
+  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$legacy_target" "$managed_source" >"$state_file"
 
   run_selfishell uninstall --yes >/dev/null
   [[ ! -e "$state_file" ]] || fail "Legacy Ghostty link state was not removed"
-  [[ ! -e "$target" ]] || fail "Legacy Ghostty link was not removed"
+  [[ ! -e "$legacy_target" ]] || fail "Legacy Ghostty link was not removed"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
   [[ -f "$target" && ! -L "$target" ]] || fail "Reinstall did not create a user-owned Ghostty config"
   grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Reinstalled Ghostty config is missing the include block"
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Reinstalled Ghostty resource was not recorded as a block"
@@ -218,16 +221,16 @@ test_macos_install_reuses_declined_ghostty_choice() {
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config" ]] ||
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" ]] ||
     fail "A saved declined Ghostty choice was ignored"
-  [[ ! -e "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+  [[ ! -e "$XDG_CONFIG_HOME/ghostty/config.ghostty" ]] ||
     fail "A saved declined Ghostty choice created a user config file"
   assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
 test_user_ghostty_changes_survive_reinstall_and_uninstall_exactly() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
   local prefix="$TEST_ROOT/ghostty-prefix"
   local suffix="$TEST_ROOT/ghostty-suffix"
   local expected="$TEST_ROOT/expected-ghostty-config"
