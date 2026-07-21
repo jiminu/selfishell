@@ -214,6 +214,40 @@ test_legacy_ghostty_link_can_be_uninstalled_for_manual_transition() {
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Reinstalled Ghostty resource was not recorded as a block"
 }
 
+test_outdated_ghostty_block_content_is_treated_as_legacy_not_modified() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
+  local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
+  local old_body_checksum
+  local status
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  # Simulate a block installed by an older Selfishell release whose body was
+  # a single config-file line (no optional user.ghostty override yet), left
+  # completely untouched by the user since then -- content the resource's
+  # own release changed, not something the user modified.
+  printf '# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\n' \
+    "$managed_source" >"$target"
+  old_body_checksum="$(cksum <"$target" | awk '{print $1 ":" $2}')"
+  printf '2\nblock\nactive\n%s\nselfishell-user-ghostty-block-v1\n-\n%s\n' \
+    "$target" "$old_body_checksum" >"$state_file"
+
+  set +e
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "Outdated block content should require a clean reinstall, not silently overwrite"
+  grep -Fq "Legacy Selfishell state was detected" "$TEST_ROOT/stderr" ||
+    fail "Outdated (but untouched) block content was not treated as a legacy transition"
+  ! grep -Fq "Cannot manage the Selfishell" "$TEST_ROOT/stderr" ||
+    fail "Outdated (but untouched) block content was mistaken for user modification"
+
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ ! -e "$state_file" ]] || fail "uninstall --restore did not clear the outdated block's state"
+}
+
 test_macos_install_reuses_declined_ghostty_choice() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   mkdir -p "$XDG_STATE_HOME/selfishell"

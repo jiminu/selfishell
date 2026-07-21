@@ -147,12 +147,20 @@ managed_block_content() {
   printf '%s\n%s\n%s\n' "$(managed_block_begin "$MANAGED_BLOCK_LABEL")" "$MANAGED_BLOCK_BODY" "$(managed_block_end "$MANAGED_BLOCK_LABEL")"
 }
 
+# Sets MANAGED_BLOCK_STATUS to absent/malformed/intact based purely on marker
+# structure, and MANAGED_BLOCK_CHECKSUM to the live block bytes' checksum.
+# "intact" means the markers are well-formed -- it deliberately does NOT
+# compare against managed_block_content's current output, so a resource whose
+# body has legitimately changed across a Selfishell release (unlike the
+# hand-written checksum a user would produce by editing the block) is never
+# mistaken for user tampering. Callers that need to know whether the content
+# is up to date or was actually modified compare MANAGED_BLOCK_CHECKSUM
+# against their own reference checksum themselves.
 managed_inspect_block() {
   local resource="$1"
   local target_file="$2"
   local begin_marker end_marker metadata
   local begin_count end_count related_count start finish
-  local expected_checksum actual_checksum
 
   MANAGED_BLOCK_STATUS=absent
   MANAGED_BLOCK_START=0
@@ -192,14 +200,8 @@ managed_inspect_block() {
 
   MANAGED_BLOCK_START="$start"
   MANAGED_BLOCK_LENGTH=$((finish - start))
-  expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
-  actual_checksum="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_BLOCK_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
-  MANAGED_BLOCK_CHECKSUM="$actual_checksum"
-  if [[ "$actual_checksum" == "$expected_checksum" ]]; then
-    MANAGED_BLOCK_STATUS=intact
-  else
-    MANAGED_BLOCK_STATUS=modified
-  fi
+  MANAGED_BLOCK_CHECKSUM="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_BLOCK_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
+  MANAGED_BLOCK_STATUS=intact
 }
 
 managed_block_error() {
@@ -237,7 +239,7 @@ managed_preflight_zsh_loader() {
 
   managed_inspect_block user-zshrc "$target_file" || return
   case "$MANAGED_BLOCK_STATUS" in
-    malformed | modified)
+    malformed)
       managed_block_error user-zshrc "$target_file"
       return "$SELFISHELL_EXIT_ERROR"
       ;;
@@ -267,12 +269,22 @@ managed_install_block() {
       cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
       return "$SELFISHELL_EXIT_ERROR"
     fi
-    if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
+    if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$expected_checksum" ]]; then
       if [[ "$dry_run" == 0 ]]; then
         managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum"
       fi
       printf 'Unchanged Selfishell block: %s\n' "$target_file"
       return 0
+    fi
+    if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
+      # Untouched since it was installed, but Selfishell's own content for
+      # this resource changed since then (not user tampering) -- the block
+      # rewrite below only knows how to add a fresh block, not splice an
+      # updated one into an existing file, so ask for a clean reinstall
+      # rather than risk creating a duplicate block.
+      cli_error "Legacy Selfishell state was detected for: $resource"
+      cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
+      return "$SELFISHELL_EXIT_ERROR"
     fi
     if [[ "$MANAGED_STATE_STATUS" != pending || "$MANAGED_BLOCK_STATUS" != absent ]]; then
       managed_block_error "$resource" "$target_file"
