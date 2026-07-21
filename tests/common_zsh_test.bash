@@ -573,6 +573,94 @@ test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined() {
   teardown_test_home
 }
 
+test_update_notice_created_at_zero_falls_back_to_directory_mtime() {
+  local fake_bin cache_dir output label
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  for label in stale fresh; do
+    mkdir -p "$cache_dir/update-check.lock"
+    printf '0\n' >"$cache_dir/update-check.lock/created_at"
+    [[ "$label" == stale ]] && touch -t 202001010000 "$cache_dir/update-check.lock/created_at" "$cache_dir/update-check.lock"
+
+    output="$(
+      PATH="$fake_bin:/usr/bin:/bin" \
+        /bin/zsh -f -c '
+          source "$1"
+          _selfishell_update_notice_refresh "$2" 12345
+          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+    )"
+
+    if [[ "$label" == stale ]]; then
+      [[ "$output" == *'LOCK_CLEARED'* ]] ||
+        fail "created_at=0 backed by an old directory mtime was not reclaimed: $output"
+    else
+      [[ "$output" == *'LOCK_LEFT'* ]] ||
+        fail "created_at=0 backed by a fresh directory mtime was incorrectly reclaimed (0 must not mean instantly stale): $output"
+    fi
+    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
+  done
+  teardown_test_home
+}
+
+test_update_notice_refresh_cleans_up_temp_files_on_write_failure() {
+  local cache_dir output
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$cache_dir"
+  chmod 555 "$cache_dir"
+
+  output="$(
+    PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l | command tr -d " "
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir" 2>/dev/null
+  )"
+  chmod 755 "$cache_dir"
+
+  [[ "$(id -u)" == 0 ]] || [[ "$output" == 0 ]] ||
+    fail "A write failure left a temporary available-version/checked-at file behind: $output"
+  teardown_test_home
+}
+
+test_update_notice_refresh_cleans_up_temp_files_on_mv_failure() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$fake_bin/mv"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == 0 ]] ||
+    fail "A failed final mv left a temporary available-version/checked-at file behind: $output"
+  teardown_test_home
+}
+
 test_shell_tool_cache_generation_succeeds_atomically() {
   local cache_dir output
 
@@ -1024,6 +1112,12 @@ test_update_notice_refresh_removes_lock_even_when_version_lookup_fails
 printf 'PASS: test_update_notice_refresh_removes_lock_even_when_version_lookup_fails\n'
 test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined
 printf 'PASS: test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined\n'
+test_update_notice_created_at_zero_falls_back_to_directory_mtime
+printf 'PASS: test_update_notice_created_at_zero_falls_back_to_directory_mtime\n'
+test_update_notice_refresh_cleans_up_temp_files_on_write_failure
+printf 'PASS: test_update_notice_refresh_cleans_up_temp_files_on_write_failure\n'
+test_update_notice_refresh_cleans_up_temp_files_on_mv_failure
+printf 'PASS: test_update_notice_refresh_cleans_up_temp_files_on_mv_failure\n'
 test_shell_tool_cache_generation_succeeds_atomically
 printf 'PASS: test_shell_tool_cache_generation_succeeds_atomically\n'
 test_shell_tool_cache_generation_failures_preserve_existing_cache
