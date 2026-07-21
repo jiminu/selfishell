@@ -73,12 +73,13 @@ everyone.
 - [x] Add local/private configuration injection without secrets in this repository.
 - [x] Respect proxy variables and restricted-network environments.
 
-Proposed profile boundaries:
+Current profile boundaries:
 
-- `minimal`: Zsh, Git, Starship, Zinit, fzf, zoxide, ripgrep, eza, bat, Vim, core
-  configuration, and macOS terminal fonts.
-- `developer`: minimal plus jq and build tools, with Node.js, Python, Temurin,
-  kubectl, and kubectx managed by mise.
+- `minimal`: Zsh, Git, Curl, Starship, Zinit, Vim, core configuration, and
+  macOS terminal fonts.
+- `developer`: minimal plus fzf, zoxide, ripgrep, eza, bat, jq, and build
+  tools, with Neovim, Tree-sitter CLI, Node.js, Python, and uv managed by
+  mise.
 - Ghostty is a separate macOS installation choice rather than a profile tier.
 
 Acceptance criteria:
