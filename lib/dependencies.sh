@@ -81,11 +81,17 @@ dependency_install_download() {
     return 1
   fi
 
-  mkdir -p "$(dirname "$DEPENDENCY_TARGET")"
+  mkdir -p "$(dirname "$DEPENDENCY_TARGET")" || {
+    rm -rf "$temporary_dir"
+    return 1
+  }
   if [[ "$DEPENDENCY_MARKER" == raw ]]; then
     extracted="$archive"
   else
-    tar -xzf "$archive" -C "$temporary_dir"
+    tar -xzf "$archive" -C "$temporary_dir" || {
+      rm -rf "$temporary_dir"
+      return 1
+    }
     extracted="$temporary_dir/$DEPENDENCY_MARKER"
   fi
   [[ -f "$extracted" ]] || {
@@ -93,30 +99,63 @@ dependency_install_download() {
     rm -rf "$temporary_dir"
     return 1
   }
-  chmod 0755 "$extracted"
-  mv "$extracted" "$DEPENDENCY_TARGET"
+  chmod 0755 "$extracted" || {
+    rm -rf "$temporary_dir"
+    return 1
+  }
+  # Guarded explicitly: dependency_install_download runs with errexit
+  # disabled (it's called as `dependency_install_download || return`), so an
+  # unguarded mv failure here would fall through to `rm -rf`, silently
+  # deleting the freshly extracted binary and reporting success.
+  if ! mv "$extracted" "$DEPENDENCY_TARGET"; then
+    rm -rf "$temporary_dir"
+    return 1
+  fi
   rm -rf "$temporary_dir"
 }
 
 dependency_install_git() {
   local temporary_target="${DEPENDENCY_TARGET}.tmp.$$"
+  local previous_target="${DEPENDENCY_TARGET}.previous.$$"
   [[ ! -e "$temporary_target" ]] || {
     cli_error "Temporary dependency path already exists: $temporary_target"
     return 1
   }
-  git clone --quiet "$DEPENDENCY_SOURCE" "$temporary_target"
-  git -C "$temporary_target" checkout --quiet --detach "$DEPENDENCY_VERSION"
+  git clone --quiet "$DEPENDENCY_SOURCE" "$temporary_target" || {
+    rm -rf "$temporary_target"
+    return 1
+  }
+  git -C "$temporary_target" checkout --quiet --detach "$DEPENDENCY_VERSION" || {
+    rm -rf "$temporary_target"
+    return 1
+  }
   [[ -e "$temporary_target/$DEPENDENCY_MARKER" ]] || {
     cli_error "Expected marker missing from $DEPENDENCY_NAME checkout."
     rm -rf "$temporary_target"
     return 1
   }
+
+  # Guarded explicitly: dependency_install_git runs with errexit disabled
+  # (it's called as `dependency_install_git || return`), so an unguarded mv
+  # failure here would previously fall through and delete the working
+  # previous install via the final `rm -rf`. Restore it instead of losing it.
   if [[ -e "$DEPENDENCY_TARGET" ]]; then
-    mv "$DEPENDENCY_TARGET" "${DEPENDENCY_TARGET}.previous.$$"
+    mv "$DEPENDENCY_TARGET" "$previous_target" || {
+      rm -rf "$temporary_target"
+      return 1
+    }
   fi
-  mkdir -p "$(dirname "$DEPENDENCY_TARGET")"
-  mv "$temporary_target" "$DEPENDENCY_TARGET"
-  rm -rf "${DEPENDENCY_TARGET}.previous.$$"
+  if ! mkdir -p "$(dirname "$DEPENDENCY_TARGET")"; then
+    [[ ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
+    rm -rf "$temporary_target"
+    return 1
+  fi
+  if ! mv "$temporary_target" "$DEPENDENCY_TARGET"; then
+    [[ ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
+    rm -rf "$temporary_target"
+    return 1
+  fi
+  rm -rf "$previous_target"
 }
 
 dependency_install() {

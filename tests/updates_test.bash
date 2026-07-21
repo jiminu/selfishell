@@ -74,6 +74,60 @@ test_checksum_failure_preserves_existing_managed_tool() {
   teardown_update_home
 }
 
+test_download_move_failure_does_not_report_success() {
+  local status
+  setup_update_home
+  mkdir -p "$HOME/.local/bin"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$TEST_ROOT/tool"
+  local checksum
+  checksum="$(fixture_sha256 "$TEST_ROOT/tool")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$TEST_ROOT/tool" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  chmod 0555 "$HOME/.local/bin"
+
+  set +e
+  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR" >/dev/null 2>&1
+  status=$?
+  set -e
+  chmod 0755 "$HOME/.local/bin"
+
+  [[ "$status" -ne 0 ]] || fail "A failed move must not report success"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/dependencies/tool" ]] || fail "A failed move must not be recorded as installed"
+  [[ ! -e "$HOME/.local/bin/tool" ]] || fail "A failed move must not leave a partial target"
+  teardown_update_home
+}
+
+test_git_checkout_failure_preserves_existing_managed_tool() {
+  local status
+  setup_update_home
+  local repo="$TEST_ROOT/repo"
+  mkdir -p "$repo"
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name test
+  printf 'marker\n' >"$repo/marker"
+  git -C "$repo" add marker
+  git -C "$repo" commit --quiet -m initial
+  git -C "$repo" tag v1.0
+
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'git testgit v1.0 linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
+  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install testgit linux amd64' _ "$ROOT_DIR" >/dev/null
+  assert_file_content 'v1.0' "$XDG_STATE_HOME/selfishell/dependencies/testgit"
+  assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
+
+  printf 'git testgit v9.9-missing-tag linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
+  set +e
+  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install testgit linux amd64' _ "$ROOT_DIR" >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "An unresolvable checkout ref must not report success"
+  assert_file_content 'v1.0' "$XDG_STATE_HOME/selfishell/dependencies/testgit"
+  assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
+  teardown_update_home
+}
+
 main() {
   test_tools_update_synchronizes_profile_packages
   printf 'PASS: test_tools_update_synchronizes_profile_packages\n'
@@ -81,6 +135,10 @@ main() {
   printf 'PASS: test_download_dependency_is_checksum_verified_and_recorded\n'
   test_checksum_failure_preserves_existing_managed_tool
   printf 'PASS: test_checksum_failure_preserves_existing_managed_tool\n'
+  test_download_move_failure_does_not_report_success
+  printf 'PASS: test_download_move_failure_does_not_report_success\n'
+  test_git_checkout_failure_preserves_existing_managed_tool
+  printf 'PASS: test_git_checkout_failure_preserves_existing_managed_tool\n'
 }
 
 main "$@"
