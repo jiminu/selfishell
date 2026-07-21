@@ -17,7 +17,7 @@ _selfishell_update_lock_stale_since() {
   zmodload zsh/stat 2>/dev/null
   [[ -r "$lock_dir/created_at" ]] && created_at="$(<"$lock_dir/created_at")"
   case "$created_at" in
-    "" | *[!0-9]*)
+    "" | *[!0-9]* | 0)
       zstat -H lock_stat +mtime -- "$lock_dir" 2>/dev/null || return 1
       created_at="$lock_stat[mtime]"
       ;;
@@ -75,13 +75,19 @@ _selfishell_update_notice_refresh() {
     if available="$(command selfishell version --available 2>/dev/null)" &&
        [[ -n "$available" ]]; then
       temporary="$available_file.tmp.$$.$RANDOM"
-      print -r -- "$available" >| "$temporary" &&
-        command mv -f "$temporary" "$available_file"
+      if print -r -- "$available" >| "$temporary"; then
+        command mv -f "$temporary" "$available_file" || command rm -f "$temporary"
+      else
+        command rm -f "$temporary"
+      fi
     fi
 
     temporary="$checked_file.tmp.$$.$RANDOM"
-    print -r -- "$checked_at" >| "$temporary" &&
-      command mv -f "$temporary" "$checked_file"
+    if print -r -- "$checked_at" >| "$temporary"; then
+      command mv -f "$temporary" "$checked_file" || command rm -f "$temporary"
+    else
+      command rm -f "$temporary"
+    fi
   } always {
     # Guaranteed to run even if the block above returns early or errors, so
     # a normal failure (e.g. no network) can't leak the lock the same way a
