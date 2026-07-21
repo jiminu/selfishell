@@ -23,6 +23,62 @@ test_version_reads_version_file() {
   [[ "$output" == "selfishell $expected" ]] || fail "Unexpected version output: $output"
 }
 
+test_check_script_discovers_all_shell_files() {
+  local file
+  local fixture="lib/.check_discovery_fixture_$$.sh"
+  local bash_files=()
+  local zsh_files=()
+
+  # Mirrors scripts/check.sh's own discovery snippet so this test fails if
+  # that discovery mechanism regresses back to a hand-maintained list that
+  # can silently omit files (as it once did for lib/resources.sh,
+  # lib/profile_scan.sh, and common/aliases-editor.zsh).
+  while IFS= read -r file; do
+    bash_files+=("$file")
+  done < <(
+    cd "$ROOT_DIR" && {
+      printf '%s\n' bin/selfishell install.sh
+      find lib scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
+    } | sort -u
+  )
+  while IFS= read -r file; do
+    zsh_files+=("$file")
+  done < <(
+    cd "$ROOT_DIR" && {
+      printf '%s\n' mac/.zshrc ubuntu/.zshrc
+      find common -type f -name '*.zsh'
+    } | sort -u
+  )
+
+  for file in lib/resources.sh lib/profile_scan.sh; do
+    printf '%s\n' "${bash_files[@]}" | grep -Fqx "$file" ||
+      fail "check.sh discovery did not include: $file"
+  done
+  printf '%s\n' "${zsh_files[@]}" | grep -Fqx common/aliases-editor.zsh ||
+    fail "check.sh discovery did not include: common/aliases-editor.zsh"
+
+  local fixture_path="$ROOT_DIR/$fixture"
+  # shellcheck disable=SC2064 # intentionally expanded now, as a safety net
+  # in case fail() below exits before the explicit cleanup at the end.
+  trap "rm -f '$fixture_path'" EXIT
+  printf '#!/usr/bin/env bash\ntrue\n' >"$fixture_path"
+
+  bash_files=()
+  while IFS= read -r file; do
+    bash_files+=("$file")
+  done < <(
+    cd "$ROOT_DIR" && {
+      printf '%s\n' bin/selfishell install.sh
+      find lib scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
+    } | sort -u
+  )
+  printf '%s\n' "${bash_files[@]}" | grep -Fqx "$fixture" ||
+    fail "check.sh discovery did not pick up a newly added lib/*.sh file"
+
+  rm -f "$fixture_path"
+  trap - EXIT
+}
+
 test_help_and_local_version_skip_full_cli_loading() {
   local help_trace
   local version_trace

@@ -5,6 +5,11 @@ status_resource() {
   local current_checksum
 
   if ! managed_read_state "$resource"; then
+    if managed_state_exists "$resource"; then
+      printf '[MALFORMED] %s\n' "$(managed_state_path "$resource")"
+      SELFISHELL_STATUS_RESOURCE_COUNT=$((SELFISHELL_STATUS_RESOURCE_COUNT + 1))
+      SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
+    fi
     return 0
   fi
 

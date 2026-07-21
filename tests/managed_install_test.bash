@@ -532,6 +532,89 @@ test_legacy_zshrc_state_is_rejected_without_changes() {
   [[ "$(sed -n '1p' "$state_file")" == 1 ]] || fail "Legacy state was changed"
 }
 
+test_malformed_managed_file_state_variants_are_rejected_without_changes() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local before_content
+  local label
+  local status
+
+  before_content="$(<"$target")"
+
+  for label in truncated-1-line truncated-6-lines empty-type unknown-type \
+    unknown-status empty-target unsupported-version no-final-newline; do
+    case "$label" in
+      truncated-1-line) printf '2\n' >"$state_file" ;;
+      truncated-6-lines) printf '2\nfile\nactive\n%s\nref\nbackup\n' "$target" >"$state_file" ;;
+      empty-type) printf '2\n\nactive\n%s\nref\nbackup\nchecksum\n' "$target" >"$state_file" ;;
+      unknown-type) printf '2\nbogus\nactive\n%s\nref\nbackup\nchecksum\n' "$target" >"$state_file" ;;
+      unknown-status) printf '2\nfile\nbogus\n%s\nref\nbackup\nchecksum\n' "$target" >"$state_file" ;;
+      empty-target) printf '2\nfile\nactive\n\nref\nbackup\nchecksum\n' >"$state_file" ;;
+      unsupported-version) printf '3\nfile\nactive\n%s\nref\nbackup\nchecksum\n' "$target" >"$state_file" ;;
+      no-final-newline) printf '2\nfile\nactive\n%s\nref\nbackup\nchecksum' "$target" >"$state_file" ;;
+    esac
+
+    set +e
+    run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+
+    [[ "$status" -ne 0 ]] || fail "Malformed state ($label) should stop install"
+    [[ "$(<"$target")" == "$before_content" ]] ||
+      fail "Malformed state ($label) changed the existing target bytes"
+    [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
+      fail "Malformed state ($label) created a backup"
+    grep -Fq 'vimrc.state' "$TEST_ROOT/stderr" ||
+      fail "Malformed state ($label) error did not mention the state path"
+  done
+}
+
+test_malformed_state_blocks_uninstall_without_removing_managed_block() {
+  run_selfishell install --skip-packages --yes >/dev/null
+
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local target="$HOME/.zshrc"
+  local before_content
+  local status
+
+  before_content="$(<"$target")"
+  printf '2\n' >"$state_file"
+
+  set +e
+  run_selfishell uninstall --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Malformed state should stop uninstall"
+  [[ "$(<"$target")" == "$before_content" ]] ||
+    fail "Malformed state changed the target during a blocked uninstall"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$target" ||
+    fail "Malformed state let uninstall silently skip removing the managed block"
+  grep -Fq 'user-zshrc.state' "$TEST_ROOT/stderr" ||
+    fail "Malformed state uninstall error did not mention the state path"
+}
+
+test_malformed_state_reported_by_status() {
+  run_selfishell install --skip-packages --yes >/dev/null
+
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local output
+  local status=0
+
+  printf '2\n' >"$state_file"
+
+  set +e
+  output="$(run_selfishell status)"
+  status=$?
+  set -e
+
+  ((status != 0)) || fail "status should fail when a resource state is malformed"
+  [[ "$output" == *'[MALFORMED]'*'vimrc.state'* ]] ||
+    fail "status did not report the malformed resource state: $output"
+}
+
 test_legacy_zshrc_can_be_uninstalled_for_manual_transition() {
   local backup="$HOME/.zshrc.backup.legacy"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
@@ -1340,6 +1423,69 @@ test_ghostty_preflight_stops_before_other_resources_install() {
     fail "Ghostty preflight ran after other managed resource state was already created"
   ! grep -Fq 'Skipping package installation' "$TEST_ROOT/stdout" ||
     fail "Ghostty preflight did not run before the package-installation stage"
+}
+
+test_update_ghostty_preflight_stops_before_other_resources_change() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
+  local dotfiles_source="$TEST_ROOT/dotfiles/config.ghostty"
+  local cache_marker="$XDG_CACHE_HOME/selfishell/zoxide-init.zsh"
+  local before_zshrc
+  local before_vimrc_state
+  local status
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  mkdir -p "$(dirname "$dotfiles_source")"
+  printf 'font-size = 14\n' >"$dotfiles_source"
+  rm -f "$target"
+  ln -s "$dotfiles_source" "$target"
+  mkdir -p "$(dirname "$cache_marker")"
+  printf 'stale\n' >"$cache_marker"
+  before_zshrc="$(<"$HOME/.zshrc")"
+  before_vimrc_state="$(<"$XDG_STATE_HOME/selfishell/resources/vimrc.state")"
+
+  set +e
+  run_selfishell update --tools-only --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Ghostty preflight should stop update"
+  assert_symlink_to "$dotfiles_source" "$target"
+  [[ "$(<"$HOME/.zshrc")" == "$before_zshrc" ]] ||
+    fail "Ghostty preflight failure changed the Zsh loader block"
+  [[ "$(<"$XDG_STATE_HOME/selfishell/resources/vimrc.state")" == "$before_vimrc_state" ]] ||
+    fail "Ghostty preflight failure changed an unrelated managed file's state"
+  [[ -f "$cache_marker" ]] ||
+    fail "Ghostty preflight failure ran shell-tool cache cleanup"
+  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+    fail "Ghostty preflight failure printed a success message"
+}
+
+test_update_ghostty_preflight_rejects_directory_before_other_resources_change() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
+  local before_zshrc
+  local status
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  rm -f "$target"
+  mkdir -p "$target/keep"
+  before_zshrc="$(<"$HOME/.zshrc")"
+
+  set +e
+  run_selfishell update --tools-only --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Ghostty directory preflight should stop update"
+  [[ -d "$target" && ! -L "$target" ]] || fail "Rejected Ghostty config directory was changed"
+  [[ -d "$target/keep" ]] || fail "Contents under the rejected Ghostty config directory were lost"
+  [[ "$(<"$HOME/.zshrc")" == "$before_zshrc" ]] ||
+    fail "Ghostty directory preflight failure changed the Zsh loader block"
+  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+    fail "Ghostty directory preflight failure printed a success message"
 }
 
 test_readme_ghostty_file_descriptions_do_not_contradict_ownership() {

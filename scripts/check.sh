@@ -5,68 +5,27 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-bash_files=(
-  bin/selfishell
-  install.sh
-  lib/common.sh
-  lib/managed.sh
-  lib/installers.sh
-  lib/packages.sh
-  lib/paths.sh
-  lib/platform.sh
-  lib/profiles.sh
-  lib/dependencies.sh
-  lib/tool_status.sh
-  lib/releases.sh
-  lib/package_managers/apt.sh
-  lib/package_managers/homebrew.sh
-  lib/commands/doctor.sh
-  lib/commands/help.sh
-  lib/commands/install.sh
-  lib/commands/status.sh
-  lib/commands/uninstall.sh
-  lib/commands/version.sh
-  lib/commands/update.sh
-  lib/commands/rollback.sh
-  scripts/check.sh
-  scripts/benchmark.sh
-  scripts/build-release.sh
-  scripts/release-check.sh
-  scripts/next-patch-version.sh
-  scripts/update-dependencies.sh
-  scripts/neovim-e2e.sh
-  scripts/ubuntu-container-e2e.sh
-  scripts/workflow-failure-issue.sh
-  tests/cli_test.bash
-  tests/common_zsh_test.bash
-  tests/neovim_config_test.bash
-  tests/managed_install_test.bash
-  tests/installers_test.bash
-  tests/package_adapters_test.bash
-  tests/platform_test.bash
-  tests/profiles_test.bash
-  tests/proxy_test.bash
-  tests/tool_status_test.bash
-  tests/workflow_notifications_test.bash
-  tests/release_bootstrap_test.bash
-  tests/run.bash
-  tests/test_helper.bash
-  tests/updates_test.bash
-  tests/dependency_updates_test.bash
-  tests/lifecycle_e2e_test.bash
+# Discovered rather than hand-listed so a new lib/scripts/tests file is
+# checked automatically; mapfile is intentionally avoided since it's not
+# available on Bash 3.2 (macOS's default /bin/bash).
+bash_files=()
+while IFS= read -r file; do
+  bash_files+=("$file")
+done < <(
+  {
+    printf '%s\n' bin/selfishell install.sh
+    find lib scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
+  } | sort -u
 )
 
-zsh_files=(
-  mac/.zshrc
-  ubuntu/.zshrc
-  common/common.zsh
-  common/runtime.zsh
-  common/completion.zsh
-  common/interactive.zsh
-  common/update-notice.zsh
-  common/aliases-common.zsh
-  common/aliases-git.zsh
-  common/aliases-kubectl.zsh
+zsh_files=()
+while IFS= read -r file; do
+  zsh_files+=("$file")
+done < <(
+  {
+    printf '%s\n' mac/.zshrc ubuntu/.zshrc
+    find common -type f -name '*.zsh'
+  } | sort -u
 )
 
 printf 'Checking Bash syntax\n'
