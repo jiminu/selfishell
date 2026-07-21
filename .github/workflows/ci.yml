@@ -60,6 +60,36 @@ jobs:
           name: shell-performance-${{ runner.os }}
           path: ${{ runner.temp }}/selfishell-benchmark.tsv
 
+  shell-full-profile-benchmark:
+    name: Measure full-profile shell performance (warn-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install shell tooling and profile integrations
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh fzf zoxide
+
+      - name: Measure full-profile shell performance
+        env:
+          # Same advisory policy as the base benchmark above: this mode
+          # additionally provisions the pinned mise/starship/zinit (with
+          # its pinned plugins) so the numbers reflect a real developer
+          # startup, not just what happens to be on the runner's PATH.
+          SELFISHELL_BENCHMARK_ENFORCE: 0
+          SELFISHELL_BENCHMARK_RESULTS_FILE: ${{ runner.temp }}/selfishell-benchmark-full.tsv
+        run: bash scripts/benchmark.sh --mode full
+
+      - name: Upload full-profile performance result
+        uses: actions/upload-artifact@v7
+        with:
+          name: shell-performance-full-profile
+          path: ${{ runner.temp }}/selfishell-benchmark-full.tsv
+
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E
     runs-on: ubuntu-latest

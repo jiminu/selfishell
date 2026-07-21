@@ -5,10 +5,65 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ITERATIONS="${SELFISHELL_BENCHMARK_ITERATIONS:-30}"
 ENFORCE_BUDGETS="${SELFISHELL_BENCHMARK_ENFORCE:-0}"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
-TEST_HOME="$TEST_ROOT/home"
+PROFILE_MODE="${SELFISHELL_BENCHMARK_PROFILE:-base}"
 RESULTS_FILE="${SELFISHELL_BENCHMARK_RESULTS_FILE:-}"
 
+usage() {
+  cat <<'EOF'
+Usage: scripts/benchmark.sh [--mode base|full]
+
+  base  Selfishell's own startup cost, independent of external integrations
+        (mise/starship/zinit/fzf/zoxide measured only if already on PATH).
+        This is the default and what CI runs on every push/PR.
+
+  full  Installs the pinned mise, starship, and zinit (with its pinned
+        plugins) into an isolated HOME before measuring, so the
+        interactive-cached metric reflects a real developer-profile
+        startup. fzf and zoxide are measured if already on PATH (install
+        them via the platform package manager before running this mode);
+        this script does not invoke a package manager itself.
+
+SELFISHELL_BENCHMARK_PROFILE=base|full is equivalent to --mode.
+EOF
+}
+
+while (("$#" > 0)); do
+  case "$1" in
+    --mode)
+      shift
+      if (($# == 0)); then
+        printf '%s\n' '--mode requires base or full' >&2
+        usage >&2
+        exit 2
+      fi
+      PROFILE_MODE="$1"
+      ;;
+    --help | -h)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+case "$PROFILE_MODE" in
+  base | full) ;;
+  *)
+    printf -- '--mode/SELFISHELL_BENCHMARK_PROFILE must be "base" or "full" (got: %s)\n' "$PROFILE_MODE" >&2
+    exit 2
+    ;;
+esac
+
+# Argument parsing and mode validation happen above, before this creates
+# anything on disk, so --help/a bad --mode/an unknown option can never
+# leave a benchmark temp directory behind.
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
+TEST_HOME="$TEST_ROOT/home"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/selfishell/zsh"
 
@@ -27,6 +82,51 @@ ln -s "$ROOT_DIR/common/aliases-git.zsh" "$TEST_HOME/.config/selfishell/zsh/alia
 ln -s "$ROOT_DIR/common/aliases-kubectl.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-kubectl.zsh"
 ln -s "$PLATFORM_CONFIG" "$TEST_HOME/.zshrc"
 date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
+
+# Installs the pinned mise/starship/zinit into the isolated $TEST_HOME so
+# "full" mode measures a real developer-profile startup, not just whatever
+# happens to already be on the runner's PATH. Reuses dependency_install
+# (the same code the real installer uses) rather than reimplementing
+# download/checkout logic here. fzf and zoxide are intentionally left to
+# the platform package manager -- installing packages is out of scope for
+# this script -- so provision them separately before running --mode full.
+install_full_profile_integrations() {
+  local platform dependency_platform architecture
+  local name status=0
+
+  platform="$(
+    source "$ROOT_DIR/lib/common.sh"
+    source "$ROOT_DIR/lib/platform.sh"
+    detect_platform
+  )"
+  case "$platform" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$platform" ;; esac
+  architecture="$(
+    source "$ROOT_DIR/lib/common.sh"
+    source "$ROOT_DIR/lib/platform.sh"
+    detect_architecture
+  )"
+
+  for name in mise starship zinit; do
+    HOME="$TEST_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+      SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c '
+        source "$1/lib/common.sh"
+        source "$1/lib/paths.sh"
+        source "$1/lib/dependencies.sh"
+        dependency_install "$2" "$3" "$4"
+      ' _ "$ROOT_DIR" "$name" "$dependency_platform" "$architecture" || status=1
+  done
+
+  ((status == 0)) || {
+    printf 'Failed to provision one or more full-profile integrations (mise/starship/zinit)\n' >&2
+    exit 1
+  }
+}
+
+if [[ "$PROFILE_MODE" == full ]]; then
+  install_full_profile_integrations
+  PATH="$TEST_HOME/.local/bin:$PATH"
+fi
 
 validate_iterations() {
   case "$ITERATIONS" in
@@ -88,12 +188,15 @@ record_result() {
 
   printf '%s\n' "$result"
   if [[ -n "$RESULTS_FILE" ]]; then
-    printf '%s\t%s\t%s\n' "$(uname -s)" "$(uname -m)" "$result" >>"$RESULTS_FILE"
+    printf '%s\t%s\t%s\t%s\n' "$(uname -s)" "$(uname -m)" "$PROFILE_MODE" "$result" >>"$RESULTS_FILE"
   fi
 }
 
 run_common_zsh() {
-  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" PATH=/usr/bin:/bin \
+  # $TEST_HOME/.local/bin is only populated (and only matters) in --mode
+  # full, where it holds the pinned mise/starship provisioned above;
+  # prepending it is a no-op in base mode.
+  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" \
     /bin/zsh -f -c 'source "$1"' \
     zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
 }
@@ -106,26 +209,31 @@ run_interactive_zsh() {
 
 describe_integrations() {
   local integration status
+  local summary="Interactive integrations:"
 
-  printf 'Interactive integrations:'
   for integration in starship fzf zoxide; do
-    if command -v "$integration" >/dev/null 2>&1; then
+    if PATH="$TEST_HOME/.local/bin:$PATH" command -v "$integration" >/dev/null 2>&1; then
       status=enabled
     else
       status=absent
     fi
-    printf ' %s=%s' "$integration" "$status"
+    summary="$summary $integration=$status"
   done
   if [[ -s "$TEST_HOME/.local/share/zinit/zinit.git/zinit.zsh" ]]; then
     status=enabled
   else
     status=absent
   fi
-  printf ' zinit=%s\n' "$status"
+  summary="$summary zinit=$status"
+
+  printf '%s\n' "$summary"
+  if [[ -n "$RESULTS_FILE" ]]; then
+    printf '%s\t%s\t%s\t# %s\n' "$(uname -s)" "$(uname -m)" "$PROFILE_MODE" "$summary" >>"$RESULTS_FILE"
+  fi
 }
 
 validate_iterations
-printf 'Selfishell benchmark (%s iterations, milliseconds per run)\n' "$ITERATIONS"
+printf 'Selfishell benchmark (mode=%s, %s iterations, milliseconds per run)\n' "$PROFILE_MODE" "$ITERATIONS"
 printf 'metric\tmean\tp50\tp95\tmax\n'
 describe_integrations
 

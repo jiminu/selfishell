@@ -33,13 +33,16 @@ if command -v fzf >/dev/null 2>&1; then
 fi
 
 if (($+functions[zinit])); then
+  # Pinned to the commits recorded in dependencies.conf; keep the two in
+  # sync (see tests/common_zsh_test.bash).
   # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
   if command -v fzf >/dev/null 2>&1; then
+    zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
     zinit light Aloxaf/fzf-tab
   fi
-  zinit ice wait'0' lucid
+  zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
   zinit light zsh-users/zsh-autosuggestions
-  zinit ice wait'0' lucid
+  zinit ice wait'0' lucid ver'3d574ccf48804b10dca52625df13da5edae7f553'
   zinit light zdharma-continuum/fast-syntax-highlighting
 fi
 

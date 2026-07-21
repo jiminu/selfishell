@@ -4,7 +4,9 @@ ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 
 if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
-  zinit ice blockf atpull'zinit creinstall -q .'
+  # Pinned to the commit recorded for zsh-users/zsh-completions in
+  # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
+  zinit ice blockf atpull'zinit creinstall -q .' ver'9903bae60284072de3fa0e3e20965f22368c5694'
   zinit light zsh-users/zsh-completions
 fi
 
