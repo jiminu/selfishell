@@ -42,15 +42,8 @@ managed_write_state() {
   state_file="$(managed_state_path "$resource")"
   temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
-  if ! {
-    printf '2\n'
-    printf '%s\n' "$type"
-    printf '%s\n' "$status"
-    printf '%s\n' "$target"
-    printf '%s\n' "$reference"
-    printf '%s\n' "$backup"
-    printf '%s\n' "$checksum"
-  } >"$temporary_file"; then
+  if ! printf '2\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$type" "$status" "$target" "$reference" "$backup" "$checksum" >"$temporary_file"; then
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
@@ -355,9 +348,15 @@ managed_install_block() {
       rm -f "$temporary_file"
       return "$SELFISHELL_EXIT_ERROR"
     }
-    : >"$temporary_file"
+    : >"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   else
-    chmod 0644 "$temporary_file"
+    chmod 0644 "$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
   managed_block_content "$resource" >"$temporary_file" || {
     rm -f "$temporary_file"
@@ -393,7 +392,10 @@ managed_remove_block() {
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   }
-  : >"$temporary_file"
+  : >"$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
   if ((MANAGED_BLOCK_START > 0)); then
     dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || {
       rm -f "$temporary_file"
