@@ -41,8 +41,12 @@ jobs:
       - name: Run checks
         run: bash scripts/check.sh
 
-      - name: Measure interactive shell performance
+      - name: Measure shell performance and warn on regressions
         env:
+          # Budgets are advisory: hosted-runner noise makes them unreliable
+          # as a hard gate, so a budget miss is reported as a CI warning
+          # annotation rather than failing the job. Set to 1 to enforce.
+          SELFISHELL_BENCHMARK_ENFORCE: 0
           SELFISHELL_BENCHMARK_COMMON_P95_MAX_MS: 50
           SELFISHELL_BENCHMARK_HELP_P95_MAX_MS: 50
           SELFISHELL_BENCHMARK_INTERACTIVE_P95_MAX_MS: ${{ matrix.interactive_p95_budget_ms }}
