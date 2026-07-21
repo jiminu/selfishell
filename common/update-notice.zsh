@@ -1,3 +1,31 @@
+# Prints the timestamp a lock has been stale since -- its recorded
+# created_at if that's a valid positive integer, otherwise the lock
+# directory's own mtime via zsh/stat (covers a lock left by an older
+# Selfishell version, one whose writer died right after mkdir before it
+# could write metadata, or corrupt metadata) -- or fails if the lock isn't
+# stale, or its age can't be determined at all, in which case the caller
+# must leave the lock alone rather than guess. zsh/stat is used instead of
+# the external `stat` command because its flags differ between Linux and
+# macOS/BSD.
+_selfishell_update_lock_stale_since() {
+  local lock_dir="$1"
+  local lock_ttl="$2"
+  local now="$3"
+  local created_at=""
+  local -A lock_stat
+
+  zmodload zsh/stat 2>/dev/null
+  [[ -r "$lock_dir/created_at" ]] && created_at="$(<"$lock_dir/created_at")"
+  case "$created_at" in
+    "" | *[!0-9]*)
+      zstat -H lock_stat +mtime -- "$lock_dir" 2>/dev/null || return 1
+      created_at="$lock_stat[mtime]"
+      ;;
+  esac
+  (( now - created_at >= lock_ttl )) || return 1
+  printf '%s\n' "$created_at"
+}
+
 # Read cached release metadata during startup and refresh it in the background.
 _selfishell_update_notice_refresh() {
   local cache_dir="$1"
@@ -8,8 +36,12 @@ _selfishell_update_notice_refresh() {
   local checked_file="$cache_dir/update-checked-at"
   local temporary
   local available
-  local lock_created_at=0
+  local lock_created_at
   local now
+
+  case "$lock_ttl" in
+    "" | *[!0-9]* | 0) lock_ttl=600 ;;
+  esac
 
   command mkdir -p "$cache_dir" 2>/dev/null || return
 
@@ -17,16 +49,20 @@ _selfishell_update_notice_refresh() {
     # A prior refresh may have been killed (e.g. the terminal was closed)
     # before it could remove its own lock, which would otherwise wedge every
     # future check silently forever. If the lock is older than the TTL,
-    # treat it as abandoned and take over; a second concurrent recovery
-    # racing this one just means two redundant checks, not corruption, since
-    # available-version/update-checked-at are still written atomically below.
+    # treat it as abandoned and take over.
     zmodload zsh/datetime 2>/dev/null
     now="${EPOCHSECONDS:-$(command date +%s)}"
-    [[ -r "$lock_dir/created_at" ]] && lock_created_at="$(<"$lock_dir/created_at")"
-    case "$lock_created_at" in
-      "" | *[!0-9]*) lock_created_at=0 ;;
-    esac
-    (( lock_created_at > 0 && now - lock_created_at >= lock_ttl )) || return
+
+    lock_created_at="$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" || return
+    # Re-check immediately before reclaiming: if the lock's staleness
+    # signature changed since the check above, a concurrent refresh has
+    # already renewed it, so leave it alone instead of tearing down a lock
+    # that's no longer stale. This narrows, without fully closing, the race
+    # between two processes that both saw the same lock as abandoned; a
+    # second concurrent recovery that still slips through just means two
+    # redundant checks, not corruption, since available-version/
+    # update-checked-at are still written atomically below.
+    [[ "$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" == "$lock_created_at" ]] || return
     command rm -rf "$lock_dir" 2>/dev/null
     command mkdir "$lock_dir" 2>/dev/null || return
   fi
