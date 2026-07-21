@@ -61,10 +61,17 @@ dependency_write_version() {
   local version="$2"
   local state_dir="$SELFISHELL_STATE_DIR/dependencies"
   local temporary_file
-  mkdir -p "$state_dir"
-  temporary_file="$(mktemp "$state_dir/${name}.tmp.XXXXXX")"
-  printf '%s\n' "$version" >"$temporary_file"
-  mv "$temporary_file" "$state_dir/$name"
+
+  mkdir -p "$state_dir" || return 1
+  temporary_file="$(mktemp "$state_dir/${name}.tmp.XXXXXX")" || return 1
+  printf '%s\n' "$version" >"$temporary_file" || {
+    rm -f "$temporary_file"
+    return 1
+  }
+  mv "$temporary_file" "$state_dir/$name" || {
+    rm -f "$temporary_file"
+    return 1
+  }
 }
 
 dependency_install_download() {
@@ -185,6 +192,6 @@ dependency_install() {
       return 1
       ;;
   esac
-  dependency_write_version "$name" "$DEPENDENCY_VERSION"
+  dependency_write_version "$name" "$DEPENDENCY_VERSION" || return 1
   printf 'Installed approved dependency: %s %s\n' "$name" "$DEPENDENCY_VERSION"
 }
