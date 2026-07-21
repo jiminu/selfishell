@@ -254,6 +254,23 @@ test_minimal_profile_keeps_system_vim() {
   teardown_test_home
 }
 
+test_zsh_plugin_pins_match_dependencies_conf() {
+  local repository target_file expected_commit
+
+  while read -r repository target_file; do
+    expected_commit="$(awk -v repository="$repository" '$1 == "zsh-plugin" && $2 == repository { print $3 }' "$ROOT_DIR/dependencies.conf")"
+    [[ "$expected_commit" =~ ^[0-9a-f]{40}$ ]] ||
+      fail "No approved zsh-plugin commit recorded for $repository"
+    grep -Fq "ver'$expected_commit'" "$ROOT_DIR/$target_file" ||
+      fail "$target_file does not pin $repository to the dependencies.conf commit ($expected_commit)"
+  done <<'PLUGINS'
+zsh-users/zsh-completions common/completion.zsh
+Aloxaf/fzf-tab common/interactive.zsh
+zsh-users/zsh-autosuggestions common/interactive.zsh
+zdharma-continuum/fast-syntax-highlighting common/interactive.zsh
+PLUGINS
+}
+
 test_minimal_profile_initializes_git_completion_without_zinit
 printf 'PASS: test_minimal_profile_initializes_git_completion_without_zinit\n'
 test_macos_managed_zsh_adds_default_cli_prefix_to_path
@@ -266,6 +283,8 @@ test_update_notice_reads_installed_version_file
 printf 'PASS: test_update_notice_reads_installed_version_file\n'
 test_update_notice_uses_cache_and_refreshes_in_background_format
 printf 'PASS: test_update_notice_uses_cache_and_refreshes_in_background_format\n'
+test_zsh_plugin_pins_match_dependencies_conf
+printf 'PASS: test_zsh_plugin_pins_match_dependencies_conf\n'
 test_neovim_plugin_specs_delay_noncritical_plugins
 printf 'PASS: test_neovim_plugin_specs_delay_noncritical_plugins\n'
 test_editor_aliases_stay_with_neovim
