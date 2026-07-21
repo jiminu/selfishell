@@ -10,17 +10,7 @@ them to mise through this link:
 ${XDG_CONFIG_HOME:-$HOME/.config}/mise/conf.d/selfishell.toml
 ```
 
-When the conventional mise global configuration file
-`${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml` does not exist, a global
-write such as `mise use -g tool@version` can select the loaded Selfishell
-`conf.d` file as its write target. That mutates a file which must remain a
-Selfishell-owned copy of `common/mise.toml`. It can then conflict with a later
-`selfishell update`, be reported as user-modified state, and mix personal tool
-choices with reviewed Selfishell defaults.
-
-Mise documents `~/.config/mise/config.toml` as its normal global configuration
-file and as the `--global` write target. Selfishell should ensure that this
-separate user-facing target exists, but MUST NOT manage or track it.
+Selfishell ensures that mise has an explicit conventional user-global configuration target, keeping personal global choices clearly separated from Selfishell-managed defaults.
 
 ## Intended Result
 
