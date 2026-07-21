@@ -161,16 +161,17 @@ they are applied.
 
 ## Ghostty Customization
 
-On macOS, installing Ghostty creates three files:
+On macOS, Selfishell manages two Ghostty paths and recognizes an optional
+third path for personal overrides:
 
 ```text
-Selfishell managed defaults:
+Selfishell-managed:
   ${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/ghostty/config.ghostty
 
-Ghostty entrypoint:
+User-owned entrypoint with a Selfishell-managed block:
   ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty
 
-Personal overrides:
+Optional, fully user-owned override:
   ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/user.ghostty
 ```
 
