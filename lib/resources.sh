@@ -45,6 +45,9 @@ EOF
 selfishell_managed_resource_names() {
   local resource_kind resource_name resource_target resource_source
 
+  # resource_kind/resource_target/resource_source only exist to consume
+  # their tab-separated fields; only the name is needed here.
+  # shellcheck disable=SC2034
   while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
     printf '%s\n' "$resource_name"
   done < <(selfishell_managed_resources)
