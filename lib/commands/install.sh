@@ -21,6 +21,7 @@ install_managed_configuration() {
   local dry_run="$2"
   local profile="$3"
   local ghostty_enabled="${4:-0}"
+  local assume_yes="${5:-0}"
   local zsh_source
   local resource_kind resource_name resource_target resource_source
 
@@ -45,7 +46,7 @@ install_managed_configuration() {
         if [[ "$resource_name" == ghostty-config || "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
-        managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run"
+        managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes"
         ;;
       link)
         if [[ "$profile" != "developer" && ("$resource_name" == user-nvim || "$resource_name" == mise-config-link) ]]; then
@@ -54,7 +55,7 @@ install_managed_configuration() {
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
-        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
+        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run" "$assume_yes"
         ;;
       block)
         managed_install_zsh_loader "$resource_name" "$resource_target" "$dry_run"
@@ -253,7 +254,7 @@ command_install() {
     fi
   fi
 
-  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
+  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
   if [[ "$profile" == "developer" ]]; then
     install_mise_global_config "$dry_run" || return
   fi

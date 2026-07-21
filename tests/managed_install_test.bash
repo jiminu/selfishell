@@ -664,6 +664,76 @@ test_mise_global_config_ownership() {
   [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
 }
 
+test_managed_file_interactive_overwrite_yes() {
+  local tool
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise neovim tree-sitter node python uv; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
+    chmod +x "$TEST_ROOT/bin/$tool"
+  done
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local vimrc_path="$XDG_CONFIG_HOME/vim/vimrc"
+  printf 'user_modified_data\n' >"$vimrc_path"
+
+  printf 'y\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+
+  local content
+  content="$(<"$vimrc_path")"
+  [[ "$content" != *"user_modified_data"* ]] || fail "modified vimrc was not overwritten"
+
+  local backup_dir="$SELFISHELL_STATE_DIR/backups"
+  local backups_found=0
+  if [[ -d "$backup_dir" ]]; then
+    backups_found="$(find "$backup_dir" -name "*vimrc*" | wc -l | tr -d '[:space:]')"
+  fi
+  ((backups_found > 0)) || fail "backup was not created for overwritten vimrc"
+}
+
+test_managed_file_interactive_overwrite_no() {
+  local tool
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise neovim tree-sitter node python uv; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
+    chmod +x "$TEST_ROOT/bin/$tool"
+  done
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local vimrc_path="$XDG_CONFIG_HOME/vim/vimrc"
+  printf 'user_modified_data\n' >"$vimrc_path"
+
+  local rc=0
+  printf 'n\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null || rc=$?
+
+  ((rc == 0)) || fail "install failed after selecting preservation (exit code $rc)"
+  assert_file_content 'user_modified_data' "$vimrc_path"
+}
+
+test_managed_file_noninteractive_failure() {
+  local tool
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise neovim tree-sitter node python uv; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
+    chmod +x "$TEST_ROOT/bin/$tool"
+  done
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local vimrc_path="$XDG_CONFIG_HOME/vim/vimrc"
+  printf 'user_modified_data\n' >"$vimrc_path"
+
+  local rc=0
+  run_selfishell install --profile minimal --skip-packages >/dev/null 2>&1 || rc=$?
+
+  ((rc != 0)) || fail "install did not fail under non-interactive modified state"
+  assert_file_content 'user_modified_data' "$vimrc_path"
+}
+
 run_test() {
   local test_name="$1"
   local rc=0

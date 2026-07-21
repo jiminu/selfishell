@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Duplicate original stdin (FD 0) to FD 3 for interactive prompts inside loops
+exec 3<&0
+
 # These constants are consumed by command modules after this file is sourced.
 # shellcheck disable=SC2034
 SELFISHELL_EXIT_OK=0
@@ -30,6 +33,10 @@ confirm_action() {
   local assume_yes="$2"
   local dry_run="$3"
   local answer
+
+  if [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; then
+    return 0
+  fi
 
   if [[ "$dry_run" == "1" || "$assume_yes" == "1" ]]; then
     return 0

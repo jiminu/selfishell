@@ -310,7 +310,9 @@ managed_install_file() {
           case "$answer" in
             y | Y | yes | YES)
               # Always create a new backup for the modified file before overwriting
-              backup_dir="${SELFISHELL_STATE_DIR}/backups"; mkdir -p "${backup_dir}"; backup="$(managed_unique_backup_path "${backup_dir}/$(basename "$target_file")")"
+              backup_dir="${SELFISHELL_STATE_DIR}/backups"
+              mkdir -p "${backup_dir}"
+              backup="$(managed_unique_backup_path "${backup_dir}/$(basename "$target_file")")"
               current_checksum=""
               printf 'Debug: created backup path %s for %s\n' "$backup" "$target_file"
               ;;
