@@ -34,7 +34,10 @@ _selfishell_generate_zsh_cache() {
     command rm -f "$temporary"
     return 1
   }
-  command mv -f "$temporary" "$target"
+  command mv -f "$temporary" "$target" || {
+    command rm -f "$temporary"
+    return 1
+  }
 }
 
 _selfishell_generate_fzf_cache() {
@@ -45,9 +48,15 @@ _selfishell_generate_fzf_cache() {
   command mkdir -p "${target:h}" 2>/dev/null || return 1
 
   if fzf_init="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_init" ]]; then
-    print -r -- "$fzf_init" >|"$temporary"
+    print -r -- "$fzf_init" >|"$temporary" || {
+      command rm -f "$temporary"
+      return 1
+    }
   elif [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
-    command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$temporary" 2>/dev/null
+    command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$temporary" 2>/dev/null || {
+      command rm -f "$temporary"
+      return 1
+    }
   else
     return 1
   fi
@@ -60,7 +69,10 @@ _selfishell_generate_fzf_cache() {
     command rm -f "$temporary"
     return 1
   }
-  command mv -f "$temporary" "$target"
+  command mv -f "$temporary" "$target" || {
+    command rm -f "$temporary"
+    return 1
+  }
 }
 
 if _selfishell_zoxide_bin="$(command -v zoxide)"; then
