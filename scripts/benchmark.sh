@@ -6,8 +6,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ITERATIONS="${SELFISHELL_BENCHMARK_ITERATIONS:-30}"
 ENFORCE_BUDGETS="${SELFISHELL_BENCHMARK_ENFORCE:-0}"
 PROFILE_MODE="${SELFISHELL_BENCHMARK_PROFILE:-base}"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
-TEST_HOME="$TEST_ROOT/home"
 RESULTS_FILE="${SELFISHELL_BENCHMARK_RESULTS_FILE:-}"
 
 usage() {
@@ -33,7 +31,12 @@ while (("$#" > 0)); do
   case "$1" in
     --mode)
       shift
-      PROFILE_MODE="${1:-}"
+      if (($# == 0)); then
+        printf '%s\n' '--mode requires base or full' >&2
+        usage >&2
+        exit 2
+      fi
+      PROFILE_MODE="$1"
       ;;
     --help | -h)
       usage
@@ -56,6 +59,11 @@ case "$PROFILE_MODE" in
     ;;
 esac
 
+# Argument parsing and mode validation happen above, before this creates
+# anything on disk, so --help/a bad --mode/an unknown option can never
+# leave a benchmark temp directory behind.
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
+TEST_HOME="$TEST_ROOT/home"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/selfishell/zsh"
 
