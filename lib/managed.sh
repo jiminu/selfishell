@@ -291,6 +291,30 @@ managed_install_file() {
 
   source_checksum="$(managed_checksum "$source_file")"
 
+  if [[ "$resource" == "mise-config-global" ]]; then
+    if managed_read_state "$resource"; then
+      if [[ "$MANAGED_STATE_TYPE" != "file" || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
+        cli_error "State conflict for managed file: $resource"
+        return "$SELFISHELL_EXIT_ERROR"
+      fi
+      if [[ -f "$target_file" ]]; then
+        current_checksum="$(managed_checksum "$target_file")"
+        if [[ "$dry_run" == "0" ]]; then
+          managed_write_state "$resource" file active "$target_file" - "-" "$current_checksum"
+        fi
+        printf 'Unchanged (user-managed): %s\n' "$target_file"
+        return 0
+      fi
+    elif [[ -f "$target_file" ]]; then
+      current_checksum="$(managed_checksum "$target_file")"
+      if [[ "$dry_run" == "0" ]]; then
+        managed_write_state "$resource" file active "$target_file" - "-" "$current_checksum"
+      fi
+      printf 'Preserved existing file: %s\n' "$target_file"
+      return 0
+    fi
+  fi
+
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_TYPE" != "file" || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "State conflict for managed file: $resource"
@@ -415,14 +439,29 @@ managed_uninstall_resource() {
     file)
       if [[ -f "$MANAGED_STATE_TARGET" ]]; then
         current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")" || return
-        if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
-          cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
-          return "$SELFISHELL_EXIT_ERROR"
-        fi
-        if [[ "$dry_run" == "1" ]]; then
-          printf 'Would remove managed file: %s\n' "$MANAGED_STATE_TARGET"
+        if [[ "$resource" == "mise-config-global" ]]; then
+          local template_file="$SELFISHELL_ROOT/common/mise-global-config.toml"
+          local template_checksum
+          template_checksum="$(managed_checksum "$template_file")"
+          if [[ "$current_checksum" == "$template_checksum" ]]; then
+            if [[ "$dry_run" == "1" ]]; then
+              printf 'Would remove managed file: %s\n' "$MANAGED_STATE_TARGET"
+            else
+              rm "$MANAGED_STATE_TARGET" || return
+            fi
+          else
+            printf 'Preserved modified file: %s\n' "$MANAGED_STATE_TARGET"
+          fi
         else
-          rm "$MANAGED_STATE_TARGET" || return
+          if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
+            cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+          if [[ "$dry_run" == "1" ]]; then
+            printf 'Would remove managed file: %s\n' "$MANAGED_STATE_TARGET"
+          else
+            rm "$MANAGED_STATE_TARGET" || return
+          fi
         fi
       elif [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
         cli_error "Managed file path changed type; preserving it: $MANAGED_STATE_TARGET"
@@ -481,10 +520,12 @@ managed_validate_uninstall_resource() {
       ;;
     file)
       if [[ -f "$MANAGED_STATE_TARGET" ]]; then
-        current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
-        if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
-          cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
-          return "$SELFISHELL_EXIT_ERROR"
+        if [[ "$resource" != "mise-config-global" ]]; then
+          current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
+          if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
+            cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
         fi
       elif [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
         cli_error "Managed file path changed type; preserving it: $MANAGED_STATE_TARGET"

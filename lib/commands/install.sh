@@ -36,7 +36,7 @@ install_managed_configuration() {
   while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
     case "$resource_kind" in
       file)
-        if [[ "$profile" != "developer" && "$resource_name" == nvim-* ]]; then
+        if [[ "$profile" != "developer" && ("$resource_name" == nvim-* || "$resource_name" == mise-config-global) ]]; then
           continue
         fi
         if [[ "$resource_name" == "zshrc-config" ]]; then

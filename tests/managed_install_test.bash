@@ -17,6 +17,11 @@ setup_managed_home() {
   export SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version"
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux microsoft WSL2\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
+
+  mkdir -p "$TEST_ROOT/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/chsh"
+  chmod +x "$TEST_ROOT/bin/chsh"
+  export PATH="$TEST_ROOT/bin:$PATH"
 }
 
 teardown_managed_home() {
@@ -514,26 +519,94 @@ test_install_does_not_depend_on_checkout() {
     fail "Zsh configuration depended on the removed checkout"
 }
 
+test_mise_config_global_install_developer_and_minimal() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "mise/config.toml was not created for developer profile"
+  [[ -f "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global.state was not recorded"
+
+  local template_checksum
+  template_checksum="$(cksum <"$ROOT_DIR/common/mise-global-config.toml" | awk '{print $1 ":" $2}')"
+  local state_checksum
+  state_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state")"
+  [[ "$state_checksum" == "$template_checksum" ]] || fail "Registered state checksum does not match template"
+
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "uninstall did not clean up empty config.toml"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should not be created for minimal profile"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global state should not exist for minimal profile"
+}
+
+test_mise_config_global_preserves_existing_file() {
+  mkdir -p "$XDG_CONFIG_HOME/mise"
+  printf 'existing user config\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'existing user config' "$XDG_CONFIG_HOME/mise/config.toml"
+
+  local expected_checksum
+  expected_checksum="$(cksum <"$XDG_CONFIG_HOME/mise/config.toml" | awk '{print $1 ":" $2}')"
+  local state_checksum
+  state_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state")"
+  [[ "$state_checksum" == "$expected_checksum" ]] || fail "Existing file checksum was not recorded in state"
+}
+
+test_mise_config_global_update_allows_modification() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'modified by user\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null || fail "Reinstall failed after user modification"
+  assert_file_content 'modified by user' "$XDG_CONFIG_HOME/mise/config.toml"
+}
+
+test_mise_config_global_uninstall_preservation() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should be removed on uninstall if unchanged"
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'modified content\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "modified config.toml should be preserved on uninstall"
+  assert_file_content 'modified content' "$XDG_CONFIG_HOME/mise/config.toml"
+}
+
 run_test() {
   local test_name="$1"
+  local rc=0
 
   setup_managed_home
-  trap 'teardown_managed_home' RETURN
-  "$test_name"
-  trap - RETURN
+  "$test_name" || rc=$?
   teardown_managed_home
-  printf 'PASS: %s\n' "$test_name"
+
+  if ((rc == 0)); then
+    printf 'PASS: %s\n' "$test_name"
+    return 0
+  else
+    printf 'FAIL: %s (exit code %d)\n' "$test_name" "$rc" >&2
+    return 1
+  fi
 }
 
 main() {
   local test_name
   local failures=0
+  local test_list=()
 
   while IFS= read -r test_name; do
+    if [[ -n "$test_name" ]]; then
+      test_list+=("$test_name")
+    fi
+  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+
+  printf 'Total tests found: %d\n' "${#test_list[@]}"
+
+  for test_name in "${test_list[@]}"; do
     if ! run_test "$test_name"; then
       failures=$((failures + 1))
     fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+  done
 
   if ((failures > 0)); then
     printf '%d test(s) failed\n' "$failures" >&2

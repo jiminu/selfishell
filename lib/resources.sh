@@ -7,6 +7,7 @@ file	zshenv-config	$SELFISHELL_CONFIG_DIR/zsh/zshenv	$SELFISHELL_ROOT/common/zsh
 file	zsh-runtime	$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh	$SELFISHELL_ROOT/common/runtime.zsh
 file	mise-config-file	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml	$SELFISHELL_ROOT/common/mise.toml
 link	mise-config-link	${XDG_CONFIG_HOME:-$HOME/.config}/mise/conf.d/selfishell.toml	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml
+file	mise-config-global	${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml	$SELFISHELL_ROOT/common/mise-global-config.toml
 file	zsh-completion	$SELFISHELL_CONFIG_DIR/zsh/completion.zsh	$SELFISHELL_ROOT/common/completion.zsh
 file	zsh-interactive	$SELFISHELL_CONFIG_DIR/zsh/interactive.zsh	$SELFISHELL_ROOT/common/interactive.zsh
 file	zsh-update-notice	$SELFISHELL_CONFIG_DIR/zsh/update-notice.zsh	$SELFISHELL_ROOT/common/update-notice.zsh
