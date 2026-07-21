@@ -241,6 +241,11 @@ command_install() {
     fi
   fi
 
+  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
+    managed_preflight_block_target user-ghostty \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" || return
+  fi
+
   if [[ "${SELFISHELL_OFFLINE:-0}" == "1" ]]; then
     skip_packages=1
   fi
