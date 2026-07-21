@@ -33,15 +33,9 @@ jobs:
 
       - name: Verify dependency-only change
         env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          mapfile -t files < <(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
-          if [[ "${#files[@]}" -ne 1 || "${files[0]}" != dependencies.conf ]]; then
-            printf 'Automatic dependency releases require a dependencies.conf-only PR.\n' >&2
-            printf 'Changed files: %s\n' "${files[*]}" >&2
-            exit 1
-          fi
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: bash scripts/verify-dependency-release-diff.sh --base "$BASE_SHA" --head "$HEAD_SHA"
 
       - name: Dispatch next patch release
         env:

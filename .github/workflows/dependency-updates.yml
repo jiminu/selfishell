@@ -42,15 +42,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/dependency-updates
         run: |
-          git diff --quiet dependencies.conf && {
+          tracked_files=(dependencies.conf common/completion.zsh common/interactive.zsh)
+          git diff --quiet -- "${tracked_files[@]}" && {
             printf 'All approved dependencies are current.\n'
             exit 0
+          }
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!common/completion.zsh' ':!common/interactive.zsh')"
+          [[ -z "$unexpected" ]] || {
+            printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
+            exit 1
           }
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git fetch origin "$BRANCH" || true
           git checkout -B "$BRANCH"
-          git add dependencies.conf
+          git add "${tracked_files[@]}"
           git commit -m 'Update approved dependencies'
           git push --force-with-lease origin "HEAD:$BRANCH"
           gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -q '^0$' && gh pr create \
