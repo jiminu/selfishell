@@ -175,10 +175,10 @@ test_macos_update_migrates_legacy_ghostty_link_to_block() {
   ln -s "$managed_source" "$target"
   printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
 
-  run_selfishell update --tools-only --dry-run >/dev/null
+  run_selfishell install --profile minimal --skip-packages --dry-run --yes >/dev/null
   [[ -L "$target" ]] || fail "Dry-run migration removed the legacy Ghostty link"
 
-  run_selfishell update --tools-only --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
   [[ -f "$target" && ! -L "$target" ]] || fail "Legacy Ghostty link was not migrated to a user-owned file"
   grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Migrated Ghostty config is missing the include block"
