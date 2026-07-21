@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest="$ROOT_DIR/dependencies.conf"
+zsh_root="$ROOT_DIR"
 metadata=""
 temporary_dir=""
 
@@ -12,7 +13,7 @@ cleanup() {
 }
 
 usage() {
-  printf 'Usage: scripts/update-dependencies.sh [--manifest FILE] [--metadata FILE]\n'
+  printf 'Usage: scripts/update-dependencies.sh [--manifest FILE] [--metadata FILE] [--zsh-root DIR]\n'
 }
 
 sha256_file() {
@@ -103,8 +104,12 @@ discover_metadata() {
   done
 }
 
-apply_metadata() {
-  local output="$temporary_dir/dependencies.conf"
+# Builds the updated manifest into $output without touching the real
+# manifest file; the caller only commits it once every Zsh plugin pin
+# rewrite below has also validated, so a rejected pin bump can never leave
+# dependencies.conf and the Zinit pins out of sync.
+build_manifest() {
+  local output="$1"
 
   awk '
     NR == FNR {
@@ -181,7 +186,85 @@ apply_metadata() {
       exit invalid
     }
   ' "$metadata" "$manifest" >"$output"
-  mv "$output" "$manifest"
+}
+
+# Maps a pinned Zsh plugin's repository to the file that hardcodes its
+# Zinit `ver'<sha>'` pin, so a bump can target that exact string instead of
+# a blanket repo-wide substitution. An unrecognized repository is a hard
+# failure rather than a silent no-op.
+zsh_plugin_pin_file() {
+  case "$1" in
+    zsh-users/zsh-completions) printf 'common/completion.zsh\n' ;;
+    Aloxaf/fzf-tab) printf 'common/interactive.zsh\n' ;;
+    zsh-users/zsh-autosuggestions) printf 'common/interactive.zsh\n' ;;
+    zdharma-continuum/fast-syntax-highlighting) printf 'common/interactive.zsh\n' ;;
+    *) return 1 ;;
+  esac
+}
+
+# Rewrites one plugin's `ver'<old>'` pin to `ver'<new>'` on a staged copy
+# under $staged_dir, chaining onto an earlier plugin's edit to the same
+# file instead of re-copying it from disk. Nothing here touches a real
+# file: stage_zsh_plugin_pins' caller only commits the staged copies once
+# every plugin (and the manifest) has validated.
+stage_zsh_plugin_pin() {
+  local repository="$1" old_commit="$2" new_commit="$3" staged_dir="$4"
+  local target_file staged_file match_count
+
+  target_file="$(zsh_plugin_pin_file "$repository")" || {
+    printf 'No pin-file mapping for Zsh plugin: %s\n' "$repository" >&2
+    return 1
+  }
+  [[ "$new_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'New commit for %s is not a 40-character lowercase SHA: %s\n' "$repository" "$new_commit" >&2
+    return 1
+  }
+  [[ "$old_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'Recorded dependencies.conf commit for %s is not a 40-character lowercase SHA: %s\n' "$repository" "$old_commit" >&2
+    return 1
+  }
+
+  staged_file="$staged_dir/$target_file"
+  if [[ ! -f "$staged_file" ]]; then
+    [[ -r "$zsh_root/$target_file" ]] || {
+      printf 'Zsh plugin pin file not found: %s\n' "$target_file" >&2
+      return 1
+    }
+    mkdir -p "$(dirname "$staged_file")"
+    cp "$zsh_root/$target_file" "$staged_file"
+  fi
+
+  match_count="$(grep -Fc "ver'$old_commit'" "$staged_file" || true)"
+  [[ "$match_count" -eq 1 ]] || {
+    printf "Expected exactly one ver'%s' pin for %s in %s, found %s\n" \
+      "$old_commit" "$repository" "$target_file" "$match_count" >&2
+    return 1
+  }
+
+  awk -v old="ver'$old_commit'" -v new="ver'$new_commit'" '{ gsub(old, new); print }' \
+    "$staged_file" >"$staged_file.next"
+  mv "$staged_file.next" "$staged_file"
+}
+
+# Stages every `zsh-plugin` bump in $metadata against the pre-update
+# commit recorded in $manifest (build_manifest hasn't overwritten it yet,
+# since it only writes to a temp file). Returns non-zero without staging
+# anything further as soon as one plugin fails to validate.
+stage_zsh_plugin_pins() {
+  local staged_dir="$1"
+  local type name commit old_commit
+
+  while read -r type name commit _; do
+    [[ "$type" == zsh-plugin ]] || continue
+    old_commit="$(awk -v name="$name" '
+      $1 == "zsh-plugin" && $2 == name { print $3; found = 1 }
+      END { exit !found }
+    ' "$manifest")" || {
+      printf 'No dependencies.conf zsh-plugin entry for %s\n' "$name" >&2
+      return 1
+    }
+    stage_zsh_plugin_pin "$name" "$old_commit" "$commit" "$staged_dir" || return 1
+  done <"$metadata"
 }
 
 while (($# > 0)); do
@@ -193,6 +276,10 @@ while (($# > 0)); do
     --metadata)
       shift
       metadata="${1:-}"
+      ;;
+    --zsh-root)
+      shift
+      zsh_root="${1:-}"
       ;;
     --help | -h)
       usage
@@ -223,4 +310,19 @@ else
     exit 1
   }
 fi
-apply_metadata
+
+manifest_output="$temporary_dir/dependencies.conf"
+staged_dir="$temporary_dir/staged"
+mkdir -p "$staged_dir"
+
+build_manifest "$manifest_output"
+stage_zsh_plugin_pins "$staged_dir"
+
+# Nothing above touched a real file; only now, with the manifest and every
+# Zsh plugin pin rewrite validated, are they committed together.
+mv "$manifest_output" "$manifest"
+for target_file in common/completion.zsh common/interactive.zsh; do
+  staged_file="$staged_dir/$target_file"
+  [[ -f "$staged_file" ]] || continue
+  mv "$staged_file" "$zsh_root/$target_file"
+done
