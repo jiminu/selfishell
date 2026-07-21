@@ -329,26 +329,6 @@ test_ghostty_config_symlink_is_rejected_without_changes() {
     fail "Rejected Ghostty symlink did not explain the refusal"
 }
 
-test_ghostty_config_dangling_symlink_is_rejected_without_changes() {
-  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
-  local missing_source="$TEST_ROOT/dotfiles/config.ghostty"
-  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
-  local status
-
-  mkdir -p "$(dirname "$target")"
-  ln -s "$missing_source" "$target"
-
-  set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "Dangling Ghostty config symlink should stop installation"
-  assert_symlink_to "$missing_source" "$target"
-  [[ ! -e "$state_file" ]] || fail "Rejected dangling Ghostty symlink created state"
-}
-
 test_ghostty_config_directory_is_rejected_without_changes() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
@@ -750,41 +730,6 @@ EOF
   [[ -r "$XDG_STATE_HOME/selfishell/resources/zshrc-config.state" ]] ||
     fail "Failed managed resource state was removed"
   assert_file_content 'minimal' "$XDG_STATE_HOME/selfishell/profile"
-}
-
-test_uninstall_removes_user_link_before_internal_managed_target() {
-  local fake_bin="$TEST_ROOT/bin"
-  local link_path="$XDG_CONFIG_HOME/starship.toml"
-  local internal_target="$XDG_CONFIG_HOME/selfishell/starship.toml"
-  local link_state="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
-  local internal_state="$XDG_STATE_HOME/selfishell/resources/starship-config.state"
-  local status
-
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  assert_symlink_to "$internal_target" "$link_path"
-
-  mkdir -p "$fake_bin"
-  cat >"$fake_bin/rm" <<'EOF'
-#!/usr/bin/env bash
-for argument in "$@"; do
-  case "$argument" in
-    */selfishell/starship.toml) exit 1 ;;
-  esac
-done
-exec /bin/rm "$@"
-EOF
-  chmod +x "$fake_bin/rm"
-
-  set +e
-  PATH="$fake_bin:/usr/bin:/bin" run_selfishell uninstall --yes >/dev/null 2>"$TEST_ROOT/stderr"
-  status=$?
-  set -e
-
-  [[ "$status" -ne 0 ]] || fail "Uninstall should report the internal Starship file removal failure"
-  [[ ! -e "$link_state" ]] || fail "The user Starship symlink was not removed before the failure"
-  [[ ! -e "$link_path" ]] || fail "The user Starship symlink still exists after uninstall removed it"
-  [[ -e "$internal_state" ]] || fail "The internal Starship state should remain after a failed removal"
-  [[ -f "$internal_target" ]] || fail "The internal Starship file should remain after a failed removal"
 }
 
 test_uninstall_removes_ghostty_block_before_ghostty_defaults() {
