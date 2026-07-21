@@ -8,6 +8,7 @@ source "$ROOT_DIR/tests/test_helper.bash"
 
 setup_managed_home() {
   setup_test_home
+  export ORIGINAL_TEST_PATH="$PATH"
   export XDG_CONFIG_HOME="$HOME/.config"
   export XDG_STATE_HOME="$HOME/.local/state"
   export XDG_CACHE_HOME="$HOME/.cache"
@@ -17,9 +18,18 @@ setup_managed_home() {
   export SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version"
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux microsoft WSL2\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
+
+  mkdir -p "$TEST_ROOT/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/chsh"
+  chmod +x "$TEST_ROOT/bin/chsh"
+  export PATH="$TEST_ROOT/bin:$PATH"
 }
 
 teardown_managed_home() {
+  if [[ -n "${ORIGINAL_TEST_PATH:-}" ]]; then
+    export PATH="$ORIGINAL_TEST_PATH"
+    unset ORIGINAL_TEST_PATH
+  fi
   unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
@@ -514,26 +524,184 @@ test_install_does_not_depend_on_checkout() {
     fail "Zsh configuration depended on the removed checkout"
 }
 
+test_mise_config_global_creation_and_no_state() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml was not created on developer install"
+  [[ ! -f "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global state should not exist"
+}
+
+test_mise_config_global_minimal_profile() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should not be created for minimal profile"
+}
+
+test_mise_config_global_preserves_existing_types() {
+  # 일반 파일
+  mkdir -p "$XDG_CONFIG_HOME/mise"
+  printf 'user_owned_data_content_bytes\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'user_owned_data_content_bytes' "$XDG_CONFIG_HOME/mise/config.toml"
+
+  # 일반 symlink
+  rm -f "$XDG_CONFIG_HOME/mise/config.toml"
+  printf 'link_target_content\n' >"$TEST_ROOT/real_config.toml"
+  ln -s "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_symlink_to "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
+
+  # symlink-to-directory
+  rm -f "$XDG_CONFIG_HOME/mise/config.toml"
+  mkdir -p "$TEST_ROOT/some_dir"
+  ln -s "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_symlink_to "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
+
+  # symlink-to-special (dangling)
+  rm -rf "$TEST_ROOT/some_dir"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  [[ -L "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dangling symlink was removed"
+  [[ "$(readlink "$XDG_CONFIG_HOME/mise/config.toml")" == "$TEST_ROOT/some_dir" ]] || fail "dangling symlink target changed"
+}
+
+test_mise_config_global_idempotency_and_status() {
+  local tool
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise neovim tree-sitter node python uv; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
+    chmod +x "$TEST_ROOT/bin/$tool"
+  done
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'modified by user 123\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
+
+  local status_out
+  local status=0
+  status_out="$(run_selfishell status 2>&1)" || status=$?
+  ((status == 0)) || fail "status failed after user modified config.toml (exit code $status)"
+  [[ "$status_out" != *'config.toml'* ]] || fail "user-owned config.toml should not be reported by status"
+}
+
+test_mise_config_global_uninstall_preservation() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should remain after uninstall"
+
+  mkdir -p "$XDG_CONFIG_HOME/mise"
+  printf 'pre_existing_data\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell uninstall --restore --yes >/dev/null
+  assert_file_content 'pre_existing_data' "$XDG_CONFIG_HOME/mise/config.toml"
+
+  cat >"$XDG_CONFIG_HOME/mise/config.toml" <<'EOF'
+# User-defined global mise configuration
+# Selfishell defaults are loaded from conf.d/selfishell.toml
+EOF
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml with template content was deleted on uninstall"
+}
+
+test_mise_config_global_dry_run_and_directory_error() {
+  run_selfishell install --profile developer --skip-packages --dry-run --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dry-run created config.toml"
+
+  mkdir -p "$XDG_CONFIG_HOME/mise/config.toml"
+  local rc=0
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null 2>&1 || rc=$?
+  ((rc != 0)) || fail "install did not return error when config.toml is a directory"
+
+  [[ -d "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "invalid existing directory was changed"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "preflight failure created Selfishell configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "preflight failure created Selfishell state"
+  [[ ! -L "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml" ]] || fail "preflight failure created the managed mise link"
+}
+
+test_mise_global_config_env_runtime() {
+  local fake_bin="$TEST_ROOT/bin"
+  local output
+
+  mkdir -p "$fake_bin"
+
+  cat >"$fake_bin/mise" <<'EOF'
+#!/usr/bin/env sh
+if [ "${1:-}" = "activate" ]; then
+  printf ':\n'
+fi
+EOF
+  chmod +x "$fake_bin/mise"
+
+  # shellcheck disable=SC2016
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml" \
+      zsh -dfc '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        print -r -- "${MISE_GLOBAL_CONFIG_FILE-}"
+      ' zsh "$ROOT_DIR/common/runtime.zsh"
+  )"
+
+  [[ "$output" == "$HOME/personal-mise.toml" ]] ||
+    fail "runtime modified caller-provided MISE_GLOBAL_CONFIG_FILE"
+
+  # shellcheck disable=SC2016
+  output="$(
+    env -u MISE_GLOBAL_CONFIG_FILE \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      zsh -dfc '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        [[ -z "${MISE_GLOBAL_CONFIG_FILE+x}" ]]
+      ' zsh "$ROOT_DIR/common/runtime.zsh"
+  )" || fail "runtime created MISE_GLOBAL_CONFIG_FILE"
+}
+
+test_mise_global_config_ownership() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'node = "24"\n' >>"$XDG_CONFIG_HOME/mise/config.toml"
+  local selfishell_toml_content
+  selfishell_toml_content="$(<"$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml")"
+  [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
+}
+
 run_test() {
   local test_name="$1"
+  local rc=0
 
   setup_managed_home
-  trap 'teardown_managed_home' RETURN
-  "$test_name"
-  trap - RETURN
+  "$test_name" || rc=$?
   teardown_managed_home
-  printf 'PASS: %s\n' "$test_name"
+
+  if ((rc == 0)); then
+    printf 'PASS: %s\n' "$test_name"
+    return 0
+  else
+    printf 'FAIL: %s (exit code %d)\n' "$test_name" "$rc" >&2
+    return 1
+  fi
 }
 
 main() {
   local test_name
   local failures=0
+  local test_list=()
 
   while IFS= read -r test_name; do
+    if [[ -n "$test_name" ]]; then
+      test_list+=("$test_name")
+    fi
+  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+
+  printf 'Total tests found: %d\n' "${#test_list[@]}"
+
+  for test_name in "${test_list[@]}"; do
     if ! run_test "$test_name"; then
       failures=$((failures + 1))
     fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+  done
 
   if ((failures > 0)); then
     printf '%d test(s) failed\n' "$failures" >&2

@@ -16,6 +16,52 @@ fail() {
   exit 1
 }
 
+verify_mise_global_config_ownership() {
+  local selfishell_mise_config
+  local user_mise_config
+  local mise_config_link
+  local selfishell_mise_before
+
+  selfishell_mise_config="$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml"
+  user_mise_config="$XDG_CONFIG_HOME/mise/config.toml"
+  mise_config_link="$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
+  selfishell_mise_before="$TEST_ROOT/selfishell-mise-before.toml"
+
+  unset MISE_GLOBAL_CONFIG_FILE
+  unset MISE_DEFAULT_CONFIG_FILENAME
+  unset MISE_OVERRIDE_CONFIG_FILENAMES
+
+  [[ -f "$selfishell_mise_config" ]] ||
+    fail "Selfishell-managed mise config is missing"
+
+  [[ -f "$user_mise_config" ]] ||
+    fail "User-owned mise global config is missing"
+
+  [[ -L "$mise_config_link" ]] ||
+    fail "Selfishell mise conf.d link is missing"
+
+  cp "$selfishell_mise_config" "$selfishell_mise_before"
+
+  "$MISE_COMMAND" settings set pin true >/dev/null
+
+  [[ -f "$user_mise_config" ]] ||
+    fail "mise global settings did not write to the user config"
+
+  grep -Eq \
+    '^[[:space:]]*pin[[:space:]]*=[[:space:]]*true[[:space:]]*$' \
+    "$user_mise_config" ||
+    fail "mise did not persist the global pin setting in the user config"
+
+  cmp -s "$selfishell_mise_before" "$selfishell_mise_config" ||
+    fail "mise global settings modified the Selfishell-managed config"
+
+  [[ -L "$mise_config_link" ]] ||
+    fail "mise global settings replaced the Selfishell conf.d link"
+
+  [[ "$(readlink "$mise_config_link")" == "$selfishell_mise_config" ]] ||
+    fail "mise global settings changed the Selfishell conf.d link target"
+}
+
 trap cleanup EXIT HUP INT TERM
 
 command -v nvim >/dev/null 2>&1 || fail "Neovim is unavailable"
@@ -40,6 +86,8 @@ if zsh_path="$(command -v zsh 2>/dev/null)"; then
 fi
 
 bash "$ROOT_DIR/bin/selfishell" install --profile developer --skip-packages --yes >/dev/null
+
+verify_mise_global_config_ownership
 
 PATH=/usr/local/bin:/usr/bin:/bin bash -c '
   set -euo pipefail

@@ -290,7 +290,6 @@ managed_install_file() {
   local backup="-"
 
   source_checksum="$(managed_checksum "$source_file")"
-
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_TYPE" != "file" || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "State conflict for managed file: $resource"

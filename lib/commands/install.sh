@@ -107,6 +107,72 @@ install_default_shell() {
   fi
 }
 
+preflight_mise_global_config() {
+  local target_file="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+
+  if [[ -L "$target_file" || -f "$target_file" ]]; then
+    return 0
+  fi
+
+  if [[ -e "$target_file" ]]; then
+    cli_error "mise global config path is not a regular file or symlink: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+}
+
+install_mise_global_config() {
+  local dry_run="$1"
+  local target_file="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+  local parent_dir
+  local temporary_file
+
+  if [[ -L "$target_file" || -f "$target_file" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'User mise config exists; preserving it: %s\n' "$target_file"
+    fi
+    return 0
+  fi
+
+  if [[ -e "$target_file" ]]; then
+    cli_error "mise global config path is not a regular file or symlink: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would create user mise config: %s\n' "$target_file"
+    return 0
+  fi
+
+  parent_dir="$(dirname "$target_file")"
+  mkdir -p "$parent_dir" || return "$SELFISHELL_EXIT_ERROR"
+
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+
+  if ! cat >"$temporary_file" <<'EOF'; then
+# User-defined global mise configuration
+# Selfishell defaults are loaded from conf.d/selfishell.toml
+EOF
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if ln "$temporary_file" "$target_file" 2>/dev/null; then
+    rm -f "$temporary_file"
+    printf 'Created user mise config: %s\n' "$target_file"
+    return 0
+  fi
+
+  rm -f "$temporary_file"
+
+  if [[ -e "$target_file" || -L "$target_file" ]]; then
+    printf 'User mise config appeared concurrently; preserving it: %s\n' "$target_file"
+    return 0
+  fi
+
+  cli_error "Failed to create user mise config: $target_file"
+  return "$SELFISHELL_EXIT_ERROR"
+}
+
 command_install() {
   local assume_yes=0
   local dry_run=0
@@ -160,6 +226,9 @@ command_install() {
   selfishell_initialize_paths
   managed_preflight_zsh_loader || return
   profile_load "$profile" "$local_profile"
+  if [[ "$profile" == "developer" ]]; then
+    preflight_mise_global_config || return
+  fi
 
   if [[ "$platform" == "macos" ]]; then
     if [[ -r "$SELFISHELL_STATE_DIR/ghostty" ]]; then
@@ -188,6 +257,9 @@ command_install() {
   fi
 
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
+  if [[ "$profile" == "developer" ]]; then
+    install_mise_global_config "$dry_run" || return
+  fi
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
