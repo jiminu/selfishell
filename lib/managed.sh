@@ -8,13 +8,22 @@ managed_state_path() {
   printf '%s/%s.state\n' "$SELFISHELL_RESOURCE_STATE_DIR" "$1"
 }
 
+managed_state_exists() {
+  [[ -e "$(managed_state_path "$1")" ]]
+}
+
+# Returns 1 for both a missing state file and a malformed one (short,
+# truncated, or holding unrecognized field values); callers that must tell
+# the two apart -- so a corrupted state can't be silently treated as "no
+# state" and its resource mistaken for a fresh install -- check
+# managed_state_exists() themselves after this returns false.
 managed_read_state() {
   local state_file
   state_file="$(managed_state_path "$1")"
 
   [[ -r "$state_file" ]] || return 1
 
-  {
+  if ! {
     IFS= read -r MANAGED_STATE_VERSION
     IFS= read -r MANAGED_STATE_TYPE
     IFS= read -r MANAGED_STATE_STATUS
@@ -22,9 +31,14 @@ managed_read_state() {
     IFS= read -r MANAGED_STATE_REFERENCE
     IFS= read -r MANAGED_STATE_BACKUP
     IFS= read -r MANAGED_STATE_CHECKSUM
-  } <"$state_file"
+  } <"$state_file"; then
+    return 1
+  fi
 
   case "$MANAGED_STATE_VERSION" in 1 | 2) ;; *) return 1 ;; esac
+  case "$MANAGED_STATE_TYPE" in file | link | block) ;; *) return 1 ;; esac
+  case "$MANAGED_STATE_STATUS" in pending | active) ;; *) return 1 ;; esac
+  [[ -n "$MANAGED_STATE_TARGET" ]] || return 1
 }
 
 managed_write_state() {
@@ -330,6 +344,9 @@ managed_install_block() {
       managed_block_error "$resource" "$target_file"
       return "$SELFISHELL_EXIT_ERROR"
     fi
+  elif managed_state_exists "$resource"; then
+    cli_error "Managed resource state is malformed: $(managed_state_path "$resource")"
+    return "$SELFISHELL_EXIT_ERROR"
   elif [[ "$MANAGED_BLOCK_STATUS" != absent ]]; then
     managed_block_error "$resource" "$target_file"
     return "$SELFISHELL_EXIT_ERROR"
@@ -481,6 +498,9 @@ managed_install_file() {
       cli_error "Managed file path changed type; preserving it: $target_file"
       return "$SELFISHELL_EXIT_ERROR"
     fi
+  elif managed_state_exists "$resource"; then
+    cli_error "Managed resource state is malformed: $(managed_state_path "$resource")"
+    return "$SELFISHELL_EXIT_ERROR"
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     original_backup="$(managed_unique_backup_path "$target_file")"
   fi
@@ -535,6 +555,9 @@ managed_install_link() {
       cli_error "Managed link was replaced; preserving it: $target_file"
       return "$SELFISHELL_EXIT_ERROR"
     fi
+  elif managed_state_exists "$resource"; then
+    cli_error "Managed resource state is malformed: $(managed_state_path "$resource")"
+    return "$SELFISHELL_EXIT_ERROR"
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     backup="$(managed_unique_backup_path "$target_file")"
   fi
@@ -576,7 +599,11 @@ managed_uninstall_resource() {
   local dry_run="$3"
   local current_checksum
 
-  managed_read_state "$resource" || return 0
+  if ! managed_read_state "$resource"; then
+    managed_state_exists "$resource" || return 0
+    cli_error "Managed resource state is malformed: $(managed_state_path "$resource")"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
 
   case "$MANAGED_STATE_TYPE" in
     block)
@@ -643,7 +670,11 @@ managed_validate_uninstall_resource() {
   local resource="$1"
   local current_checksum
 
-  managed_read_state "$resource" || return 0
+  if ! managed_read_state "$resource"; then
+    managed_state_exists "$resource" || return 0
+    cli_error "Managed resource state is malformed: $(managed_state_path "$resource")"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
 
   case "$MANAGED_STATE_TYPE" in
     block)
