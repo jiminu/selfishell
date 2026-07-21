@@ -143,15 +143,15 @@ context_alias = '$cluster'
 # Display only when related files exist in the current directory
 # ─────────────────────────────
 [python]
-format = '[ $version]($style) '
+format = '[ ($virtualenv)]($style) '
 style = 'bold fg:#ffd75f'
 
 [nodejs]
-format = '[ $version]($style) '
+format = '[ v${raw}]($style) '
 style = 'bold fg:#5faf5f'
 
 [java]
-format = '[ $version]($style) '
+format = '[ v${raw}]($style) '
 style = 'bold fg:#ff875f'
 
 
