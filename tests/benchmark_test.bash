@@ -21,6 +21,16 @@ test_benchmark_rejects_unknown_mode() {
   [[ "$output" == *'must be "base" or "full"'* ]] || fail "Unknown --mode did not explain the valid values: $output"
 }
 
+test_benchmark_rejects_missing_mode_value() {
+  local status=0
+  local output
+
+  output="$(bash "$ROOT_DIR/scripts/benchmark.sh" --mode 2>&1)" || status=$?
+
+  [[ "$status" -eq 2 ]] || fail "A --mode with no following value should exit 2 (got $status)"
+  [[ "$output" == *'--mode requires base or full'* ]] || fail "A missing --mode value did not explain usage: $output"
+}
+
 test_benchmark_rejects_unknown_option() {
   local status=0
   local output
@@ -59,6 +69,29 @@ test_benchmark_profile_env_var_is_equivalent_to_mode_flag() {
 
   [[ "$output" == *'must be "base" or "full"'* ]] ||
     fail "SELFISHELL_BENCHMARK_PROFILE was not honored as a --mode equivalent: $output"
+}
+
+# Argument parsing and mode validation must happen before benchmark.sh
+# creates its temp directory, so every early-exit path above (missing
+# --mode value, unknown --mode, unknown option, an invalid env-var mode)
+# leaves nothing behind. TMPDIR is scoped to an isolated sandbox so this
+# check can't be confused by unrelated temp entries on the real system.
+test_benchmark_early_exit_paths_leave_no_temp_directory() {
+  local leftover
+
+  setup_test_home
+  trap teardown_test_home EXIT
+
+  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --mode >/dev/null 2>&1 || true
+  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --mode bogus >/dev/null 2>&1 || true
+  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --bogus-flag >/dev/null 2>&1 || true
+  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --help >/dev/null 2>&1 || true
+  TMPDIR="$TEST_ROOT" SELFISHELL_BENCHMARK_PROFILE=bogus bash "$ROOT_DIR/scripts/benchmark.sh" >/dev/null 2>&1 || true
+
+  leftover="$(find "$TEST_ROOT" -maxdepth 1 -name 'selfishell-benchmark.*')"
+  [[ -z "$leftover" ]] || fail "An early-exit path left a benchmark temp directory behind: $leftover"
+
+  teardown_test_home
 }
 
 run_test() {
