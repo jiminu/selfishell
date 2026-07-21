@@ -275,6 +275,304 @@ test_update_notice_fresh_lock_blocks_concurrent_refresh() {
   teardown_test_home
 }
 
+test_update_notice_stale_empty_lock_directory_is_reclaimed() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  # No pid/created_at at all -- either a lock left by a Selfishell version
+  # that predates lock metadata, or a writer that died between mkdir and
+  # its first write -- so only the directory's own (old) mtime is left to
+  # judge staleness by.
+  touch -t 202001010000 "$cache_dir/update-check.lock"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "A stale, metadata-less lock directory was not reclaimed: $output"
+  teardown_test_home
+}
+
+test_update_notice_fresh_empty_lock_directory_is_preserved() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_LEFT'* ]] ||
+    fail "A fresh, metadata-less lock directory was incorrectly reclaimed: $output"
+  [[ "$output" == *'VERSION_ABSENT'* ]] ||
+    fail "A concurrent refresh ran despite a fresh metadata-less lock: $output"
+  teardown_test_home
+}
+
+test_update_notice_stale_lock_with_only_pid_is_reclaimed() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  printf '99999\n' >"$cache_dir/update-check.lock/pid"
+  touch -t 202001010000 "$cache_dir/update-check.lock/pid" "$cache_dir/update-check.lock"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "A stale lock with only a pid file was not reclaimed: $output"
+  teardown_test_home
+}
+
+test_update_notice_corrupt_created_at_falls_back_to_directory_mtime() {
+  local fake_bin cache_dir output label
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  for label in stale fresh; do
+    mkdir -p "$cache_dir/update-check.lock"
+    printf 'not-a-timestamp\n' >"$cache_dir/update-check.lock/created_at"
+    [[ "$label" == stale ]] && touch -t 202001010000 "$cache_dir/update-check.lock/created_at" "$cache_dir/update-check.lock"
+
+    output="$(
+      PATH="$fake_bin:/usr/bin:/bin" \
+        /bin/zsh -f -c '
+          source "$1"
+          _selfishell_update_notice_refresh "$2" 12345
+          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+    )"
+
+    if [[ "$label" == stale ]]; then
+      [[ "$output" == *'LOCK_CLEARED'* ]] ||
+        fail "A corrupt created_at backed by an old directory mtime was not reclaimed: $output"
+    else
+      [[ "$output" == *'LOCK_LEFT'* ]] ||
+        fail "A corrupt created_at backed by a fresh directory mtime was incorrectly reclaimed: $output"
+    fi
+    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
+  done
+  teardown_test_home
+}
+
+test_update_notice_unreadable_created_at_falls_back_to_directory_mtime() {
+  local fake_bin cache_dir output
+
+  # Permission bits don't restrict root's own reads, so this scenario can't
+  # be produced when running as root (e.g. some containers).
+  [[ "$(id -u)" != 0 ]] || return 0
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  printf '%s\n' "$(date +%s)" >"$cache_dir/update-check.lock/created_at"
+  chmod 000 "$cache_dir/update-check.lock/created_at"
+  touch -t 202001010000 "$cache_dir/update-check.lock"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  chmod 644 "$cache_dir/update-check.lock/created_at" 2>/dev/null || true
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "An unreadable created_at backed by an old directory mtime was not reclaimed: $output"
+  teardown_test_home
+}
+
+test_update_notice_future_created_at_is_preserved() {
+  local fake_bin cache_dir output future_created_at
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  future_created_at=$(($(date +%s) + 100000))
+  printf '%s\n' "$future_created_at" >"$cache_dir/update-check.lock/created_at"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_LEFT'* ]] ||
+    fail "A lock with a future created_at was incorrectly reclaimed: $output"
+  teardown_test_home
+}
+
+test_update_notice_lock_ttl_rejects_invalid_values() {
+  local fake_bin cache_dir output ttl stale_created_at
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  stale_created_at=$(($(date +%s) - 700))
+
+  for ttl in abc -100 1.5 0 ''; do
+    mkdir -p "$cache_dir/update-check.lock"
+    printf '%s\n' "$stale_created_at" >"$cache_dir/update-check.lock/created_at"
+
+    output="$(
+      SELFISHELL_UPDATE_LOCK_TTL="$ttl" PATH="$fake_bin:/usr/bin:/bin" \
+        /bin/zsh -f -c '
+          source "$1"
+          _selfishell_update_notice_refresh "$2" 12345
+          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+    )"
+
+    [[ "$output" == *'LOCK_CLEARED'* ]] ||
+      fail "An invalid SELFISHELL_UPDATE_LOCK_TTL='$ttl' did not fall back to the default TTL: $output"
+    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
+  done
+  teardown_test_home
+}
+
+test_update_notice_lock_ttl_zero_does_not_mean_instantly_stale() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  printf '%s\n' "$(($(date +%s) - 2))" >"$cache_dir/update-check.lock/created_at"
+
+  output="$(
+    SELFISHELL_UPDATE_LOCK_TTL=0 PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_LEFT'* ]] ||
+    fail "SELFISHELL_UPDATE_LOCK_TTL=0 treated a 2-second-old lock as instantly stale instead of falling back to the default: $output"
+  teardown_test_home
+}
+
+test_update_notice_lock_ttl_honors_valid_custom_value() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+  printf '%s\n' "$(($(date +%s) - 5))" >"$cache_dir/update-check.lock/created_at"
+
+  output="$(
+    SELFISHELL_UPDATE_LOCK_TTL=2 PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "A valid custom SELFISHELL_UPDATE_LOCK_TTL was not honored: $output"
+  teardown_test_home
+}
+
+test_update_notice_refresh_removes_lock_even_when_version_lookup_fails() {
+  local cache_dir output
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$cache_dir"
+
+  output="$(
+    PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "The lock was not released after a failed version lookup: $output"
+  teardown_test_home
+}
+
+test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined() {
+  local output
+
+  setup_test_home
+  output="$(
+    /bin/zsh -f -c '
+      source "$1"
+      if result="$(_selfishell_update_lock_stale_since "$2" 600 99999999999)"; then
+        print "DETERMINED:$result"
+      else
+        print "PRESERVED"
+      fi
+    ' zsh "$ROOT_DIR/common/update-notice.zsh" "$TEST_ROOT/no-such-lock-dir"
+  )"
+
+  [[ "$output" == 'PRESERVED' ]] ||
+    fail "A lock whose age cannot be determined at all should be left alone: $output"
+  teardown_test_home
+}
+
 test_shell_tool_cache_generation_succeeds_atomically() {
   local cache_dir output
 
@@ -346,7 +644,8 @@ printf 'echo regenerated\n'
 EOF
   chmod +x "$fake_bin/zoxide"
   printf '# stale cache\n' >"$cache_dir/zoxide-init.zsh"
-  touch -d '2020-01-01' "$cache_dir/zoxide-init.zsh"
+  # -t, not -d: -d is a GNU extension BSD/macOS touch doesn't support.
+  touch -t 202001010000 "$cache_dir/zoxide-init.zsh"
   touch "$fake_bin/zoxide"
 
   output="$(
@@ -359,6 +658,259 @@ EOF
 
   [[ "$output" == *'regenerated'* ]] ||
     fail "Cache was not regenerated when the tool binary is newer than the cache: $output"
+  teardown_test_home
+}
+
+test_shell_tool_cache_does_not_regenerate_when_cache_is_newer_than_binary() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  cat >"$fake_bin/zoxide" <<'EOF'
+#!/usr/bin/env bash
+printf 'echo regenerated\n'
+EOF
+  chmod +x "$fake_bin/zoxide"
+  touch -t 202001010000 "$fake_bin/zoxide"
+  printf '# already current\n' >"$cache_dir/zoxide-init.zsh"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
+      /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
+      zsh "$ROOT_DIR/common/interactive.zsh" 2>/dev/null
+    cat "$cache_dir/zoxide-init.zsh"
+  )"
+
+  [[ "$output" == *'# already current'* ]] ||
+    fail "Cache was regenerated even though it is newer than the tool binary: $output"
+  [[ "$output" != *'regenerated'* ]] ||
+    fail "The tool was invoked even though its cache is already current: $output"
+  teardown_test_home
+}
+
+test_shell_tool_cache_write_failure_preserves_existing_cache() {
+  local cache_dir output
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$cache_dir"
+  printf '# preexisting cache\n' >"$cache_dir/cache.zsh"
+  chmod 555 "$cache_dir"
+
+  output="$(
+    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
+        cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+  )"
+  chmod 755 "$cache_dir"
+
+  [[ "$(id -u)" == 0 ]] || {
+    [[ "$output" == *'# preexisting cache'* ]] ||
+      fail "A write failure corrupted the existing cache: $output"
+    [[ "$output" == *$'\n0' ]] ||
+      fail "A write failure left a temporary file behind: $output"
+  }
+  teardown_test_home
+}
+
+test_shell_tool_cache_final_mv_failure_cleans_up_and_preserves_existing_cache() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  printf '# preexisting cache\n' >"$cache_dir/cache.zsh"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$fake_bin/mv"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
+        cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'# preexisting cache'* ]] ||
+    fail "A failed final mv corrupted the existing cache: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "A failed final mv left a temporary file behind: $output"
+  teardown_test_home
+}
+
+test_fzf_cache_generation_succeeds_atomically() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  cat >"$fake_bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+printf 'bindkey -M emacs "^R" fzf-history-widget\n'
+EOF
+  chmod +x "$fake_bin/fzf"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_fzf_cache "$2/cache.zsh"
+        [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'fzf-history-widget'* ]] ||
+    fail "A successful fzf cache generation did not write the expected content: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "A successful fzf cache generation left a temporary file behind: $output"
+  teardown_test_home
+}
+
+test_fzf_cache_generation_rejects_invalid_zsh_syntax() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  printf '# preexisting fzf cache\n' >"$cache_dir/cache.zsh"
+  cat >"$fake_bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+printf 'if [[ not valid zsh\n'
+EOF
+  chmod +x "$fake_bin/fzf"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_fzf_cache "$2/cache.zsh"
+        cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'# preexisting fzf cache'* ]] ||
+    fail "Invalid zsh syntax from fzf corrupted the existing cache: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "Invalid zsh syntax from fzf left a temporary file behind: $output"
+  teardown_test_home
+}
+
+test_fzf_cache_final_mv_failure_cleans_up_and_preserves_existing_cache() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  printf '# preexisting fzf cache\n' >"$cache_dir/cache.zsh"
+  cat >"$fake_bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+printf 'bindkey -M emacs "^R" fzf-history-widget\n'
+EOF
+  chmod +x "$fake_bin/fzf"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$fake_bin/mv"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_fzf_cache "$2/cache.zsh"
+        cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'# preexisting fzf cache'* ]] ||
+    fail "A failed final mv corrupted the existing fzf cache: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "A failed final mv left a temporary fzf cache file behind: $output"
+  teardown_test_home
+}
+
+# _selfishell_generate_fzf_cache's fallback (cp from the system fzf docs)
+# only triggers when fzf itself is unreachable, so PATH is rebuilt from
+# individually-symlinked tools rather than the usual /usr/bin:/bin --
+# those are the same merged directory on most Linux systems and can't be
+# used to make an installed fzf disappear. Skipped outright wherever that
+# hardcoded fallback path doesn't exist (e.g. CI's shell job, which never
+# installs fzf), since there's nothing this test can exercise there.
+test_fzf_cache_copy_fallback_success_and_failure() {
+  local restricted_bin cache_dir output tool
+
+  [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]] || return 0
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  restricted_bin="$TEST_ROOT/restricted-bin"
+  mkdir -p "$cache_dir" "$restricted_bin"
+  for tool in mkdir rm mv zsh cat find wc; do
+    ln -sf "$(command -v "$tool")" "$restricted_bin/$tool"
+  done
+  ln -sf "$(command -v cp)" "$restricted_bin/cp"
+
+  output="$(
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$restricted_bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
+        [[ -s "$2/fallback-cache.zsh" ]] && print FALLBACK_WRITTEN
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+  )"
+
+  [[ "$output" == *'FALLBACK_WRITTEN'* ]] ||
+    fail "The system key-bindings fallback was not copied when fzf was unreachable: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "The fallback copy left a temporary file behind: $output"
+
+  rm -f "$cache_dir/fallback-cache.zsh" "$restricted_bin/cp"
+  cat >"$restricted_bin/cp" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "$restricted_bin/cp"
+  printf '# preexisting fallback cache\n' >"$cache_dir/fallback-cache.zsh"
+
+  output="$(
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$restricted_bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
+        cat "$2/fallback-cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+  )"
+
+  [[ "$output" == *'# preexisting fallback cache'* ]] ||
+    fail "A failed fallback copy corrupted the existing cache: $output"
+  [[ "$output" == *$'\n0' ]] ||
+    fail "A failed fallback copy left a temporary file behind: $output"
   teardown_test_home
 }
 
@@ -450,12 +1002,48 @@ test_update_notice_stale_lock_is_reclaimed_after_ttl
 printf 'PASS: test_update_notice_stale_lock_is_reclaimed_after_ttl\n'
 test_update_notice_fresh_lock_blocks_concurrent_refresh
 printf 'PASS: test_update_notice_fresh_lock_blocks_concurrent_refresh\n'
+test_update_notice_stale_empty_lock_directory_is_reclaimed
+printf 'PASS: test_update_notice_stale_empty_lock_directory_is_reclaimed\n'
+test_update_notice_fresh_empty_lock_directory_is_preserved
+printf 'PASS: test_update_notice_fresh_empty_lock_directory_is_preserved\n'
+test_update_notice_stale_lock_with_only_pid_is_reclaimed
+printf 'PASS: test_update_notice_stale_lock_with_only_pid_is_reclaimed\n'
+test_update_notice_corrupt_created_at_falls_back_to_directory_mtime
+printf 'PASS: test_update_notice_corrupt_created_at_falls_back_to_directory_mtime\n'
+test_update_notice_unreadable_created_at_falls_back_to_directory_mtime
+printf 'PASS: test_update_notice_unreadable_created_at_falls_back_to_directory_mtime\n'
+test_update_notice_future_created_at_is_preserved
+printf 'PASS: test_update_notice_future_created_at_is_preserved\n'
+test_update_notice_lock_ttl_rejects_invalid_values
+printf 'PASS: test_update_notice_lock_ttl_rejects_invalid_values\n'
+test_update_notice_lock_ttl_zero_does_not_mean_instantly_stale
+printf 'PASS: test_update_notice_lock_ttl_zero_does_not_mean_instantly_stale\n'
+test_update_notice_lock_ttl_honors_valid_custom_value
+printf 'PASS: test_update_notice_lock_ttl_honors_valid_custom_value\n'
+test_update_notice_refresh_removes_lock_even_when_version_lookup_fails
+printf 'PASS: test_update_notice_refresh_removes_lock_even_when_version_lookup_fails\n'
+test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined
+printf 'PASS: test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined\n'
 test_shell_tool_cache_generation_succeeds_atomically
 printf 'PASS: test_shell_tool_cache_generation_succeeds_atomically\n'
 test_shell_tool_cache_generation_failures_preserve_existing_cache
 printf 'PASS: test_shell_tool_cache_generation_failures_preserve_existing_cache\n'
 test_shell_tool_cache_regenerates_when_binary_is_newer
 printf 'PASS: test_shell_tool_cache_regenerates_when_binary_is_newer\n'
+test_shell_tool_cache_does_not_regenerate_when_cache_is_newer_than_binary
+printf 'PASS: test_shell_tool_cache_does_not_regenerate_when_cache_is_newer_than_binary\n'
+test_shell_tool_cache_write_failure_preserves_existing_cache
+printf 'PASS: test_shell_tool_cache_write_failure_preserves_existing_cache\n'
+test_shell_tool_cache_final_mv_failure_cleans_up_and_preserves_existing_cache
+printf 'PASS: test_shell_tool_cache_final_mv_failure_cleans_up_and_preserves_existing_cache\n'
+test_fzf_cache_generation_succeeds_atomically
+printf 'PASS: test_fzf_cache_generation_succeeds_atomically\n'
+test_fzf_cache_generation_rejects_invalid_zsh_syntax
+printf 'PASS: test_fzf_cache_generation_rejects_invalid_zsh_syntax\n'
+test_fzf_cache_final_mv_failure_cleans_up_and_preserves_existing_cache
+printf 'PASS: test_fzf_cache_final_mv_failure_cleans_up_and_preserves_existing_cache\n'
+test_fzf_cache_copy_fallback_success_and_failure
+printf 'PASS: test_fzf_cache_copy_fallback_success_and_failure\n'
 test_neovim_plugin_specs_delay_noncritical_plugins
 printf 'PASS: test_neovim_plugin_specs_delay_noncritical_plugins\n'
 test_editor_aliases_stay_with_neovim
