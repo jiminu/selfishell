@@ -35,7 +35,7 @@ Selfishell **does not own or manage** `~/.config/mise/config.toml`. It only ensu
 3. Add a dedicated helper function `install_mise_global_config` in `lib/commands/install.sh`. This function runs only for the `developer` profile:
    - If `config.toml` already exists (as a regular file, a symlink, or a dangling symlink), it is preserved exactly as-is. Selfishell does not overwrite, backup, or change it.
    - If the target path is a directory or another unsupported type, it fails with an error and exits.
-   - If it does not exist, it writes a placeholder file with descriptive comments atomically using a temporary file and rename.
+   - If it does not exist, Selfishell creates a temporary file in the same directory and installs it atomically with create-if-absent semantics, without overwriting a concurrently created user file.
    - For `--dry-run`, it prints a message and does not modify the filesystem.
 4. Keep `mise-config-file` and `mise-config-link` fully managed.
 5. Do not modify or set `MISE_GLOBAL_CONFIG_FILE` in `common/runtime.zsh`.
@@ -61,3 +61,4 @@ Add coverage to verify:
 8. Uninstalling preserves `config.toml` (even if it is unmodified/empty).
 9. Dry-run does not write anything.
 10. Error reporting if the target path is a directory.
+11. The pinned mise binary writes a global setting to the user-owned mise/config.toml while leaving Selfishell-managed defaults and the conf.d link unchanged.
