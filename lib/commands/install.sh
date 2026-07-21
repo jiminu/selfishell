@@ -268,15 +268,29 @@ command_install() {
     local temporary_profile_state
     local ghostty_state
     local temporary_ghostty_state
-    mkdir -p "$SELFISHELL_STATE_DIR"
+    mkdir -p "$SELFISHELL_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
+
     profile_state="$SELFISHELL_STATE_DIR/profile"
-    temporary_profile_state="$(mktemp "${profile_state}.tmp.XXXXXX")"
-    printf '%s\n' "$profile" >"$temporary_profile_state"
-    mv "$temporary_profile_state" "$profile_state"
+    temporary_profile_state="$(mktemp "${profile_state}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+    printf '%s\n' "$profile" >"$temporary_profile_state" || {
+      rm -f "$temporary_profile_state"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+    mv "$temporary_profile_state" "$profile_state" || {
+      rm -f "$temporary_profile_state"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+
     ghostty_state="$SELFISHELL_STATE_DIR/ghostty"
-    temporary_ghostty_state="$(mktemp "${ghostty_state}.tmp.XXXXXX")"
-    printf '%s\n' "$ghostty_enabled" >"$temporary_ghostty_state"
-    mv "$temporary_ghostty_state" "$ghostty_state"
+    temporary_ghostty_state="$(mktemp "${ghostty_state}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+    printf '%s\n' "$ghostty_enabled" >"$temporary_ghostty_state" || {
+      rm -f "$temporary_ghostty_state"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+    mv "$temporary_ghostty_state" "$ghostty_state" || {
+      rm -f "$temporary_ghostty_state"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
 
   if [[ "$dry_run" == "1" ]]; then

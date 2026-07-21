@@ -159,6 +159,40 @@ context above and below the cursor when possible, confirms commands that would
 discard unsaved changes, and previews `:substitute` results in a split before
 they are applied.
 
+## Ghostty Customization
+
+On macOS, installing Ghostty creates three files:
+
+```text
+Selfishell managed defaults:
+  ${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/ghostty/config.ghostty
+
+Ghostty entrypoint:
+  ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty
+
+Personal overrides:
+  ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/user.ghostty
+```
+
+The entrypoint contains a marked Selfishell block that includes the managed
+defaults and then an optional `user.ghostty`; do not edit inside that block
+directly. Write personal settings to `user.ghostty` instead:
+
+```bash
+${EDITOR:-vim} ~/.config/ghostty/user.ghostty
+```
+
+```ini
+theme = Catppuccin Mocha
+font-size = 15
+cursor-style = bar
+```
+
+`user.ghostty` loads after the Selfishell defaults, so any key you set there
+wins over the corresponding default. `user.ghostty` is entirely yours:
+Selfishell never creates, modifies, checksums, or deletes it, and its absence
+is normal — Ghostty simply has no overrides applied.
+
 ## Everyday Commands
 
 ```bash

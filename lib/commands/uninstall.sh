@@ -151,6 +151,8 @@ command_uninstall() {
   local prefix
   local resource
   local result="$SELFISHELL_EXIT_OK"
+  local resources=()
+  local index
 
   while (("$#" > 0)); do
     case "$1" in
@@ -197,9 +199,17 @@ command_uninstall() {
     uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
+  # Remove in reverse declaration order so user-facing entrypoints (links,
+  # blocks) come off before the Selfishell-internal managed targets they
+  # point at -- resources.sh generally declares internal files first and
+  # user-owned paths last. Validation above still runs in declaration order.
   while IFS= read -r resource; do
-    managed_uninstall_resource "$resource" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
+    resources+=("$resource")
   done < <(selfishell_managed_resource_names)
+
+  for ((index = ${#resources[@]} - 1; index >= 0; index--)); do
+    managed_uninstall_resource "${resources[index]}" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
+  done
 
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall was incomplete; preserved remaining state for a retry."
