@@ -285,6 +285,7 @@ managed_install_file() {
   local source_file="$2"
   local target_file="$3"
   local dry_run="$4"
+  local assume_yes="${5:-0}"
   local source_checksum
   local current_checksum=""
   local backup="-"
@@ -301,10 +302,31 @@ managed_install_file() {
       current_checksum="$(managed_checksum "$target_file")"
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
         if [[ "$MANAGED_STATE_STATUS" == "active" || "$backup" == "-" || -e "$backup" || -L "$backup" ]]; then
-          cli_error "Managed file was modified; preserving it: $target_file"
-          return "$SELFISHELL_EXIT_ERROR"
+          local answer=""
+          if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
+            printf 'Managed file was modified: %s. Overwrite with default config? [y/N] ' "$target_file"
+            IFS= read -r answer <&3
+          fi
+          case "$answer" in
+            y | Y | yes | YES)
+              # Always create a new backup for the modified file before overwriting
+              backup_dir="${SELFISHELL_STATE_DIR}/backups"; mkdir -p "${backup_dir}"; backup="$(managed_unique_backup_path "${backup_dir}/$(basename "$target_file")")"
+              current_checksum=""
+              printf 'Debug: created backup path %s for %s\n' "$backup" "$target_file"
+              ;;
+            *)
+              if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
+                printf 'Preserved modified file: %s\n' "$target_file"
+                return 0
+              else
+                cli_error "Managed file was modified; preserving it: $target_file"
+                return "$SELFISHELL_EXIT_ERROR"
+              fi
+              ;;
+          esac
+        else
+          current_checksum=""
         fi
-        current_checksum=""
       fi
     elif [[ -e "$target_file" || -L "$target_file" ]]; then
       cli_error "Managed file path changed type; preserving it: $target_file"
@@ -329,7 +351,10 @@ managed_install_file() {
 
   managed_write_state "$resource" file pending "$target_file" - "$backup" "$source_checksum"
   if [[ "$backup" != "-" && ! -e "$backup" && ! -L "$backup" && (-e "$target_file" || -L "$target_file") ]]; then
-    mv "$target_file" "$backup"
+    # Ensure backup directory exists
+    mkdir -p "$(dirname "$backup")"
+    printf 'Debug: moving %s to backup %s\n' "$target_file" "$backup"
+    mv "${target_file}" "${backup}"
   fi
   managed_atomic_copy "$source_file" "$target_file"
   managed_write_state "$resource" file active "$target_file" - "$backup" "$source_checksum"
@@ -341,6 +366,7 @@ managed_install_link() {
   local target_file="$2"
   local source_file="$3"
   local dry_run="$4"
+  local assume_yes="${5:-0}"
   local backup="-"
 
   if managed_read_state "$resource"; then
@@ -359,8 +385,28 @@ managed_install_link() {
     fi
 
     if [[ "$MANAGED_STATE_STATUS" == "active" && (-e "$target_file" || -L "$target_file") ]]; then
-      cli_error "Managed link was replaced; preserving it: $target_file"
-      return "$SELFISHELL_EXIT_ERROR"
+      local answer=""
+      if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
+        printf 'Managed link was replaced: %s. Overwrite with default symlink? [y/N] ' "$target_file"
+        IFS= read -r answer <&3
+      fi
+      case "$answer" in
+        y | Y | yes | YES)
+          if [[ "$backup" == "-" ]]; then
+            backup="$(managed_unique_backup_path "$target_file")"
+          fi
+          # 덮어쓰기 계속 진행
+          ;;
+        *)
+          if { [[ -t 0 ]] || [[ -n "${SELFISHELL_TEST_TTY:-}" ]]; } && [[ "$assume_yes" != "1" ]]; then
+            printf 'Preserved modified link: %s\n' "$target_file"
+            return 0
+          else
+            cli_error "Managed link was replaced; preserving it: $target_file"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+          ;;
+      esac
     fi
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     backup="$(managed_unique_backup_path "$target_file")"
