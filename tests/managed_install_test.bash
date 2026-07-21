@@ -1411,6 +1411,104 @@ test_block_remove_failure_cleans_up_temporary_files() {
     fail "A failed block removal must not change resource state"
 }
 
+test_block_install_chmod_failure_leaves_no_target_or_state() {
+  local target="$HOME/.zshrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local helper="$TEST_ROOT/block-chmod-helper.bash"
+  local status
+
+  cat >"$helper" <<'EOF'
+#!/usr/bin/env bash
+source "$1/lib/common.sh"
+source "$1/lib/paths.sh"
+selfishell_initialize_paths
+source "$1/lib/managed.sh"
+chmod() { return 1; }
+managed_install_block user-zshrc "$2" 0
+EOF
+
+  set +e
+  bash "$helper" "$ROOT_DIR" "$target" >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "A forced chmod failure should propagate as an error"
+  [[ ! -e "$target" ]] || fail "A failed chmod must not leave a partial block target"
+  [[ "$(sed -n '3p' "$state_file")" == pending ]] ||
+    fail "A failed chmod must not be recorded as active"
+  [[ "$(find "$HOME" -maxdepth 1 -name '.zshrc.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A failed chmod left a temporary file behind"
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  grep -Fqx '# >>> Selfishell initialize >>>' "$target" ||
+    fail "Retrying after removing the forced chmod failure did not recover"
+}
+
+test_block_install_truncation_failure_preserves_target_and_state() {
+  local target="$HOME/.zshrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local before_content
+  local status=0
+
+  printf 'original zshrc\n' >"$target"
+  before_content="$(<"$target")"
+  chmod 0444 "$target"
+
+  set +e
+  run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+  chmod 0644 "$target"
+
+  ((status != 0)) || fail "A forced truncation failure should propagate as an error"
+  [[ "$(<"$target")" == "$before_content" ]] ||
+    fail "A failed truncation must not change the existing target bytes"
+  [[ "$(sed -n '3p' "$state_file")" == pending ]] ||
+    fail "A failed truncation must not be recorded as active"
+  [[ "$(find "$HOME" -maxdepth 1 -name '.zshrc.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A failed truncation left a temporary file behind"
+  ! grep -Fq 'Added Selfishell block' "$TEST_ROOT/stdout" ||
+    fail "A failed truncation printed a success message"
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  grep -Fqx '# >>> Selfishell initialize >>>' "$target" ||
+    fail "Retrying after removing the forced permission failure did not recover"
+}
+
+test_block_remove_truncation_failure_preserves_block_and_state() {
+  local target="$HOME/.zshrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local before_content
+  local status=0
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  before_content="$(<"$target")"
+  chmod 0444 "$target"
+
+  set +e
+  run_selfishell uninstall --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+  chmod 0644 "$target"
+
+  ((status != 0)) || fail "A forced removal-truncation failure should propagate as an error"
+  [[ "$(<"$target")" == "$before_content" ]] ||
+    fail "A failed block removal must not change the existing target bytes"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$target" ||
+    fail "A failed block removal must leave the managed block in place"
+  [[ -e "$state_file" ]] || fail "A failed block removal must not delete the resource state"
+  [[ "$(find "$HOME" -maxdepth 1 -name '.zshrc.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A failed block removal left a temporary file behind"
+  ! grep -Fq 'Selfishell configuration uninstalled' "$TEST_ROOT/stdout" ||
+    fail "A failed block removal printed a success message"
+
+  run_selfishell uninstall --yes >/dev/null
+  [[ ! -e "$state_file" ]] ||
+    fail "Retrying after removing the forced permission failure did not clear resource state"
+  ! grep -Fqx '# >>> Selfishell initialize >>>' "$target" 2>/dev/null ||
+    fail "Retrying after removing the forced permission failure did not remove the managed block"
+}
+
 test_install_final_state_write_failure_does_not_report_success() {
   local rc=0
   local before_profile
