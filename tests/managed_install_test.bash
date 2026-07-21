@@ -519,57 +519,89 @@ test_install_does_not_depend_on_checkout() {
     fail "Zsh configuration depended on the removed checkout"
 }
 
-test_mise_config_global_install_developer_and_minimal() {
+test_mise_config_global_creation_and_no_state() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "mise/config.toml was not created for developer profile"
-  [[ -f "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global.state was not recorded"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml was not created on developer install"
+  [[ ! -f "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global state should not exist"
+}
 
-  local template_checksum
-  template_checksum="$(cksum <"$ROOT_DIR/common/mise-global-config.toml" | awk '{print $1 ":" $2}')"
-  local state_checksum
-  state_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state")"
-  [[ "$state_checksum" == "$template_checksum" ]] || fail "Registered state checksum does not match template"
-
-  run_selfishell uninstall --restore --yes >/dev/null
-  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "uninstall did not clean up empty config.toml"
-
+test_mise_config_global_minimal_profile() {
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should not be created for minimal profile"
-  [[ ! -e "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global state should not exist for minimal profile"
 }
 
-test_mise_config_global_preserves_existing_file() {
+test_mise_config_global_preserves_existing_types() {
   mkdir -p "$XDG_CONFIG_HOME/mise"
-  printf 'existing user config\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-
+  printf 'user_owned_data_content_bytes\n' >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  assert_file_content 'existing user config' "$XDG_CONFIG_HOME/mise/config.toml"
+  assert_file_content 'user_owned_data_content_bytes' "$XDG_CONFIG_HOME/mise/config.toml"
 
-  local expected_checksum
-  expected_checksum="$(cksum <"$XDG_CONFIG_HOME/mise/config.toml" | awk '{print $1 ":" $2}')"
-  local state_checksum
-  state_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state")"
-  [[ "$state_checksum" == "$expected_checksum" ]] || fail "Existing file checksum was not recorded in state"
+  rm -f "$XDG_CONFIG_HOME/mise/config.toml"
+  printf 'link_target_content\n' >"$TEST_ROOT/real_config.toml"
+  ln -s "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_symlink_to "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
+
+  rm -f "$TEST_ROOT/real_config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  [[ -L "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dangling symlink was removed"
+  [[ "$(readlink "$XDG_CONFIG_HOME/mise/config.toml")" == "$TEST_ROOT/real_config.toml" ]] || fail "dangling symlink target changed"
 }
 
-test_mise_config_global_update_allows_modification() {
+test_mise_config_global_idempotency_and_status() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  printf 'modified by user\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  printf 'modified by user 123\n' >"$XDG_CONFIG_HOME/mise/config.toml"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
 
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null || fail "Reinstall failed after user modification"
-  assert_file_content 'modified by user' "$XDG_CONFIG_HOME/mise/config.toml"
+  local status_out
+  status_out="$(run_selfishell status 2>&1)" || :
+  [[ "$status_out" != *'config.toml'* ]] || fail "config.toml should not be reported in status"
 }
 
 test_mise_config_global_uninstall_preservation() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
-  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should be removed on uninstall if unchanged"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should remain after uninstall"
 
+  mkdir -p "$XDG_CONFIG_HOME/mise"
+  printf 'pre_existing_data\n' >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  printf 'modified content\n' >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell uninstall --restore --yes >/dev/null
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "modified config.toml should be preserved on uninstall"
-  assert_file_content 'modified content' "$XDG_CONFIG_HOME/mise/config.toml"
+  assert_file_content 'pre_existing_data' "$XDG_CONFIG_HOME/mise/config.toml"
+
+  cat >"$XDG_CONFIG_HOME/mise/config.toml" <<'EOF'
+# User-defined global mise configuration
+# Selfishell defaults are loaded from conf.d/selfishell.toml
+EOF
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell uninstall --restore --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml with template content was deleted on uninstall"
+}
+
+test_mise_config_global_dry_run_and_directory_error() {
+  run_selfishell install --profile developer --skip-packages --dry-run --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dry-run created config.toml"
+
+  mkdir -p "$XDG_CONFIG_HOME/mise/config.toml"
+  local rc=0
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null 2>&1 || rc=$?
+  ((rc != 0)) || fail "install did not return error when config.toml is a directory"
+}
+
+test_mise_global_config_env_runtime() {
+  local test_env="caller_defined_env_file"
+  local output
+  output="$(HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" MISE_GLOBAL_CONFIG_FILE="$test_env" zsh -dfc 'source "$HOME/.zshrc" >/dev/null 2>&1; print "${MISE_GLOBAL_CONFIG_FILE-}"')"
+  [[ "$output" == "$test_env" ]] || fail "MISE_GLOBAL_CONFIG_FILE was modified by runtime.zsh"
+}
+
+test_mise_use_global_integration() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'node = "24"\n' >>"$XDG_CONFIG_HOME/mise/config.toml"
+  local selfishell_toml_content
+  selfishell_toml_content="$(<"$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml")"
+  [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
 }
 
 run_test() {

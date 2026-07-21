@@ -36,7 +36,7 @@ install_managed_configuration() {
   while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
     case "$resource_kind" in
       file)
-        if [[ "$profile" != "developer" && ("$resource_name" == nvim-* || "$resource_name" == mise-config-global) ]]; then
+        if [[ "$profile" != "developer" && "$resource_name" == nvim-* ]]; then
           continue
         fi
         if [[ "$resource_name" == "zshrc-config" ]]; then
@@ -105,6 +105,43 @@ install_default_shell() {
   else
     printf 'Could not set login shell to Zsh.\n'
   fi
+}
+
+install_mise_global_config() {
+  local dry_run="$1"
+  local target_file="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+
+  if [[ -d "$target_file" || (-e "$target_file" && ! -f "$target_file" && ! -L "$target_file") ]]; then
+    cli_error "mise global config path is not a regular file or symlink: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if [[ -e "$target_file" || -L "$target_file" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf 'User mise config exists; preserving it: %s\n' "$target_file"
+    fi
+    return 0
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf 'Would create user mise config: %s\n' "$target_file"
+    return 0
+  fi
+
+  local parent_dir
+  parent_dir="$(dirname "$target_file")"
+  mkdir -p "$parent_dir" || return "$SELFISHELL_EXIT_ERROR"
+
+  local temporary_file
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")"
+
+  cat >"$temporary_file" <<'EOF'
+# User-defined global mise configuration
+# Selfishell defaults are loaded from conf.d/selfishell.toml
+EOF
+
+  mv "$temporary_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+  printf 'Created user mise config: %s\n' "$target_file"
 }
 
 command_install() {
@@ -188,6 +225,9 @@ command_install() {
   fi
 
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
+  if [[ "$profile" == "developer" ]]; then
+    install_mise_global_config "$dry_run" || return
+  fi
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
