@@ -125,7 +125,7 @@ are activated.
 | Profile | Included tools |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Vim, Starship, Zinit, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
+| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
 
 `minimal` is the default and uses Vim for the base editor. Preview the
 developer profile without changing anything:
@@ -136,7 +136,8 @@ selfishell install --profile developer --dry-run
 
 You can change an existing installation from `minimal` to `developer` by
 running the developer installation command. Existing managed settings are
-updated safely. In `developer`, `vim` and `vi` resolve to Neovim.
+updated safely. In the `developer` profile, `vim` resolves to Neovim while
+`vi` remains the system editor.
 
 Packages marked optional by a profile are recommended packages: Selfishell
 attempts to install them automatically but continues if they are unavailable.

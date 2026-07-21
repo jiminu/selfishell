@@ -6,7 +6,7 @@ role.
 | Profile | Purpose |
 | --- | --- |
 | `minimal` | Core shell, Zinit, Vim, and macOS terminal fonts |
-| `developer` | Minimal plus Neovim 0.12.4, Tree-sitter CLI 0.26.11, Node.js 24.18.0, Python 3.13.14, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tooling |
+| `developer` | Minimal plus Neovim 0.12.4, Tree-sitter CLI 0.26.11, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tooling |
 
 `minimal` is selected when `--profile` is omitted.
 
