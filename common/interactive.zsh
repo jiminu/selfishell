@@ -7,30 +7,93 @@ source "$SELFISHELL_COMMON_DIR/aliases-kubectl.zsh"
 # Shell tools configure key bindings before interactive plugins load.
 SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
 
-if command -v zoxide >/dev/null 2>&1; then
+# Writes "$@"'s stdout to $target through a temp file, validated non-empty
+# and zsh-syntax-clean before the atomic rename, so a process killed
+# mid-generation (a closed terminal, a signal) can never leave a partially
+# written, non-empty cache that then gets sourced forever without
+# regenerating (the caller's [[ -s ]] check can't tell "empty" from
+# "truncated"). Only fits tools whose init output is exactly one command's
+# stdout; fzf's fallback-to-a-copied-file shape doesn't, so it stays
+# separate below rather than forcing it through this signature.
+_selfishell_generate_zsh_cache() {
+  local target="$1"
+  shift
+  local temporary="${target}.tmp.$$.$RANDOM"
+
+  command mkdir -p "${target:h}" 2>/dev/null || return 1
+
+  "$@" >|"$temporary" 2>/dev/null || {
+    command rm -f "$temporary"
+    return 1
+  }
+  [[ -s "$temporary" ]] || {
+    command rm -f "$temporary"
+    return 1
+  }
+  command zsh -n "$temporary" >/dev/null 2>&1 || {
+    command rm -f "$temporary"
+    return 1
+  }
+  command mv -f "$temporary" "$target" || {
+    command rm -f "$temporary"
+    return 1
+  }
+}
+
+_selfishell_generate_fzf_cache() {
+  local target="$1"
+  local temporary="${target}.tmp.$$.$RANDOM"
+  local fzf_init
+
+  command mkdir -p "${target:h}" 2>/dev/null || return 1
+
+  if fzf_init="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_init" ]]; then
+    print -r -- "$fzf_init" >|"$temporary" || {
+      command rm -f "$temporary"
+      return 1
+    }
+  elif [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
+    command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$temporary" 2>/dev/null || {
+      command rm -f "$temporary"
+      return 1
+    }
+  else
+    return 1
+  fi
+
+  [[ -s "$temporary" ]] || {
+    command rm -f "$temporary"
+    return 1
+  }
+  command zsh -n "$temporary" >/dev/null 2>&1 || {
+    command rm -f "$temporary"
+    return 1
+  }
+  command mv -f "$temporary" "$target" || {
+    command rm -f "$temporary"
+    return 1
+  }
+}
+
+if _selfishell_zoxide_bin="$(command -v zoxide)"; then
   _selfishell_zoxide_cache="$SELFISHELL_CACHE_DIR/zoxide-init.zsh"
-  if [[ ! -s "$_selfishell_zoxide_cache" ]]; then
-    command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
-    zoxide init zsh >|"$_selfishell_zoxide_cache" 2>/dev/null
+  if [[ ! -s "$_selfishell_zoxide_cache" || "$_selfishell_zoxide_bin" -nt "$_selfishell_zoxide_cache" ]]; then
+    _selfishell_generate_zsh_cache "$_selfishell_zoxide_cache" zoxide init zsh
   fi
   [[ -s "$_selfishell_zoxide_cache" ]] && source "$_selfishell_zoxide_cache"
   unset _selfishell_zoxide_cache
 fi
+unset _selfishell_zoxide_bin
 
-if command -v fzf >/dev/null 2>&1; then
+if _selfishell_fzf_bin="$(command -v fzf)"; then
   _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
-  if [[ ! -s "$_selfishell_fzf_cache" ]]; then
-    command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
-    local fzf_init
-    if fzf_init="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_init" ]]; then
-      print -r -- "$fzf_init" >|"$_selfishell_fzf_cache"
-    elif [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
-      command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$_selfishell_fzf_cache"
-    fi
+  if [[ ! -s "$_selfishell_fzf_cache" || "$_selfishell_fzf_bin" -nt "$_selfishell_fzf_cache" ]]; then
+    _selfishell_generate_fzf_cache "$_selfishell_fzf_cache"
   fi
   [[ -s "$_selfishell_fzf_cache" ]] && source "$_selfishell_fzf_cache"
   unset _selfishell_fzf_cache
 fi
+unset _selfishell_fzf_bin
 
 if (($+functions[zinit])); then
   # Pinned to the commits recorded in dependencies.conf; keep the two in
@@ -46,14 +109,14 @@ if (($+functions[zinit])); then
   zinit light zdharma-continuum/fast-syntax-highlighting
 fi
 
-if command -v starship >/dev/null 2>&1; then
+if _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
-  if [[ ! -s "$_selfishell_starship_cache" ]]; then
-    command mkdir -p "$SELFISHELL_CACHE_DIR" 2>/dev/null
-    starship init zsh >|"$_selfishell_starship_cache" 2>/dev/null
+  if [[ ! -s "$_selfishell_starship_cache" || "$_selfishell_starship_bin" -nt "$_selfishell_starship_cache" ]]; then
+    _selfishell_generate_zsh_cache "$_selfishell_starship_cache" starship init zsh
   fi
   [[ -s "$_selfishell_starship_cache" ]] && source "$_selfishell_starship_cache"
   unset _selfishell_starship_cache
 fi
+unset _selfishell_starship_bin
 
 unset SELFISHELL_CACHE_DIR
