@@ -49,11 +49,15 @@ release_atomic_link() {
   local target="$1"
   local path="$2"
   local temporary="${path}.tmp.$$"
-  ln -s "$target" "$temporary"
+
+  ln -s "$target" "$temporary" || return 1
   if mv -fT "$temporary" "$path" 2>/dev/null; then
     return
   fi
-  mv -fh "$temporary" "$path"
+  if ! mv -fh "$temporary" "$path"; then
+    rm -f "$temporary"
+    return 1
+  fi
 }
 
 release_platform() {
@@ -96,7 +100,7 @@ release_install() {
   architecture="$(detect_architecture)"
   archive_name="selfishell-${version}-${platform}-${architecture}.tar.gz"
   release_url="$(release_root_url)/download/v${version}"
-  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-update.XXXXXX")"
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-update.XXXXXX")" || return 1
   archive="$temporary_dir/$archive_name"
   checksum_file="$temporary_dir/SHA256SUMS"
 
@@ -117,19 +121,35 @@ release_install() {
   fi
 
   if [[ ! -d "$SELFISHELL_RELEASES_DIR/$version" ]]; then
-    staging="$(mktemp -d "$SELFISHELL_RELEASES_DIR/.${version}.tmp.XXXXXX")"
-    tar -xzf "$archive" -C "$staging"
+    staging="$(mktemp -d "$SELFISHELL_RELEASES_DIR/.${version}.tmp.XXXXXX")" || {
+      rm -rf "$temporary_dir"
+      return 1
+    }
+    tar -xzf "$archive" -C "$staging" || {
+      rm -rf "$temporary_dir" "$staging"
+      return 1
+    }
     if [[ ! -x "$staging/bin/selfishell" || ! -r "$staging/VERSION" || "$(<"$staging/VERSION")" != "$version" ]]; then
       cli_error "Release archive is invalid or has the wrong version."
       rm -rf "$temporary_dir" "$staging"
       return 1
     fi
-    mv "$staging" "$SELFISHELL_RELEASES_DIR/$version"
+    mv "$staging" "$SELFISHELL_RELEASES_DIR/$version" || {
+      rm -rf "$temporary_dir" "$staging"
+      return 1
+    }
   fi
   rm -rf "$temporary_dir"
 
-  release_atomic_link "$(readlink "$SELFISHELL_SHARE_DIR/current")" "$SELFISHELL_SHARE_DIR/previous"
-  release_atomic_link "releases/$version" "$SELFISHELL_SHARE_DIR/current"
+  # A failure here only loses the rollback link, not the update itself, so
+  # warn and continue rather than aborting an otherwise-successful update.
+  if ! release_atomic_link "$(readlink "$SELFISHELL_SHARE_DIR/current")" "$SELFISHELL_SHARE_DIR/previous"; then
+    cli_error "Failed to update the previous release link; continuing."
+  fi
+  release_atomic_link "releases/$version" "$SELFISHELL_SHARE_DIR/current" || {
+    cli_error "Failed to activate Selfishell $version."
+    return 1
+  }
   printf 'Selfishell CLI updated to %s.\n' "$version"
   release_prune_inactive
 }

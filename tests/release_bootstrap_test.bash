@@ -191,6 +191,82 @@ test_cli_update_and_offline_rollback() {
   assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/previous"
 }
 
+test_update_release_move_failure_does_not_corrupt_symlinks() {
+  local version
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */releases/0.2.3) exit 1 ;;
+  esac
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  PATH="$fake_bin:$PATH" "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  ((status != 0)) || fail "A forced release-move failure should propagate as an error"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/previous" ]] ||
+    fail "A forced release-move failure must not create a previous link"
+  ! grep -Fq 'CLI updated to' "$TEST_ROOT/stdout" ||
+    fail "A forced release-move failure printed a success message"
+  [[ ! -d "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3" ]] ||
+    fail "A forced release-move failure must not leave a partial release directory"
+
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_update_activation_link_failure_does_not_report_success() {
+  local version
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/ln" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */share/selfishell/current.tmp.*) exit 1 ;;
+  esac
+done
+exec /bin/ln "$@"
+EOF
+  chmod +x "$fake_bin/ln"
+
+  set +e
+  PATH="$fake_bin:$PATH" "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  ((status != 0)) || fail "A forced activation-link failure should propagate as an error"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  ! grep -Fq 'CLI updated to' "$TEST_ROOT/stdout" ||
+    fail "A forced activation-link failure printed a success message"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3" ]] ||
+    fail "The downloaded release directory should still be usable for a retry"
+
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
 test_default_update_skips_missing_configuration_and_updates_cli() {
   local output
   local cli_line skip_line
