@@ -57,6 +57,13 @@ install_managed_configuration() {
       block)
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
+          if managed_read_state "$resource_name" && [[ "$MANAGED_STATE_TYPE" == link ]]; then
+            if [[ "$dry_run" == "1" ]]; then
+              printf 'Would migrate Ghostty configuration from a managed link to an include block: %s\n' "$MANAGED_STATE_TARGET"
+              continue
+            fi
+            managed_uninstall_resource "$resource_name" 1 0 || return
+          fi
         fi
         managed_install_block "$resource_name" "$resource_target" "$dry_run"
         ;;

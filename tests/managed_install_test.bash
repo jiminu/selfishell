@@ -163,6 +163,29 @@ test_macos_install_includes_ghostty_configuration() {
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
+test_macos_update_migrates_legacy_ghostty_link_to_block() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  rm "$target"
+  ln -s "$managed_source" "$target"
+  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
+
+  run_selfishell update --tools-only --dry-run >/dev/null
+  [[ -L "$target" ]] || fail "Dry-run migration removed the legacy Ghostty link"
+
+  run_selfishell update --tools-only --yes >/dev/null
+
+  [[ -f "$target" && ! -L "$target" ]] || fail "Legacy Ghostty link was not migrated to a user-owned file"
+  grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Migrated Ghostty config is missing the include block"
+  grep -Fqx "config-file = $managed_source" "$target" || fail "Migrated Ghostty config is missing the include line"
+  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Ghostty resource state was not migrated to block"
+}
+
 test_macos_install_reuses_declined_ghostty_choice() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   mkdir -p "$XDG_STATE_HOME/selfishell"
