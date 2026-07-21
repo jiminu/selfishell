@@ -256,8 +256,13 @@ managed_install_block() {
   reference="selfishell-${resource}-block-v1"
 
   if managed_read_state "$resource"; then
-    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
+    if [[ "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "State conflict for managed block: $resource"
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
+    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block ]]; then
+      cli_error "Legacy Selfishell state was detected for: $resource"
+      cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
       return "$SELFISHELL_EXIT_ERROR"
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then

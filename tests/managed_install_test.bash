@@ -163,7 +163,32 @@ test_macos_install_includes_ghostty_configuration() {
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
 }
 
-test_macos_update_migrates_legacy_ghostty_link_to_block() {
+test_legacy_ghostty_link_state_is_rejected_without_changes() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
+  local status
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  rm "$target"
+  ln -s "$managed_source" "$target"
+  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
+
+  set +e
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Legacy Ghostty link state should stop installation"
+  assert_symlink_to "$managed_source" "$target"
+  [[ "$(sed -n '2p' "$state_file")" == link ]] || fail "Legacy state was changed"
+  grep -Fq "Run 'selfishell uninstall --restore --yes', then reinstall." "$TEST_ROOT/stderr" ||
+    fail "Legacy state error did not explain how to recover"
+}
+
+test_legacy_ghostty_link_can_be_uninstalled_for_manual_transition() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   local target="$XDG_CONFIG_HOME/ghostty/config"
   local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
@@ -175,15 +200,15 @@ test_macos_update_migrates_legacy_ghostty_link_to_block() {
   ln -s "$managed_source" "$target"
   printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
 
-  run_selfishell install --profile minimal --skip-packages --dry-run --yes >/dev/null
-  [[ -L "$target" ]] || fail "Dry-run migration removed the legacy Ghostty link"
+  run_selfishell uninstall --yes >/dev/null
+  [[ ! -e "$state_file" ]] || fail "Legacy Ghostty link state was not removed"
+  [[ ! -e "$target" ]] || fail "Legacy Ghostty link was not removed"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  [[ -f "$target" && ! -L "$target" ]] || fail "Legacy Ghostty link was not migrated to a user-owned file"
-  grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Migrated Ghostty config is missing the include block"
-  grep -Fqx "config-file = $managed_source" "$target" || fail "Migrated Ghostty config is missing the include line"
-  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Ghostty resource state was not migrated to block"
+  [[ -f "$target" && ! -L "$target" ]] || fail "Reinstall did not create a user-owned Ghostty config"
+  grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Reinstalled Ghostty config is missing the include block"
+  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Reinstalled Ghostty resource was not recorded as a block"
 }
 
 test_macos_install_reuses_declined_ghostty_choice() {
