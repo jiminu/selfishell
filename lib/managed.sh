@@ -38,21 +38,20 @@ managed_write_state() {
   local state_file
   local temporary_file
 
-  mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR"
+  mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
   state_file="$(managed_state_path "$resource")"
-  temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")"
+  temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
-  {
-    printf '2\n'
-    printf '%s\n' "$type"
-    printf '%s\n' "$status"
-    printf '%s\n' "$target"
-    printf '%s\n' "$reference"
-    printf '%s\n' "$backup"
-    printf '%s\n' "$checksum"
-  } >"$temporary_file"
+  if ! printf '2\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$type" "$status" "$target" "$reference" "$backup" "$checksum" >"$temporary_file"; then
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
 
-  mv "$temporary_file" "$state_file"
+  mv "$temporary_file" "$state_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
 }
 
 managed_remove_state() {
@@ -81,11 +80,21 @@ managed_atomic_copy() {
   local target_file="$2"
   local temporary_file
 
-  mkdir -p "$(dirname "$target_file")"
-  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")"
-  cp "$source_file" "$temporary_file"
-  chmod 0644 "$temporary_file"
-  mv "$temporary_file" "$target_file"
+  mkdir -p "$(dirname "$target_file")" || return "$SELFISHELL_EXIT_ERROR"
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+
+  cp "$source_file" "$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  chmod 0644 "$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  mv "$temporary_file" "$target_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
 }
 
 # Managed regular-file conflicts are handled from inside a
@@ -212,6 +221,28 @@ managed_block_error() {
   cli_error "Preserving the file. Remove conflicting Selfishell markers and retry."
 }
 
+managed_preflight_block_target() {
+  local resource="$1"
+  local target_file="$2"
+
+  if [[ -L "$target_file" ]]; then
+    cli_error "Refusing to modify symbolic link: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  if [[ -e "$target_file" && ! -f "$target_file" ]]; then
+    cli_error "Refusing to modify non-regular block path: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  managed_inspect_block "$resource" "$target_file" || return
+  case "$MANAGED_BLOCK_STATUS" in
+    malformed)
+      managed_block_error "$resource" "$target_file"
+      return "$SELFISHELL_EXIT_ERROR"
+      ;;
+  esac
+}
+
 managed_preflight_zsh_loader() {
   local target_file="$HOME/.zshrc"
   local state_file legacy_version legacy_type
@@ -259,6 +290,15 @@ managed_install_block() {
   local dry_run="$3"
   local expected_checksum temporary_file reference
 
+  if [[ -L "$target_file" ]]; then
+    cli_error "Refusing to modify symbolic link: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  if [[ -e "$target_file" && ! -f "$target_file" ]]; then
+    cli_error "Refusing to modify non-regular block path: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
   expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
   managed_inspect_block "$resource" "$target_file" || return
   reference="selfishell-${resource}-block-v1"
@@ -271,7 +311,7 @@ managed_install_block() {
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$expected_checksum" ]]; then
       if [[ "$dry_run" == 0 ]]; then
-        managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum"
+        managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       fi
       printf 'Unchanged Selfishell block: %s\n' "$target_file"
       return 0
@@ -300,21 +340,39 @@ managed_install_block() {
     return 0
   fi
 
-  managed_write_state "$resource" block pending "$target_file" "$reference" - "$expected_checksum"
-  mkdir -p "$(dirname "$target_file")" || return
-  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
+  managed_write_state "$resource" block pending "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+  mkdir -p "$(dirname "$target_file")" || return "$SELFISHELL_EXIT_ERROR"
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
   if [[ -f "$target_file" ]]; then
-    cp -p "$target_file" "$temporary_file" || return
-    : >"$temporary_file"
+    cp -p "$target_file" "$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+    : >"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   else
-    chmod 0644 "$temporary_file"
+    chmod 0644 "$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
-  managed_block_content "$resource" >"$temporary_file" || return
+  managed_block_content "$resource" >"$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
   if [[ -f "$target_file" ]]; then
-    cat "$target_file" >>"$temporary_file" || return
+    cat "$target_file" >>"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
-  mv "$temporary_file" "$target_file" || return
-  managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum"
+  mv "$temporary_file" "$target_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
   printf 'Added Selfishell block: %s\n' "$target_file"
 }
 
@@ -329,18 +387,33 @@ managed_remove_block() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
-  cp -p "$target_file" "$temporary_file" || return
-  : >"$temporary_file"
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+  cp -p "$target_file" "$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  : >"$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
   if ((MANAGED_BLOCK_START > 0)); then
-    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || return
+    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
   file_size="$(LC_ALL=C wc -c <"$target_file")"
   suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
   if ((suffix_start < file_size)); then
-    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || return
+    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
   fi
-  mv "$temporary_file" "$target_file" || return
+  mv "$temporary_file" "$target_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
 }
 
 managed_install_file() {
@@ -391,7 +464,7 @@ managed_install_file() {
               cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
               printf 'Backed up modified managed file: %s -> %s\n' "$target_file" "$conflict_backup"
               managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
-              managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
+              managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
               printf 'Installed managed file: %s\n' "$target_file"
               return 0
               ;;
@@ -414,7 +487,7 @@ managed_install_file() {
 
   if [[ "$current_checksum" == "$source_checksum" ]]; then
     if [[ "$dry_run" == "0" ]]; then
-      managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
+      managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
     fi
     printf 'Unchanged: %s\n' "$target_file"
     return
@@ -425,13 +498,13 @@ managed_install_file() {
     return
   fi
 
-  managed_write_state "$resource" file pending "$target_file" - "$original_backup" "$source_checksum"
+  managed_write_state "$resource" file pending "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
   if [[ "$original_backup" != "-" && ! -e "$original_backup" && ! -L "$original_backup" && (-e "$target_file" || -L "$target_file") ]]; then
     mkdir -p "$(dirname "$original_backup")" || return "$SELFISHELL_EXIT_ERROR"
     mv "$target_file" "$original_backup" || return "$SELFISHELL_EXIT_ERROR"
   fi
   managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
-  managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
+  managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
   printf 'Installed managed file: %s\n' "$target_file"
 }
 
@@ -441,6 +514,7 @@ managed_install_link() {
   local source_file="$3"
   local dry_run="$4"
   local backup="-"
+  local moved_to_backup=0
 
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_TYPE" != "link" || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
@@ -451,7 +525,7 @@ managed_install_link() {
 
     if [[ -L "$target_file" && "$(readlink "$target_file")" == "$source_file" ]]; then
       if [[ "$dry_run" == "0" ]]; then
-        managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" -
+        managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
       fi
       printf 'Unchanged: %s\n' "$target_file"
       return
@@ -470,15 +544,29 @@ managed_install_link() {
     return
   fi
 
-  managed_write_state "$resource" link pending "$target_file" "$source_file" "$backup" -
-  mkdir -p "$(dirname "$target_file")"
+  managed_write_state "$resource" link pending "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
+  mkdir -p "$(dirname "$target_file")" || return "$SELFISHELL_EXIT_ERROR"
   if [[ "$backup" != "-" && ! -e "$backup" && ! -L "$backup" && (-e "$target_file" || -L "$target_file") ]]; then
-    mv "$target_file" "$backup"
+    mv "$target_file" "$backup" || return "$SELFISHELL_EXIT_ERROR"
+    moved_to_backup=1
   fi
   if [[ ! -e "$target_file" && ! -L "$target_file" ]]; then
-    ln -s "$source_file" "$target_file"
+    if ! ln -s "$source_file" "$target_file"; then
+      if [[ "$moved_to_backup" == 1 && ! -e "$target_file" && ! -L "$target_file" && (-e "$backup" || -L "$backup") ]]; then
+        if mv "$backup" "$target_file"; then
+          managed_remove_state "$resource"
+          return "$SELFISHELL_EXIT_ERROR"
+        fi
+        cli_error "Failed to restore original managed-link target from backup: $backup"
+      fi
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
   fi
-  managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" -
+  if [[ ! -L "$target_file" || "$(readlink "$target_file")" != "$source_file" ]]; then
+    cli_error "Failed to install managed link: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
   printf 'Linked: %s -> %s\n' "$target_file" "$source_file"
 }
 

@@ -17,6 +17,9 @@ test_treesitter_autocmd_uses_detected_filetypes() {
     --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
     '+lua vim.treesitter.start = function(buf) vim.g.selfishell_test_filetype = vim.bo[buf].filetype end; require("config.autocmds"); vim.cmd("enew"); vim.bo.filetype = "sh"; vim.api.nvim_exec_autocmds("FileType", { buffer = 0 }); print(vim.g.selfishell_test_filetype); print(vim.treesitter.language.get_lang("tf"))' \
     +qa 2>&1)"
+  # This headless nvim build emits CRLF line endings for print() on some
+  # platforms (observed on WSL2); normalize before the line-spanning match.
+  output="${output//$'\r'/}"
 
   [[ "$output" == *$'sh\nterraform'* ]] ||
     fail "Tree-sitter autocmd did not use FileType values and Terraform mapping: $output"
