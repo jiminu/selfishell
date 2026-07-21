@@ -587,7 +587,7 @@ test_shell_tool_cache_generation_succeeds_atomically() {
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
   )"
 
@@ -619,7 +619,7 @@ test_shell_tool_cache_generation_failures_preserve_existing_cache() {
 
           _selfishell_generate_zsh_cache "$2/cache.zsh" fake_tool
           cat "$2/cache.zsh"
-          command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+          command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
         ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" "$label"
     )"
 
@@ -707,7 +707,7 @@ test_shell_tool_cache_write_failure_preserves_existing_cache() {
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
   chmod 755 "$cache_dir"
@@ -742,7 +742,7 @@ EOF
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
   )"
 
@@ -773,7 +773,7 @@ EOF
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
   )"
 
@@ -805,7 +805,7 @@ EOF
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
   )"
 
@@ -842,7 +842,7 @@ EOF
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         cat "$2/cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
   )"
 
@@ -869,7 +869,7 @@ test_fzf_cache_copy_fallback_success_and_failure() {
   cache_dir="$HOME/.cache/selfishell"
   restricted_bin="$TEST_ROOT/restricted-bin"
   mkdir -p "$cache_dir" "$restricted_bin"
-  for tool in mkdir rm mv zsh cat find wc; do
+  for tool in mkdir rm mv zsh cat find wc tr; do
     ln -sf "$(command -v "$tool")" "$restricted_bin/$tool"
   done
   ln -sf "$(command -v cp)" "$restricted_bin/cp"
@@ -880,7 +880,7 @@ test_fzf_cache_copy_fallback_success_and_failure() {
         source "$1"
         _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
         [[ -s "$2/fallback-cache.zsh" ]] && print FALLBACK_WRITTEN
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
 
@@ -903,7 +903,7 @@ EOF
         source "$1"
         _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
         cat "$2/fallback-cache.zsh"
-        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
       ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
 
