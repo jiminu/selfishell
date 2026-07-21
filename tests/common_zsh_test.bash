@@ -201,6 +201,167 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
   teardown_test_home
 }
 
+test_update_notice_stale_lock_is_reclaimed_after_ttl() {
+  local fake_bin cache_dir output
+  local stale_created_at
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  # Positional parameters must expand in the generated mock, not this test.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'if [[ "${2:-}" == "--available" ]]; then' \
+    '  printf "2.0.0\\n"' \
+    'else' \
+    '  printf "selfishell 0.2.0\\n"' \
+    'fi' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  # Simulate a lock left behind by a refresh that was killed mid-run (e.g.
+  # the terminal closed) well past the default TTL.
+  stale_created_at=$(($(date +%s) - 700))
+  printf '99999\n' >"$cache_dir/update-check.lock/pid"
+  printf '%s\n' "$stale_created_at" >"$cache_dir/update-check.lock/created_at"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        cat "$2/available-version" 2>/dev/null
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_CLEARED'* ]] ||
+    fail "A stale lock older than the TTL was not reclaimed and cleared: $output"
+  [[ "$output" == *'2.0.0'* ]] ||
+    fail "Reclaiming a stale lock did not perform the refresh: $output"
+  teardown_test_home
+}
+
+test_update_notice_fresh_lock_blocks_concurrent_refresh() {
+  local fake_bin cache_dir output
+  local fresh_created_at
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
+  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  fresh_created_at="$(date +%s)"
+  printf '99999\n' >"$cache_dir/update-check.lock/pid"
+  printf '%s\n' "$fresh_created_at" >"$cache_dir/update-check.lock/created_at"
+
+  output="$(
+    PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        _selfishell_update_notice_refresh "$2" 12345
+        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
+        [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
+      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'LOCK_LEFT'* ]] ||
+    fail "A fresh, still-held lock was incorrectly reclaimed: $output"
+  [[ "$output" == *'VERSION_ABSENT'* ]] ||
+    fail "A concurrent refresh ran despite a fresh lock still being held: $output"
+  teardown_test_home
+}
+
+test_shell_tool_cache_generation_succeeds_atomically() {
+  local cache_dir output
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$cache_dir"
+
+  output="$(
+    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
+        [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
+        command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+  )"
+
+  [[ "$output" == *'print ok'* ]] || fail "A successful cache generation did not write the expected content: $output"
+  [[ "$output" == *$'\n0' ]] || fail "A successful cache generation left a temporary file behind: $output"
+  teardown_test_home
+}
+
+test_shell_tool_cache_generation_failures_preserve_existing_cache() {
+  local cache_dir output label
+
+  setup_test_home
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$cache_dir"
+
+  for label in nonzero-exit empty-output invalid-syntax; do
+    output="$(
+      ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+        /bin/zsh -f -c '
+          _selfishell_command_path() { command -v "$1"; }
+          source "$1"
+          print -r -- "# preexisting cache" >| "$2/cache.zsh"
+
+          case "$3" in
+            nonzero-exit) fake_tool() { print "partial"; return 1 } ;;
+            empty-output) fake_tool() { :; } ;;
+            invalid-syntax) fake_tool() { print "if [[ not valid zsh"; } ;;
+          esac
+
+          _selfishell_generate_zsh_cache "$2/cache.zsh" fake_tool
+          cat "$2/cache.zsh"
+          command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l
+        ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" "$label"
+    )"
+
+    [[ "$output" == *'# preexisting cache'* ]] ||
+      fail "A $label failure corrupted the existing cache: $output"
+    [[ "$output" == *$'\n0' ]] ||
+      fail "A $label failure left a temporary file behind: $output"
+  done
+  teardown_test_home
+}
+
+test_shell_tool_cache_regenerates_when_binary_is_newer() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  mkdir -p "$fake_bin" "$cache_dir"
+  cat >"$fake_bin/zoxide" <<'EOF'
+#!/usr/bin/env bash
+printf 'echo regenerated\n'
+EOF
+  chmod +x "$fake_bin/zoxide"
+  printf '# stale cache\n' >"$cache_dir/zoxide-init.zsh"
+  touch -d '2020-01-01' "$cache_dir/zoxide-init.zsh"
+  touch "$fake_bin/zoxide"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
+      /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
+      zsh "$ROOT_DIR/common/interactive.zsh" 2>/dev/null
+    cat "$cache_dir/zoxide-init.zsh"
+  )"
+
+  [[ "$output" == *'regenerated'* ]] ||
+    fail "Cache was not regenerated when the tool binary is newer than the cache: $output"
+  teardown_test_home
+}
+
 test_neovim_plugin_specs_delay_noncritical_plugins() {
   grep -Fqx '    ft = languages.lsp_filetypes,' "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" ||
     fail "LSP plugin was not limited to supported filetypes"
@@ -285,6 +446,16 @@ test_update_notice_uses_cache_and_refreshes_in_background_format
 printf 'PASS: test_update_notice_uses_cache_and_refreshes_in_background_format\n'
 test_zsh_plugin_pins_match_dependencies_conf
 printf 'PASS: test_zsh_plugin_pins_match_dependencies_conf\n'
+test_update_notice_stale_lock_is_reclaimed_after_ttl
+printf 'PASS: test_update_notice_stale_lock_is_reclaimed_after_ttl\n'
+test_update_notice_fresh_lock_blocks_concurrent_refresh
+printf 'PASS: test_update_notice_fresh_lock_blocks_concurrent_refresh\n'
+test_shell_tool_cache_generation_succeeds_atomically
+printf 'PASS: test_shell_tool_cache_generation_succeeds_atomically\n'
+test_shell_tool_cache_generation_failures_preserve_existing_cache
+printf 'PASS: test_shell_tool_cache_generation_failures_preserve_existing_cache\n'
+test_shell_tool_cache_regenerates_when_binary_is_newer
+printf 'PASS: test_shell_tool_cache_regenerates_when_binary_is_newer\n'
 test_neovim_plugin_specs_delay_noncritical_plugins
 printf 'PASS: test_neovim_plugin_specs_delay_noncritical_plugins\n'
 test_editor_aliases_stay_with_neovim
