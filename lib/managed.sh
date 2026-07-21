@@ -110,6 +110,7 @@ managed_block_definition() {
   case "$resource" in
     user-zshrc)
       MANAGED_BLOCK_LABEL='Selfishell initialize'
+      # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
       MANAGED_BLOCK_BODY='if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc" ]]; then
   source "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc"
 fi'
