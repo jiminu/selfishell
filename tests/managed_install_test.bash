@@ -145,10 +145,19 @@ test_developer_install_includes_neovim_configuration() {
 
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  mkdir -p "$XDG_CONFIG_HOME/ghostty"
+  printf 'font-size = 14\n' >"$XDG_CONFIG_HOME/ghostty/config"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config"
+  [[ -f "$XDG_CONFIG_HOME/ghostty/config" && ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+    fail "Ghostty config is not user-owned"
+  grep -Fqx '# >>> Selfishell ghostty >>>' "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Ghostty include start marker is missing"
+  grep -Fqx "config-file = $XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Ghostty include line is missing"
+  grep -Fqx 'font-size = 14' "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Original Ghostty configuration was not preserved"
   cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config" ||
     fail "Ghostty configuration was not copied"
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
@@ -163,9 +172,35 @@ test_macos_install_reuses_declined_ghostty_choice() {
 
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config" ]] ||
     fail "A saved declined Ghostty choice was ignored"
-  [[ ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
-    fail "A saved declined Ghostty choice created a dangling user link"
+  [[ ! -e "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+    fail "A saved declined Ghostty choice created a user config file"
   assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
+}
+
+test_user_ghostty_changes_survive_reinstall_and_uninstall_exactly() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local prefix="$TEST_ROOT/ghostty-prefix"
+  local suffix="$TEST_ROOT/ghostty-suffix"
+  local expected="$TEST_ROOT/expected-ghostty-config"
+  local modified="$TEST_ROOT/modified-ghostty-config"
+
+  mkdir -p "$(dirname "$target")"
+  printf 'font-size = 14\n' >"$target"
+  printf 'window-padding-x = 20\n' >"$prefix"
+  printf '\ncursor-style = bar\n' >"$suffix"
+  cat "$prefix" "$target" "$suffix" >"$expected"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  cat "$prefix" "$target" >"$modified"
+  mv "$modified" "$target"
+  cat "$suffix" >>"$target"
+
+  run_selfishell update --tools-only --dry-run >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell uninstall --yes >/dev/null
+
+  cmp -s "$expected" "$target" || fail "Uninstall changed user Ghostty config bytes outside the block"
 }
 
 test_local_zsh_extension_is_retired_and_preserved() {
@@ -292,7 +327,7 @@ test_untracked_and_duplicate_loaders_are_rejected() {
   local loader="$TEST_ROOT/loader"
   local status
 
-  bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" >"$loader"
+  bash -c 'source "$1/lib/managed.sh"; managed_block_content user-zshrc' _ "$ROOT_DIR" >"$loader"
   cp "$loader" "$HOME/.zshrc"
 
   set +e
@@ -478,7 +513,7 @@ test_pending_loader_state_recovers_on_reinstall() {
   printf 'original zshrc' >"$HOME/.zshrc"
   mkdir -p "$XDG_STATE_HOME/selfishell/resources"
   state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-  checksum="$(bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" | cksum | awk '{print $1 ":" $2}')"
+  checksum="$(bash -c 'source "$1/lib/managed.sh"; managed_block_content user-zshrc' _ "$ROOT_DIR" | cksum | awk '{print $1 ":" $2}')"
   printf '2\nblock\npending\n%s\nselfishell-zsh-loader-v1\n-\n%s\n' "$HOME/.zshrc" "$checksum" >"$state_file"
 
   run_selfishell install --skip-packages --yes >/dev/null
