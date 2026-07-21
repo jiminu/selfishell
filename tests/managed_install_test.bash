@@ -1119,6 +1119,238 @@ test_managed_link_creation_failure_does_not_report_success_and_is_retryable() {
     fail "Retrying after a fixed permission error did not recover"
 }
 
+test_atomic_copy_step_failures_preserve_target_and_clean_up() {
+  local source="$TEST_ROOT/atomic-copy-source"
+  local target="$HOME/atomic-copy-target"
+  local helper="$TEST_ROOT/atomic-copy-helper.bash"
+  local scenario
+  local status
+
+  printf 'new content\n' >"$source"
+
+  cat >"$helper" <<'EOF'
+#!/usr/bin/env bash
+source "$1/lib/common.sh"
+source "$1/lib/paths.sh"
+selfishell_initialize_paths
+source "$1/lib/managed.sh"
+case "$2" in
+  cp) cp() { return 1; } ;;
+  chmod) chmod() { return 1; } ;;
+  mv) mv() { return 1; } ;;
+esac
+managed_atomic_copy "$3" "$4"
+EOF
+
+  for scenario in cp chmod mv; do
+    printf 'original content\n' >"$target"
+
+    set +e
+    bash "$helper" "$ROOT_DIR" "$scenario" "$source" "$target" >/dev/null 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+
+    [[ "$status" -ne 0 ]] || fail "A forced $scenario failure in managed_atomic_copy should propagate"
+    assert_file_content 'original content' "$target"
+  done
+
+  [[ "$(find "$HOME" -maxdepth 1 -name 'atomic-copy-target.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A forced managed_atomic_copy failure left a temporary file behind"
+}
+
+test_write_state_step_failures_preserve_existing_state() {
+  local target="$HOME/.zshrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
+  local helper="$TEST_ROOT/write-state-helper.bash"
+  local before_checksum
+  local scenario
+  local status
+
+  printf 'original zshrc\n' >"$target"
+  run_selfishell install --skip-packages --yes >/dev/null
+  before_checksum="$(sed -n '7p' "$state_file")"
+
+  cat >"$helper" <<'EOF'
+#!/usr/bin/env bash
+source "$1/lib/common.sh"
+source "$1/lib/paths.sh"
+selfishell_initialize_paths
+source "$1/lib/managed.sh"
+case "$2" in
+  mktemp) mktemp() { return 1; } ;;
+  mv) mv() { return 1; } ;;
+esac
+managed_write_state user-zshrc block active "$3" selfishell-user-zshrc-block-v1 - forged-checksum
+EOF
+
+  for scenario in mktemp mv; do
+    set +e
+    bash "$helper" "$ROOT_DIR" "$scenario" "$target" >/dev/null 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+
+    [[ "$status" -ne 0 ]] || fail "A forced $scenario failure in managed_write_state should propagate"
+    [[ "$(sed -n '7p' "$state_file")" == "$before_checksum" ]] ||
+      fail "A forced $scenario failure changed the existing state checksum"
+  done
+
+  [[ "$(find "$XDG_STATE_HOME/selfishell/resources" -maxdepth 1 -name 'user-zshrc.state.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A forced managed_write_state failure left a temporary file behind"
+}
+
+test_unchanged_block_state_refresh_failure_does_not_report_unchanged() {
+  local fake_bin="$TEST_ROOT/bin"
+  local status=0
+
+  run_selfishell install --skip-packages --yes >/dev/null
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */resources/user-zshrc.state.tmp.*) exit 1 ;;
+  esac
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  ((status != 0)) || fail "A forced state-refresh failure for an unchanged block should propagate"
+  ! grep -Fq 'Unchanged Selfishell block' "$TEST_ROOT/stdout" ||
+    fail "A failed state-refresh must not report the block as successfully unchanged"
+}
+
+test_managed_file_overwrite_conflict_atomic_copy_failure_preserves_backup_and_state() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local saved_state="$TEST_ROOT/vimrc.state.before"
+  # A dedicated directory, not $TEST_ROOT/bin: that one is permanently on
+  # PATH for the whole test (it holds the fake chsh from setup_managed_home),
+  # so a fake `cp` planted there would still shadow the real one on retry.
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  printf 'user_modified_vimrc\n' >"$target_file"
+  cp "$state_file" "$saved_state"
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/cp" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */vim/vimrc.tmp.*) exit 1 ;;
+  esac
+done
+exec /bin/cp "$@"
+EOF
+  chmod +x "$fake_bin/cp"
+
+  set +e
+  printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "A forced atomic-copy failure during an overwrite conflict should propagate"
+  assert_file_content 'user_modified_vimrc' "$target_file"
+  cmp -s "$saved_state" "$state_file" || fail "A failed overwrite must not change the existing resource state"
+
+  local conflict_backup
+  conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
+  [[ -n "$conflict_backup" ]] || fail "No conflict backup was created before the failed overwrite"
+  assert_file_content 'user_modified_vimrc' "$conflict_backup"
+
+  ! grep -Fq 'Installed managed file' "$TEST_ROOT/stderr" ||
+    fail "A failed overwrite must not report success"
+
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" ||
+    fail "Retrying after removing the forced failure did not recover"
+}
+
+test_managed_link_ln_failure_restores_preexisting_regular_file() {
+  local link_path="$XDG_CONFIG_HOME/starship.toml"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
+  # A dedicated directory, not $TEST_ROOT/bin: that one is permanently on
+  # PATH for the whole test (it holds the fake chsh from setup_managed_home),
+  # so a fake `ln` planted there would still shadow the real one on retry.
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  mkdir -p "$(dirname "$link_path")"
+  printf 'preexisting user starship config\n' >"$link_path"
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/ln" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */.config/starship.toml) exit 1 ;;
+  esac
+done
+exec /bin/ln "$@"
+EOF
+  chmod +x "$fake_bin/ln"
+
+  set +e
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  ((status != 0)) || fail "A symlink creation failure must not be reported as success"
+  [[ -f "$link_path" && ! -L "$link_path" ]] ||
+    fail "The original Starship file was not restored after a failed link creation"
+  assert_file_content 'preexisting user starship config' "$link_path"
+  [[ ! -e "$state_file" ]] ||
+    fail "A restored failed link install should not leave pending state behind"
+  ! grep -Fq "Linked: $link_path" "$TEST_ROOT/stdout" ||
+    fail "A failed link creation printed a success message"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$link_path"
+}
+
+test_ghostty_preflight_stops_before_other_resources_install() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
+  local dotfiles_source="$TEST_ROOT/dotfiles/config.ghostty"
+  local status
+
+  mkdir -p "$(dirname "$dotfiles_source")" "$(dirname "$target")"
+  printf 'font-size = 14\n' >"$dotfiles_source"
+  ln -s "$dotfiles_source" "$target"
+
+  set +e
+  run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Ghostty preflight should stop installation"
+  assert_symlink_to "$dotfiles_source" "$target"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] ||
+    fail "Ghostty preflight ran after other managed resources were already installed"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/resources" ]] ||
+    fail "Ghostty preflight ran after other managed resource state was already created"
+  ! grep -Fq 'Skipping package installation' "$TEST_ROOT/stdout" ||
+    fail "Ghostty preflight did not run before the package-installation stage"
+}
+
+test_readme_ghostty_file_descriptions_do_not_contradict_ownership() {
+  ! grep -Fqi 'installing Ghostty creates three files' "$ROOT_DIR/README.md" ||
+    fail "README should not claim Selfishell creates all three Ghostty paths"
+  grep -Fq 'fully user-owned override' "$ROOT_DIR/README.md" ||
+    fail "README does not mark user.ghostty as fully user-owned"
+  grep -Fq 'Selfishell never creates, modifies, checksums, or deletes it' "$ROOT_DIR/README.md" ||
+    fail "README does not state that Selfishell never touches user.ghostty"
+}
+
 test_block_install_failure_cleans_up_temporary_files() {
   local target="$HOME/.zshrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
