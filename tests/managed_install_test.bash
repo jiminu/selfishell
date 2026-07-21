@@ -23,6 +23,14 @@ setup_managed_home() {
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/chsh"
   chmod +x "$TEST_ROOT/bin/chsh"
   export PATH="$TEST_ROOT/bin:$PATH"
+
+  # Conflict tests below assert directly against $SELFISHELL_STATE_DIR (e.g.
+  # its backups/ subdirectory and resource state files). These globals are
+  # derived purely from the XDG_*/HOME values exported above, so scoping the
+  # sourcing to this file keeps every other test's HOME/XDG isolation intact.
+  source "$ROOT_DIR/lib/paths.sh"
+  selfishell_initialize_paths
+  export SELFISHELL_CONFIG_DIR SELFISHELL_STATE_DIR SELFISHELL_CACHE_DIR SELFISHELL_RESOURCE_STATE_DIR
 }
 
 teardown_managed_home() {
@@ -33,6 +41,7 @@ teardown_managed_home() {
   unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
+  unset SELFISHELL_CONFIG_DIR SELFISHELL_STATE_DIR SELFISHELL_CACHE_DIR SELFISHELL_RESOURCE_STATE_DIR
   teardown_test_home
 }
 
@@ -136,10 +145,19 @@ test_developer_install_includes_neovim_configuration() {
 
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  mkdir -p "$XDG_CONFIG_HOME/ghostty"
+  printf 'font-size = 14\n' >"$XDG_CONFIG_HOME/ghostty/config"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config"
+  [[ -f "$XDG_CONFIG_HOME/ghostty/config" && ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+    fail "Ghostty config is not user-owned"
+  grep -Fqx '# >>> Selfishell ghostty >>>' "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Ghostty include start marker is missing"
+  grep -Fqx "config-file = $XDG_CONFIG_HOME/selfishell/ghostty/config" "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Ghostty include line is missing"
+  grep -Fqx 'font-size = 14' "$XDG_CONFIG_HOME/ghostty/config" ||
+    fail "Original Ghostty configuration was not preserved"
   cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config" ||
     fail "Ghostty configuration was not copied"
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
@@ -154,9 +172,35 @@ test_macos_install_reuses_declined_ghostty_choice() {
 
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config" ]] ||
     fail "A saved declined Ghostty choice was ignored"
-  [[ ! -L "$XDG_CONFIG_HOME/ghostty/config" ]] ||
-    fail "A saved declined Ghostty choice created a dangling user link"
+  [[ ! -e "$XDG_CONFIG_HOME/ghostty/config" ]] ||
+    fail "A saved declined Ghostty choice created a user config file"
   assert_file_content '0' "$XDG_STATE_HOME/selfishell/ghostty"
+}
+
+test_user_ghostty_changes_survive_reinstall_and_uninstall_exactly() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  local target="$XDG_CONFIG_HOME/ghostty/config"
+  local prefix="$TEST_ROOT/ghostty-prefix"
+  local suffix="$TEST_ROOT/ghostty-suffix"
+  local expected="$TEST_ROOT/expected-ghostty-config"
+  local modified="$TEST_ROOT/modified-ghostty-config"
+
+  mkdir -p "$(dirname "$target")"
+  printf 'font-size = 14\n' >"$target"
+  printf 'window-padding-x = 20\n' >"$prefix"
+  printf '\ncursor-style = bar\n' >"$suffix"
+  cat "$prefix" "$target" "$suffix" >"$expected"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  cat "$prefix" "$target" >"$modified"
+  mv "$modified" "$target"
+  cat "$suffix" >>"$target"
+
+  run_selfishell update --tools-only --dry-run >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell uninstall --yes >/dev/null
+
+  cmp -s "$expected" "$target" || fail "Uninstall changed user Ghostty config bytes outside the block"
 }
 
 test_local_zsh_extension_is_retired_and_preserved() {
@@ -283,7 +327,7 @@ test_untracked_and_duplicate_loaders_are_rejected() {
   local loader="$TEST_ROOT/loader"
   local status
 
-  bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" >"$loader"
+  bash -c 'source "$1/lib/managed.sh"; managed_block_content user-zshrc' _ "$ROOT_DIR" >"$loader"
   cp "$loader" "$HOME/.zshrc"
 
   set +e
@@ -469,7 +513,7 @@ test_pending_loader_state_recovers_on_reinstall() {
   printf 'original zshrc' >"$HOME/.zshrc"
   mkdir -p "$XDG_STATE_HOME/selfishell/resources"
   state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-  checksum="$(bash -c 'source "$1/lib/managed.sh"; managed_zsh_loader_block' _ "$ROOT_DIR" | cksum | awk '{print $1 ":" $2}')"
+  checksum="$(bash -c 'source "$1/lib/managed.sh"; managed_block_content user-zshrc' _ "$ROOT_DIR" | cksum | awk '{print $1 ":" $2}')"
   printf '2\nblock\npending\n%s\nselfishell-zsh-loader-v1\n-\n%s\n' "$HOME/.zshrc" "$checksum" >"$state_file"
 
   run_selfishell install --skip-packages --yes >/dev/null
@@ -662,6 +706,260 @@ test_mise_global_config_ownership() {
   local selfishell_toml_content
   selfishell_toml_content="$(<"$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml")"
   [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
+}
+
+# Real (non-dry-run, non-`--skip-packages`) `update` calls reach
+# packages_install_profile, which must not touch the network or need root in
+# tests. Faking apt-get/dpkg satisfies the apt requirement check without
+# `sudo`, and pre-creating the "direct" dependency targets (starship, zinit)
+# makes dependency_install treat them as already present. This is host- and
+# platform-independent: it works whether the test runs on the Ubuntu or
+# macOS CI runner, since it never depends on a real apt-get or network path.
+setup_fake_minimal_packages() {
+  mkdir -p "$TEST_ROOT/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt-get"
+  chmod +x "$TEST_ROOT/bin/apt-get"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/dpkg"
+  chmod +x "$TEST_ROOT/bin/dpkg"
+
+  mkdir -p "$HOME/.local/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
+  chmod +x "$HOME/.local/bin/starship"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+}
+
+# Copies the checkout into its own root so a test can change a managed
+# resource's *source* file (to simulate a new Selfishell release) without
+# mutating the real repository under test.
+build_release_copy() {
+  local release_root="$1"
+
+  mkdir -p "$release_root"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" \
+    "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
+  cp "$ROOT_DIR/VERSION" "$release_root/VERSION"
+  cp "$ROOT_DIR/dependencies.conf" "$release_root/dependencies.conf"
+}
+
+test_managed_file_interactive_overwrite_yes() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  printf 'user_modified_data\n' >"$target_file"
+
+  # First "y" answers the initial "Install Selfishell configuration?"
+  # confirmation (read from FD 0, before the resource loop remaps it);
+  # the second "y" answers the managed-file conflict prompt (read from FD 3,
+  # a copy of the original stdin taken before that remap).
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+
+  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" ||
+    fail "Modified managed file was not overwritten with the default"
+
+  local conflict_backup
+  conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
+  [[ -n "$conflict_backup" ]] || fail "No conflict backup was created for the overwritten file"
+  assert_file_content 'user_modified_data' "$conflict_backup"
+}
+
+test_managed_file_interactive_skip_preserves_state_and_continues() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local completion_target="$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
+  local completion_state="$XDG_STATE_HOME/selfishell/resources/zsh-completion.state"
+  local saved_state="$TEST_ROOT/zsh-completion.state.before"
+
+  printf 'user_modified_completion\n' >"$completion_target"
+  cp "$completion_state" "$saved_state"
+
+  local rc=0
+  printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null || rc=$?
+
+  ((rc == 0)) || fail "Install failed after skipping a modified managed file (exit code $rc)"
+  assert_file_content 'user_modified_completion' "$completion_target"
+  cmp -s "$saved_state" "$completion_state" || fail "Skipping a conflict must not change its resource state"
+  cmp -s "$ROOT_DIR/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+    fail "Later managed resources were not installed after a skip"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
+    fail "Skipping a modified file must not create a conflict backup"
+}
+
+test_managed_file_yes_flag_preserves_modification() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local saved_state="$TEST_ROOT/vimrc.state.before"
+
+  printf 'user_modified_data\n' >"$target_file"
+  cp "$state_file" "$saved_state"
+
+  local rc=0
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+
+  ((rc != 0)) || fail "--yes must not silently overwrite a modified managed file"
+  assert_file_content 'user_modified_data' "$target_file"
+  cmp -s "$saved_state" "$state_file" || fail "A refused --yes conflict must not change the resource state"
+  grep -Fq 'Managed file was modified; preserving it' "$TEST_ROOT/stderr" ||
+    fail "--yes conflict did not report a preserving error"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
+    fail "--yes conflict must not create a conflict backup"
+}
+
+test_managed_link_conflict_still_aborts() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local link_path="$XDG_CONFIG_HOME/starship.toml"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
+  local saved_state="$TEST_ROOT/user-starship.state.before"
+
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$link_path"
+  cp "$state_file" "$saved_state"
+  rm "$link_path"
+  printf 'replaced_by_user\n' >"$link_path"
+
+  local rc=0
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+
+  ((rc != 0)) || fail "A replaced managed link must still abort installation"
+  assert_file_content 'replaced_by_user' "$link_path"
+  cmp -s "$saved_state" "$state_file" || fail "A replaced managed link must not change its resource state"
+  grep -Fq 'Managed link was replaced; preserving it' "$TEST_ROOT/stderr" ||
+    fail "Replaced link did not report a preserving error"
+}
+
+test_managed_file_dry_run_conflict_changes_nothing() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local saved_target="$TEST_ROOT/vimrc.before"
+  local saved_state="$TEST_ROOT/vimrc.state.before"
+
+  printf 'user_modified_data\n' >"$target_file"
+  cp "$target_file" "$saved_target"
+  cp "$state_file" "$saved_state"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] || fail "Backups directory already existed before the dry run"
+
+  local output
+  output="$(run_selfishell update --tools-only --dry-run)"
+
+  cmp -s "$saved_target" "$target_file" || fail "Dry run changed the conflicting managed file"
+  cmp -s "$saved_state" "$state_file" || fail "Dry run changed the resource state"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] || fail "Dry run created a backups directory"
+  [[ "$output" == *"Conflict: modified managed file: $target_file"* ]] ||
+    fail "Dry run did not report the managed file conflict"
+  [[ "$output" == *'Would require an overwrite or skip decision.'* ]] ||
+    fail "Dry run did not describe the pending decision"
+}
+
+test_original_backup_survives_overwrite_and_uninstall_restore() {
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+
+  mkdir -p "$(dirname "$target_file")"
+  printf 'original-before-install\n' >"$target_file"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local original_backup
+  original_backup="$(sed -n '6p' "$state_file")"
+  [[ "$original_backup" != "-" ]] || fail "Installation backup was not recorded for a pre-existing file"
+  assert_file_content 'original-before-install' "$original_backup"
+
+  printf 'user-modification-after-install\n' >"$target_file"
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+
+  [[ "$(sed -n '6p' "$state_file")" == "$original_backup" ]] ||
+    fail "Overwriting a conflict must keep the original installation backup"
+  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" || fail "Overwrite did not install the default managed file"
+
+  local conflict_backup
+  conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
+  [[ -n "$conflict_backup" ]] || fail "No conflict backup was created for the overwrite"
+  assert_file_content 'user-modification-after-install' "$conflict_backup"
+
+  run_selfishell uninstall --restore --yes >/dev/null
+  assert_file_content 'original-before-install' "$target_file"
+}
+
+test_update_tools_only_overwrites_modified_managed_file() {
+  local release_root="$TEST_ROOT/release"
+
+  build_release_copy "$release_root"
+  setup_fake_minimal_packages
+
+  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  printf 'user_modified_vimrc\n' >"$target_file"
+  printf '" a newer default vimrc\n' >>"$release_root/common/vimrc"
+
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 bash "$release_root/bin/selfishell" update --tools-only >/dev/null
+
+  cmp -s "$release_root/common/vimrc" "$target_file" ||
+    fail "update --tools-only did not install the new managed file version"
+
+  local conflict_backup
+  conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
+  [[ -n "$conflict_backup" ]] || fail "update --tools-only did not create a conflict backup"
+  assert_file_content 'user_modified_vimrc' "$conflict_backup"
+
+  local expected_checksum recorded_checksum
+  expected_checksum="$(cksum <"$release_root/common/vimrc" | awk '{print $1 ":" $2}')"
+  recorded_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/vimrc.state")"
+  [[ "$recorded_checksum" == "$expected_checksum" ]] ||
+    fail "Resource state checksum was not updated to the new source checksum"
+}
+
+test_update_tools_only_skips_modified_managed_file_and_continues() {
+  local release_root="$TEST_ROOT/release"
+
+  build_release_copy "$release_root"
+  setup_fake_minimal_packages
+
+  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+
+  local completion_target="$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
+  local completion_state="$XDG_STATE_HOME/selfishell/resources/zsh-completion.state"
+  local saved_state="$TEST_ROOT/zsh-completion.state.before"
+
+  printf 'user_modified_completion\n' >"$completion_target"
+  cp "$completion_state" "$saved_state"
+  printf '" a newer default vimrc\n' >>"$release_root/common/vimrc"
+
+  local rc=0
+  printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 bash "$release_root/bin/selfishell" update --tools-only >/dev/null || rc=$?
+
+  ((rc == 0)) || fail "update --tools-only failed after skipping a modified managed file (exit code $rc)"
+  assert_file_content 'user_modified_completion' "$completion_target"
+  cmp -s "$saved_state" "$completion_state" || fail "Skipping a conflict must not change its resource state"
+  cmp -s "$release_root/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+    fail "update --tools-only did not continue updating later managed resources after a skip"
+}
+
+test_update_tools_only_yes_preserves_modified_file() {
+  setup_fake_minimal_packages
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
+  local saved_state="$TEST_ROOT/vimrc.state.before"
+
+  printf 'user_modified_data\n' >"$target_file"
+  cp "$state_file" "$saved_state"
+
+  local rc=0
+  run_selfishell update --tools-only --yes </dev/null >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+
+  ((rc != 0)) || fail "update --tools-only --yes must not silently overwrite a modified managed file"
+  assert_file_content 'user_modified_data' "$target_file"
+  cmp -s "$saved_state" "$state_file" || fail "Refused conflict must not change the resource state"
+  grep -Fq 'Managed file was modified; preserving it' "$TEST_ROOT/stderr" ||
+    fail "Non-interactive update conflict did not report a preserving error"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
+    fail "Non-interactive update conflict must not create a conflict backup"
 }
 
 run_test() {

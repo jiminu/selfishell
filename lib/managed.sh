@@ -88,42 +88,80 @@ managed_atomic_copy() {
   mv "$temporary_file" "$target_file"
 }
 
-managed_zsh_loader_begin() {
-  printf '%s\n' '# >>> Selfishell initialize >>>'
+# Managed regular-file conflicts are handled from inside a
+# `while ... done < <(selfishell_managed_resources)` loop, which redirects
+# FD 0 to the resource list for the duration of the loop. FD 3 is a copy of
+# the real stdin created once in lib/common.sh before that redirection takes
+# effect, so conflict prompts must check and read FD 3, not FD 0.
+managed_conflict_is_interactive() {
+  selfishell_is_interactive
 }
 
-managed_zsh_loader_end() {
-  printf '%s\n' '# <<< Selfishell initialize <<<'
+managed_read_conflict_answer() {
+  local answer=""
+
+  IFS= read -r answer <&3 || return "$SELFISHELL_EXIT_ERROR"
+  printf '%s\n' "$answer"
 }
 
-managed_zsh_loader_block() {
-  cat <<'EOF'
-# >>> Selfishell initialize >>>
-if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc" ]]; then
+managed_block_definition() {
+  local resource="$1"
+
+  case "$resource" in
+    user-zshrc)
+      MANAGED_BLOCK_LABEL='Selfishell initialize'
+      # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
+      MANAGED_BLOCK_BODY='if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc" ]]; then
   source "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc"
-fi
-# <<< Selfishell initialize <<<
-EOF
+fi'
+      ;;
+    user-ghostty)
+      MANAGED_BLOCK_LABEL='Selfishell ghostty'
+      MANAGED_BLOCK_BODY="config-file = $SELFISHELL_CONFIG_DIR/ghostty/config"
+      ;;
+    *)
+      cli_error "Unknown managed block resource: $resource"
+      return "$SELFISHELL_EXIT_ERROR"
+      ;;
+  esac
 }
 
-managed_inspect_zsh_loader() {
-  local target_file="$1"
+managed_block_begin() {
+  printf '# >>> %s >>>\n' "$1"
+}
+
+managed_block_end() {
+  printf '# <<< %s <<<\n' "$1"
+}
+
+managed_block_content() {
+  local resource="$1"
+
+  managed_block_definition "$resource" || return
+  printf '%s\n%s\n%s\n' "$(managed_block_begin "$MANAGED_BLOCK_LABEL")" "$MANAGED_BLOCK_BODY" "$(managed_block_end "$MANAGED_BLOCK_LABEL")"
+}
+
+managed_inspect_block() {
+  local resource="$1"
+  local target_file="$2"
   local begin_marker end_marker metadata
   local begin_count end_count related_count start finish
   local expected_checksum actual_checksum
 
-  MANAGED_ZSH_LOADER_STATUS=absent
-  MANAGED_ZSH_LOADER_START=0
-  MANAGED_ZSH_LOADER_LENGTH=0
-  MANAGED_ZSH_LOADER_CHECKSUM=""
+  MANAGED_BLOCK_STATUS=absent
+  MANAGED_BLOCK_START=0
+  MANAGED_BLOCK_LENGTH=0
+  MANAGED_BLOCK_CHECKSUM=""
+
+  managed_block_definition "$resource" || return
 
   [[ -f "$target_file" && ! -L "$target_file" ]] || return 0
-  begin_marker="$(managed_zsh_loader_begin)"
-  end_marker="$(managed_zsh_loader_end)"
-  metadata="$(LC_ALL=C awk -v begin="$begin_marker" -v end="$end_marker" '
+  begin_marker="$(managed_block_begin "$MANAGED_BLOCK_LABEL")"
+  end_marker="$(managed_block_end "$MANAGED_BLOCK_LABEL")"
+  metadata="$(LC_ALL=C awk -v begin="$begin_marker" -v end="$end_marker" -v label="$MANAGED_BLOCK_LABEL" '
     BEGIN { offset = 0; begin_count = 0; end_count = 0; related_count = 0; start = 0; finish = 0 }
     {
-      if (index($0, "Selfishell initialize") > 0) related_count++
+      if (index($0, label) > 0) related_count++
       if ($0 == begin) {
         begin_count++
         start = offset
@@ -142,25 +180,28 @@ managed_inspect_zsh_loader() {
     return 0
   fi
   if [[ "$begin_count" != 1 || "$end_count" != 1 || "$related_count" != 2 || "$finish" -le "$start" ]]; then
-    MANAGED_ZSH_LOADER_STATUS=malformed
+    MANAGED_BLOCK_STATUS=malformed
     return 0
   fi
 
-  MANAGED_ZSH_LOADER_START="$start"
-  MANAGED_ZSH_LOADER_LENGTH=$((finish - start))
-  expected_checksum="$(managed_zsh_loader_block | cksum | awk '{print $1 ":" $2}')"
-  actual_checksum="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_ZSH_LOADER_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
-  MANAGED_ZSH_LOADER_CHECKSUM="$actual_checksum"
+  MANAGED_BLOCK_START="$start"
+  MANAGED_BLOCK_LENGTH=$((finish - start))
+  expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
+  actual_checksum="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_BLOCK_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
+  MANAGED_BLOCK_CHECKSUM="$actual_checksum"
   if [[ "$actual_checksum" == "$expected_checksum" ]]; then
-    MANAGED_ZSH_LOADER_STATUS=intact
+    MANAGED_BLOCK_STATUS=intact
   else
-    MANAGED_ZSH_LOADER_STATUS=modified
+    MANAGED_BLOCK_STATUS=modified
   fi
 }
 
-managed_zsh_loader_error() {
-  cli_error "Cannot manage the Selfishell loader in: $HOME/.zshrc"
-  cli_error "Preserving the startup file. Remove conflicting Selfishell markers and retry."
+managed_block_error() {
+  local resource="$1"
+  local target_file="$2"
+
+  cli_error "Cannot manage the Selfishell $resource block in: $target_file"
+  cli_error "Preserving the file. Remove conflicting Selfishell markers and retry."
 }
 
 managed_preflight_zsh_loader() {
@@ -188,10 +229,10 @@ managed_preflight_zsh_loader() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  managed_inspect_zsh_loader "$target_file" || return
-  case "$MANAGED_ZSH_LOADER_STATUS" in
+  managed_inspect_block user-zshrc "$target_file" || return
+  case "$MANAGED_BLOCK_STATUS" in
     malformed | modified)
-      managed_zsh_loader_error
+      managed_block_error user-zshrc "$target_file"
       return "$SELFISHELL_EXIT_ERROR"
       ;;
     intact)
@@ -204,42 +245,44 @@ managed_preflight_zsh_loader() {
   esac
 }
 
-managed_install_zsh_loader() {
+managed_install_block() {
   local resource="$1"
   local target_file="$2"
   local dry_run="$3"
-  local expected_checksum temporary_file
+  local expected_checksum temporary_file reference
 
-  expected_checksum="$(managed_zsh_loader_block | cksum | awk '{print $1 ":" $2}')"
-  managed_inspect_zsh_loader "$target_file" || return
+  expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
+  managed_inspect_block "$resource" "$target_file" || return
+  reference="selfishell-${resource}-block-v1"
 
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
-      cli_error "State conflict for managed loader block: $resource"
+      cli_error "State conflict for managed block: $resource"
       return "$SELFISHELL_EXIT_ERROR"
     fi
-    if [[ "$MANAGED_ZSH_LOADER_STATUS" == intact && "$MANAGED_ZSH_LOADER_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
+    if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
       if [[ "$dry_run" == 0 ]]; then
-        managed_write_state "$resource" block active "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
+        managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum"
       fi
-      printf 'Unchanged loader block: %s\n' "$target_file"
+      printf 'Unchanged Selfishell block: %s\n' "$target_file"
       return 0
     fi
-    if [[ "$MANAGED_STATE_STATUS" != pending || "$MANAGED_ZSH_LOADER_STATUS" != absent ]]; then
-      managed_zsh_loader_error
+    if [[ "$MANAGED_STATE_STATUS" != pending || "$MANAGED_BLOCK_STATUS" != absent ]]; then
+      managed_block_error "$resource" "$target_file"
       return "$SELFISHELL_EXIT_ERROR"
     fi
-  elif [[ "$MANAGED_ZSH_LOADER_STATUS" != absent ]]; then
-    managed_zsh_loader_error
+  elif [[ "$MANAGED_BLOCK_STATUS" != absent ]]; then
+    managed_block_error "$resource" "$target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
   if [[ "$dry_run" == 1 ]]; then
-    printf 'Would add Selfishell loader block: %s\n' "$target_file"
+    printf 'Would add Selfishell block: %s\n' "$target_file"
     return 0
   fi
 
-  managed_write_state "$resource" block pending "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
+  managed_write_state "$resource" block pending "$target_file" "$reference" - "$expected_checksum"
+  mkdir -p "$(dirname "$target_file")" || return
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
   if [[ -f "$target_file" ]]; then
     cp -p "$target_file" "$temporary_file" || return
@@ -247,33 +290,34 @@ managed_install_zsh_loader() {
   else
     chmod 0644 "$temporary_file"
   fi
-  managed_zsh_loader_block >"$temporary_file" || return
+  managed_block_content "$resource" >"$temporary_file" || return
   if [[ -f "$target_file" ]]; then
     cat "$target_file" >>"$temporary_file" || return
   fi
   mv "$temporary_file" "$target_file" || return
-  managed_write_state "$resource" block active "$target_file" selfishell-zsh-loader-v1 - "$expected_checksum"
-  printf 'Added Selfishell loader block: %s\n' "$target_file"
+  managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum"
+  printf 'Added Selfishell block: %s\n' "$target_file"
 }
 
-managed_remove_zsh_loader() {
-  local target_file="$1"
+managed_remove_block() {
+  local resource="$1"
+  local target_file="$2"
   local temporary_file file_size suffix_start
 
-  managed_inspect_zsh_loader "$target_file" || return
-  if [[ "$MANAGED_ZSH_LOADER_STATUS" != intact || "$MANAGED_ZSH_LOADER_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
-    managed_zsh_loader_error
+  managed_inspect_block "$resource" "$target_file" || return
+  if [[ "$MANAGED_BLOCK_STATUS" != intact || "$MANAGED_BLOCK_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
+    managed_block_error "$resource" "$target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return
   cp -p "$target_file" "$temporary_file" || return
   : >"$temporary_file"
-  if ((MANAGED_ZSH_LOADER_START > 0)); then
-    dd if="$target_file" bs=1 count="$MANAGED_ZSH_LOADER_START" 2>/dev/null >"$temporary_file" || return
+  if ((MANAGED_BLOCK_START > 0)); then
+    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || return
   fi
   file_size="$(LC_ALL=C wc -c <"$target_file")"
-  suffix_start=$((MANAGED_ZSH_LOADER_START + MANAGED_ZSH_LOADER_LENGTH))
+  suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
   if ((suffix_start < file_size)); then
     dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || return
   fi
@@ -285,9 +329,12 @@ managed_install_file() {
   local source_file="$2"
   local target_file="$3"
   local dry_run="$4"
+  local assume_yes="${5:-0}"
   local source_checksum
   local current_checksum=""
-  local backup="-"
+  local original_backup="-"
+  local conflict_backup=""
+  local answer=""
 
   source_checksum="$(managed_checksum "$source_file")"
   if managed_read_state "$resource"; then
@@ -295,28 +342,60 @@ managed_install_file() {
       cli_error "State conflict for managed file: $resource"
       return "$SELFISHELL_EXIT_ERROR"
     fi
-    backup="$MANAGED_STATE_BACKUP"
+    original_backup="$MANAGED_STATE_BACKUP"
 
     if [[ -f "$target_file" ]]; then
       current_checksum="$(managed_checksum "$target_file")"
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
-        if [[ "$MANAGED_STATE_STATUS" == "active" || "$backup" == "-" || -e "$backup" || -L "$backup" ]]; then
-          cli_error "Managed file was modified; preserving it: $target_file"
-          return "$SELFISHELL_EXIT_ERROR"
+        if [[ "$MANAGED_STATE_STATUS" == "active" || "$original_backup" == "-" || -e "$original_backup" || -L "$original_backup" ]]; then
+          if [[ "$dry_run" == "1" ]]; then
+            printf 'Conflict: modified managed file: %s\n' "$target_file"
+            printf 'Would require an overwrite or skip decision.\n'
+            return 0
+          fi
+
+          if [[ "$assume_yes" == "1" ]] || ! managed_conflict_is_interactive; then
+            cli_error "Managed file was modified; preserving it: $target_file"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+
+          printf 'Managed file was modified: %s. Overwrite with default config? [y/N] ' "$target_file"
+          if ! answer="$(managed_read_conflict_answer)"; then
+            cli_error "Managed file was modified; preserving it: $target_file"
+            return "$SELFISHELL_EXIT_ERROR"
+          fi
+
+          case "$answer" in
+            y | Y | yes | YES)
+              conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
+              mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
+              cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
+              printf 'Backed up modified managed file: %s -> %s\n' "$target_file" "$conflict_backup"
+              managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+              managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
+              printf 'Installed managed file: %s\n' "$target_file"
+              return 0
+              ;;
+            *)
+              printf 'Skipped modified managed file: %s\n' "$target_file"
+              return 0
+              ;;
+          esac
+        else
+          current_checksum=""
         fi
-        current_checksum=""
       fi
     elif [[ -e "$target_file" || -L "$target_file" ]]; then
       cli_error "Managed file path changed type; preserving it: $target_file"
       return "$SELFISHELL_EXIT_ERROR"
     fi
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
-    backup="$(managed_unique_backup_path "$target_file")"
+    original_backup="$(managed_unique_backup_path "$target_file")"
   fi
 
   if [[ "$current_checksum" == "$source_checksum" ]]; then
     if [[ "$dry_run" == "0" ]]; then
-      managed_write_state "$resource" file active "$target_file" - "$backup" "$source_checksum"
+      managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
     fi
     printf 'Unchanged: %s\n' "$target_file"
     return
@@ -327,12 +406,13 @@ managed_install_file() {
     return
   fi
 
-  managed_write_state "$resource" file pending "$target_file" - "$backup" "$source_checksum"
-  if [[ "$backup" != "-" && ! -e "$backup" && ! -L "$backup" && (-e "$target_file" || -L "$target_file") ]]; then
-    mv "$target_file" "$backup"
+  managed_write_state "$resource" file pending "$target_file" - "$original_backup" "$source_checksum"
+  if [[ "$original_backup" != "-" && ! -e "$original_backup" && ! -L "$original_backup" && (-e "$target_file" || -L "$target_file") ]]; then
+    mkdir -p "$(dirname "$original_backup")" || return "$SELFISHELL_EXIT_ERROR"
+    mv "$target_file" "$original_backup" || return "$SELFISHELL_EXIT_ERROR"
   fi
-  managed_atomic_copy "$source_file" "$target_file"
-  managed_write_state "$resource" file active "$target_file" - "$backup" "$source_checksum"
+  managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+  managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum"
   printf 'Installed managed file: %s\n' "$target_file"
 }
 
@@ -394,9 +474,9 @@ managed_uninstall_resource() {
   case "$MANAGED_STATE_TYPE" in
     block)
       if [[ "$dry_run" == 1 ]]; then
-        printf 'Would remove Selfishell loader block: %s\n' "$MANAGED_STATE_TARGET"
+        printf 'Would remove Selfishell block: %s\n' "$MANAGED_STATE_TARGET"
       else
-        managed_remove_zsh_loader "$MANAGED_STATE_TARGET" || return
+        managed_remove_block "$resource" "$MANAGED_STATE_TARGET" || return
       fi
       ;;
     link)
@@ -461,12 +541,12 @@ managed_validate_uninstall_resource() {
   case "$MANAGED_STATE_TYPE" in
     block)
       if [[ ! -f "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
-        cli_error "Managed loader path changed type; preserving it: $MANAGED_STATE_TARGET"
+        cli_error "Managed block path changed type; preserving it: $MANAGED_STATE_TARGET"
         return "$SELFISHELL_EXIT_ERROR"
       fi
-      managed_inspect_zsh_loader "$MANAGED_STATE_TARGET" || return
-      if [[ "$MANAGED_ZSH_LOADER_STATUS" != intact || "$MANAGED_ZSH_LOADER_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
-        managed_zsh_loader_error
+      managed_inspect_block "$resource" "$MANAGED_STATE_TARGET" || return
+      if [[ "$MANAGED_BLOCK_STATUS" != intact || "$MANAGED_BLOCK_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
+        managed_block_error "$resource" "$MANAGED_STATE_TARGET"
         return "$SELFISHELL_EXIT_ERROR"
       fi
       ;;

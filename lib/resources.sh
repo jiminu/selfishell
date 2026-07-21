@@ -38,7 +38,7 @@ link	user-zshenv	$HOME/.zshenv	$SELFISHELL_CONFIG_DIR/zsh/zshenv
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
 link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
 link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvim
-link	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config	$SELFISHELL_CONFIG_DIR/ghostty/config
+block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config	-
 EOF
 }
 

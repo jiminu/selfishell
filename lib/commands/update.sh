@@ -40,7 +40,7 @@ update_tools_and_configuration() {
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     homebrew_install_packages optional cask "$dry_run" ghostty
   fi
-  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled"
+  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
   if [[ "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
