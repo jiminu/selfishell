@@ -68,13 +68,13 @@ discover_metadata() {
   printf 'git %s %s\n' "$name" "$tag" >>"$metadata"
 
   while read -r type name _ _ _ source _; do
-    [[ "$type" == nvim-plugin ]] || continue
+    case "$type" in nvim-plugin | zsh-plugin) ;; *) continue ;; esac
     commit="$(git ls-remote "$source" HEAD | awk 'NR == 1 { print $1 }')"
     [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
-      printf 'Invalid Neovim plugin commit for %s: %s\n' "$name" "$commit" >&2
+      printf 'Invalid Git plugin commit for %s: %s\n' "$name" "$commit" >&2
       return 1
     }
-    printf 'nvim-plugin %s %s\n' "$name" "$commit" >>"$metadata"
+    printf '%s %s %s\n' "$type" "$name" "$commit" >>"$metadata"
   done <"$manifest"
 
   starship_tag="$(github_latest_tag starship/starship)"
@@ -114,6 +114,9 @@ apply_metadata() {
       } else if ($1 == "nvim-plugin") {
         nvim_plugin_version[$2] = $3
         expected_nvim_plugin[$2] = 1
+      } else if ($1 == "zsh-plugin") {
+        zsh_plugin_version[$2] = $3
+        expected_zsh_plugin[$2] = 1
       } else if ($1 == "download") {
         key = $2 SUBSEP $4 SUBSEP $5
         download_version[key] = $3
@@ -134,6 +137,10 @@ apply_metadata() {
     $1 == "nvim-plugin" && ($2 in nvim_plugin_version) {
       $3 = nvim_plugin_version[$2]
       matched_nvim_plugin[$2] = 1
+    }
+    $1 == "zsh-plugin" && ($2 in zsh_plugin_version) {
+      $3 = zsh_plugin_version[$2]
+      matched_zsh_plugin[$2] = 1
     }
     $1 == "download" {
       key = $2 SUBSEP $4 SUBSEP $5
@@ -162,6 +169,12 @@ apply_metadata() {
       for (name in expected_nvim_plugin) {
         if (!(name in matched_nvim_plugin)) {
           print "Dependency metadata did not match manifest Neovim plugin entry: " name > "/dev/stderr"
+          invalid = 1
+        }
+      }
+      for (name in expected_zsh_plugin) {
+        if (!(name in matched_zsh_plugin)) {
+          print "Dependency metadata did not match manifest Zsh plugin entry: " name > "/dev/stderr"
           invalid = 1
         }
       }

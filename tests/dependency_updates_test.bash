@@ -18,12 +18,14 @@ download starship 1.0.0 linux amd64 https://old/starship.tar.gz oldsum .local/bi
 download mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw
 git zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh
 nvim-plugin folke/lazy.nvim 1111111111111111111111111111111111111111 all all https://github.com/folke/lazy.nvim.git - - -
+zsh-plugin zsh-users/zsh-completions 1111111111111111111111111111111111111111 all all https://github.com/zsh-users/zsh-completions.git - - -
 EOF
   cat >"$metadata" <<'EOF'
 download starship 2.0.0 linux amd64 https://new/starship.tar.gz newsum
 download mise 2.0.0 linux arm64 https://new/mise newmise
 git zinit v0.2.0
 nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222
+zsh-plugin zsh-users/zsh-completions 3333333333333333333333333333333333333333
 EOF
 
   bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata"
@@ -36,6 +38,8 @@ EOF
     fail "Git dependency metadata was not applied"
   grep -Fqx 'nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222 all all https://github.com/folke/lazy.nvim.git - - -' "$manifest" ||
     fail "Neovim plugin metadata was not applied"
+  grep -Fqx 'zsh-plugin zsh-users/zsh-completions 3333333333333333333333333333333333333333 all all https://github.com/zsh-users/zsh-completions.git - - -' "$manifest" ||
+    fail "Zsh plugin metadata was not applied"
 }
 
 test_rejects_metadata_without_manifest_entry() {
