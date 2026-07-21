@@ -49,7 +49,14 @@ command_rollback() {
   confirm_action "Roll back Selfishell CLI to ${target##*/}?" "$assume_yes" 0 || return
 
   previous_target="$current_target"
-  release_atomic_link "$target" "$SELFISHELL_SHARE_DIR/current"
-  release_atomic_link "$previous_target" "$SELFISHELL_SHARE_DIR/previous"
+  release_atomic_link "$target" "$SELFISHELL_SHARE_DIR/current" || {
+    cli_error "Failed to roll back to ${target##*/}."
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  # A failure here only loses the rollback link, not the rollback itself, so
+  # warn and continue rather than aborting an otherwise-successful rollback.
+  if ! release_atomic_link "$previous_target" "$SELFISHELL_SHARE_DIR/previous"; then
+    cli_error "Failed to update the previous release link; continuing."
+  fi
   printf 'Selfishell CLI rolled back to %s.\n' "${target##*/}"
 }
