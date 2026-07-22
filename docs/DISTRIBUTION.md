@@ -7,16 +7,9 @@ version source or configuration lifecycle.
 
 ## Homebrew Tap decision
 
-Decision on 2026-07-16: defer a Homebrew Tap until after the stable release and
-there is demonstrated user demand.
-
-The public repository was created on 2026-07-14. At the time of evaluation it
-had no stars, forks, watchers, issues, or Homebrew distribution requests. The
-two beta releases had only the small number of asset downloads produced by
-maintainer verification. This is not enough evidence to justify another release
-channel and its ongoing formula update, audit, and support work.
-
-Revisit this decision after a stable release when at least one of these is true:
+A Homebrew Tap remains deferred until there is demonstrated user demand and a
+maintainer willing to own formula updates, audits, and support. Revisit the
+decision when at least one of these is true:
 
 - users request Homebrew installation through public issues or feedback;
 - bootstrap adoption shows repeated use beyond maintainer verification; or
@@ -27,7 +20,7 @@ checksum. It must expose the same `selfishell` CLI, must not define another
 version source, and must not install profiles or modify user configuration as a
 package installation side effect.
 
-## APT and Debian packages
+## Apt and Debian packages
 
 `.deb`, PPA, and APT repository evaluation remains deferred. The same demand,
 ownership, artifact reuse, and configuration-safety requirements apply.

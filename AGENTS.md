@@ -1,96 +1,43 @@
 # Selfishell Agent Guide
 
-This file is the durable project context for coding agents. Read it before
-changing the repository, then read `docs/project/MILESTONES.md` to find the current
-delivery stage.
+This file contains repository-wide rules for coding agents. Keep it focused on
+constraints that affect implementation. Use the linked documents for user and
+maintainer procedures instead of duplicating them here.
 
-## Project Intent
+## Project and Sources of Truth
 
-Selfishell provides a consistent, fast Zsh development environment for personal
-machines, other developers, and company-managed new computers.
+Selfishell provides a consistent Zsh development environment for macOS, Ubuntu,
+and Ubuntu on WSL. Installation must be simple, maintenance predictable, and the
+user experience consistent across supported platforms.
 
-The product goals, in priority order, are:
+- `VERSION` is the product version.
+- `profiles/*.conf` defines built-in package profiles.
+- `dependencies.conf` pins direct downloads and Git dependencies.
+- `common/mise.toml` pins mise-managed developer tools.
+- `docs/MILESTONES.md` is the roadmap, not a default task queue.
+- `docs/RELEASING.md` is the release procedure.
 
-1. Installation must be simple.
-2. Maintenance and releases must be predictable.
-3. The same user experience should work across supported platforms.
+The public installer currently lives in this GitHub repository. The
+`selfishell.dev` domain is aspirational; do not add it to executable code until
+it has a real distribution endpoint.
 
-The intended user experience is:
+## Product Contract
 
-```sh
-curl -fsSL https://selfishell.dev/install.sh | bash
-selfishell install
-selfishell doctor
-```
+The canonical command is `selfishell`; `sfs` is an optional convenience
+symlink. Do not introduce `sf`, and use `selfishell` in documentation,
+automation, and errors.
 
-The domain is provisional until the project has a real distribution endpoint.
-Do not add a dead production URL to executable code.
+Supported commands are `help`, `version`, `doctor`, `install`, `status`,
+`update`, `rollback`, and `uninstall`. Keep their responsibilities narrow:
 
-## Current State
+- the bootstrap installs only the CLI unless `--setup` is explicit;
+- `selfishell install` explicitly installs a profile and configuration;
+- `update --cli-only` and `update --tools-only` keep release and environment
+  updates separable;
+- rollback uses a retained release without downloading it again;
+- purge removes the CLI only when explicitly requested.
 
-The repository currently contains a Bash release bootstrap, shared Zsh settings,
-Starship configuration, aliases, Vim configuration, and Ghostty configuration.
-
-- `install.sh` is the public versioned release bootstrap.
-- `common/common.zsh` contains shared interactive shell initialization.
-- Managed configuration is copied out of the source checkout.
-
-The `selfishell` CLI, managed configuration lifecycle, declarative profiles, and
-managed apt/Homebrew/direct package installation now exist. The versioned release
-bootstrap, reproducible dependency manifest, explicit updates, rollback, and
-artifact builder also exist. Tagged release publication is automated; public
-beta verification remains a manual release gate.
-
-Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
-`update`, `rollback`, and `uninstall`. The former checkout-linked legacy
-bootstrap has been retired.
-
-The `developer` profile uses a pinned mise binary for Neovim, Tree-sitter CLI,
-Node.js, Python, and uv. jq, Starship, build libraries, and core shell tools
-remain under the existing Selfishell or operating-system package lifecycle. Do
-not delete legacy NVM or pyenv user data during migration.
-
-## Product Decisions
-
-- Use one installation method for macOS and Ubuntu: a small curl-delivered
-  bootstrap script backed by versioned GitHub Release archives.
-- The bootstrap installs only the Selfishell CLI. It must not silently replace
-  user configuration or install the full development environment.
-- The bootstrap must not modify shell startup files by default. An explicit
-  `--add-to-path` option may add one idempotent, tracked Bash or Zsh PATH entry.
-  Purge may remove only that exact installer-managed entry and must preserve a
-  startup file when the entry was changed.
-- The canonical command is `selfishell`. Also provide `sfs` as an optional
-  convenience symlink for interactive use.
-- Do not use `sf` as a command name because it is too generic and has a higher
-  collision risk with existing developer tools.
-- Official documentation, automation, and error messages should use
-  `selfishell`; `sfs` is only a shorthand.
-- `selfishell install` performs user environment setup explicitly.
-- Install Selfishell without root privileges under XDG-compatible user paths.
-- Keep package-manager distribution, such as Homebrew Tap or APT, optional and
-  defer it until the release process is stable.
-- Start with macOS, Ubuntu, and Ubuntu on WSL. Other distributions are not
-  officially supported until they have platform adapters and CI coverage.
-- Keep a minimal cross-platform core. Optional tools belong in profiles.
-- Treat existing user files as user data: back up safely, never overwrite a
-  backup, and provide restoration and uninstall paths.
-- Separate Selfishell CLI updates from managed tool/configuration updates.
-- Prefer reproducible releases. Pin and checksum direct downloads; use normal
-  package-manager resolution for system packages unless there is a documented
-  compatibility requirement.
-- Automated dependency discovery may update `dependencies.conf` through a
-  review PR, but must never auto-merge or auto-publish a Selfishell release.
-- A maintainer merge of the exact automated dependency branch may dispatch the
-  next stable patch release when the diff is limited to `dependencies.conf`
-  and, when Zsh plugin commits change, the approved Zinit pin files
-  `common/completion.zsh` and `common/interactive.zsh`. `dependencies.conf`
-  must always change; changes to those Zsh files must be limited to matching
-  `ver'<40-character SHA>'` pin replacements. Any other file or code change
-  must block automatic release dispatch. General PR merges must never trigger
-  automatic publication.
-
-## Target Filesystem Layout
+Install Selfishell without root privileges under XDG-compatible user paths:
 
 ```text
 ~/.local/bin/selfishell
@@ -102,174 +49,131 @@ not delete legacy NVM or pyenv user data during migration.
 ~/.cache/selfishell/
 ```
 
-The installed product must continue working after the source checkout or build
-directory is moved or removed.
+The installed product must work after the source checkout is removed.
 
-## Target CLI Contract
+## User Data and Managed State
 
-Keep command names and responsibilities narrow:
-
-- `selfishell install`: install a selected profile and user configuration.
-- `selfishell update`: update the CLI release, managed tools, and configuration;
-  `--cli-only` and `--tools-only` restrict the scope.
-- `selfishell doctor`: diagnose platform, dependencies, and configuration.
-- `selfishell status`: report installed versions and managed files.
-- `selfishell rollback`: switch to a retained Selfishell release.
-- `selfishell uninstall`: remove managed files, optionally restore backups, and
-  purge the installed CLI when explicitly requested.
-- `selfishell version`: print the CLI version.
-
-`sfs <command>` must resolve to the same implementation and behavior as
-`selfishell <command>`. Help and documentation should show `selfishell` as the
-primary form.
-
-Do not implement an implicit update during ordinary shell startup. A cached
-release notice is enabled by default and may refresh version metadata in a
-non-blocking background job at most once per configured interval; it must never
-delay startup or install an update.
-
-## Managed Resource State
+Treat every existing path as user data. Back it up safely, never overwrite a
+backup, and never restore over an occupied target.
 
 Managed configuration is copied under `~/.config/selfishell`; user-facing paths
-link to those copies, never to a source checkout. `~/.zshrc` is the exception: it
-remains user-owned and contains one bounded loader block that sources the managed
-platform entrypoint. Each managed file, link, and loader block has an individual
-versioned state record under
-`~/.local/state/selfishell/resources`. State is written through a temporary file
-and atomic rename.
+link to those copies. `~/.zshrc` remains user-owned and contains one bounded
+loader block that sources the managed platform entrypoint. Personal aliases,
+exports, PATH entries, and functions belong outside that block.
 
-Preserve these invariants when extending the lifecycle:
+Preserve these lifecycle invariants:
 
-- Write pending state before moving user data or creating a managed path.
-- Retain the original backup path across idempotent reinstalls.
-- Record and verify checksums for managed regular files.
-- Treat a replaced link, changed file, or changed path type as user data.
-- Preflight every uninstall resource before removing any of them.
-- Never restore a backup over an occupied target.
-- Dry-run must not create XDG directories, state files, backups, or links.
-- The fixed-line state format is internal. Increment its version before changing
-  field order or meaning.
+- write pending state before moving user data or creating a managed path;
+- write state through a temporary file and atomic rename;
+- retain the original backup path across idempotent reinstalls;
+- checksum managed regular files;
+- treat a replaced link, changed file, or changed path type as user data;
+- preflight every uninstall or update resource before changing any of them;
+- remove only an intact installer-managed loader or PATH block;
+- make dry-run create no directories, state, backups, links, or files;
+- increment the fixed-line state format version before changing field order or
+  meaning.
 
-## Engineering Rules
+The former managed `.zshrc` symlink and `local.zsh` extension are retired. Do
+not migrate or delete them automatically. Detect legacy state and stop with
+manual uninstall/reinstall instructions.
 
-- Preserve macOS compatibility when writing bootstrap and CLI entrypoint code.
-  macOS may provide Bash 3.2 unless the project explicitly installs another
-  interpreter first.
-- Keep platform-specific package operations in platform adapters. Do not scatter
-  `brew` and `apt` branches throughout command implementations.
-- Make setup idempotent. Running an operation twice must not destroy data or
-  create duplicate configuration.
-- Download into a temporary location, verify it, then move it atomically into
-  place.
-- Never execute an unversioned remote payload as the actual installer. A remote
-  bootstrap may select a release, but release archives must be versioned and
-  checksum-verified.
-- Avoid `sudo` for Selfishell files. Request it only for system package actions
-  that genuinely require it.
-- Respect `HOME`, XDG variables, proxy variables, and non-interactive execution.
-- Do not store company URLs, credentials, tokens, kubeconfigs, or user-specific
-  secrets in the public repository.
-- Keep company customization injectable through a local configuration file or a
-  separate private repository.
-- Do not claim support for a platform without automated or documented manual
-  verification.
+## Implementation Boundaries
 
-## Profiles and Local Extensions
+- Keep `install.sh`, the CLI entrypoint, and shared libraries compatible with
+  macOS Bash 3.2 unless the product explicitly installs another interpreter.
+- Keep Homebrew and Apt operations in `lib/package_managers/`; do not scatter
+  platform branches through command implementations.
+- Keep profile files declarative: only supported `include` and `package`
+  records, never executable shell code.
+- Make repeated setup safe and idempotent.
+- Download to a temporary location, verify it, and activate it atomically.
+- Never execute an unversioned remote release payload as the installer.
+- Avoid `sudo` for Selfishell files; use it only for system package operations
+  that require it.
+- Respect `HOME`, XDG variables, proxy variables, offline mode, and
+  non-interactive execution.
+- Never store credentials, internal URLs, kubeconfigs, or user-specific secrets
+  in the public repository.
+- Do not claim platform support without automated or documented verification.
+- Ordinary shell startup must never install updates or block on the network. A
+  cached release notice may refresh metadata in a non-blocking background job.
 
-Built-in profiles live in `profiles/*.conf` and contain declarative `include` and
-`package` records. Keep profile files free of executable shell code. The built-in
-profiles are `minimal` and `developer`; `developer` includes `minimal`. `minimal`
-is the default and includes only basic interactive shell setup, Zinit, Vim
-configuration, and macOS terminal fonts. Everyday interactive shell tools (fzf,
-zoxide, ripgrep, eza, bat), jq, Node.js, Python, and compiler tools begin in
-`developer`. Ghostty is a separate macOS installation choice
-whose selection is retained in state for later updates.
+## Profiles and Dependencies
 
-Private package additions use `--local-profile FILE` or
-`SELFISHELL_LOCAL_PROFILE`. Local files may contain only package records and may
-not include another profile. The target shell model keeps `~/.zshrc` user-owned
-and manages only one bounded loader block that sources Selfishell configuration.
-Personal aliases, exports, PATH entries, and functions belong directly in the
-user's `~/.zshrc`. `local.zsh` is being retired; migrate existing contents once
-manually before reinstalling. This is an intentional pre-stable breaking change:
-do not add automatic migration for the former managed `.zshrc` symlink, its
-backup state, or `local.zsh`. Detect legacy state and stop without changing user
-files. See M8 in `docs/project/MILESTONES.md`.
+`minimal` is the default profile. `developer` includes `minimal` and adds the
+larger interactive tools, jq, build tools, and language/editor tooling. Ghostty
+is a separate saved macOS installation choice.
 
-Package adapters must inherit proxy environment variables. `--skip-packages` and
-`SELFISHELL_OFFLINE=1` must perform configuration-only installation without any
-package or network command.
+The developer profile uses a pinned mise binary for Neovim, Tree-sitter CLI,
+Node.js, Python, and uv. Do not delete legacy NVM or pyenv data during migration.
 
-The profile requirement `optional` means recommended and non-fatal, not
-interactive opt-in. Optional packages are attempted automatically and reported
-when unavailable. Ghostty is the only separate saved installation choice.
+Local additions use `--local-profile FILE` or `SELFISHELL_LOCAL_PROFILE`. Local
+profiles may contain package records only and may not include another profile.
+`--skip-packages` and `SELFISHELL_OFFLINE=1` must perform configuration-only
+installation without package or network commands. `optional` packages are
+attempted automatically but remain non-fatal.
 
-## Release Contract
+Automated dependency discovery may open a review PR but must never auto-merge.
+A maintainer merge of `automation/dependency-updates` may dispatch a stable
+patch release only when `dependencies.conf` changes and the remaining diff is
+limited to matching commit-pin replacements in `common/completion.zsh` and
+`common/interactive.zsh`. Any other change must block automatic publication.
 
-`install.sh` is the public, curl-delivered bootstrap. Keep it small and compatible
-with macOS Bash 3.2. It selects an exact platform/architecture archive, verifies
-that archive against `SHA256SUMS`, extracts into a versioned release directory,
-then atomically switches `current` and CLI links.
-Bootstrap upgrades retain the former active release as `previous` and prune
-older inactive releases, matching the CLI update lifecycle.
+## Release Rules
 
-Release assets and naming are defined in `docs/RELEASING.md`. A requested version
-must use only its `releases/download/v<version>` path and must never fall back to
-latest. The bootstrap installs the CLI only unless `--setup` is explicit.
-Semantic version tags are the release version source. Do not replace assets on an
-existing GitHub Release.
+`install.sh` selects an exact platform archive, verifies it against
+`SHA256SUMS`, installs it into a versioned release directory, and atomically
+switches links. An explicit version must use only its own
+`releases/download/v<version>` path and never fall back to latest.
 
-Before creating a stable release tag, ensure the version consistency checks in
-`scripts/check.sh` pass. The documentation version strings in `README.md` and
-`docs/INSTALLATION.md` must match the version in `VERSION`, which can be automatically
-updated by running `scripts/update-readme-version.sh` or updated implicitly during
-`scripts/build-release.sh`. After publication, verify those versioned
-bootstrap URLs and `releases/latest/download/VERSION`; a release is not complete
-while the primary installation documentation still points at an older version.
-
-## Verification Expectations
-
-Every shell change should receive the checks applicable to it:
+Semantic version tags are immutable release sources. Never replace assets on an
+existing GitHub Release; publish a new patch version instead. Before tagging,
+update `VERSION` and run:
 
 ```sh
-bash -n install.sh bin/selfishell lib/*.sh lib/commands/*.sh
-zsh -n mac/.zshrc ubuntu/.zshrc common/*.zsh
+bash scripts/release-check.sh <version>
 ```
 
-As the test harness is introduced, also run ShellCheck, formatting checks, unit
-tests with a temporary `HOME`, and idempotency tests. Never run installation
-tests against the developer's real home directory.
+After publication, verify all four archives, `SHA256SUMS`, `VERSION`, the exact
+version URL, and `releases/latest/download/VERSION`. See
+`docs/RELEASING.md` for the complete procedure.
 
-Tests should cover at least:
+## Verification
 
-- an empty home directory;
-- existing configuration files and symbolic links;
-- two consecutive installations;
-- interrupted or incomplete downloads and clones;
-- unsupported platforms and missing optional packages;
-- uninstall, restore, CLI update, and rollback behavior.
+Run the smallest relevant tests while iterating, then run the repository gate
+for any shell, lifecycle, profile, dependency, or release change:
 
-## Known Risks in the Current Implementation
+```sh
+bash scripts/check.sh
+```
 
-- Homebrew bootstrap still executes Homebrew's upstream installer when Homebrew
-  is absent; company deployments should provision Homebrew separately when this
-  trust model is not acceptable.
-- Apt and Homebrew packages follow their package-manager repositories rather than
-  the direct dependency manifest, so their exact transitive versions are not
-  reproducible across repository snapshots.
-- Release archives are checksum-verified and carry signed GitHub Artifact
-  Attestations. Keep checksum integrity and provenance authentication described
-  as separate guarantees.
+The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, and the
+test suite. Tests must use a temporary `HOME` and must never install against or
+modify the developer's real home directory. Behavioral changes require tests,
+especially for empty/existing paths, repeated operations, interruptions,
+unsupported platforms, offline behavior, uninstall, restore, update, and
+rollback.
 
-Address these through the milestones instead of hiding them with documentation.
+## Repository Map
+
+| Path | Responsibility |
+| --- | --- |
+| `bin/`, `lib/` | CLI commands, lifecycle, platform and package adapters |
+| `common/`, `mac/`, `ubuntu/` | Managed shell, editor, and platform configuration |
+| `profiles/`, `dependencies.conf` | Declarative profiles and approved dependencies |
+| `tests/` | Isolated unit and lifecycle coverage |
+| `scripts/` | Validation, benchmarks, dependency discovery, release builds |
+| `.github/` | CI, dependency automation, and release publication |
+| `docs/` | User, maintainer, security, and roadmap documentation |
 
 ## Working Process
 
-1. Read this file and `docs/project/MILESTONES.md`.
+1. Follow the user's requested scope. Consult the roadmap only for roadmap work
+   or when no task has been selected.
 2. Check the worktree before editing and preserve unrelated user changes.
-3. Select the earliest incomplete milestone whose prerequisites are complete.
-4. Keep changes scoped to one reviewable milestone or a clearly identified slice.
-5. Add or update tests with behavioral changes.
-6. Update milestone checkboxes only after the acceptance criteria actually pass.
-7. Record material architecture decisions in this file or a focused ADR under
-   `docs/` so work can continue on another machine without conversation history.
+3. Keep changes to one reviewable feature, fix, or documentation slice.
+4. Add or update tests for behavioral changes.
+5. Update milestone checkboxes only after their acceptance criteria pass.
+6. Record durable architecture decisions in this file or a focused document
+   under `docs/`; keep transient status and dated run logs out of agent rules.

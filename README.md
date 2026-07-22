@@ -324,12 +324,15 @@ bash scripts/check.sh
 
 - [Installation](docs/INSTALLATION.md)
 - [Profiles](docs/PROFILES.md)
+- [Python development](docs/PYTHON.md)
 - [Updates and rollback](docs/UPDATES.md)
 - [Shell performance](docs/PERFORMANCE.md)
 - [Company deployment](docs/COMPANY.md)
+- [Distribution channels](docs/DISTRIBUTION.md)
 - [Security model](docs/SECURITY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Release process](docs/RELEASING.md)
+- [Roadmap](docs/MILESTONES.md)
 - [Vulnerability reporting](SECURITY.md)
 
 ## Platform Notes

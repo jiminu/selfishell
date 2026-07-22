@@ -48,7 +48,7 @@ SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
 
 This skips all package and direct dependency network operations.
 
-## Pre-stable Zsh transition
+## Legacy Zsh transition
 
 Selfishell no longer replaces `~/.zshrc` with a managed symbolic link or loads
 `~/.config/selfishell/local.zsh`. Existing installations using that legacy model

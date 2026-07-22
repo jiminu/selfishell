@@ -83,16 +83,16 @@ test_agents_developer_profile_tool_list_matches_mise_toml() {
   [[ "$mise_line" == *uv* ]] || fail "AGENTS.md's mise-managed tool list does not mention uv"
 }
 
-# docs/project/MILESTONES.md's M3 profile-boundary description must match
+# docs/MILESTONES.md's M3 profile-boundary description must match
 # the actual profiles/minimal.conf and profiles/developer.conf package lists.
 test_milestones_profile_boundaries_match_profile_files() {
   local minimal_line developer_line tool
 
   # The backtick-quoted labels are literal patterns, not expansions.
   # shellcheck disable=SC2016
-  minimal_line="$(join_wrapped_match '`minimal`:' "$ROOT_DIR/docs/project/MILESTONES.md")"
+  minimal_line="$(join_wrapped_match '`minimal`:' "$ROOT_DIR/docs/MILESTONES.md")"
   # shellcheck disable=SC2016
-  developer_line="$(join_wrapped_match '`developer`:' "$ROOT_DIR/docs/project/MILESTONES.md")"
+  developer_line="$(join_wrapped_match '`developer`:' "$ROOT_DIR/docs/MILESTONES.md")"
 
   [[ -n "$minimal_line" ]] || fail "MILESTONES.md no longer documents the minimal profile boundary"
   [[ -n "$developer_line" ]] || fail "MILESTONES.md no longer documents the developer profile boundary"

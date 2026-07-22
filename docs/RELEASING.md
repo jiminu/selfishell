@@ -32,35 +32,40 @@ the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
 Release title is the version tag itself, such as `v1.2.3`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
 
-Before creating the tag, update the version in `VERSION` and review the installation examples for any versioned URLs:
+Before creating the tag, update the version in `VERSION`:
 
 ```bash
 # Update target version
 printf '%s\n' '1.2.3' > VERSION
 ```
 
-Ensure the validation check passes:
+Run the complete release-candidate gate. It repeats the repository checks and
+builds and verifies every release asset:
 
 ```bash
-bash scripts/check.sh
+bash scripts/release-check.sh 1.2.3
 ```
 
-Include those documentation updates in the reviewed release commit so the published release and the primary installation instructions cannot drift apart.
+Commit the version change on the branch that the tag will reference, then push
+the branch and annotated tag together so publication cannot start from an
+unpublished release commit:
 
 ```bash
+git add VERSION
+git commit -m 'chore: release 1.2.3'
 git tag -a v1.2.3 -m 'Selfishell 1.2.3'
-git push origin v1.2.3
+git push --atomic origin main v1.2.3
 ```
+
+Replace `main` if the repository's release branch changes.
 
 After the workflow completes:
 
 1. Verify all expected assets are attached to the GitHub Release.
 2. Verify `releases/latest/download/VERSION` resolves to the stable version.
-3. Verify the exact-version bootstrap commands in `README.md` and
-   `docs/INSTALLATION.md` resolve to the published installer.
-4. Run the exact-version bootstrap on the beta machines in
-   `docs/project/BETA.md`.
-5. Record failures as issues and publish a new patch release after fixes.
+3. Verify the tag's `install.sh` URL and an exact-version bootstrap resolve to
+   the published release.
+4. Record failures as issues and publish a new patch release after fixes.
 
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.
