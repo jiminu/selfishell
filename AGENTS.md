@@ -103,9 +103,10 @@ manual uninstall/reinstall instructions.
 
 ## Profiles and Dependencies
 
-`minimal` is the default profile. `developer` includes `minimal` and adds the
-larger interactive tools, jq, build tools, and language/editor tooling. Ghostty
-is a separate saved macOS installation choice.
+`developer` is the default profile and includes `minimal` plus the larger
+interactive tools, jq, build tools, and language/editor tooling. `minimal` is
+the explicit lightweight choice. Ghostty is a separate saved macOS installation
+choice.
 
 The developer profile's mise-managed tools are declared in `common/mise.toml`;
 treat that file as the source of truth. Do not delete legacy NVM or pyenv data

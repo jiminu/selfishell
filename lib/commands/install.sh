@@ -7,7 +7,7 @@ Usage:
                       [--skip-packages] [--dry-run] [--yes]
 
 Options:
-  --profile NAME       Select minimal or developer (default: minimal)
+  --profile NAME       Select minimal or developer (default: developer)
   --local-profile FILE Add private platform package records
   --skip-packages      Install configuration without package operations
   --dry-run  Show changes without modifying files
@@ -174,7 +174,7 @@ install_mise_global_config() {
 command_install() {
   local assume_yes=0
   local dry_run=0
-  local profile=minimal
+  local profile=developer
   local local_profile="${SELFISHELL_LOCAL_PROFILE:-}"
   local skip_packages=0
   local platform

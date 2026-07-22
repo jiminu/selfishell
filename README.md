@@ -8,7 +8,12 @@ It installs a practical set of terminal tools and keeps your Zsh, Starship,
 editor, aliases, completions, and optional Ghostty configuration consistent
 across macOS and Ubuntu.
 
-![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/preview.png)
+![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/selfishell.png)
+
+The `developer` profile also includes a practical Neovim setup with convenient
+features for everyday development.
+
+![Selfishell Neovim workspace showing the file explorer, buffer tabs, shell-script syntax highlighting, and compact statusline](img/nvim.png)
 
 ## Who Is It For?
 
@@ -29,8 +34,9 @@ directly.
 
 - a readable Starship prompt with Git and runtime information;
 - Zsh completion (powered by fzf-tab) and aliases for common Git and shell workflows;
-- Vim in the default profile; Neovim (configured with lazy.nvim) and advanced shell tools (FZF, Zoxide, Ripgrep, Eza, Bat) are in the developer profile;
-- optional mise-managed Python and Node.js, plus jq and build tools;
+- an editor workflow that scales from a minimal Vim setup to a
+  developer-focused Neovim environment;
+- optional versioned language runtimes and expanded developer tooling;
 - managed configuration with safe backups where Selfishell replaces existing paths;
 - one-command updates, release notifications, checksum verification, and
   offline rollback.
@@ -70,17 +76,17 @@ afterward, or run the printed `export` command immediately.
 
 ### 2. Install a profile
 
-For a comfortable general-purpose terminal:
+For the recommended development environment:
 
 ```bash
 selfishell install
 ```
 
-This installs the default `minimal` profile. For a workstation with language
-runtimes (Node.js, Python), jq, advanced shell tools, build dependencies, and Neovim:
+This installs the default `developer` profile. For a lightweight shell setup
+with Vim and the core interactive tools:
 
 ```bash
-selfishell install --profile developer
+selfishell install --profile minimal
 ```
 
 The installer shows what it is doing and asks before changing the environment.
@@ -128,17 +134,15 @@ are activated.
 | `minimal` | Zsh, Git, Curl, Vim, Starship, Zinit, and macOS terminal fonts |
 | `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
 
-`minimal` is the default and uses Vim for the base editor. Preview the
-developer profile without changing anything:
+`developer` is the default. Preview it without changing anything:
 
 ```bash
-selfishell install --profile developer --dry-run
+selfishell install --dry-run
 ```
 
-You can change an existing installation from `minimal` to `developer` by
-running the developer installation command. Existing managed settings are
-updated safely. In the `developer` profile, `vim` resolves to Neovim while
-`vi` remains the system editor.
+Choose `minimal` explicitly when you want the core shell experience without
+the larger development toolchain. In the `developer` profile,
+`vim` resolves to Neovim while `vi` remains the system editor.
 
 Packages marked optional by a profile are recommended packages: Selfishell
 attempts to install them automatically but continues if they are unavailable.

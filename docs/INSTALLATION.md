@@ -9,6 +9,9 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 selfishell install
 ```
 
+`selfishell install` selects the recommended `developer` profile. Use
+`selfishell install --profile minimal` for a lightweight shell setup.
+
 The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
 installer prints commands for the current shell and an absolute command that
 works immediately. It does not modify shell startup files by default. Pass
@@ -32,7 +35,7 @@ Use an exact release in controlled environments:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --version <version>
-selfishell install --profile minimal --yes
+selfishell install --profile developer --yes
 ```
 
 The archive is downloaded to a temporary directory, checked against the
