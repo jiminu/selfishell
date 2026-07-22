@@ -109,6 +109,18 @@ jobs:
       - name: Run real installation lifecycle
         run: bash scripts/ubuntu-container-e2e.sh
 
+  macos-configuration-e2e:
+    name: macOS configuration lifecycle E2E
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Run real configuration lifecycle
+        run: bash scripts/macos-configuration-e2e.sh
+
   neovim-developer-e2e:
     name: Pinned Neovim developer E2E
     runs-on: ubuntu-latest
