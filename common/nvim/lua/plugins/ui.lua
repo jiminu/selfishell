@@ -41,6 +41,40 @@ return {
     },
   }),
 
+  -- Buffer tabs: keep the critical startup path clear and hide the bar when a
+  -- single buffer is open.
+  plugin("akinsho/bufferline.nvim", {
+    event = "VeryLazy",
+    keys = {
+      {
+        "[b",
+        "<cmd>BufferLineCyclePrev<CR>",
+        desc = "Previous buffer",
+      },
+      {
+        "]b",
+        "<cmd>BufferLineCycleNext<CR>",
+        desc = "Next buffer",
+      },
+    },
+    dependencies = {
+      plugin("nvim-tree/nvim-web-devicons"),
+    },
+    opts = {
+      options = {
+        always_show_bufferline = false,
+        offsets = {
+          {
+            filetype = "NvimTree",
+            text = "File Explorer",
+            highlight = "Directory",
+            separator = true,
+          },
+        },
+      },
+    },
+  }),
+
   -- Statusline: not required for the critical startup path.
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
