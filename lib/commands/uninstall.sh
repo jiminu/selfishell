@@ -261,7 +261,10 @@ command_uninstall() {
     if [[ "$dry_run" == "1" ]]; then
       printf 'Dry run complete; no files were changed.\n'
     else
-      printf 'Selfishell configuration uninstalled.\n'
+      printf '%s\n' \
+        'Selfishell configuration uninstalled.' \
+        'The Selfishell CLI is still installed.' \
+        "Run 'selfishell uninstall --purge' to remove the CLI and all remaining data."
     fi
   fi
 
