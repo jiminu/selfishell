@@ -31,14 +31,16 @@ run_profile_dry_run() {
   printf '%s\n' "$output" | awk '/^Would install .* (apt packages|Homebrew|direct package|mise tools)/'
 }
 
-test_default_profile_is_minimal() {
+test_default_profile_is_developer() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
 
   [[ "$output" == *'vim'* && "$output" == *'starship'* ]] ||
-    fail "Default install did not select the minimal profile"
-  [[ "$output" != *'direct package: mise'* ]] ||
-    fail "Default install included developer tools"
+    fail "Default install omitted the minimal profile foundation"
+  [[ "$output" == *'direct package: mise'* && "$output" == *'required mise tools:'* ]] ||
+    fail "Default install did not select the developer profile"
+  [[ "$output" == *'Neovim plugins'* ]] ||
+    fail "Default install omitted the developer Neovim setup"
 }
 
 test_minimal_includes_shell_tools_and_excludes_larger_profiles() {

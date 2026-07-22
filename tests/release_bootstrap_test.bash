@@ -702,6 +702,7 @@ test_setup_is_explicit_and_can_run_offline() {
 
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Setup did not create a user-owned .zshrc"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Setup did not add the Zsh loader"
+  assert_file_content 'developer' "$XDG_STATE_HOME/selfishell/profile"
 }
 
 test_missing_bin_path_prints_actionable_message() {

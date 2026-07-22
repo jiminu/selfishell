@@ -8,7 +8,9 @@ role.
 | `minimal` | Core shell, Zinit, Vim, and macOS terminal fonts |
 | `developer` | Minimal plus Neovim 0.12.4, Tree-sitter CLI 0.26.11, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tooling |
 
-`minimal` is selected when `--profile` is omitted.
+`developer` is selected when `--profile` is omitted. Choose `minimal`
+explicitly for a lightweight shell setup without the larger development
+toolchain.
 
 The `developer` profile installs a pinned mise binary and activates it for
 interactive Zsh. Selfishell keeps its defaults in
@@ -23,13 +25,13 @@ Selfishell release and never happens during shell startup.
 Preview without changing the machine:
 
 ```sh
-selfishell install --profile developer --dry-run
+selfishell install --dry-run
 ```
 
 Install or change the selected profile explicitly:
 
 ```sh
-selfishell install --profile developer --yes
+selfishell install --profile minimal --yes
 ```
 
 The active profile is recorded in the XDG state directory. `selfishell update`
