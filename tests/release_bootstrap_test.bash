@@ -191,6 +191,23 @@ test_cli_update_and_offline_rollback() {
   assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/previous"
 }
 
+test_cli_update_to_current_version_preserves_rollback() {
+  local output version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  output="$(SELFISHELL_RELEASE_ROOT='file:///unavailable' \
+    "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes)"
+
+  [[ "$output" == *'already at 0.2.3; skipping CLI update'* ]] ||
+    fail "Same-version CLI update was not reported as a no-op"
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
+    fail "Same-version CLI update pruned the rollback release"
+}
+
 test_update_release_move_failure_does_not_corrupt_symlinks() {
   local version
   local fake_bin="$TEST_ROOT/fakebin"
@@ -359,6 +376,22 @@ test_bootstrap_upgrade_retains_rollback_and_prunes_inactive_release() {
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_bootstrap_same_version_preserves_rollback_release() {
+  local version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  run_bootstrap --version 0.2.3 >/dev/null
+  rm "$TEST_ROOT/prefix/bin/sfs"
+
+  run_bootstrap --version 0.2.3 >/dev/null
+
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/previous"
+  [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
+    fail "Same-version bootstrap pruned the rollback release"
+  assert_symlink_to selfishell "$TEST_ROOT/prefix/bin/sfs"
 }
 
 test_add_to_path_updates_bashrc_once() {

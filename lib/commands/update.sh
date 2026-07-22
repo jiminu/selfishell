@@ -69,7 +69,8 @@ update_cli_release() {
     return "$SELFISHELL_EXIT_USAGE"
   }
   if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then
-    printf 'Selfishell CLI is already at %s; refreshing links.\n' "$version"
+    printf 'Selfishell CLI is already at %s; skipping CLI update.\n' "$version"
+    return
   fi
   if [[ "$dry_run" == 1 ]]; then
     printf 'Would update Selfishell CLI to %s.\n' "$version"

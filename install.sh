@@ -240,6 +240,7 @@ main() {
   local bin_dir
   local setup_args=()
   local current_target=""
+  local current_version=""
   local previous_target=""
 
   while (("$#" > 0)); do
@@ -357,7 +358,8 @@ main() {
 
   [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
   [[ ! -L "$share_dir/previous" ]] || previous_target="$(readlink "$share_dir/previous")"
-  if [[ -n "$current_target" ]]; then
+  current_version="${current_target##*/}"
+  if [[ -n "$current_target" && "$current_version" != "$version" ]]; then
     bootstrap_atomic_link "$current_target" "$share_dir/previous"
     previous_target="$current_target"
   fi
