@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 bash "$ROOT_DIR/tests/docs_test.bash"
+bash "$ROOT_DIR/tests/github_actions_pins_test.bash"
 bash "$ROOT_DIR/tests/cli_test.bash"
 bash "$ROOT_DIR/tests/common_zsh_test.bash"
 bash "$ROOT_DIR/tests/neovim_config_test.bash"
