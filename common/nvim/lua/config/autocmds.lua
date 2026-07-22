@@ -12,6 +12,17 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- Recompute the file explorer width when the terminal is resized; nvim-tree
+-- only sizes on open/toggle otherwise.
+vim.api.nvim_create_autocmd("VimResized", {
+  group = group,
+  callback = function()
+    if package.loaded["nvim-tree.api"] then
+      require("nvim-tree.api").tree.resize()
+    end
+  end,
+})
+
 -- Restore the last cursor position when reopening a regular file.
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = group,

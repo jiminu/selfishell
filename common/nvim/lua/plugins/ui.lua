@@ -74,10 +74,12 @@ return {
         require("config.keymaps").set_window_navigation({ buffer = bufnr })
       end,
       view = {
-        width = {
-          min = 25,
-          max = 40,
-        },
+        -- Scale with the terminal width instead of nvim-tree's default
+        -- content-based adaptive sizing, which ignores terminal size.
+        width = function()
+          local computed = math.floor(vim.o.columns * 0.25)
+          return math.max(20, math.min(30, computed))
+        end,
       },
     },
   }),
