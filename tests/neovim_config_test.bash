@@ -53,7 +53,7 @@ test_every_neovim_plugin_has_an_approved_revision() {
     plugin_count=$((plugin_count + 1))
   done < <(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/common/nvim/lua/plugins/*.lua | sort -u)
 
-  [[ "$plugin_count" -eq 21 ]] || fail "Expected 21 pinned Neovim plugins, got $plugin_count"
+  [[ "$plugin_count" -eq 23 ]] || fail "Expected 23 pinned Neovim plugins, got $plugin_count"
   revision="$(awk '$1 == "nvim-plugin" && $2 == "folke/lazy.nvim" { print $3 }' "$ROOT_DIR/dependencies.conf")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail "lazy.nvim is missing an approved revision"
 }
