@@ -46,9 +46,9 @@ Implemented CLI commands are `help`, `version`, `doctor`, `install`, `status`,
 bootstrap has been retired.
 
 The `developer` profile uses a pinned mise binary for Neovim, Tree-sitter CLI,
-Node.js, Python, Temurin, kubectl, and kubectx. jq, Starship, build libraries,
-and core shell tools remain under the existing Selfishell or operating-system
-package lifecycle. Do not delete legacy NVM or pyenv user data during migration.
+Node.js, Python, and uv. jq, Starship, build libraries, and core shell tools
+remain under the existing Selfishell or operating-system package lifecycle. Do
+not delete legacy NVM or pyenv user data during migration.
 
 ## Product Decisions
 
@@ -82,8 +82,13 @@ package lifecycle. Do not delete legacy NVM or pyenv user data during migration.
 - Automated dependency discovery may update `dependencies.conf` through a
   review PR, but must never auto-merge or auto-publish a Selfishell release.
 - A maintainer merge of the exact automated dependency branch may dispatch the
-  next stable patch release only when `dependencies.conf` is the sole changed
-  file. General PR merges must never trigger automatic publication.
+  next stable patch release when the diff is limited to `dependencies.conf`
+  and, when Zsh plugin commits change, the approved Zinit pin files
+  `common/completion.zsh` and `common/interactive.zsh`. `dependencies.conf`
+  must always change; changes to those Zsh files must be limited to matching
+  `ver'<40-character SHA>'` pin replacements. Any other file or code change
+  must block automatic release dispatch. General PR merges must never trigger
+  automatic publication.
 
 ## Target Filesystem Layout
 
