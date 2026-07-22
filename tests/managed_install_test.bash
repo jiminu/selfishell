@@ -373,6 +373,7 @@ test_user_ghostty_regular_file_is_preserved_across_lifecycle() {
   [[ "$(fixture_sha256 "$user_override")" == "$checksum_before" ]] ||
     fail "Install changed user.ghostty"
 
+  setup_fake_macos_minimal_packages
   run_selfishell update --tools-only --yes >/dev/null
   [[ "$(fixture_sha256 "$user_override")" == "$checksum_before" ]] ||
     fail "Update changed user.ghostty"
@@ -395,6 +396,7 @@ test_user_ghostty_symlink_is_untouched_across_lifecycle() {
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   assert_symlink_to "$dotfiles_source" "$user_override"
 
+  setup_fake_macos_minimal_packages
   run_selfishell update --tools-only --yes >/dev/null
   assert_symlink_to "$dotfiles_source" "$user_override"
 
@@ -1072,6 +1074,23 @@ setup_fake_minimal_packages() {
   mkdir -p "$HOME/.local/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
   chmod +x "$HOME/.local/bin/starship"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+}
+
+setup_fake_macos_minimal_packages() {
+  mkdir -p "$TEST_ROOT/bin"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == list && "${2:-}" == --formula ]]; then
+  printf '%s\n' git starship vim
+elif [[ "${1:-}" == list && "${2:-}" == --cask ]]; then
+  printf '%s\n' font-meslo-lg-nerd-font font-noto-sans-cjk-kr
+fi
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
   touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
 }
@@ -1832,8 +1851,21 @@ run_test() {
 
 main() {
   local test_name
+  local test_index=0
+  local test_jobs="${SELFISHELL_TEST_JOBS:-4}"
+  local batch_index
   local failures=0
   local test_list=()
+  local batch_logs=()
+  local batch_pids=()
+  local log_root
+
+  case "$test_jobs" in
+    '' | *[!0-9]* | 0)
+      printf 'SELFISHELL_TEST_JOBS must be a positive integer.\n' >&2
+      return 2
+      ;;
+  esac
 
   while IFS= read -r test_name; do
     if [[ -n "$test_name" ]]; then
@@ -1841,18 +1873,38 @@ main() {
     fi
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 
-  printf 'Total tests found: %d\n' "${#test_list[@]}"
+  log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-managed-test.XXXXXX")"
+  trap 'rm -rf "$log_root"' EXIT HUP INT TERM
 
-  for test_name in "${test_list[@]}"; do
-    if ! run_test "$test_name"; then
-      failures=$((failures + 1))
-    fi
+  printf 'Total tests found: %d (jobs: %d)\n' "${#test_list[@]}" "$test_jobs"
+
+  while ((test_index < ${#test_list[@]})); do
+    batch_logs=()
+    batch_pids=()
+
+    for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
+      test_name="${test_list[$test_index]}"
+      batch_logs+=("$log_root/$test_index.log")
+      run_test "$test_name" >"$log_root/$test_index.log" 2>&1 &
+      batch_pids+=("$!")
+      test_index=$((test_index + 1))
+    done
+
+    for batch_index in "${!batch_pids[@]}"; do
+      if ! wait "${batch_pids[$batch_index]}"; then
+        failures=$((failures + 1))
+      fi
+      cat "${batch_logs[$batch_index]}"
+    done
   done
 
   if ((failures > 0)); then
     printf '%d test(s) failed\n' "$failures" >&2
     return 1
   fi
+
+  trap - EXIT HUP INT TERM
+  rm -rf "$log_root"
 }
 
 main "$@"
