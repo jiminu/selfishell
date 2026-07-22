@@ -7,19 +7,26 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
   desc = "Clear search highlight",
 })
 
--- Window navigation
-map("n", "<C-h>", "<C-w>h", {
-  desc = "Go to left window"
-})
-map("n", "<C-l>", "<C-w>l", {
-  desc = "Go to right window"
-})
-map("n", "<C-j>", "<C-w>j", {
-  desc = "Go to lower window"
-})
-map("n", "<C-k>", "<C-w>k", {
-  desc = "Go to upper window"
-})
+-- Window navigation. Plugins with buffer-local mappings can call this after
+-- their defaults to preserve the same navigation keys.
+function M.set_window_navigation(options)
+  options = options or {}
+  local mappings = {
+    ["<C-h>"] = { "<C-W>h", "Go to left window" },
+    ["<C-j>"] = { "<C-W>j", "Go to lower window" },
+    ["<C-k>"] = { "<C-W>k", "Go to upper window" },
+    ["<C-l>"] = { "<C-W>l", "Go to right window" },
+  }
+
+  for lhs, mapping in pairs(mappings) do
+    map("n", lhs, mapping[1], vim.tbl_extend("force", {
+      desc = mapping[2],
+      silent = true,
+    }, options))
+  end
+end
+
+M.set_window_navigation()
 
 -- Buffer management
 function M.delete_buffer(bufnr)
