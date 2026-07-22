@@ -14,7 +14,7 @@ homebrew_ensure_installed() {
   fi
 
   printf 'Installing Homebrew\n'
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  /bin/bash -c "$(selfishell_curl transfer https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   homebrew_activate
   have_command brew
 }

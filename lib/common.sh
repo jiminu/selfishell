@@ -22,6 +22,42 @@ have_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+selfishell_curl() {
+  local mode="$1"
+  local connect_timeout="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"
+  local low_speed_limit="${SELFISHELL_CURL_LOW_SPEED_LIMIT:-1024}"
+  local low_speed_time="${SELFISHELL_CURL_LOW_SPEED_TIME:-30}"
+  local metadata_max_time="${SELFISHELL_CURL_METADATA_MAX_TIME:-15}"
+  local value
+  local arguments=()
+  shift
+
+  for value in "$connect_timeout" "$low_speed_limit" "$low_speed_time" "$metadata_max_time"; do
+    case "$value" in
+      "" | *[!0-9]* | 0)
+        cli_error "Selfishell curl timeout and speed settings must be positive integers."
+        return "$SELFISHELL_EXIT_USAGE"
+        ;;
+    esac
+  done
+
+  arguments=(
+    --connect-timeout "$connect_timeout"
+    --speed-limit "$low_speed_limit"
+    --speed-time "$low_speed_time"
+  )
+  case "$mode" in
+    metadata) arguments+=(--max-time "$metadata_max_time") ;;
+    transfer) ;;
+    *)
+      cli_error "Unknown Selfishell curl mode: $mode"
+      return "$SELFISHELL_EXIT_USAGE"
+      ;;
+  esac
+
+  curl -fsSL "${arguments[@]}" "$@"
+}
+
 require_no_arguments() {
   local command="$1"
   shift

@@ -33,6 +33,21 @@ replacement before removing legacy data manually.
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
 Use `SELFISHELL_OFFLINE=1` or `--skip-packages` for configuration-only setup.
 
+Release and direct-tool downloads stop when they cannot connect or remain below
+the minimum transfer rate. Metadata checks also have a short total deadline.
+Slow or high-latency networks can tune the positive-integer values, in seconds
+or bytes per second as appropriate:
+
+```sh
+export SELFISHELL_CURL_CONNECT_TIMEOUT=20
+export SELFISHELL_CURL_LOW_SPEED_LIMIT=256
+export SELFISHELL_CURL_LOW_SPEED_TIME=120
+export SELFISHELL_CURL_METADATA_MAX_TIME=30
+```
+
+Archive downloads deliberately have no fixed total deadline, so a slow but
+progressing download can finish.
+
 ## Modified Managed File
 
 Selfishell refuses to overwrite or remove a managed file whose checksum changed.

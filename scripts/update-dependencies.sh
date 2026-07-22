@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/lib/common.sh"
+
 manifest="$ROOT_DIR/dependencies.conf"
 zsh_root="$ROOT_DIR"
 metadata=""
@@ -26,9 +28,10 @@ sha256_file() {
 
 github_latest_tag() {
   local repository="$1"
-  local arguments=(-fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+  local arguments=(-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
   [[ -z "${GH_TOKEN:-}" ]] || arguments+=(-H "Authorization: Bearer $GH_TOKEN")
-  curl "${arguments[@]}" "https://api.github.com/repos/$repository/releases/latest" | jq -er '.tag_name'
+  selfishell_curl metadata "${arguments[@]}" "https://api.github.com/repos/$repository/releases/latest" |
+    jq -er '.tag_name'
 }
 
 record_download() {
@@ -40,7 +43,7 @@ record_download() {
   local archive="$temporary_dir/$name-$platform-$architecture"
   local checksum
 
-  curl -fsSL "$source" -o "$archive"
+  selfishell_curl transfer "$source" -o "$archive"
   checksum="$(sha256_file "$archive")"
   printf 'download %s %s %s %s %s %s\n' \
     "$name" "$version" "$platform" "$architecture" "$source" "$checksum" >>"$metadata"

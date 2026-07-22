@@ -8,13 +8,11 @@ release_latest_version() {
   local official_root="https://github.com/jiminu/selfishell/releases"
   local root api_url response version published_version
   # This is called from the interactive shell's background update-notice
-  # check, which holds a lock for as long as it runs; an unbounded curl hang
-  # (dead network, silently dropped packets) would wedge that lock, not just
-  # this command, so every request here is time-boxed.
-  local curl_timeouts=(--connect-timeout 5 --max-time 15)
+  # check, which holds a lock for as long as it runs. Metadata mode therefore
+  # has a short total deadline in addition to the shared connection limits.
 
   root="$(release_root_url)"
-  if version="$(curl -fsSL "${curl_timeouts[@]}" "$root/latest/download/VERSION" 2>/dev/null)"; then
+  if version="$(selfishell_curl metadata "$root/latest/download/VERSION" 2>/dev/null)"; then
     version="${version#v}"
     [[ -n "$version" ]] && {
       printf '%s\n' "$version"
@@ -24,7 +22,7 @@ release_latest_version() {
 
   [[ "$root" == "$official_root" || -n "${SELFISHELL_RELEASE_TAGS_API_URL:-${SELFISHELL_RELEASE_API_URL:-}}" ]] || return 1
   api_url="${SELFISHELL_RELEASE_TAGS_API_URL:-${SELFISHELL_RELEASE_API_URL:-https://api.github.com/repos/jiminu/selfishell/tags?per_page=1}}"
-  response="$(curl -fsSL "${curl_timeouts[@]}" \
+  response="$(selfishell_curl metadata \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
     "$api_url" 2>/dev/null)" || return 1
@@ -32,7 +30,7 @@ release_latest_version() {
     -e 's/.*"name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' \
     -e 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
   [[ -n "$version" ]] || return 1
-  published_version="$(curl -fsSL "${curl_timeouts[@]}" "$root/download/v${version}/VERSION" 2>/dev/null)" || return 1
+  published_version="$(selfishell_curl metadata "$root/download/v${version}/VERSION" 2>/dev/null)" || return 1
   published_version="${published_version#v}"
   [[ "$published_version" == "$version" ]] || return 1
   printf '%s\n' "$version"
@@ -109,11 +107,11 @@ release_install() {
   archive="$temporary_dir/$archive_name"
   checksum_file="$temporary_dir/SHA256SUMS"
 
-  curl -fsSL "$release_url/$archive_name" -o "$archive" || {
+  selfishell_curl transfer "$release_url/$archive_name" -o "$archive" || {
     rm -rf "$temporary_dir"
     return 1
   }
-  curl -fsSL "$release_url/SHA256SUMS" -o "$checksum_file" || {
+  selfishell_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file" || {
     rm -rf "$temporary_dir"
     return 1
   }

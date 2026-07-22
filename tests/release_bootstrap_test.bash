@@ -42,6 +42,8 @@ teardown_release_home() {
   unset SELFISHELL_RELEASE_ROOT SELFISHELL_RELEASE_API_URL SELFISHELL_RELEASE_TAGS_API_URL
   unset SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
   unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
+  unset SELFISHELL_CURL_CONNECT_TIMEOUT SELFISHELL_CURL_LOW_SPEED_LIMIT
+  unset SELFISHELL_CURL_LOW_SPEED_TIME SELFISHELL_CURL_METADATA_MAX_TIME
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
   teardown_test_home
@@ -99,6 +101,49 @@ test_latest_uses_published_version_file() {
   run_bootstrap >/dev/null
   [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.3 ]] ||
     fail "Latest installation selected the wrong version"
+}
+
+test_bootstrap_uses_bounded_curl_policy() {
+  local fake_bin="$TEST_ROOT/fakebin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf 'call' >>"$HOME/curl-calls"
+printf ' %s' "$@" >>"$HOME/curl-calls"
+printf '\n' >>"$HOME/curl-calls"
+exec /usr/bin/curl "$@"
+EOF
+  chmod +x "$fake_bin/curl"
+
+  PATH="$fake_bin:$PATH" run_bootstrap >/dev/null
+
+  grep -Fq -- '--connect-timeout 10' "$HOME/curl-calls" ||
+    fail "Bootstrap curl calls did not set a connection timeout"
+  grep -Fq -- '--speed-limit 1024' "$HOME/curl-calls" ||
+    fail "Bootstrap curl calls did not set a low-speed limit"
+  grep -Fq -- '--speed-time 30' "$HOME/curl-calls" ||
+    fail "Bootstrap curl calls did not set a low-speed duration"
+  grep -Fq -- '--max-time 15' "$HOME/curl-calls" ||
+    fail "Bootstrap metadata lookup did not set a total timeout"
+  grep -F -- '-o ' "$HOME/curl-calls" | grep -Fvq -- '--max-time' ||
+    fail "Bootstrap release download used the metadata total timeout"
+}
+
+test_bootstrap_rejects_invalid_curl_policy() {
+  local output status version
+  version="$(<"$ROOT_DIR/VERSION")"
+
+  set +e
+  output="$(SELFISHELL_CURL_LOW_SPEED_TIME=invalid \
+    run_bootstrap --version "$version" 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 2 ]] || fail "Invalid bootstrap curl policy should return a usage error"
+  [[ "$output" == *'must be positive integers'* ]] ||
+    fail "Invalid bootstrap curl policy did not explain the accepted values"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+    fail "Invalid bootstrap curl policy changed the active release"
 }
 
 test_latest_falls_back_to_published_prerelease() {

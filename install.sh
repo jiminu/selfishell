@@ -83,11 +83,47 @@ bootstrap_validate_version() {
   esac
 }
 
+bootstrap_curl() {
+  local mode="$1"
+  local connect_timeout="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"
+  local low_speed_limit="${SELFISHELL_CURL_LOW_SPEED_LIMIT:-1024}"
+  local low_speed_time="${SELFISHELL_CURL_LOW_SPEED_TIME:-30}"
+  local metadata_max_time="${SELFISHELL_CURL_METADATA_MAX_TIME:-15}"
+  local value
+  local arguments=()
+  shift
+
+  for value in "$connect_timeout" "$low_speed_limit" "$low_speed_time" "$metadata_max_time"; do
+    case "$value" in
+      "" | *[!0-9]* | 0)
+        bootstrap_error "Curl timeout and speed settings must be positive integers."
+        return 2
+        ;;
+    esac
+  done
+
+  arguments=(
+    --connect-timeout "$connect_timeout"
+    --speed-limit "$low_speed_limit"
+    --speed-time "$low_speed_time"
+  )
+  case "$mode" in
+    metadata) arguments+=(--max-time "$metadata_max_time") ;;
+    transfer) ;;
+    *)
+      bootstrap_error "Unknown curl mode: $mode"
+      return 2
+      ;;
+  esac
+
+  curl -fsSL "${arguments[@]}" "$@"
+}
+
 bootstrap_latest_version() {
   local official_root="https://github.com/jiminu/selfishell/releases"
   local api_url response version published_version
 
-  if version="$(curl -fsSL "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>/dev/null)"; then
+  if version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>/dev/null)"; then
     version="${version#v}"
     [[ -n "$version" ]] && {
       printf '%s\n' "$version"
@@ -97,7 +133,7 @@ bootstrap_latest_version() {
 
   [[ "$SELFISHELL_RELEASE_ROOT" == "$official_root" || -n "${SELFISHELL_RELEASE_TAGS_API_URL:-${SELFISHELL_RELEASE_API_URL:-}}" ]] || return 1
   api_url="${SELFISHELL_RELEASE_TAGS_API_URL:-${SELFISHELL_RELEASE_API_URL:-https://api.github.com/repos/jiminu/selfishell/tags?per_page=1}}"
-  response="$(curl -fsSL \
+  response="$(bootstrap_curl metadata \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
     "$api_url" 2>/dev/null)" || return 1
@@ -105,7 +141,7 @@ bootstrap_latest_version() {
     -e 's/.*"name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' \
     -e 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
   [[ -n "$version" ]] || return 1
-  published_version="$(curl -fsSL "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>/dev/null)" || return 1
+  published_version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>/dev/null)" || return 1
   published_version="${published_version#v}"
   [[ "$published_version" == "$version" ]] || return 1
   printf '%s\n' "$version"
@@ -426,8 +462,8 @@ main() {
   checksum_file="$SELFISHELL_TEMP_DIR/SHA256SUMS"
 
   printf 'Downloading Selfishell %s for %s/%s\n' "$version" "$platform" "$architecture"
-  curl -fsSL "$release_url/$archive_name" -o "$archive_file"
-  curl -fsSL "$release_url/SHA256SUMS" -o "$checksum_file"
+  bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
+  bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
 
   expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file")"
   if [[ -z "$expected_checksum" || "$expected_checksum" == *[!0-9a-fA-F]* ]]; then

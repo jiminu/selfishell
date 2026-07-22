@@ -26,6 +26,7 @@ test_direct_installer_preserves_proxy_environment() {
   cat >"$fake_bin/curl" <<'EOF'
 #!/bin/sh
 printf '%s' "$HTTPS_PROXY" >"$HOME/proxy-observed"
+printf '%s\n' "$@" >"$HOME/curl-arguments"
 exec /usr/bin/curl "$@"
 EOF
   chmod +x "$fake_bin/curl"
@@ -42,6 +43,31 @@ EOF
   install_direct_package required mise 0
 
   assert_file_content "$HTTPS_PROXY" "$HOME/proxy-observed"
+  grep -Fxq -- '--connect-timeout' "$HOME/curl-arguments" ||
+    fail "Direct download did not set a connection timeout"
+  grep -Fxq -- '--speed-limit' "$HOME/curl-arguments" ||
+    fail "Direct download did not set a low-speed limit"
+  grep -Fxq -- '--speed-time' "$HOME/curl-arguments" ||
+    fail "Direct download did not set a low-speed duration"
+  ! grep -Fxq -- '--max-time' "$HOME/curl-arguments" ||
+    fail "Direct download should not use a short total timeout"
+}
+
+test_invalid_curl_policy_is_rejected_before_network_access() {
+  local output status
+  rm -f "$HOME/proxy-observed"
+
+  set +e
+  output="$(SELFISHELL_CURL_CONNECT_TIMEOUT=0 \
+    selfishell_curl transfer file://"$TEST_ROOT/mise" 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq "$SELFISHELL_EXIT_USAGE" ]] ||
+    fail "Invalid curl policy should return a usage error"
+  [[ "$output" == *'must be positive integers'* ]] ||
+    fail "Invalid curl policy did not explain the accepted values"
+  [[ ! -e "$HOME/proxy-observed" ]] || fail "Invalid curl policy still invoked curl"
 }
 
 main() {
@@ -49,6 +75,8 @@ main() {
   trap teardown_test_home EXIT
   test_direct_installer_preserves_proxy_environment
   printf 'PASS: test_direct_installer_preserves_proxy_environment\n'
+  test_invalid_curl_policy_is_rejected_before_network_access
+  printf 'PASS: test_invalid_curl_policy_is_rejected_before_network_access\n'
 }
 
 main "$@"
