@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       runtime: ${{ steps.filter.outputs.runtime }}
+      ubuntu_container_e2e: ${{ steps.filter.outputs.ubuntu_container_e2e }}
 
     steps:
       - name: Check out repository
@@ -33,19 +34,16 @@ jobs:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          runtime=true
-          if [[ "$EVENT_NAME" != workflow_dispatch && -n "$BASE_SHA" &&
-            "$BASE_SHA" != 0000000000000000000000000000000000000000 ]] &&
-            git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-            runtime=false
-            while IFS= read -r changed_file; do
-              case "$changed_file" in
-                AGENTS.md | README.md | docs/* | .agents/*) ;;
-                *) runtime=true; break ;;
-              esac
-            done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            classification=$'runtime=true\nubuntu_container_e2e=true'
+          else
+            classification="$(bash scripts/classify-ci-changes.sh "$BASE_SHA" "$GITHUB_SHA")"
           fi
-          printf 'runtime=%s\n' "$runtime" >>"$GITHUB_OUTPUT"
+          printf '%s\n' "$classification" >>"$GITHUB_OUTPUT"
+          {
+            printf '### CI change classification\n\n'
+            printf '```text\n%s\n```\n' "$classification"
+          } >>"$GITHUB_STEP_SUMMARY"
 
   shell:
     name: Shell checks (${{ matrix.os }})
@@ -136,7 +134,7 @@ jobs:
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: needs.changes.outputs.ubuntu_container_e2e == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
