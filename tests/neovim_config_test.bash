@@ -53,7 +53,7 @@ test_every_neovim_plugin_has_an_approved_revision() {
     plugin_count=$((plugin_count + 1))
   done < <(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/common/nvim/lua/plugins/*.lua | sort -u)
 
-  [[ "$plugin_count" -eq 20 ]] || fail "Expected 20 pinned Neovim plugins, got $plugin_count"
+  [[ "$plugin_count" -eq 21 ]] || fail "Expected 21 pinned Neovim plugins, got $plugin_count"
   revision="$(awk '$1 == "nvim-plugin" && $2 == "folke/lazy.nvim" { print $3 }' "$ROOT_DIR/dependencies.conf")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail "lazy.nvim is missing an approved revision"
 }
@@ -88,10 +88,27 @@ test_editor_workflow_options_and_keymaps() {
   cp "$ROOT_DIR/dependencies.conf" "$XDG_CONFIG_HOME/nvim/plugin-versions.conf"
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
     --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
-    '+lua vim.g.mapleader = " "; require("config.options"); require("config.keymaps"); assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured"); assert(vim.o.scrolloff == 4, "scrolloff is not configured"); assert(vim.o.confirm, "confirmation is not enabled"); assert(vim.o.inccommand == "split", "substitution preview is not configured"); local function assert_map(mode, lhs, rhs) local mapping = vim.fn.maparg(lhs, mode, false, true); assert(mapping.rhs == rhs, "unexpected mapping for " .. lhs .. ": " .. vim.inspect(mapping)) end; assert_map("n", "<leader>bd", "<cmd>confirm bdelete<CR>"); assert_map("x", "<", "<gv"); assert_map("x", ">", ">gv"); local function plugin_spec(module, repository) for _, spec in ipairs(require(module)) do if spec[1] == repository then return spec end end end; local function plugin_key(module, repository, lhs) local spec = plugin_spec(module, repository); for _, key in ipairs(spec and spec.keys or {}) do if key[1] == lhs then return key[2] end end end; local telescope = { ["<leader>fd"] = "<cmd>Telescope diagnostics<CR>", ["<leader>fs"] = "<cmd>Telescope lsp_document_symbols<CR>", ["<leader>fS"] = "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>", ["<leader>fr"] = "<cmd>Telescope resume<CR>" }; for lhs, rhs in pairs(telescope) do assert(plugin_key("plugins.telescope", "nvim-telescope/telescope.nvim", lhs) == rhs, "missing Telescope mapping: " .. lhs) end; local tree = assert(plugin_spec("plugins.ui", "nvim-tree/nvim-tree.lua"), "nvim-tree spec is missing"); assert(tree.opts.view.width == 40, "unexpected NvimTree width"); assert(plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>", "missing current-file tree mapping"); local rainbow = assert(plugin_spec("plugins.editor", "HiPhish/rainbow-delimiters.nvim"), "rainbow-delimiters spec is missing"); assert(vim.deep_equal(rainbow.event, { "BufReadPre", "BufNewFile" }), "rainbow-delimiters loads after the initial FileType event"); print("editor workflows: OK")' \
+    '+lua vim.g.mapleader = " "; require("config.options"); require("config.keymaps"); assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured"); assert(vim.o.scrolloff == 4, "scrolloff is not configured"); assert(vim.o.confirm, "confirmation is not enabled"); assert(vim.o.inccommand == "split", "substitution preview is not configured"); local function assert_map(mode, lhs, rhs) local mapping = vim.fn.maparg(lhs, mode, false, true); assert(mapping.rhs == rhs, "unexpected mapping for " .. lhs .. ": " .. vim.inspect(mapping)) end; for lhs, rhs in pairs({ ["<C-h>"] = "<C-W>h", ["<C-j>"] = "<C-W>j", ["<C-k>"] = "<C-W>k", ["<C-l>"] = "<C-W>l" }) do assert_map("n", lhs, rhs) end; local delete_map = vim.fn.maparg("<leader>bd", "n", false, true); assert(type(delete_map.callback) == "function", "buffer delete mapping is not callback-based"); assert_map("x", "<", "<gv"); assert_map("x", ">", ">gv"); local function plugin_spec(module, repository) for _, spec in ipairs(require(module)) do if spec[1] == repository then return spec end end end; local function plugin_key(module, repository, lhs) local spec = plugin_spec(module, repository); for _, key in ipairs(spec and spec.keys or {}) do if key[1] == lhs then return key[2] end end end; local telescope = { ["<leader>fd"] = "<cmd>Telescope diagnostics<CR>", ["<leader>fs"] = "<cmd>Telescope lsp_document_symbols<CR>", ["<leader>fS"] = "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>", ["<leader>fr"] = "<cmd>Telescope resume<CR>" }; for lhs, rhs in pairs(telescope) do assert(plugin_key("plugins.telescope", "nvim-telescope/telescope.nvim", lhs) == rhs, "missing Telescope mapping: " .. lhs) end; local tree = assert(plugin_spec("plugins.ui", "nvim-tree/nvim-tree.lua"), "nvim-tree spec is missing"); assert(tree.opts.view.width == 40, "unexpected NvimTree width"); assert(type(tree.opts.on_attach) == "function", "NvimTree does not preserve window navigation mappings"); assert(plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>", "missing current-file tree mapping"); local bufferline = assert(plugin_spec("plugins.ui", "akinsho/bufferline.nvim"), "bufferline spec is missing"); assert(bufferline.event == "VeryLazy", "bufferline is not deferred"); assert(bufferline.opts.options.always_show_bufferline == false, "bufferline should hide for one buffer"); assert(bufferline.opts.options.offsets[1].filetype == "NvimTree", "bufferline is not aligned with NvimTree"); assert(plugin_key("plugins.ui", "akinsho/bufferline.nvim", "[b") == "<cmd>BufferLineCyclePrev<CR>", "missing previous-buffer mapping"); assert(plugin_key("plugins.ui", "akinsho/bufferline.nvim", "]b") == "<cmd>BufferLineCycleNext<CR>", "missing next-buffer mapping"); local rainbow = assert(plugin_spec("plugins.editor", "HiPhish/rainbow-delimiters.nvim"), "rainbow-delimiters spec is missing"); assert(vim.deep_equal(rainbow.event, { "BufReadPre", "BufNewFile" }), "rainbow-delimiters loads after the initial FileType event"); print("editor workflows: OK")' \
     +qa 2>&1)"
 
   [[ "$output" == *'editor workflows: OK'* ]] || fail "Editor workflow configuration is invalid: $output"
+}
+
+test_buffer_delete_preserves_editor_window() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    printf 'SKIP: test_buffer_delete_preserves_editor_window (Neovim unavailable)\n'
+    return
+  fi
+
+  output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
+    --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
+    '+lua vim.g.mapleader = " "; vim.bo.buflisted = false; local buffers = require("config.keymaps"); local editor_win = vim.api.nvim_get_current_win(); local tree_buf = vim.api.nvim_create_buf(false, true); vim.bo[tree_buf].filetype = "NvimTree"; local tree_win = vim.api.nvim_open_win(tree_buf, false, { split = "left", win = editor_win }); local first = vim.api.nvim_create_buf(true, false); local second = vim.api.nvim_create_buf(true, false); vim.api.nvim_win_set_buf(editor_win, first); buffers.delete_buffer(first); assert(vim.api.nvim_win_is_valid(editor_win), "editor window was closed"); assert(vim.api.nvim_win_get_buf(editor_win) == second, "next listed buffer did not replace the deleted buffer"); assert(vim.api.nvim_win_is_valid(tree_win) and vim.api.nvim_win_get_buf(tree_win) == tree_buf, "NvimTree window was changed"); buffers.delete_buffer(second); assert(vim.api.nvim_win_is_valid(editor_win), "editor window was closed with the last file buffer"); assert(vim.api.nvim_win_get_buf(editor_win) ~= tree_buf, "NvimTree replaced the editor buffer"); print("buffer delete layout: OK")' \
+    +qa 2>&1)"
+
+  [[ "$output" == *'buffer delete layout: OK'* ]] ||
+    fail "Buffer deletion did not preserve the editor layout: $output"
 }
 
 test_lazy_revision_prefers_detached_head() {
@@ -192,6 +209,8 @@ test_pinned_neovim_plugin_specs_load
 printf 'PASS: test_pinned_neovim_plugin_specs_load\n'
 test_editor_workflow_options_and_keymaps
 printf 'PASS: test_editor_workflow_options_and_keymaps\n'
+test_buffer_delete_preserves_editor_window
+printf 'PASS: test_buffer_delete_preserves_editor_window\n'
 test_lazy_revision_prefers_detached_head
 printf 'PASS: test_lazy_revision_prefers_detached_head\n'
 test_lazy_revision_falls_back_for_symbolic_head

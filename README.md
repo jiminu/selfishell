@@ -159,7 +159,9 @@ Neovim 0.12's standard LSP mappings remain available as well.
 The configuration opens new splits to the right and below, keeps four lines of
 context above and below the cursor when possible, confirms commands that would
 discard unsaved changes, and previews `:substitute` results in a split before
-they are applied.
+they are applied. When multiple buffers are open, bufferline shows them across
+the top of the editor; use `[b` and `]b` to move to the previous or next buffer,
+and `Space b d` to close the current buffer without closing its editor window.
 
 ## Ghostty Customization
 
