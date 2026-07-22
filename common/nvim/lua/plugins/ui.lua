@@ -34,7 +34,11 @@ return {
     dependencies = {
       plugin("nvim-tree/nvim-web-devicons"),
     },
-    opts = {},
+    opts = {
+      view = {
+        width = 40,
+      },
+    },
   }),
 
   -- Statusline: not required for the critical startup path.

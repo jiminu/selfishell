@@ -125,6 +125,8 @@ jobs:
     name: Pinned Neovim developer E2E
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out repository
