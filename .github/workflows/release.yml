@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
 
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Check out tagged source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
@@ -97,7 +97,7 @@ jobs:
         run: bash scripts/build-release.sh --version '${{ steps.version.outputs.version }}' --output dist
 
       - name: Generate signed build provenance
-        uses: actions/attest@v4
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: dist/*
 
@@ -150,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out notification script
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: main
 
