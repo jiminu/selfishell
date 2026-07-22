@@ -89,11 +89,39 @@ status_report_package() {
   fi
 }
 
+status_rollback_version() {
+  local releases_dir share_dir previous_link previous_target version release_dir
+
+  releases_dir="$(dirname "$SELFISHELL_ROOT")"
+  if [[ "$(basename "$releases_dir")" != releases ]]; then
+    printf 'none\n'
+    return
+  fi
+  share_dir="$(dirname "$releases_dir")"
+  previous_link="$share_dir/previous"
+  if [[ ! -L "$previous_link" ]]; then
+    printf 'none\n'
+    return
+  fi
+
+  previous_target="$(readlink "$previous_link")"
+  version="${previous_target##*/}"
+  release_dir="$releases_dir/$version"
+  if [[ -n "$version" && -d "$release_dir" && ! -L "$release_dir" &&
+    -r "$release_dir/VERSION" && "$(<"$release_dir/VERSION")" == "$version" &&
+    -x "$release_dir/bin/selfishell" ]]; then
+    printf '%s\n' "$version"
+  else
+    printf 'invalid\n'
+  fi
+}
+
 command_status() {
   local check_updates=0
   local check_package_updates=0
   local verbose=0
   local current_version="unknown"
+  local rollback_version="none"
   local available_version="not checked"
   local platform profile_platform dependency_platform architecture
   local profile=""
@@ -118,13 +146,15 @@ command_status() {
   selfishell_initialize_paths
 
   [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
+  rollback_version="$(status_rollback_version)"
   if [[ "$check_updates" == 1 ]]; then
     available_version="$(release_latest_version)" || {
       cli_error "Unable to check the available CLI version."
       available_version="unavailable"
     }
   fi
-  printf '[CLI] Current: %s | Available: %s\n' "$current_version" "$available_version"
+  printf '[CLI] Current: %s | Rollback: %s | Available: %s\n' \
+    "$current_version" "$rollback_version" "$available_version"
 
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_PACKAGES_TOTAL=0

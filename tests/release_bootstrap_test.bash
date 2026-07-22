@@ -137,7 +137,7 @@ test_status_falls_back_to_published_prerelease() {
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" status --check-updates)" || true
 
-  [[ "$output" == *"[CLI] Current: $version | Available: 0.3.0-beta.2"* ]] ||
+  [[ "$output" == *"[CLI] Current: $version | Rollback: none | Available: 0.3.0-beta.2"* ]] ||
     fail "Status did not report the published prerelease"
 }
 
@@ -171,7 +171,7 @@ test_unpublished_tag_is_not_selected() {
 }
 
 test_cli_update_and_offline_rollback() {
-  local version
+  local output version
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin"
@@ -184,11 +184,17 @@ test_cli_update_and_offline_rollback() {
     fail "CLI update did not prune an inactive release"
   [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
     fail "CLI update pruned the rollback release"
+  output="$("$TEST_ROOT/prefix/bin/selfishell" status 2>&1)" || true
+  [[ "$output" == *"[CLI] Current: 0.2.3 | Rollback: $version | Available: not checked"* ]] ||
+    fail "Status did not report the retained rollback release"
 
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
     "$TEST_ROOT/prefix/bin/selfishell" rollback --yes >/dev/null
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/previous"
+  output="$("$TEST_ROOT/prefix/bin/selfishell" status 2>&1)" || true
+  [[ "$output" == *"[CLI] Current: $version | Rollback: 0.2.3 | Available: not checked"* ]] ||
+    fail "Status did not update the rollback release after rollback"
 }
 
 test_cli_update_to_current_version_preserves_rollback() {
