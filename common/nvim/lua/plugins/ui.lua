@@ -74,7 +74,10 @@ return {
         require("config.keymaps").set_window_navigation({ buffer = bufnr })
       end,
       view = {
-        width = 40,
+        width = {
+          min = 25,
+          max = 40,
+        },
       },
     },
   }),
