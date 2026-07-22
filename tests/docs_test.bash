@@ -67,20 +67,22 @@ test_developer_profile_docs_include_mise_tool_versions() {
   ' "$ROOT_DIR/common/mise.toml")
 }
 
-# AGENTS.md's "Current State" once described Temurin/kubectl/kubectx as
-# mise-managed in the developer profile; none of those are in
-# common/mise.toml, which manages Neovim/Tree-sitter/Node.js/Python/uv.
-test_agents_developer_profile_tool_list_matches_mise_toml() {
+# AGENTS.md should point to common/mise.toml instead of duplicating its tool
+# list. Keep guarding against the stale tool claims that prompted this check.
+test_agents_developer_profile_tools_use_mise_source_of_truth() {
   local mise_line
+  local mise_source="\`common/mise.toml\`"
 
-  mise_line="$(join_wrapped_match 'pinned mise binary for' "$ROOT_DIR/AGENTS.md")"
-  [[ -n "$mise_line" ]] || fail "AGENTS.md no longer describes the developer profile's mise-managed tools"
+  mise_line="$(join_wrapped_match "mise-managed tools are declared" "$ROOT_DIR/AGENTS.md")"
+  [[ "$mise_line" == *"$mise_source"* ]] ||
+    fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool declaration"
+  [[ "$mise_line" == *'source of truth'* ]] ||
+    fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool source of truth"
 
   for tool in Temurin kubectl kubectx; do
     [[ "$mise_line" != *"$tool"* ]] ||
       fail "AGENTS.md still claims $tool is managed by mise in the developer profile"
   done
-  [[ "$mise_line" == *uv* ]] || fail "AGENTS.md's mise-managed tool list does not mention uv"
 }
 
 # docs/MILESTONES.md's M3 profile-boundary description must match
@@ -137,8 +139,8 @@ test_readme_vi_alias_documentation_matches_implementation
 printf 'PASS: test_readme_vi_alias_documentation_matches_implementation\n'
 test_developer_profile_docs_include_mise_tool_versions
 printf 'PASS: test_developer_profile_docs_include_mise_tool_versions\n'
-test_agents_developer_profile_tool_list_matches_mise_toml
-printf 'PASS: test_agents_developer_profile_tool_list_matches_mise_toml\n'
+test_agents_developer_profile_tools_use_mise_source_of_truth
+printf 'PASS: test_agents_developer_profile_tools_use_mise_source_of_truth\n'
 test_milestones_profile_boundaries_match_profile_files
 printf 'PASS: test_milestones_profile_boundaries_match_profile_files\n'
 test_agents_dependency_release_rule_matches_current_gate

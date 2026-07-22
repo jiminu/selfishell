@@ -68,7 +68,9 @@ Preserve these lifecycle invariants:
 - retain the original backup path across idempotent reinstalls;
 - checksum managed regular files;
 - treat a replaced link, changed file, or changed path type as user data;
-- preflight every uninstall or update resource before changing any of them;
+- preflight the full uninstall resource set before removing any resource;
+- run required user-owned loader and block-target preflights before package or
+  configuration changes during install and update;
 - remove only an intact installer-managed loader or PATH block;
 - make dry-run create no directories, state, backups, links, or files;
 - increment the fixed-line state format version before changing field order or
@@ -105,8 +107,9 @@ manual uninstall/reinstall instructions.
 larger interactive tools, jq, build tools, and language/editor tooling. Ghostty
 is a separate saved macOS installation choice.
 
-The developer profile uses a pinned mise binary for Neovim, Tree-sitter CLI,
-Node.js, Python, and uv. Do not delete legacy NVM or pyenv data during migration.
+The developer profile's mise-managed tools are declared in `common/mise.toml`;
+treat that file as the source of truth. Do not delete legacy NVM or pyenv data
+during migration.
 
 Local additions use `--local-profile FILE` or `SELFISHELL_LOCAL_PROFILE`. Local
 profiles may contain package records only and may not include another profile.
@@ -177,3 +180,5 @@ rollback.
 5. Update milestone checkboxes only after their acceptance criteria pass.
 6. Record durable architecture decisions in this file or a focused document
    under `docs/`; keep transient status and dated run logs out of agent rules.
+7. Report only checks actually run. Separate local results, GitHub Actions
+   results, and checks that were unavailable; never imply an unrun check passed.
