@@ -31,6 +31,8 @@ the full suite, builds every archive, smoke-tests an exact install, and creates
 the GitHub Release with all archives, `SHA256SUMS`, and `VERSION`. The GitHub
 Release title is the version tag itself, such as `v1.2.3`; artifact filenames
 retain the `selfishell-` prefix so downloaded files remain identifiable.
+Prerelease suffixes use dot-separated SemVer identifiers made of ASCII letters,
+digits, and hyphens. Numeric identifiers must not contain leading zeroes.
 
 Before creating the tag, update the version in `VERSION`:
 

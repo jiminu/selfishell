@@ -22,6 +22,24 @@ have_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+selfishell_version_is_valid() {
+  local version="${1:-}"
+  local prerelease identifier
+  local identifiers=()
+
+  [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]] ||
+    return 1
+  [[ "$version" == *-* ]] || return 0
+
+  prerelease="${version#*-}"
+  IFS=. read -r -a identifiers <<<"$prerelease"
+  for identifier in "${identifiers[@]}"; do
+    if [[ "$identifier" =~ ^[0-9]+$ && "$identifier" != 0 && "$identifier" == 0* ]]; then
+      return 1
+    fi
+  done
+}
+
 selfishell_curl() {
   local mode="$1"
   local connect_timeout="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"

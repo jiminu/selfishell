@@ -186,6 +186,26 @@ test_update_rejects_version_for_tools_only() {
   [[ "$status" -eq 2 ]] || fail "Tools-only version selection should return exit code 2"
 }
 
+test_update_validates_semantic_versions() {
+  local output status version
+
+  output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only \
+    --version 1.2.3-alpha.1.x-7 --dry-run)"
+  [[ "$output" == *'Would update Selfishell CLI to 1.2.3-alpha.1.x-7'* ]] ||
+    fail "CLI update rejected a valid prerelease"
+
+  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01; do
+    set +e
+    output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only \
+      --version "$version" --dry-run 2>&1)"
+    status=$?
+    set -e
+    [[ "$status" -eq 2 ]] || fail "CLI update accepted invalid version: $version"
+    [[ "$output" == *'Invalid semantic version'* ]] ||
+      fail "CLI update did not explain invalid version: $version"
+  done
+}
+
 test_update_propagates_cli_install_failure() {
   local output
   local status

@@ -146,6 +146,22 @@ test_bootstrap_rejects_invalid_curl_policy() {
     fail "Invalid bootstrap curl policy changed the active release"
 }
 
+test_bootstrap_rejects_invalid_semantic_versions() {
+  local output status version
+
+  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01; do
+    set +e
+    output="$(run_bootstrap --version "$version" 2>&1)"
+    status=$?
+    set -e
+    [[ "$status" -ne 0 ]] || fail "Bootstrap accepted invalid version: $version"
+    [[ "$output" == *'Invalid semantic version'* ]] ||
+      fail "Bootstrap did not explain invalid version: $version"
+    [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+      fail "Invalid version changed the active release: $version"
+  done
+}
+
 test_latest_falls_back_to_published_prerelease() {
   rm "$TEST_ROOT/releases/latest/download/VERSION"
   printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"

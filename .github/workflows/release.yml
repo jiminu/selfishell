@@ -81,7 +81,8 @@ jobs:
             version="$REQUESTED_VERSION"
             TAG="v$version"
           fi
-          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+          source lib/common.sh
+          if ! selfishell_version_is_valid "$version"; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
             exit 1
           fi

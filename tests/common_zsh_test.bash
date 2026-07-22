@@ -180,6 +180,14 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
         _selfishell_version_is_newer 0.1.0-beta.13 0.1.0-beta.12
         _selfishell_version_is_newer 0.1.0 0.1.0-beta.12
         ! _selfishell_version_is_newer 0.1.0-beta.12 0.1.0
+        _selfishell_version_is_newer 0.1.0-beta.1 0.1.0-alpha.9
+        _selfishell_version_is_newer 0.1.0-alpha.1 0.1.0-alpha
+        ! _selfishell_version_is_newer 0.1.0-alpha 0.1.0-alpha.1
+        _selfishell_version_is_newer 0.1.0-alpha.beta 0.1.0-alpha.1
+        ! _selfishell_version_is_newer 0.1.0-alpha.1 0.1.0-alpha.beta
+        _selfishell_version_is_newer 0.1.0-rc.1.2 0.1.0-rc.1.1
+        ! _selfishell_version_is_newer 0.1.0-alpha.01 0.1.0-alpha.1
+        ! _selfishell_version_is_newer 01.1.0 1.0.0
         _selfishell_update_notice
         SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice
         command rm -f "$2/available-version" "$2/update-checked-at"

@@ -64,8 +64,8 @@ update_cli_release() {
       return "$SELFISHELL_EXIT_ERROR"
     }
   fi
-  [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]] || {
-    cli_error "Invalid version: $version"
+  selfishell_version_is_valid "$version" || {
+    cli_error "Invalid semantic version: $version"
     return "$SELFISHELL_EXIT_USAGE"
   }
   if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then

@@ -99,28 +99,100 @@ _selfishell_update_notice_refresh() {
   }
 }
 
-_selfishell_version_is_newer() {
-  local candidate="$1"
-  local current="$2"
-  local version_pattern='^([0-9]+)\.([0-9]+)\.([0-9]+)(-([A-Za-z]+)\.([0-9]+))?$'
-  local -a candidate_parts current_parts
-  local index
+_selfishell_version_is_valid() {
+  local version="$1"
+  local core="$version"
+  local prerelease=""
+  local numeric_pattern='^(0|[1-9][0-9]*)$'
+  local prerelease_pattern='^[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$'
+  local identifier
+  local -a core_parts prerelease_parts
 
-  [[ "$candidate" =~ "$version_pattern" ]] || return 1
-  candidate_parts=("${match[@]}")
-  [[ "$current" =~ "$version_pattern" ]] || return 1
-  current_parts=("${match[@]}")
+  if [[ "$version" == *-* ]]; then
+    core="${version%%-*}"
+    prerelease="${version#*-}"
+    [[ -n "$prerelease" && "$prerelease" =~ "$prerelease_pattern" ]] || return 1
+  fi
 
-  for index in 1 2 3; do
-    (( candidate_parts[index] > current_parts[index] )) && return 0
-    (( candidate_parts[index] < current_parts[index] )) && return 1
+  core_parts=("${(s:.:)core}")
+  (( ${#core_parts} == 3 )) || return 1
+  for identifier in "${core_parts[@]}"; do
+    [[ "$identifier" =~ "$numeric_pattern" ]] || return 1
   done
 
-  [[ -z "${candidate_parts[4]}" && -n "${current_parts[4]}" ]] && return 0
-  [[ -n "${candidate_parts[4]}" && -z "${current_parts[4]}" ]] && return 1
-  [[ -z "${candidate_parts[4]}" ]] && return 1
-  [[ "${candidate_parts[5]}" == "${current_parts[5]}" ]] || return 1
-  (( candidate_parts[6] > current_parts[6] ))
+  [[ -n "$prerelease" ]] || return 0
+  prerelease_parts=("${(s:.:)prerelease}")
+  for identifier in "${prerelease_parts[@]}"; do
+    if [[ "$identifier" == <-> && ${#identifier} -gt 1 && "$identifier" == 0* ]]; then
+      return 1
+    fi
+  done
+}
+
+_selfishell_version_is_newer() {
+  local LC_ALL=C
+  local candidate="$1"
+  local current="$2"
+  local candidate_core="$candidate"
+  local current_core="$current"
+  local candidate_prerelease=""
+  local current_prerelease=""
+  local candidate_identifier current_identifier
+  local candidate_numeric current_numeric
+  local -a candidate_core_parts current_core_parts candidate_parts current_parts
+  local index
+
+  _selfishell_version_is_valid "$candidate" || return 1
+  _selfishell_version_is_valid "$current" || return 1
+
+  if [[ "$candidate" == *-* ]]; then
+    candidate_core="${candidate%%-*}"
+    candidate_prerelease="${candidate#*-}"
+  fi
+  if [[ "$current" == *-* ]]; then
+    current_core="${current%%-*}"
+    current_prerelease="${current#*-}"
+  fi
+  candidate_core_parts=("${(s:.:)candidate_core}")
+  current_core_parts=("${(s:.:)current_core}")
+
+  for index in 1 2 3; do
+    [[ "${candidate_core_parts[index]}" == "${current_core_parts[index]}" ]] && continue
+    (( ${#candidate_core_parts[index]} > ${#current_core_parts[index]} )) && return 0
+    (( ${#candidate_core_parts[index]} < ${#current_core_parts[index]} )) && return 1
+    [[ "${candidate_core_parts[index]}" > "${current_core_parts[index]}" ]] && return 0
+    return 1
+  done
+
+  [[ -z "$candidate_prerelease" && -n "$current_prerelease" ]] && return 0
+  [[ -n "$candidate_prerelease" && -z "$current_prerelease" ]] && return 1
+  [[ -z "$candidate_prerelease" ]] && return 1
+
+  candidate_parts=("${(s:.:)candidate_prerelease}")
+  current_parts=("${(s:.:)current_prerelease}")
+  for (( index = 1; index <= ${#candidate_parts} || index <= ${#current_parts}; index++ )); do
+    (( index <= ${#candidate_parts} )) || return 1
+    (( index <= ${#current_parts} )) || return 0
+    candidate_identifier="${candidate_parts[index]}"
+    current_identifier="${current_parts[index]}"
+    [[ "$candidate_identifier" == "$current_identifier" ]] && continue
+
+    candidate_numeric=0
+    current_numeric=0
+    [[ "$candidate_identifier" == <-> ]] && candidate_numeric=1
+    [[ "$current_identifier" == <-> ]] && current_numeric=1
+    if (( candidate_numeric && current_numeric )); then
+      (( ${#candidate_identifier} > ${#current_identifier} )) && return 0
+      (( ${#candidate_identifier} < ${#current_identifier} )) && return 1
+      [[ "$candidate_identifier" > "$current_identifier" ]] && return 0
+      return 1
+    fi
+    (( candidate_numeric )) && return 1
+    (( current_numeric )) && return 0
+    [[ "$candidate_identifier" > "$current_identifier" ]] && return 0
+    return 1
+  done
+  return 1
 }
 
 _selfishell_current_version() {

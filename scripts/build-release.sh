@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/lib/common.sh"
+
 version="$(<"$ROOT_DIR/VERSION")"
 output_dir="$ROOT_DIR/dist"
 
@@ -29,10 +31,10 @@ while (("$#" > 0)); do
   shift
 done
 
-[[ -n "$version" ]] || {
-  printf 'Version is required.\n' >&2
+if ! selfishell_version_is_valid "$version"; then
+  printf 'A valid semantic version is required.\n' >&2
   exit 2
-}
+fi
 [[ "$output_dir" == /* ]] || output_dir="$ROOT_DIR/$output_dir"
 
 if [[ -n "$version" && "$update_source" == "1" ]]; then
