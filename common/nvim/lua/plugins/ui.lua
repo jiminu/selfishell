@@ -63,13 +63,67 @@ return {
     opts = {
       options = {
         always_show_bufferline = false,
+        close_command = function(bufnr)
+          require("config.keymaps").delete_buffer(bufnr)
+        end,
+        right_mouse_command = function(bufnr)
+          require("config.keymaps").delete_buffer(bufnr)
+        end,
+        indicator = {
+          style = "none",
+        },
+        separator_style = "thin",
+        show_close_icon = false,
+        show_buffer_close_icons = true,
+        hover = {
+          enabled = true,
+          delay = 150,
+          reveal = { "close" },
+        },
+        max_name_length = 24,
+        tab_size = 16,
         offsets = {
           {
             filetype = "NvimTree",
-            text = "File Explorer",
-            highlight = "Directory",
+            text = "EXPLORER",
+            text_align = "left",
+            highlight = "TabLineFill",
             separator = true,
           },
+        },
+      },
+      highlights = {
+        fill = {
+          fg = { attribute = "fg", highlight = "TabLineFill" },
+          bg = { attribute = "bg", highlight = "TabLineFill" },
+        },
+        background = {
+          fg = { attribute = "fg", highlight = "TabLine" },
+          bg = { attribute = "bg", highlight = "TabLine" },
+          italic = false,
+        },
+        buffer_visible = {
+          fg = { attribute = "fg", highlight = "TabLine" },
+          bg = { attribute = "bg", highlight = "TabLine" },
+          italic = false,
+        },
+        buffer_selected = {
+          fg = { attribute = "fg", highlight = "TabLineSel" },
+          bg = { attribute = "bg", highlight = "TabLineSel" },
+          bold = false,
+          italic = false,
+        },
+        separator = {
+          fg = { attribute = "bg", highlight = "TabLineFill" },
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        separator_visible = {
+          fg = { attribute = "bg", highlight = "TabLineFill" },
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        separator_selected = {
+          fg = { attribute = "bg", highlight = "TabLineFill" },
+          bg = { attribute = "bg", highlight = "TabLineSel" },
         },
       },
     },

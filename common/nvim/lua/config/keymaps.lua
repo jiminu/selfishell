@@ -1,4 +1,5 @@
 local map = vim.keymap.set
+local M = {}
 
 -- Clear search highlighting
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
@@ -21,7 +22,56 @@ map("n", "<C-k>", "<C-w>k", {
 })
 
 -- Buffer management
-map("n", "<leader>bd", "<cmd>confirm bdelete<CR>", {
+function M.delete_buffer(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local current_win = vim.api.nvim_get_current_win()
+  local replacement
+  local created_replacement = false
+
+  if vim.api.nvim_win_get_buf(current_win) == bufnr then
+    local listed = vim.tbl_filter(function(candidate)
+      return vim.api.nvim_buf_is_valid(candidate) and vim.bo[candidate].buflisted
+    end, vim.api.nvim_list_bufs())
+
+    for index, candidate in ipairs(listed) do
+      if candidate == bufnr then
+        replacement = listed[index + 1] or listed[index - 1]
+        break
+      end
+    end
+    replacement = replacement or listed[1]
+    if replacement == bufnr then
+      replacement = nil
+    end
+    if not replacement then
+      replacement = vim.api.nvim_create_buf(true, false)
+      created_replacement = true
+    end
+    vim.api.nvim_win_set_buf(current_win, replacement)
+  end
+
+  local ok, err = pcall(vim.cmd, "confirm bdelete " .. bufnr)
+  local target_remains = vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr)
+  if not ok or target_remains then
+    if vim.api.nvim_win_is_valid(current_win) and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_win_set_buf(current_win, bufnr)
+    end
+    if created_replacement and vim.api.nvim_buf_is_valid(replacement) then
+      vim.api.nvim_buf_delete(replacement, { force = true })
+    end
+    if not ok then
+      error(err)
+    end
+  end
+end
+
+map("n", "<leader>bd", function()
+  M.delete_buffer()
+end, {
   silent = true,
   desc = "Delete buffer",
 })
@@ -64,3 +114,5 @@ vim.api.nvim_create_autocmd("LspAttach", {
     lsp_map("<leader>d", vim.diagnostic.open_float, "Show line diagnostics")
   end,
 })
+
+return M
