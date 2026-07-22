@@ -70,7 +70,7 @@ return {
           require("config.keymaps").delete_buffer(bufnr)
         end,
         indicator = {
-          style = "none",
+          style = "underline",
         },
         separator_style = "thin",
         show_close_icon = false,
@@ -98,20 +98,50 @@ return {
           bg = { attribute = "bg", highlight = "TabLineFill" },
         },
         background = {
-          fg = { attribute = "fg", highlight = "TabLine" },
+          fg = "#858585",
           bg = { attribute = "bg", highlight = "TabLine" },
           italic = false,
         },
         buffer_visible = {
-          fg = { attribute = "fg", highlight = "TabLine" },
+          fg = "#858585",
           bg = { attribute = "bg", highlight = "TabLine" },
           italic = false,
         },
         buffer_selected = {
-          fg = { attribute = "fg", highlight = "TabLineSel" },
+          fg = "#FFFFFF",
           bg = { attribute = "bg", highlight = "TabLineSel" },
-          bold = false,
+          bold = true,
           italic = false,
+          underline = true,
+          sp = "#007ACC",
+        },
+        close_button = {
+          fg = "#858585",
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        close_button_visible = {
+          fg = "#858585",
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        close_button_selected = {
+          fg = "#D4D4D4",
+          bg = { attribute = "bg", highlight = "TabLineSel" },
+          underline = true,
+          sp = "#007ACC",
+        },
+        modified = {
+          fg = "#D7BA7D",
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        modified_visible = {
+          fg = "#D7BA7D",
+          bg = { attribute = "bg", highlight = "TabLine" },
+        },
+        modified_selected = {
+          fg = "#D7BA7D",
+          bg = { attribute = "bg", highlight = "TabLineSel" },
+          underline = true,
+          sp = "#007ACC",
         },
         separator = {
           fg = { attribute = "bg", highlight = "TabLineFill" },
@@ -124,6 +154,14 @@ return {
         separator_selected = {
           fg = { attribute = "bg", highlight = "TabLineFill" },
           bg = { attribute = "bg", highlight = "TabLineSel" },
+          underline = true,
+          sp = "#007ACC",
+        },
+        indicator_selected = {
+          fg = "#007ACC",
+          bg = { attribute = "bg", highlight = "TabLineSel" },
+          underline = true,
+          sp = "#007ACC",
         },
       },
     },
