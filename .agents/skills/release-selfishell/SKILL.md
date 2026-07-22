@@ -35,21 +35,25 @@ If the requested version already exists anywhere, stop. Tags and GitHub Release 
 Skip mutations in Audit mode. Otherwise:
 
 1. Change only `VERSION` to the exact requested version.
-2. Run the canonical gate:
+2. Create a fresh temporary candidate directory and run the canonical gate
+   against it so artifacts from an earlier version cannot contaminate the
+   candidate:
 
    ```bash
-   bash scripts/release-check.sh <version>
+   candidate_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-candidate.XXXXXX")"
+   bash scripts/release-check.sh <version> "$candidate_dir"
    ```
 
-3. Require all checks and the build to succeed. Confirm `dist/` contains exactly the expected release contract:
+3. Require all checks and the build to succeed. Confirm the candidate directory
+   contains exactly the expected release contract:
    - `selfishell-<version>-linux-amd64.tar.gz`
    - `selfishell-<version>-linux-arm64.tar.gz`
    - `selfishell-<version>-macos-amd64.tar.gz`
    - `selfishell-<version>-macos-arm64.tar.gz`
    - `SHA256SUMS`
    - `VERSION`
-4. Verify `dist/VERSION`, archive names, and checksum entries match the requested version.
-5. Recheck the worktree. Only `VERSION` may be an intentional tracked release change; `dist/` must remain ignored.
+4. Verify the candidate `VERSION`, archive names, and checksum entries match the requested version.
+5. Recheck the worktree. Only `VERSION` may be an intentional tracked release change. Remove the temporary candidate directory after its evidence is no longer needed.
 
 Stop on any failure. Report the failing command and preserve its evidence. Do not weaken, skip, or edit checks merely to make a release pass.
 
@@ -73,14 +77,16 @@ The automated dependency patch path is separate: a qualifying merge from `automa
 
 ## Verify the published release
 
-After a successful workflow:
+After a successful workflow, run:
 
-1. Confirm the immutable GitHub Release points to `v<version>` and has the expected stable or pre-release classification.
-2. Confirm all four archives, `SHA256SUMS`, and `VERSION` are attached.
-3. Download the assets into a temporary directory, verify every checksum, and verify GitHub Artifact Attestations for the four archives when `gh attestation verify` is available.
-4. Verify the exact tag's `install.sh` URL and exact-version bootstrap resolve only through `releases/download/v<version>`.
-5. Install into an isolated temporary prefix and confirm `selfishell version` reports the released version. Never run a release smoke test against the developer's real home or normal XDG directories.
-6. For a stable release, verify `releases/latest/download/VERSION` resolves to the new version. A pre-release must not replace the latest stable version.
+```bash
+bash scripts/verify-published-release.sh <version>
+```
+
+Require it to confirm the release classification, exact asset set, checksums,
+available GitHub Artifact Attestations, tagged installer, isolated exact-version
+bootstrap, and latest-stable behavior. The script uses temporary HOME, XDG, and
+prefix paths; never substitute the developer's real environment.
 
 Do not modify an existing release to repair a failed verification. Diagnose the cause, fix it normally, and publish a new version—usually the next patch.
 

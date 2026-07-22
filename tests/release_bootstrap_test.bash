@@ -6,6 +6,32 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/tests/test_helper.bash"
 
+RELEASE_FIXTURE_ROOT=""
+
+setup_release_fixture() {
+  local version
+  local next_version=0.2.3
+  local prerelease_version=0.3.0-beta.2
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  RELEASE_FIXTURE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release-fixture.XXXXXX")"
+  mkdir -p "$RELEASE_FIXTURE_ROOT/artifacts" \
+    "$RELEASE_FIXTURE_ROOT/next-artifacts" \
+    "$RELEASE_FIXTURE_ROOT/prerelease-artifacts"
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" \
+    --output "$RELEASE_FIXTURE_ROOT/artifacts" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" \
+    --output "$RELEASE_FIXTURE_ROOT/next-artifacts" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" \
+    --output "$RELEASE_FIXTURE_ROOT/prerelease-artifacts" --no-update-source >/dev/null
+}
+
+teardown_release_fixture() {
+  if [[ -n "$RELEASE_FIXTURE_ROOT" && -d "$RELEASE_FIXTURE_ROOT" ]]; then
+    rm -rf "$RELEASE_FIXTURE_ROOT"
+  fi
+}
+
 setup_release_home() {
   local version
   local next_version=0.2.3
@@ -29,9 +55,9 @@ setup_release_home() {
     "$TEST_ROOT/releases/download/v$version" "$TEST_ROOT/releases/download/v$next_version" \
     "$TEST_ROOT/releases/download/v$prerelease_version" \
     "$TEST_ROOT/releases/latest/download"
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$TEST_ROOT/artifacts" --no-update-source >/dev/null
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" --output "$TEST_ROOT/next-artifacts" --no-update-source >/dev/null
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" --output "$TEST_ROOT/prerelease-artifacts" --no-update-source >/dev/null
+  cp -R "$RELEASE_FIXTURE_ROOT/artifacts/." "$TEST_ROOT/artifacts/"
+  cp -R "$RELEASE_FIXTURE_ROOT/next-artifacts/." "$TEST_ROOT/next-artifacts/"
+  cp -R "$RELEASE_FIXTURE_ROOT/prerelease-artifacts/." "$TEST_ROOT/prerelease-artifacts/"
   cp "$TEST_ROOT/artifacts"/* "$TEST_ROOT/releases/download/v$version/"
   cp "$TEST_ROOT/next-artifacts"/* "$TEST_ROOT/releases/download/v$next_version/"
   cp "$TEST_ROOT/prerelease-artifacts"/* "$TEST_ROOT/releases/download/v$prerelease_version/"
@@ -764,9 +790,15 @@ run_test() {
 main() {
   local test_name
 
+  setup_release_fixture
+  trap teardown_release_fixture EXIT HUP INT TERM
+
   while IFS= read -r test_name; do
     run_test "$test_name"
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+
+  trap - EXIT HUP INT TERM
+  teardown_release_fixture
 }
 
 main "$@"

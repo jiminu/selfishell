@@ -10,9 +10,46 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      runtime: ${{ steps.filter.outputs.runtime }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Detect runtime changes
+        id: filter
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          runtime=true
+          if [[ "$EVENT_NAME" != workflow_dispatch && -n "$BASE_SHA" &&
+            "$BASE_SHA" != 0000000000000000000000000000000000000000 ]] &&
+            git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            runtime=false
+            while IFS= read -r changed_file; do
+              case "$changed_file" in
+                AGENTS.md | README.md | docs/* | .agents/*) ;;
+                *) runtime=true; break ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+          fi
+          printf 'runtime=%s\n' "$runtime" >>"$GITHUB_OUTPUT"
+
   shell:
     name: Shell checks (${{ matrix.os }})
+    needs: changes
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -26,6 +63,7 @@ jobs:
 
     steps:
       - name: Check out repository
+        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install shell tooling (Ubuntu)
@@ -35,13 +73,15 @@ jobs:
           sudo apt-get install -y shellcheck shfmt zsh
 
       - name: Install shell tooling (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && needs.changes.outputs.runtime == 'true'
         run: brew install shellcheck shfmt
 
       - name: Run checks
+        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         run: bash scripts/check.sh
 
       - name: Measure shell performance and warn on regressions
+        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         env:
           # Budgets are advisory: hosted-runner noise makes them unreliable
           # as a hard gate, so a budget miss is reported as a CI warning
@@ -55,6 +95,7 @@ jobs:
         run: bash scripts/benchmark.sh
 
       - name: Upload performance result
+        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: shell-performance-${{ runner.os }}
@@ -62,6 +103,8 @@ jobs:
 
   shell-full-profile-benchmark:
     name: Measure full-profile shell performance (warn-only)
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -92,6 +135,8 @@ jobs:
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
@@ -111,6 +156,8 @@ jobs:
 
   macos-configuration-e2e:
     name: macOS configuration lifecycle E2E
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: macos-latest
     timeout-minutes: 15
 
@@ -123,6 +170,8 @@ jobs:
 
   neovim-developer-e2e:
     name: Pinned Neovim developer E2E
+    needs: changes
+    if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

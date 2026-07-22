@@ -135,6 +135,15 @@ test_performance_docs_document_full_benchmark_mode() {
     fail "docs/PERFORMANCE.md does not name the full-profile benchmark's artifact"
 }
 
+test_release_procedures_use_published_release_verifier() {
+  local verifier='bash scripts/verify-published-release.sh'
+
+  grep -Fq "$verifier" "$ROOT_DIR/docs/RELEASING.md" ||
+    fail "docs/RELEASING.md does not use the published release verifier"
+  grep -Fq "$verifier" "$ROOT_DIR/.agents/skills/release-selfishell/SKILL.md" ||
+    fail "release-selfishell skill does not use the published release verifier"
+}
+
 test_readme_vi_alias_documentation_matches_implementation
 printf 'PASS: test_readme_vi_alias_documentation_matches_implementation\n'
 test_developer_profile_docs_include_mise_tool_versions
@@ -147,3 +156,5 @@ test_agents_dependency_release_rule_matches_current_gate
 printf 'PASS: test_agents_dependency_release_rule_matches_current_gate\n'
 test_performance_docs_document_full_benchmark_mode
 printf 'PASS: test_performance_docs_document_full_benchmark_mode\n'
+test_release_procedures_use_published_release_verifier
+printf 'PASS: test_release_procedures_use_published_release_verifier\n'
