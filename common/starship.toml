@@ -147,11 +147,13 @@ format = '[( $virtualenv )]($style)'
 style = 'bold fg:#ffd75f'
 
 [nodejs]
-format = '[( v${raw} )]($style)'
+format = '[( $version )]($style)'
+version_format = 'v${major}'
 style = 'bold fg:#5faf5f'
 
 [java]
-format = '[( v${raw} )]($style)'
+format = '[( $version )]($style)'
+version_format = 'v${major}'
 style = 'bold fg:#ff875f'
 
 
