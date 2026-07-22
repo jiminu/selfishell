@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -55,7 +55,7 @@ jobs:
         run: bash scripts/benchmark.sh
 
       - name: Upload performance result
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: shell-performance-${{ runner.os }}
           path: ${{ runner.temp }}/selfishell-benchmark.tsv
@@ -67,7 +67,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Install shell tooling and profile integrations
         run: |
@@ -85,7 +85,7 @@ jobs:
         run: bash scripts/benchmark.sh --mode full
 
       - name: Upload full-profile performance result
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: shell-performance-full-profile
           path: ${{ runner.temp }}/selfishell-benchmark-full.tsv
@@ -104,7 +104,7 @@ jobs:
           apt-get install -y ca-certificates curl
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Run real installation lifecycle
         run: bash scripts/ubuntu-container-e2e.sh
@@ -116,7 +116,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Run real configuration lifecycle
         run: bash scripts/macos-configuration-e2e.sh
@@ -128,7 +128,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Install build prerequisites
         run: |
