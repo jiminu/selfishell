@@ -13,7 +13,8 @@ The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
 installer prints commands for the current shell and an absolute command that
 works immediately. It does not modify shell startup files by default. Pass
 `--add-to-path` to add an idempotent, tracked entry to `~/.bashrc` or `~/.zshrc`
-based on the current default shell:
+based on the current default shell. The selected path must be absent or a
+regular file; symbolic links and other path types are preserved and rejected:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |

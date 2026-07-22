@@ -396,6 +396,7 @@ test_bootstrap_same_version_preserves_rollback_release() {
 
 test_add_to_path_updates_bashrc_once() {
   local count output
+  printf 'export USER_SETTING=preserved\n' >"$HOME/.bashrc"
 
   output="$(SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path)"
   SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
@@ -404,8 +405,117 @@ test_add_to_path_updates_bashrc_once() {
     fail "Bash PATH installation was not reported"
   count="$(grep -Fc '# Added by Selfishell installer' "$HOME/.bashrc")"
   [[ "$count" -eq 1 ]] || fail "Bash PATH entry was added more than once"
+  grep -Fqx 'export USER_SETTING=preserved' "$HOME/.bashrc" ||
+    fail "PATH installation changed existing startup content"
   PATH=/usr/bin:/bin bash -c 'source "$1"; [[ ":$PATH:" == *":$2:"* ]]' \
     _ "$HOME/.bashrc" "$TEST_ROOT/prefix/bin" || fail "Bash startup did not activate the CLI path"
+}
+
+test_add_to_path_preserves_matching_user_path_entry() {
+  printf 'export PATH=%s:"%s"\n' "$TEST_ROOT/prefix/bin" "\$PATH" >"$HOME/.bashrc"
+
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  [[ "$(grep -Fc "$TEST_ROOT/prefix/bin" "$HOME/.bashrc")" -eq 1 ]] ||
+    fail "Bootstrap duplicated a matching user PATH entry"
+  [[ "$(<"$HOME/.bashrc")" != *'# Added by Selfishell installer'* ]] ||
+    fail "Bootstrap claimed ownership of a matching user PATH entry"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-startup-file" ]] ||
+    fail "Bootstrap recorded state for a user-owned PATH entry"
+}
+
+test_add_to_path_rejects_symlink_startup_file() {
+  local output status target="$TEST_ROOT/user-bashrc"
+  printf 'user startup\n' >"$target"
+  ln -s "$target" "$HOME/.bashrc"
+
+  set +e
+  output="$(SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Symlink startup file should reject PATH installation"
+  [[ "$output" == *'Refusing to modify non-regular shell startup file'* ]] ||
+    fail "Symlink startup rejection was not actionable"
+  assert_symlink_to "$target" "$HOME/.bashrc"
+  assert_file_content 'user startup' "$target"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-startup-file" ]] ||
+    fail "Rejected symlink PATH installation wrote state"
+}
+
+test_add_to_path_state_failure_preserves_startup_file() {
+  local fake_bin="$TEST_ROOT/fakebin" output status
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */path-startup-file) exit 1 ;;
+  esac
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  output="$(PATH="$fake_bin:$PATH" SELFISHELL_BOOTSTRAP_SHELL=/bin/bash \
+    run_bootstrap --add-to-path 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "PATH state write failure should fail installation"
+  [[ "$output" == *'Failed to record Selfishell PATH state'* ]] ||
+    fail "PATH state write failure was not actionable"
+  [[ ! -e "$HOME/.bashrc" ]] || fail "PATH state failure created the startup file"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-startup-file" ]] ||
+    fail "PATH state failure retained startup state"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-bin-dir" ]] ||
+    fail "PATH state failure retained bin state"
+  [[ -z "$(find "$TEST_ROOT/prefix/share/selfishell" -name 'path-*.tmp.*' -print -quit)" ]] ||
+    fail "PATH state failure leaked temporary state"
+}
+
+test_add_to_path_move_failure_rolls_back_state() {
+  local fake_bin="$TEST_ROOT/fakebin" output status
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  [[ "$argument" != "${SELFISHELL_TEST_FAIL_MV_TARGET:-}" ]] || exit 1
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  output="$(PATH="$fake_bin:$PATH" SELFISHELL_TEST_FAIL_MV_TARGET="$HOME/.bashrc" \
+    SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Startup file move failure should fail PATH installation"
+  [[ "$output" == *'Failed to update shell startup file'* ]] ||
+    fail "Startup file move failure was not actionable"
+  [[ ! -e "$HOME/.bashrc" ]] || fail "Startup move failure created the startup file"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-startup-file" ]] ||
+    fail "Startup move failure retained startup state"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/path-bin-dir" ]] ||
+    fail "Startup move failure retained bin state"
+  [[ -z "$(find "$HOME" -name '.bashrc.tmp.*' -print -quit)" ]] ||
+    fail "Startup move failure leaked a temporary file"
+}
+
+test_add_to_path_recovers_precommitted_state() {
+  run_bootstrap >/dev/null
+  printf '%s\n' "$HOME/.bashrc" >"$TEST_ROOT/prefix/share/selfishell/path-startup-file"
+  printf '%s\n' "$TEST_ROOT/prefix/bin" >"$TEST_ROOT/prefix/share/selfishell/path-bin-dir"
+
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  grep -Fqx '# Added by Selfishell installer' "$HOME/.bashrc" ||
+    fail "Bootstrap did not recover precommitted PATH state"
+  grep -Fq "$TEST_ROOT/prefix/bin" "$HOME/.bashrc" ||
+    fail "Recovered PATH block does not contain the CLI directory"
 }
 
 test_purge_removes_installer_path_entry() {
@@ -418,6 +528,54 @@ test_purge_removes_installer_path_entry() {
     fail "Purge retained the installer PATH marker"
   [[ "$(<"$HOME/.bashrc")" != *"$TEST_ROOT/prefix/bin"* ]] ||
     fail "Purge retained the installer PATH entry"
+}
+
+test_purge_rejects_symlink_startup_file() {
+  local output status target="$TEST_ROOT/user-bashrc"
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+  mv "$HOME/.bashrc" "$target"
+  ln -s "$target" "$HOME/.bashrc"
+
+  set +e
+  output="$("$TEST_ROOT/prefix/bin/selfishell" uninstall --purge --yes 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Purge should reject a symlink startup file"
+  [[ "$output" == *'preserving:'* ]] || fail "Symlink startup purge rejection was not actionable"
+  assert_symlink_to "$target" "$HOME/.bashrc"
+  grep -Fq '# Added by Selfishell installer' "$target" ||
+    fail "Rejected purge changed the symlink target"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected purge removed the CLI"
+}
+
+test_purge_path_move_failure_preserves_startup_and_state() {
+  local before fake_bin="$TEST_ROOT/fakebin" status
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+  before="$(<"$HOME/.bashrc")"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  [[ "$argument" != "${SELFISHELL_TEST_FAIL_MV_TARGET:-}" ]] || exit 1
+done
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  set +e
+  PATH="$fake_bin:$PATH" SELFISHELL_TEST_FAIL_MV_TARGET="$HOME/.bashrc" \
+    "$TEST_ROOT/prefix/bin/selfishell" uninstall --purge --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "PATH removal move failure should fail purge"
+  [[ "$(<"$HOME/.bashrc")" == "$before" ]] || fail "Failed purge changed the startup file"
+  [[ -r "$TEST_ROOT/prefix/share/selfishell/path-startup-file" ]] ||
+    fail "Failed purge removed PATH state"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Failed purge removed the CLI"
+  [[ -z "$(find "$HOME" -name '.bashrc.tmp.*' -print -quit)" ]] ||
+    fail "Failed purge leaked a temporary startup file"
 }
 
 test_purge_preserves_modified_path_entry() {

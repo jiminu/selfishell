@@ -158,17 +158,91 @@ bootstrap_prune_releases() {
   done
 }
 
+bootstrap_path_block_is_intact() {
+  local startup_file="$1"
+  local marker="$2"
+  local entry="$3"
+
+  awk -v marker="$marker" -v entry="$entry" '
+    {
+      if ($0 == marker) marker_count++
+      if ($0 == entry) {
+        entry_count++
+        if (previous == marker) intact_count++
+      }
+      previous = $0
+    }
+    END { exit(marker_count == 1 && entry_count == 1 && intact_count == 1 ? 0 : 1) }
+  ' "$startup_file"
+}
+
+bootstrap_validate_path_state_file() {
+  local state_file="$1"
+  local expected="$2"
+
+  if [[ -L "$state_file" || ! -f "$state_file" || ! -r "$state_file" ]]; then
+    bootstrap_error "Invalid Selfishell PATH state file: $state_file"
+    return 1
+  fi
+  if [[ "$(<"$state_file")" != "$expected" ]]; then
+    bootstrap_error "Selfishell PATH state does not match this installation: $state_file"
+    return 1
+  fi
+}
+
+bootstrap_record_path_state() {
+  local startup_file="$1"
+  local bin_dir="$2"
+  local state_file="$3"
+  local bin_state_file="$4"
+  local temporary_state=""
+  local temporary_bin_state=""
+  local bin_state_existed=0
+
+  [[ ! -e "$bin_state_file" && ! -L "$bin_state_file" ]] || bin_state_existed=1
+  if [[ "$bin_state_existed" == 0 ]]; then
+    temporary_bin_state="$(mktemp "${bin_state_file}.tmp.XXXXXX")" || return 1
+    printf '%s\n' "$bin_dir" >"$temporary_bin_state" || {
+      rm -f "$temporary_bin_state"
+      return 1
+    }
+    mv "$temporary_bin_state" "$bin_state_file" || {
+      rm -f "$temporary_bin_state"
+      return 1
+    }
+  fi
+
+  if [[ ! -e "$state_file" && ! -L "$state_file" ]]; then
+    temporary_state="$(mktemp "${state_file}.tmp.XXXXXX")" || {
+      [[ "$bin_state_existed" == 1 ]] || rm -f "$bin_state_file"
+      return 1
+    }
+    printf '%s\n' "$startup_file" >"$temporary_state" || {
+      rm -f "$temporary_state"
+      [[ "$bin_state_existed" == 1 ]] || rm -f "$bin_state_file"
+      return 1
+    }
+    mv "$temporary_state" "$state_file" || {
+      rm -f "$temporary_state"
+      [[ "$bin_state_existed" == 1 ]] || rm -f "$bin_state_file"
+      return 1
+    }
+  fi
+}
+
 bootstrap_add_to_path() {
   local bin_dir="$1"
   local share_dir="$2"
   local shell_name="${SELFISHELL_BOOTSTRAP_SHELL:-${SHELL:-bash}}"
   local startup_file
   local escaped_bin_dir
+  local marker='# Added by Selfishell installer'
   local path_entry
   local state_file="$share_dir/path-startup-file"
   local bin_state_file="$share_dir/path-bin-dir"
-  local temporary_state
-  local temporary_bin_state
+  local temporary_startup=""
+  local state_file_existed=0
+  local bin_state_file_existed=0
 
   case "${shell_name##*/}" in
     zsh) startup_file="$HOME/.zshrc" ;;
@@ -178,29 +252,72 @@ bootstrap_add_to_path() {
   printf -v escaped_bin_dir '%q' "$bin_dir"
   path_entry="export PATH=${escaped_bin_dir}:\"\$PATH\""
 
-  if [[ -r "$startup_file" ]] && grep -Fqx "$path_entry" "$startup_file"; then
+  if [[ -L "$startup_file" || (-e "$startup_file" && ! -f "$startup_file") ]]; then
+    bootstrap_error "Refusing to modify non-regular shell startup file: $startup_file"
+    return 1
+  fi
+  if [[ -f "$startup_file" && (! -r "$startup_file" || ! -w "$startup_file") ]]; then
+    bootstrap_error "Shell startup file must be readable and writable: $startup_file"
+    return 1
+  fi
+
+  if [[ -e "$state_file" || -L "$state_file" ]]; then
+    state_file_existed=1
+    bootstrap_validate_path_state_file "$state_file" "$startup_file" || return
+  fi
+  if [[ -e "$bin_state_file" || -L "$bin_state_file" ]]; then
+    bin_state_file_existed=1
+    bootstrap_validate_path_state_file "$bin_state_file" "$bin_dir" || return
+  fi
+
+  if [[ -f "$startup_file" ]] && bootstrap_path_block_is_intact "$startup_file" "$marker" "$path_entry"; then
+    bootstrap_record_path_state "$startup_file" "$bin_dir" "$state_file" "$bin_state_file" || {
+      bootstrap_error "Failed to record Selfishell PATH state."
+      return 1
+    }
     printf 'PATH already configured in %s\n' "$startup_file"
-    if grep -Fqx '# Added by Selfishell installer' "$startup_file"; then
-      temporary_state="$(mktemp "${state_file}.tmp.XXXXXX")"
-      printf '%s\n' "$startup_file" >"$temporary_state"
-      mv "$temporary_state" "$state_file"
-      temporary_bin_state="$(mktemp "${bin_state_file}.tmp.XXXXXX")"
-      printf '%s\n' "$bin_dir" >"$temporary_bin_state"
-      mv "$temporary_bin_state" "$bin_state_file"
-    fi
     return
   fi
 
+  if [[ "$state_file_existed" == 0 && "$bin_state_file_existed" == 0 && -f "$startup_file" ]] &&
+    grep -Fqx "$path_entry" "$startup_file" && ! grep -Fqx "$marker" "$startup_file"; then
+    printf 'PATH already configured in %s\n' "$startup_file"
+    return
+  fi
+
+  if [[ -f "$startup_file" ]] &&
+    { grep -Fqx "$marker" "$startup_file" || grep -Fqx "$path_entry" "$startup_file"; }; then
+    bootstrap_error "Existing Selfishell PATH block is incomplete or duplicated; preserving: $startup_file"
+    return 1
+  fi
+
+  temporary_startup="$(mktemp "${startup_file}.tmp.XXXXXX")" || return 1
+  if [[ -f "$startup_file" ]]; then
+    cp -p "$startup_file" "$temporary_startup" || {
+      rm -f "$temporary_startup"
+      return 1
+    }
+  fi
   {
     printf '\n# Added by Selfishell installer\n'
     printf '%s\n' "$path_entry"
-  } >>"$startup_file"
-  temporary_state="$(mktemp "${state_file}.tmp.XXXXXX")"
-  printf '%s\n' "$startup_file" >"$temporary_state"
-  mv "$temporary_state" "$state_file"
-  temporary_bin_state="$(mktemp "${bin_state_file}.tmp.XXXXXX")"
-  printf '%s\n' "$bin_dir" >"$temporary_bin_state"
-  mv "$temporary_bin_state" "$bin_state_file"
+  } >>"$temporary_startup" || {
+    rm -f "$temporary_startup"
+    return 1
+  }
+
+  bootstrap_record_path_state "$startup_file" "$bin_dir" "$state_file" "$bin_state_file" || {
+    rm -f "$temporary_startup"
+    bootstrap_error "Failed to record Selfishell PATH state."
+    return 1
+  }
+  if ! mv "$temporary_startup" "$startup_file"; then
+    rm -f "$temporary_startup"
+    [[ "$state_file_existed" == 1 ]] || rm -f "$state_file"
+    [[ "$bin_state_file_existed" == 1 ]] || rm -f "$bin_state_file"
+    bootstrap_error "Failed to update shell startup file: $startup_file"
+    return 1
+  fi
   printf 'Added %s to PATH in %s\n' "$bin_dir" "$startup_file"
 }
 

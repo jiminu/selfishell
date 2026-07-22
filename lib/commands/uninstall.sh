@@ -52,7 +52,11 @@ uninstall_path_entry_values() {
 
   SELFISHELL_PATH_STARTUP_FILE=""
   SELFISHELL_PATH_ENTRY=""
-  [[ -r "$state_file" ]] || return 0
+  [[ -e "$state_file" || -L "$state_file" ]] || return 0
+  if [[ -L "$state_file" || ! -f "$state_file" || ! -r "$state_file" ]]; then
+    cli_error "Invalid Selfishell PATH state file: $state_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
   SELFISHELL_PATH_STARTUP_FILE="$(<"$state_file")"
   case "$SELFISHELL_PATH_STARTUP_FILE" in
     "$HOME/.bashrc" | "$HOME/.zshrc") ;;
@@ -61,7 +65,11 @@ uninstall_path_entry_values() {
       return "$SELFISHELL_EXIT_ERROR"
       ;;
   esac
-  if [[ -r "$bin_state_file" ]]; then
+  if [[ -e "$bin_state_file" || -L "$bin_state_file" ]]; then
+    if [[ -L "$bin_state_file" || ! -f "$bin_state_file" || ! -r "$bin_state_file" ]]; then
+      cli_error "Invalid Selfishell PATH state file: $bin_state_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
     bin_dir="$(<"$bin_state_file")"
     if [[ "$(cd "$(dirname "$bin_dir")" && pwd -P)/$(basename "$bin_dir")" != "$(cd "$(dirname "$prefix/bin")" && pwd -P)/$(basename "$prefix/bin")" ]]; then
       cli_error "Invalid recorded Selfishell PATH directory: $bin_dir"
@@ -78,11 +86,17 @@ uninstall_validate_path_entry() {
 
   uninstall_path_entry_values "$prefix" || return
   [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
-  if [[ ! -r "$SELFISHELL_PATH_STARTUP_FILE" ]] || ! awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
-    $0 == marker {
-      if ((getline following) > 0 && following == entry) found = 1
+  if [[ -L "$SELFISHELL_PATH_STARTUP_FILE" || ! -f "$SELFISHELL_PATH_STARTUP_FILE" ||
+    ! -r "$SELFISHELL_PATH_STARTUP_FILE" ]] || ! awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
+    {
+      if ($0 == marker) marker_count++
+      if ($0 == entry) {
+        entry_count++
+        if (previous == marker) intact_count++
+      }
+      previous = $0
     }
-    END { exit(found ? 0 : 1) }
+    END { exit(marker_count == 1 && entry_count == 1 && intact_count == 1 ? 0 : 1) }
   ' "$SELFISHELL_PATH_STARTUP_FILE"; then
     cli_error "Recorded Selfishell PATH entry was modified; preserving: $SELFISHELL_PATH_STARTUP_FILE"
     return "$SELFISHELL_EXIT_ERROR"
@@ -103,7 +117,10 @@ uninstall_remove_path_entry() {
   fi
 
   temporary="$(mktemp "${SELFISHELL_PATH_STARTUP_FILE}.tmp.XXXXXX")" || return
-  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary" || return
+  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary" || {
+    rm -f "$temporary"
+    return 1
+  }
   awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
     $0 == marker {
       if ((getline following) > 0) {
@@ -114,8 +131,14 @@ uninstall_remove_path_entry() {
       }
     }
     { print }
-  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary" || return
-  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE" || return
+  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary" || {
+    rm -f "$temporary"
+    return 1
+  }
+  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE" || {
+    rm -f "$temporary"
+    return 1
+  }
   printf 'Removed Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
 }
 

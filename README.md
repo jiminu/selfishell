@@ -64,8 +64,9 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 ```
 
 The option uses the current default shell and adds an idempotent, tracked PATH
-entry. Open a new shell afterward, or run the printed `export` command
-immediately.
+entry. The selected startup path must be absent or a regular file; symbolic
+links and other path types are preserved and rejected. Open a new shell
+afterward, or run the printed `export` command immediately.
 
 ### 2. Install a profile
 
