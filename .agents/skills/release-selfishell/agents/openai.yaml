@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Selfishell"
+  short_description: "Selfishell 릴리스를 안전하게 검증하고 게시"
+  default_prompt: "Use $release-selfishell to prepare, verify, and publish the requested Selfishell release."
