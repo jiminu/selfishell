@@ -264,7 +264,7 @@ command_uninstall() {
       printf '%s\n' \
         'Selfishell configuration uninstalled.' \
         'The Selfishell CLI is still installed.' \
-        "Run 'selfishell uninstall --purge' to remove the CLI and all remaining data."
+        "Run '${SELFISHELL_COLOR_BOLD}selfishell uninstall --purge${SELFISHELL_COLOR_RESET}' to remove the CLI and all remaining data."
     fi
   fi
 

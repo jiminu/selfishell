@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
 doctor_ok() {
-  printf '[OK] %s\n' "$*"
+  printf '%s[OK]%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$*"
 }
 
 doctor_error() {
-  printf '[ERROR] %s\n' "$*"
+  printf '%s[ERROR]%s %s\n' "$SELFISHELL_COLOR_RED" "$SELFISHELL_COLOR_RESET" "$*"
 }
 
 doctor_info() {
-  printf '[INFO] %s\n' "$*"
+  printf '%s[INFO]%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$*"
 }
 
 doctor_report_package() {
@@ -81,7 +81,8 @@ command_doctor() {
     doctor_ok "Package manager: $package_manager"
   else
     doctor_error "Package manager: $package_manager was not found"
-    printf "        Run 'selfishell install' to set up the supported toolchain.\n"
+    printf "        Run '%sselfishell install%s' to set up the supported toolchain.\n" \
+      "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
     result="$SELFISHELL_EXIT_ERROR"
   fi
 
@@ -99,9 +100,11 @@ command_doctor() {
       else
         doctor_error "C compiler: gcc or clang was not found (required for compiling Treesitter parsers)"
         if [[ "$platform" == "macos" ]]; then
-          printf "        Install Xcode Command Line Tools by running: xcode-select --install\n"
+          printf "        Install Xcode Command Line Tools by running: %sxcode-select --install%s\n" \
+            "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
         else
-          printf "        Install build tools by running: sudo apt install build-essential\n"
+          printf "        Install build tools by running: %ssudo apt install build-essential%s\n" \
+            "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
         fi
         result="$SELFISHELL_EXIT_ERROR"
       fi

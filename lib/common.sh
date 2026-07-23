@@ -14,8 +14,52 @@ SELFISHELL_EXIT_OK=0
 SELFISHELL_EXIT_ERROR=1
 SELFISHELL_EXIT_USAGE=2
 
+# Colors for [OK]/[ERROR]-style markers and suggested follow-up commands in
+# `doctor` and `status` output. Left empty (and thus a no-op) unless stdout
+# is a terminal, so redirected, piped, or test-captured output stays
+# byte-identical to plain text.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_GREEN=$'\033[32m'
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_RED=$'\033[31m'
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_YELLOW=$'\033[33m'
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_CYAN=$'\033[36m'
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_BOLD=$'\033[1m'
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_RESET=$'\033[0m'
+else
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_GREEN=
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_RED=
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_YELLOW=
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_CYAN=
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_BOLD=
+  # shellcheck disable=SC2034
+  SELFISHELL_COLOR_RESET=
+fi
+
+# cli_error writes to stderr, which can be a terminal independently of
+# stdout (e.g. `selfishell doctor | tee log.txt` redirects stdout but not
+# stderr), so its color needs its own -t 2 check rather than reusing the
+# stdout-gated variables above.
+if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
+  SELFISHELL_COLOR_RED_STDERR=$'\033[31m'
+  SELFISHELL_COLOR_RESET_STDERR=$'\033[0m'
+else
+  SELFISHELL_COLOR_RED_STDERR=
+  SELFISHELL_COLOR_RESET_STDERR=
+fi
+
 cli_error() {
-  printf 'selfishell: %s\n' "$*" >&2
+  printf '%sselfishell: %s%s\n' "$SELFISHELL_COLOR_RED_STDERR" "$*" "$SELFISHELL_COLOR_RESET_STDERR" >&2
 }
 
 have_command() {

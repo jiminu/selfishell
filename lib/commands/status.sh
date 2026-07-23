@@ -6,7 +6,7 @@ status_resource() {
 
   if ! managed_read_state "$resource"; then
     if managed_state_exists "$resource"; then
-      printf '[MALFORMED] %s\n' "$(managed_state_path "$resource")"
+      printf '%s[MALFORMED]%s %s\n' "$SELFISHELL_COLOR_RED" "$SELFISHELL_COLOR_RESET" "$(managed_state_path "$resource")"
       SELFISHELL_STATUS_RESOURCE_COUNT=$((SELFISHELL_STATUS_RESOURCE_COUNT + 1))
       SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
     fi
@@ -16,7 +16,7 @@ status_resource() {
   SELFISHELL_STATUS_RESOURCE_COUNT=$((SELFISHELL_STATUS_RESOURCE_COUNT + 1))
 
   if [[ "$MANAGED_STATE_STATUS" != "active" ]]; then
-    printf '[PENDING] %s\n' "$MANAGED_STATE_TARGET"
+    printf '%s[PENDING]%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
     SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
     return
   fi
@@ -30,17 +30,17 @@ status_resource() {
       fi
       managed_block_definition "$resource" || return
       if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
-        printf '[OK] %s (%s)\n' "$MANAGED_STATE_TARGET" "$MANAGED_BLOCK_LABEL"
+        printf '%s[OK]%s %s (%s)\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET" "$MANAGED_BLOCK_LABEL"
       else
-        printf '[CHANGED] %s (%s)\n' "$MANAGED_STATE_TARGET" "$MANAGED_BLOCK_LABEL"
+        printf '%s[CHANGED]%s %s (%s)\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET" "$MANAGED_BLOCK_LABEL"
         SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
       fi
       ;;
     link)
       if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
-        printf '[OK] %s -> %s\n' "$MANAGED_STATE_TARGET" "$MANAGED_STATE_REFERENCE"
+        printf '%s[OK]%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET" "$MANAGED_STATE_REFERENCE"
       else
-        printf '[CHANGED] %s\n' "$MANAGED_STATE_TARGET"
+        printf '%s[CHANGED]%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
         SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
       fi
       ;;
@@ -49,9 +49,9 @@ status_resource() {
         current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
       fi
       if [[ -n "$current_checksum" && "$current_checksum" == "$MANAGED_STATE_CHECKSUM" ]]; then
-        printf '[OK] %s\n' "$MANAGED_STATE_TARGET"
+        printf '%s[OK]%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
       else
-        printf '[CHANGED] %s\n' "$MANAGED_STATE_TARGET"
+        printf '%s[CHANGED]%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
         SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_ERROR"
       fi
       ;;
@@ -180,7 +180,7 @@ command_status() {
 
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     profile="$(<"$SELFISHELL_STATE_DIR/profile")"
-    printf '[INFO] Installed profile: %s\n' "$profile"
+    printf '%s[INFO]%s Installed profile: %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$profile"
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" status_report_package "$profile_platform"
   fi
 
