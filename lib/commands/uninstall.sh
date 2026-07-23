@@ -163,7 +163,7 @@ uninstall_purge() {
 
   rm -f "$bin_dir/sfs" "$bin_dir/selfishell" || return
   rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
-  printf 'Selfishell CLI and remaining data removed.\n'
+  printf 'Selfishell configuration, CLI, releases, cache, and state removed.\n'
 }
 
 command_uninstall() {
@@ -260,7 +260,7 @@ command_uninstall() {
   if [[ "$result" == "$SELFISHELL_EXIT_OK" ]]; then
     if [[ "$dry_run" == "1" ]]; then
       printf 'Dry run complete; no files were changed.\n'
-    else
+    elif [[ "$purge" == 0 ]]; then
       printf '%s\n' \
         'Selfishell configuration uninstalled.' \
         'The Selfishell CLI is still installed.' \

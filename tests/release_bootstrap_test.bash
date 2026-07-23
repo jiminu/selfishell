@@ -743,6 +743,33 @@ test_purge_removes_cli_releases_cache_and_state() {
   [[ -f "$HOME/.zshrc" && ! -s "$HOME/.zshrc" ]] || fail "Purge did not leave an empty user-owned .zshrc"
 }
 
+test_uninstall_without_purge_reports_cli_still_installed() {
+  local output
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --yes)"
+
+  [[ "$output" == *'The Selfishell CLI is still installed.'* ]] ||
+    fail "Non-purge uninstall did not report that the CLI is still installed"
+  [[ "$output" == *"selfishell uninstall --purge"* ]] ||
+    fail "Non-purge uninstall did not suggest the purge follow-up"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Non-purge uninstall removed the CLI"
+}
+
+test_uninstall_purge_reports_final_state_only() {
+  local output
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes)"
+
+  [[ "$output" != *'The Selfishell CLI is still installed.'* ]] ||
+    fail "Purge uninstall falsely reported that the CLI is still installed"
+  [[ "$output" != *"selfishell uninstall --purge"* ]] ||
+    fail "Purge uninstall suggested running purge again"
+  [[ "$output" == *'Selfishell configuration, CLI, releases, cache, and state removed.'* ]] ||
+    fail "Purge uninstall did not report the final removed state: $output"
+}
+
 test_purge_refuses_non_managed_cli_path_before_uninstall() {
   local status
   run_bootstrap --setup --skip-packages --yes >/dev/null
