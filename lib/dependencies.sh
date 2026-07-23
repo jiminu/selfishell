@@ -176,11 +176,11 @@ dependency_install() {
   selfishell_initialize_paths
   installed="$(dependency_installed_version "$name")"
   if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" && -e "$DEPENDENCY_TARGET" ]]; then
-    printf 'Already approved: %s %s\n' "$name" "$DEPENDENCY_VERSION"
+    printf '%sAlready approved:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
     return
   fi
   if [[ -z "$installed" && -e "$DEPENDENCY_TARGET" ]]; then
-    printf 'Externally installed; preserving: %s\n' "$DEPENDENCY_TARGET"
+    printf '%sExternally installed; preserving:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$DEPENDENCY_TARGET"
     return
   fi
 
@@ -193,5 +193,5 @@ dependency_install() {
       ;;
   esac
   dependency_write_version "$name" "$DEPENDENCY_VERSION" || return 1
-  printf 'Installed approved dependency: %s %s\n' "$name" "$DEPENDENCY_VERSION"
+  printf '%sInstalled approved dependency:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
 }

@@ -220,6 +220,7 @@ _selfishell_update_notice() {
   local available_file="$cache_dir/available-version"
   local checked_file="$cache_dir/update-checked-at"
   local current available checked_at=0 now
+  local color_cyan='' color_bold='' color_reset=''
 
   case "${enabled:l}" in
     0 | false | no | off) return ;;
@@ -234,7 +235,12 @@ _selfishell_update_notice() {
   if [[ -r "$available_file" ]]; then
     available="$(<"$available_file")"
     if [[ -n "$available" ]] && _selfishell_version_is_newer "$available" "$current"; then
-      print -r -- "[Selfishell] $available is available. Run: selfishell update"
+      if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+        color_cyan=$'\033[36m'
+        color_bold=$'\033[1m'
+        color_reset=$'\033[0m'
+      fi
+      print -r -- "${color_cyan}[Selfishell]${color_reset} $available is available. Run: ${color_bold}selfishell update${color_reset}"
     elif [[ -n "$available" ]]; then
       command rm -f "$available_file"
     fi

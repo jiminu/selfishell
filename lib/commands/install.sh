@@ -82,7 +82,7 @@ install_default_shell() {
   [[ "$current_shell" == "$zsh_path" ]] && return 0
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would set login shell to: %s\n' "$zsh_path"
+    printf '%sWould set login shell to:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$zsh_path"
     return
   fi
 
@@ -102,9 +102,9 @@ install_default_shell() {
 
   current_user="$(id -un)"
   if chsh -s "$zsh_path" "$current_user" >/dev/null 2>&1; then
-    printf 'Set login shell to: %s\n' "$zsh_path"
+    printf '%sSet login shell to:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$zsh_path"
   else
-    printf 'Could not set login shell to Zsh.\n'
+    printf '%sCould not set login shell to Zsh.%s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
   fi
 }
 
@@ -129,7 +129,7 @@ install_mise_global_config() {
 
   if [[ -L "$target_file" || -f "$target_file" ]]; then
     if [[ "$dry_run" == "1" ]]; then
-      printf 'User mise config exists; preserving it: %s\n' "$target_file"
+      printf '%sUser mise config exists; preserving it:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
     fi
     return 0
   fi
@@ -140,7 +140,7 @@ install_mise_global_config() {
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would create user mise config: %s\n' "$target_file"
+    printf '%sWould create user mise config:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
@@ -156,14 +156,14 @@ install_mise_global_config() {
 
   if ln "$temporary_file" "$target_file" 2>/dev/null; then
     rm -f "$temporary_file"
-    printf 'Created user mise config: %s\n' "$target_file"
+    printf '%sCreated user mise config:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
   rm -f "$temporary_file"
 
   if [[ -e "$target_file" || -L "$target_file" ]]; then
-    printf 'User mise config appeared concurrently; preserving it: %s\n' "$target_file"
+    printf '%sUser mise config appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
@@ -299,8 +299,8 @@ command_install() {
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Dry run complete; no files were changed.\n'
+    printf '%sDry run complete; no files were changed.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
-    printf 'Selfishell configuration installed.\n'
+    printf '%sSelfishell configuration installed.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
   fi
 }

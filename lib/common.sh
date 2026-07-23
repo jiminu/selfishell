@@ -59,7 +59,7 @@ else
 fi
 
 cli_error() {
-  printf '%sselfishell: %s%s\n' "$SELFISHELL_COLOR_RED_STDERR" "$*" "$SELFISHELL_COLOR_RESET_STDERR" >&2
+  printf '%sselfishell:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
 have_command() {

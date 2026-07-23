@@ -90,7 +90,7 @@ release_prune_inactive() {
     release_version="${release_dir##*/}"
     [[ "$release_version" == "$current_version" || "$release_version" == "$previous_version" ]] && continue
     rm -rf "$release_dir"
-    printf 'Removed inactive Selfishell release: %s.\n' "$release_version"
+    printf '%sRemoved inactive Selfishell release:%s %s.\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_version"
   done
 }
 
@@ -153,6 +153,6 @@ release_install() {
     cli_error "Failed to activate Selfishell $version."
     return 1
   }
-  printf 'Selfishell CLI updated to %s.\n' "$version"
+  printf '%sSelfishell CLI updated to %s.%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"
   release_prune_inactive
 }

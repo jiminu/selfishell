@@ -56,7 +56,7 @@ homebrew_install_packages() {
   (("$#" > 0)) || return 0
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install %s Homebrew %s: %s\n' "$requirement" "$manager" "$*"
+    printf '%sWould install %s Homebrew %s:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$manager" "$SELFISHELL_COLOR_RESET" "$*"
     return
   fi
 
@@ -83,8 +83,8 @@ homebrew_install_packages() {
   done
 
   if ((${#installed_packages[@]} > 0)); then
-    printf 'Already installed Homebrew %s (%d): %s\n' \
-      "$manager" "${#installed_packages[@]}" "${installed_packages[*]}"
+    printf '%sAlready installed Homebrew %s (%d):%s %s\n' \
+      "$SELFISHELL_COLOR_GREEN" "$manager" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
   fi
 
   ((${#missing_packages[@]} > 0)) || return 0

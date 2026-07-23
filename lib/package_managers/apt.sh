@@ -27,7 +27,7 @@ apt_install_managed_packages() {
   (("$#" > 0)) || return 0
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install %s apt packages: %s\n' "$requirement" "$*"
+    printf '%sWould install %s apt packages:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$*"
     return
   fi
 
@@ -49,7 +49,7 @@ apt_install_managed_packages() {
   done
 
   if ((${#installed_packages[@]} > 0)); then
-    printf 'Already installed apt packages (%d): %s\n' "${#installed_packages[@]}" "${installed_packages[*]}"
+    printf '%sAlready installed apt packages (%d):%s %s\n' "$SELFISHELL_COLOR_GREEN" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
   fi
 
   ((${#missing_packages[@]} > 0)) || return 0

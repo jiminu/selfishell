@@ -25,7 +25,7 @@ update_tools_and_configuration() {
       cli_error "Selfishell configuration is not installed."
       return "$SELFISHELL_EXIT_ERROR"
     fi
-    printf 'Selfishell configuration is not installed; skipping tools and configuration.\n'
+    printf '%sSelfishell configuration is not installed; skipping tools and configuration.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
   profile="$(<"$SELFISHELL_STATE_DIR/profile")"
@@ -50,7 +50,11 @@ update_tools_and_configuration() {
   if [[ "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
-  [[ "$dry_run" == 1 ]] && printf 'Tool/configuration dry run complete.\n' || printf 'Selfishell tools and configuration updated.\n'
+  if [[ "$dry_run" == 1 ]]; then
+    printf '%sTool/configuration dry run complete.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+  else
+    printf '%sSelfishell tools and configuration updated.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
+  fi
 }
 
 update_cli_release() {
@@ -69,11 +73,11 @@ update_cli_release() {
     return "$SELFISHELL_EXIT_USAGE"
   }
   if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then
-    printf 'Selfishell CLI is already at %s; skipping CLI update.\n' "$version"
+    printf '%sSelfishell CLI is already at %s; skipping CLI update.%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"
     return
   fi
   if [[ "$dry_run" == 1 ]]; then
-    printf 'Would update Selfishell CLI to %s.\n' "$version"
+    printf '%sWould update Selfishell CLI to %s.%s\n' "$SELFISHELL_COLOR_CYAN" "$version" "$SELFISHELL_COLOR_RESET"
     return
   fi
   confirm_action "Update Selfishell CLI to $version?" "$assume_yes" 0 || return

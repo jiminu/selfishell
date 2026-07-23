@@ -6,7 +6,7 @@ install_direct_package() {
   local dry_run="$3"
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install %s direct package: %s\n' "$requirement" "$package"
+    printf '%sWould install %s direct package:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$package"
     return
   fi
 
@@ -34,7 +34,7 @@ install_mise_tools() {
   shift 2
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install %s mise tools: %s\n' "$requirement" "$*"
+    printf '%sWould install %s mise tools:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$*"
     return
   fi
   if ! mise_command="$(selfishell_mise_command)"; then
@@ -136,7 +136,7 @@ install_lazy_nvim() {
     return 1
   fi
   rm -rf "$previous"
-  printf 'Installed approved lazy.nvim revision: %s\n' "$revision"
+  printf '%sInstalled approved lazy.nvim revision:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$revision"
 }
 
 verify_neovim_plugins() {
@@ -190,9 +190,9 @@ install_neovim_plugins() {
 
   [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || return 0
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install declared Neovim plugins.\n'
-    printf 'Would install lazy.nvim bootstrap repository.\n'
-    printf 'Would install Tree-sitter parsers.\n'
+    printf '%sWould install declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    printf '%sWould install lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    printf '%sWould install Tree-sitter parsers.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
 

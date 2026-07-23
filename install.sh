@@ -6,8 +6,33 @@ SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/se
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 
+# This script runs standalone, before any Selfishell code is on disk, so it
+# cannot share lib/common.sh's color variables -- it needs its own, gated
+# per output stream the same way (stdout for status, stderr for errors) so
+# piped/redirected/non-terminal output stays plain text.
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  SELFISHELL_COLOR_GREEN=$'\033[32m'
+  SELFISHELL_COLOR_YELLOW=$'\033[33m'
+  SELFISHELL_COLOR_CYAN=$'\033[36m'
+  SELFISHELL_COLOR_BOLD=$'\033[1m'
+  SELFISHELL_COLOR_RESET=$'\033[0m'
+else
+  SELFISHELL_COLOR_GREEN=
+  SELFISHELL_COLOR_YELLOW=
+  SELFISHELL_COLOR_CYAN=
+  SELFISHELL_COLOR_BOLD=
+  SELFISHELL_COLOR_RESET=
+fi
+if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
+  SELFISHELL_COLOR_RED_STDERR=$'\033[31m'
+  SELFISHELL_COLOR_RESET_STDERR=$'\033[0m'
+else
+  SELFISHELL_COLOR_RED_STDERR=
+  SELFISHELL_COLOR_RESET_STDERR=
+fi
+
 bootstrap_error() {
-  printf 'selfishell installer: %s\n' "$*" >&2
+  printf '%sselfishell installer:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
 bootstrap_cleanup() {
@@ -206,7 +231,7 @@ bootstrap_prune_releases() {
     release_name="${release_dir##*/}"
     [[ "$release_name" == "$current_target" || "$release_name" == "$previous_target" ]] && continue
     rm -rf "$release_dir"
-    printf 'Removed inactive Selfishell release: %s\n' "$release_name"
+    printf '%sRemoved inactive Selfishell release:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_name"
   done
 }
 
@@ -327,13 +352,13 @@ bootstrap_add_to_path() {
       bootstrap_error "Failed to record Selfishell PATH state."
       return 1
     }
-    printf 'PATH already configured in %s\n' "$startup_file"
+    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$startup_file"
     return
   fi
 
   if [[ "$state_file_existed" == 0 && "$bin_state_file_existed" == 0 && -f "$startup_file" ]] &&
     grep -Fqx "$path_entry" "$startup_file" && ! grep -Fqx "$marker" "$startup_file"; then
-    printf 'PATH already configured in %s\n' "$startup_file"
+    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$startup_file"
     return
   fi
 
@@ -370,20 +395,20 @@ bootstrap_add_to_path() {
     bootstrap_error "Failed to update shell startup file: $startup_file"
     return 1
   fi
-  printf 'Added %s to PATH in %s\n' "$bin_dir" "$startup_file"
+  printf '%sAdded %s to PATH in %s%s\n' "$SELFISHELL_COLOR_GREEN" "$bin_dir" "$startup_file" "$SELFISHELL_COLOR_RESET"
 }
 
 bootstrap_print_path_guidance() {
   local bin_dir="$1"
 
-  printf '\nSelfishell is installed, but %s is not in PATH.\n' "$bin_dir"
+  printf '\n%sSelfishell is installed, but %s is not in PATH.%s\n' "$SELFISHELL_COLOR_YELLOW" "$bin_dir" "$SELFISHELL_COLOR_RESET"
   printf 'Run this in the current shell:\n'
   # Print a command for the user; do not expand the installer's PATH here.
   # shellcheck disable=SC2016
-  printf '  export PATH="%s:$PATH"\n' "$bin_dir"
+  printf '  %sexport PATH="%s:$PATH"%s\n' "$SELFISHELL_COLOR_BOLD" "$bin_dir" "$SELFISHELL_COLOR_RESET"
   printf 'To configure future Bash or Zsh sessions automatically, reinstall with --add-to-path.\n'
   printf 'Or continue without changing PATH:\n'
-  printf '  %s/selfishell install\n' "$bin_dir"
+  printf '  %s%s/selfishell install%s\n' "$SELFISHELL_COLOR_BOLD" "$bin_dir" "$SELFISHELL_COLOR_RESET"
 }
 
 main() {
@@ -477,7 +502,7 @@ main() {
   archive_file="$SELFISHELL_TEMP_DIR/$archive_name"
   checksum_file="$SELFISHELL_TEMP_DIR/SHA256SUMS"
 
-  printf 'Downloading Selfishell %s for %s/%s\n' "$version" "$platform" "$architecture"
+  printf '%sDownloading Selfishell %s for %s/%s%s\n' "$SELFISHELL_COLOR_CYAN" "$version" "$platform" "$architecture" "$SELFISHELL_COLOR_RESET"
   bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
   bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
 
@@ -512,7 +537,7 @@ main() {
       bootstrap_error "Existing release is incomplete: $release_dir"
       return 1
     fi
-    printf 'Release already installed: %s\n' "$release_dir"
+    printf '%sRelease already installed:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_dir"
   else
     staging_dir="$(mktemp -d "$releases_dir/.${version}.tmp.XXXXXX")"
     SELFISHELL_STAGING_DIR="$staging_dir"
@@ -537,7 +562,7 @@ main() {
   bootstrap_atomic_link selfishell "$bin_dir/sfs"
   bootstrap_prune_releases "$releases_dir" "releases/$version" "$previous_target"
 
-  printf 'Installed Selfishell %s\n' "$version"
+  printf '%sInstalled Selfishell %s%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"
   if [[ "$add_to_path" == 1 ]]; then
     bootstrap_add_to_path "$bin_dir" "$share_dir"
   elif [[ ":$PATH:" != *":$bin_dir:"* ]]; then
