@@ -327,7 +327,7 @@ managed_install_block() {
       if [[ "$dry_run" == 0 ]]; then
         managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       fi
-      printf 'Unchanged Selfishell block: %s\n' "$target_file"
+      printf '%sUnchanged Selfishell block: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
       return 0
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
@@ -353,7 +353,7 @@ managed_install_block() {
   fi
 
   if [[ "$dry_run" == 1 ]]; then
-    printf 'Would add Selfishell block: %s\n' "$target_file"
+    printf '%sWould add Selfishell block: %s%s\n' "$SELFISHELL_COLOR_CYAN" "$target_file" "$SELFISHELL_COLOR_RESET"
     return 0
   fi
 
@@ -390,7 +390,7 @@ managed_install_block() {
     return "$SELFISHELL_EXIT_ERROR"
   }
   managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
-  printf 'Added Selfishell block: %s\n' "$target_file"
+  printf '%sAdded Selfishell block: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
 }
 
 managed_remove_block() {
@@ -458,8 +458,8 @@ managed_install_file() {
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
         if [[ "$MANAGED_STATE_STATUS" == "active" || "$original_backup" == "-" || -e "$original_backup" || -L "$original_backup" ]]; then
           if [[ "$dry_run" == "1" ]]; then
-            printf 'Conflict: modified managed file: %s\n' "$target_file"
-            printf 'Would require an overwrite or skip decision.\n'
+            printf '%sConflict: modified managed file: %s%s\n' "$SELFISHELL_COLOR_YELLOW" "$target_file" "$SELFISHELL_COLOR_RESET"
+            printf '%sWould require an overwrite or skip decision.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
             return 0
           fi
 
@@ -479,14 +479,14 @@ managed_install_file() {
               conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
               mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
               cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
-              printf 'Backed up modified managed file: %s -> %s\n' "$target_file" "$conflict_backup"
+              printf '%sBacked up modified managed file: %s -> %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$conflict_backup" "$SELFISHELL_COLOR_RESET"
               managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
               managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
-              printf 'Installed managed file: %s\n' "$target_file"
+              printf '%sInstalled managed file: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
               return 0
               ;;
             *)
-              printf 'Skipped modified managed file: %s\n' "$target_file"
+              printf '%sSkipped modified managed file: %s%s\n' "$SELFISHELL_COLOR_YELLOW" "$target_file" "$SELFISHELL_COLOR_RESET"
               return 0
               ;;
           esac
@@ -509,12 +509,12 @@ managed_install_file() {
     if [[ "$dry_run" == "0" ]]; then
       managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
     fi
-    printf 'Unchanged: %s\n' "$target_file"
+    printf '%sUnchanged: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
     return
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would install managed file: %s\n' "$target_file"
+    printf '%sWould install managed file: %s%s\n' "$SELFISHELL_COLOR_CYAN" "$target_file" "$SELFISHELL_COLOR_RESET"
     return
   fi
 
@@ -525,7 +525,7 @@ managed_install_file() {
   fi
   managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
   managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
-  printf 'Installed managed file: %s\n' "$target_file"
+  printf '%sInstalled managed file: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
 }
 
 managed_install_link() {
@@ -547,7 +547,7 @@ managed_install_link() {
       if [[ "$dry_run" == "0" ]]; then
         managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
       fi
-      printf 'Unchanged: %s\n' "$target_file"
+      printf '%sUnchanged: %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$SELFISHELL_COLOR_RESET"
       return
     fi
 
@@ -563,7 +563,7 @@ managed_install_link() {
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf 'Would link: %s -> %s\n' "$target_file" "$source_file"
+    printf '%sWould link: %s -> %s%s\n' "$SELFISHELL_COLOR_CYAN" "$target_file" "$source_file" "$SELFISHELL_COLOR_RESET"
     return
   fi
 
@@ -590,7 +590,7 @@ managed_install_link() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
   managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
-  printf 'Linked: %s -> %s\n' "$target_file" "$source_file"
+  printf '%sLinked: %s -> %s%s\n' "$SELFISHELL_COLOR_GREEN" "$target_file" "$source_file" "$SELFISHELL_COLOR_RESET"
 }
 
 managed_uninstall_resource() {
@@ -608,7 +608,7 @@ managed_uninstall_resource() {
   case "$MANAGED_STATE_TYPE" in
     block)
       if [[ "$dry_run" == 1 ]]; then
-        printf 'Would remove Selfishell block: %s\n' "$MANAGED_STATE_TARGET"
+        printf '%sWould remove Selfishell block: %s%s\n' "$SELFISHELL_COLOR_CYAN" "$MANAGED_STATE_TARGET" "$SELFISHELL_COLOR_RESET"
       else
         managed_remove_block "$resource" "$MANAGED_STATE_TARGET" || return
       fi
@@ -616,7 +616,7 @@ managed_uninstall_resource() {
     link)
       if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
         if [[ "$dry_run" == "1" ]]; then
-          printf 'Would remove managed link: %s\n' "$MANAGED_STATE_TARGET"
+          printf '%sWould remove managed link: %s%s\n' "$SELFISHELL_COLOR_CYAN" "$MANAGED_STATE_TARGET" "$SELFISHELL_COLOR_RESET"
         else
           rm "$MANAGED_STATE_TARGET" || return
         fi
@@ -633,7 +633,7 @@ managed_uninstall_resource() {
           return "$SELFISHELL_EXIT_ERROR"
         fi
         if [[ "$dry_run" == "1" ]]; then
-          printf 'Would remove managed file: %s\n' "$MANAGED_STATE_TARGET"
+          printf '%sWould remove managed file: %s%s\n' "$SELFISHELL_COLOR_CYAN" "$MANAGED_STATE_TARGET" "$SELFISHELL_COLOR_RESET"
         else
           rm "$MANAGED_STATE_TARGET" || return
         fi
@@ -654,7 +654,7 @@ managed_uninstall_resource() {
       return "$SELFISHELL_EXIT_ERROR"
     fi
     if [[ "$dry_run" == "1" ]]; then
-      printf 'Would restore: %s -> %s\n' "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET"
+      printf '%sWould restore: %s -> %s%s\n' "$SELFISHELL_COLOR_CYAN" "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET" "$SELFISHELL_COLOR_RESET"
     else
       mkdir -p "$(dirname "$MANAGED_STATE_TARGET")" || return
       mv "$MANAGED_STATE_BACKUP" "$MANAGED_STATE_TARGET" || return
