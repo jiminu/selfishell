@@ -183,3 +183,5 @@ rollback.
    under `docs/`; keep transient status and dated run logs out of agent rules.
 7. Report only checks actually run. Separate local results, GitHub Actions
    results, and checks that were unavailable; never imply an unrun check passed.
+8. After merging a branch into `main`, delete the remote branch (e.g.
+   `gh pr merge --delete-branch`); don't leave merged branches behind.
