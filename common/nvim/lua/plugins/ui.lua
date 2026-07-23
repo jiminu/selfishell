@@ -115,9 +115,7 @@ return {
         indicator = {
           style = "underline",
         },
-        separator_style = "thin",
         show_close_icon = false,
-        show_buffer_close_icons = true,
         hover = {
           enabled = true,
           delay = 150,
@@ -219,10 +217,7 @@ return {
     opts = {
       options = {
         theme = "vscode",
-        icons_enabled = true,
         globalstatus = true,
-        component_separators = "",
-        section_separators = "",
       },
       sections = {
         lualine_a = {
@@ -279,21 +274,8 @@ return {
   plugin("lewis6991/gitsigns.nvim", {
     event = { "BufReadPre", "BufNewFile" },
     opts = {
-      -- Thinner glyphs than the plugin's defaults.
-      signs = {
-        add = { text = "│" },
-        change = { text = "│" },
-        delete = { text = "_" },
-        topdelete = { text = "‾" },
-      },
-      signs_staged = {
-        add = { text = "│" },
-        change = { text = "│" },
-        delete = { text = "_" },
-        topdelete = { text = "‾" },
-      },
       current_line_blame_opts = {
-        delay = 700,
+        delay = 500,
         ignore_whitespace = true,
       },
       preview_config = {
@@ -368,13 +350,10 @@ return {
     },
   }),
 
-  -- Scrollbar with the current viewport, diagnostics, and git hunks.
+  -- Scrollbar with the current viewport and diagnostics.
   plugin("petertriho/nvim-scrollbar", {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
-    dependencies = {
-      plugin("lewis6991/gitsigns.nvim"),
-    },
     opts = {
       show_in_active_only = true,
       hide_if_all_visible = true,
@@ -384,10 +363,6 @@ return {
       handle = {
         blend = 60,
         color = "#797979",
-        hide_if_all_visible = true,
-      },
-      excluded_buftypes = {
-        "terminal",
       },
       excluded_filetypes = {
         "cmp_docs",
@@ -399,26 +374,16 @@ return {
         "mason",
         "help",
       },
+      -- gitsigns is deliberately left off: the sign column already shows the
+      -- same hunks per-line, and mirroring them here doubled the redraw
+      -- triggers (gitsigns update + diagnostic update) for marginal benefit.
       handlers = {
         cursor = false,
         diagnostic = true,
         handle = true,
-        gitsigns = true,
         search = false,
         ale = false,
       },
-      -- The gitsigns handler has its own glyphs, separate from
-      -- gitsigns.nvim's signs. A vertical bar (matching the sign column)
-      -- reads as one continuous line across consecutive changed lines,
-      -- unlike a dash.
-      marks = {
-        GitAdd = { text = "│" },
-        GitChange = { text = "│" },
-      },
     },
-    config = function(_, opts)
-      require("scrollbar").setup(opts)
-      require("scrollbar.handlers.gitsigns").setup()
-    end,
   }),
 }
