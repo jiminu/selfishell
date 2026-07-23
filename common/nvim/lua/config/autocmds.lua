@@ -35,7 +35,11 @@ vim.api.nvim_create_autocmd("BufReadPost", {
     local line_count = vim.api.nvim_buf_line_count(args.buf)
 
     if mark[1] > 0 and mark[1] <= line_count then
-      pcall(vim.api.nvim_win_set_cursor, 0, mark)
+      for _, winid in ipairs(vim.fn.win_findbuf(args.buf)) do
+        if vim.api.nvim_win_is_valid(winid) then
+          pcall(vim.api.nvim_win_set_cursor, winid, mark)
+        end
+      end
     end
   end,
 })

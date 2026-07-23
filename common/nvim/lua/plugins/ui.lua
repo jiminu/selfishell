@@ -218,6 +218,8 @@ return {
       options = {
         theme = "vscode",
         globalstatus = true,
+        component_separators = "",
+        section_separators = "",
       },
       sections = {
         lualine_a = {
