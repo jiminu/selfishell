@@ -115,9 +115,7 @@ return {
         indicator = {
           style = "underline",
         },
-        separator_style = "thin",
         show_close_icon = false,
-        show_buffer_close_icons = true,
         hover = {
           enabled = true,
           delay = 150,
@@ -219,10 +217,7 @@ return {
     opts = {
       options = {
         theme = "vscode",
-        icons_enabled = true,
         globalstatus = true,
-        component_separators = "",
-        section_separators = "",
       },
       sections = {
         lualine_a = {
@@ -271,6 +266,123 @@ return {
         lualine_x = {},
         lualine_y = {},
         lualine_z = {},
+      },
+    },
+  }),
+
+  -- Git changes, hunk actions, and blame information.
+  plugin("lewis6991/gitsigns.nvim", {
+    event = { "BufReadPre", "BufNewFile" },
+    opts = {
+      current_line_blame_opts = {
+        delay = 500,
+        ignore_whitespace = true,
+      },
+      preview_config = {
+        border = "rounded",
+      },
+      on_attach = function(bufnr)
+        local gitsigns = require("gitsigns")
+
+        local function map(mode, lhs, rhs, desc)
+          vim.keymap.set(mode, lhs, rhs, {
+            buffer = bufnr,
+            silent = true,
+            desc = desc,
+          })
+        end
+
+        -- Navigate Git changes while preserving Vim's diff-mode mappings.
+        map("n", "]c", function()
+          if vim.wo.diff then
+            vim.cmd.normal({ "]c", bang = true })
+          else
+            gitsigns.nav_hunk("next")
+          end
+        end, "Next Git change")
+
+        map("n", "[c", function()
+          if vim.wo.diff then
+            vim.cmd.normal({ "[c", bang = true })
+          else
+            gitsigns.nav_hunk("prev")
+          end
+        end, "Previous Git change")
+
+        -- Hunk actions.
+        map("n", "<leader>hp", gitsigns.preview_hunk, "Preview Git hunk")
+        map("n", "<leader>hi", gitsigns.preview_hunk_inline, "Preview Git hunk inline")
+        map("n", "<leader>hs", gitsigns.stage_hunk, "Stage Git hunk")
+        map("n", "<leader>hr", gitsigns.reset_hunk, "Reset Git hunk")
+
+        map("x", "<leader>hs", function()
+          gitsigns.stage_hunk({
+            vim.fn.line("."),
+            vim.fn.line("v"),
+          })
+        end, "Stage selected Git lines")
+
+        map("x", "<leader>hr", function()
+          gitsigns.reset_hunk({
+            vim.fn.line("."),
+            vim.fn.line("v"),
+          })
+        end, "Reset selected Git lines")
+
+        -- Blame and diff.
+        map("n", "<leader>hb", function()
+          gitsigns.blame_line({ full = true })
+        end, "Show Git blame")
+
+        map("n", "<leader>hd", gitsigns.diffthis, "Diff against Git index")
+
+        map("n", "<leader>hD", function()
+          gitsigns.diffthis("~")
+        end, "Diff against previous commit")
+
+        -- Optional visual features.
+        map("n", "<leader>tb", gitsigns.toggle_current_line_blame, "Toggle Git blame")
+        map("n", "<leader>tw", gitsigns.toggle_word_diff, "Toggle Git word diff")
+
+        -- Git hunk text object.
+        map({ "o", "x" }, "ih", gitsigns.select_hunk, "Select Git hunk")
+      end,
+    },
+  }),
+
+  -- Scrollbar with the current viewport and diagnostics.
+  plugin("petertriho/nvim-scrollbar", {
+    main = "scrollbar",
+    event = { "BufReadPost", "BufNewFile" },
+    opts = {
+      show_in_active_only = true,
+      hide_if_all_visible = true,
+      -- The default handle color (linked to CursorColumn) is nearly
+      -- indistinguishable from vscode.nvim's background. Use VS Code's own
+      -- scrollbar slider color/opacity instead of a fully opaque gray.
+      handle = {
+        blend = 60,
+        color = "#797979",
+      },
+      excluded_filetypes = {
+        "cmp_docs",
+        "cmp_menu",
+        "prompt",
+        "TelescopePrompt",
+        "NvimTree",
+        "lazy",
+        "mason",
+        "help",
+      },
+      -- gitsigns is deliberately left off: the sign column already shows the
+      -- same hunks per-line, and mirroring them here doubled the redraw
+      -- triggers (gitsigns update + diagnostic update) for marginal benefit.
+      handlers = {
+        cursor = false,
+        diagnostic = true,
+        handle = true,
+        search = false,
+        ale = false,
       },
     },
   }),
