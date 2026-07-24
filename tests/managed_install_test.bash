@@ -100,9 +100,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader was not recorded as a managed block"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 14 zsh/starship/mise/vim resources + 4 user link resources
-  # = 18 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
-  [[ "$state_count" -eq 18 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
+  # 15 zsh/starship/mise/vim resources + 4 user link resources
+  # = 19 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
+  [[ "$state_count" -eq 19 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
 test_install_switches_login_shell_to_zsh() {
