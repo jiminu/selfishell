@@ -42,8 +42,8 @@ rollback straightforward.
 
 It supports:
 
-- macOS on Apple Silicon and Intel;
-- native Ubuntu on AMD64 and ARM64; and
+- macOS on Apple Silicon and Intel
+- native Ubuntu on AMD64 and ARM64
 - Ubuntu on WSL.
 
 It is a good fit when you want the same polished shell on several machines
