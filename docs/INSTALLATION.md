@@ -111,7 +111,7 @@ defaults and then an optional `user.ghostty`; do not edit inside that block
 directly. Write personal settings to `user.ghostty` instead:
 
 ```sh
-${EDITOR:-vim} ~/.config/ghostty/user.ghostty
+${EDITOR:-vim} "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/user.ghostty"
 ```
 
 `user.ghostty` loads after the Selfishell defaults, so any key you set there
