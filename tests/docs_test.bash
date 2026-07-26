@@ -21,13 +21,13 @@ join_wrapped_match() {
 }
 
 # common/aliases-editor.zsh intentionally aliases only vim/view (not vi), so
-# the system vi stays untouched; the README must describe that, not claim vi
-# also resolves to Neovim.
-test_readme_vi_alias_documentation_matches_implementation() {
-  grep -Eq "\`vi\`[^.]*resolve" "$ROOT_DIR/README.md" &&
-    fail "README claims vi resolves to Neovim, but no such alias exists"
-  grep -Fq "\`vim\` resolves to Neovim" "$ROOT_DIR/README.md" ||
-    fail "README does not document that vim resolves to Neovim in the developer profile"
+# the system vi stays untouched; the profile guide must describe that, not claim
+# vi also resolves to Neovim.
+test_profile_vi_alias_documentation_matches_implementation() {
+  grep -Eq "\`vi\`[^.]*resolve" "$ROOT_DIR/docs/PROFILES.md" &&
+    fail "docs/PROFILES.md claims vi resolves to Neovim, but no such alias exists"
+  grep -Fq "\`vim\` resolves to Neovim" "$ROOT_DIR/docs/PROFILES.md" ||
+    fail "docs/PROFILES.md does not document that vim resolves to Neovim in the developer profile"
   grep -Fq "alias vim='nvim'" "$ROOT_DIR/common/aliases-editor.zsh" ||
     fail "vim alias implementation not found where expected"
   grep -Fq "alias view='nvim -R'" "$ROOT_DIR/common/aliases-editor.zsh" ||
@@ -144,8 +144,8 @@ test_release_procedures_use_published_release_verifier() {
     fail "release-selfishell skill does not use the published release verifier"
 }
 
-test_readme_vi_alias_documentation_matches_implementation
-printf 'PASS: test_readme_vi_alias_documentation_matches_implementation\n'
+test_profile_vi_alias_documentation_matches_implementation
+printf 'PASS: test_profile_vi_alias_documentation_matches_implementation\n'
 test_developer_profile_docs_include_mise_tool_versions
 printf 'PASS: test_developer_profile_docs_include_mise_tool_versions\n'
 test_agents_developer_profile_tools_use_mise_source_of_truth

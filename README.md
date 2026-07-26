@@ -7,11 +7,17 @@ Ubuntu on WSL.
 
 ## Quick Start
 
-Install the CLI, apply the default development environment, then open a fresh
-Zsh session and verify it:
+Install the CLI first:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
+```
+
+If the installer says `~/.local/bin` is not in `PATH`, run the `export PATH=…`
+command it prints, then continue with the default development environment in a
+fresh Zsh session and verify it:
+
+```bash
 selfishell install
 exec zsh
 selfishell doctor

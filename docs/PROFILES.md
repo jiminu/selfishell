@@ -61,15 +61,18 @@ developer --yes` once to select the new profile structure.
 The `developer` profile includes a pinned Neovim configuration whose leader key
 is `Space`. In Normal mode, press `Space` and pause to open which-key. The popup
 shows actions available in the current context; continue typing to narrow the
-list.
+list. Every Selfishell mapping has a description, so which-key remains aligned
+with the installed configuration without a separate shortcut list.
 
 Lua, Python, Bash, and sh LSP support appears when a configured server
 attaches. Neovim's standard LSP mappings remain available as well.
 
-New splits open to the right and below, and `:substitute` results preview in a
-split before they are applied. Bufferline shows open buffers across the top;
-use `[b` and `]b` to move between them, and `Space b d` to close the current
-buffer without closing its editor window.
+New splits open to the right and below, four lines of context remain above and
+below the cursor when possible, commands that would discard unsaved changes ask
+for confirmation, and `:substitute` results preview in a split before they are
+applied. Bufferline shows open buffers across the top; use `[b` and `]b` to move
+between them, and `Space b d` to close the current buffer without closing its
+editor window.
 
 In the `developer` profile, `vim` resolves to Neovim while `vi` remains the
 system editor.

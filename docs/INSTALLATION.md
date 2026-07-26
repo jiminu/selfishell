@@ -152,6 +152,7 @@ preserved; uninstall removes only the intact marked Selfishell loader block.
 Packages installed through Apt, Homebrew, or direct tool installers are also
 preserved. If `--add-to-path` was used, purge removes the installer's unchanged
 PATH entry; a modified entry is preserved and stops the purge for review.
+Purge does not automatically remove Zinit or Neovim plugin checkouts.
 
 ## Platform notes
 
