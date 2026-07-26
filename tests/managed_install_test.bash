@@ -1507,13 +1507,13 @@ test_update_ghostty_preflight_rejects_directory_before_other_resources_change() 
     fail "Ghostty directory preflight failure printed a success message"
 }
 
-test_readme_ghostty_file_descriptions_do_not_contradict_ownership() {
-  ! grep -Fqi 'installing Ghostty creates three files' "$ROOT_DIR/README.md" ||
-    fail "README should not claim Selfishell creates all three Ghostty paths"
-  grep -Fq 'fully user-owned override' "$ROOT_DIR/README.md" ||
-    fail "README does not mark user.ghostty as fully user-owned"
-  grep -Fq 'Selfishell never creates, modifies, checksums, or deletes it' "$ROOT_DIR/README.md" ||
-    fail "README does not state that Selfishell never touches user.ghostty"
+test_installation_guide_ghostty_file_descriptions_do_not_contradict_ownership() {
+  ! grep -Fqi 'installing Ghostty creates three files' "$ROOT_DIR/docs/INSTALLATION.md" ||
+    fail "Installation guide should not claim Selfishell creates all three Ghostty paths"
+  grep -Fq 'fully user-owned override' "$ROOT_DIR/docs/INSTALLATION.md" ||
+    fail "Installation guide does not mark user.ghostty as fully user-owned"
+  grep -Fq 'Selfishell never creates, modifies, checksums, or deletes it' "$ROOT_DIR/docs/INSTALLATION.md" ||
+    fail "Installation guide does not state that Selfishell never touches user.ghostty"
 }
 
 test_block_install_failure_cleans_up_temporary_files() {
