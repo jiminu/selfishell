@@ -376,11 +376,24 @@ return {
         "mason",
         "help",
       },
+      marks = {
+        -- Bar-shaped cursor marker, reusing CursorLineNr so it stays
+        -- consistent with the colorscheme in both light and dark background.
+        -- Priority is left at the default (0, highest): when the cursor
+        -- shares a scrollbar row with a diagnostic, showing position wins.
+        -- The diagnostic on that exact line is already visible via the sign
+        -- column, so losing it from the scrollbar for one row costs little,
+        -- while losing the cursor mark would defeat the point of it.
+        Cursor = {
+          text = "─",
+          highlight = "CursorLineNr",
+        },
+      },
       -- gitsigns is deliberately left off: the sign column already shows the
       -- same hunks per-line, and mirroring them here doubled the redraw
       -- triggers (gitsigns update + diagnostic update) for marginal benefit.
       handlers = {
-        cursor = false,
+        cursor = true,
         diagnostic = true,
         handle = true,
         search = false,
