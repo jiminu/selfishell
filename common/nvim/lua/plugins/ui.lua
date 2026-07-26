@@ -170,6 +170,23 @@ return {
           underline = true,
           sp = "#007ACC",
         },
+        duplicate = {
+          fg = "#858585",
+          bg = { attribute = "bg", highlight = "TabLine" },
+          italic = true,
+        },
+        duplicate_visible = {
+          fg = "#858585",
+          bg = { attribute = "bg", highlight = "TabLine" },
+          italic = true,
+        },
+        duplicate_selected = {
+          fg = "#858585",
+          bg = { attribute = "bg", highlight = "TabLineSel" },
+          italic = true,
+          underline = true,
+          sp = "#007ACC",
+        },
         modified = {
           fg = "#D7BA7D",
           bg = { attribute = "bg", highlight = "TabLine" },
