@@ -1,351 +1,158 @@
 # Selfishell
 
-Selfishell is an all-in-one Zsh environment for people who want a polished
-terminal without spending hours installing tools, collecting dotfiles, and
-maintaining shell plugins by hand.
-
-It installs a practical set of terminal tools and keeps your Zsh, Starship,
-editor, aliases, completions, and optional Ghostty configuration consistent
-across macOS and Ubuntu.
+Selfishell is a managed Zsh development environment for macOS, Ubuntu, and
+Ubuntu on WSL.
 
 ![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/selfishell.png)
 
-The `developer` profile also includes a practical Neovim setup with convenient
-features for everyday development.
+## Quick Start
 
-![Selfishell Neovim workspace showing the file explorer, buffer tabs, shell-script syntax highlighting, and compact statusline](img/nvim.png)
-
-## Who Is It For?
-
-Selfishell is a good fit if you
-
-- want a useful terminal setup that works immediately;
-- use multiple Macs, Ubuntu machines, or Ubuntu on WSL;
-- want Git, aliases, and completions configured consistently;
-- prefer a small managed configuration over assembling a large framework such
-  as Oh My Zsh;
-- want updates and rollback without manually replacing dotfiles.
-
-It may not be the right choice if you already maintain a heavily customized
-shell framework or want every package and configuration file managed
-directly.
-
-## What You Get
-
-- a readable Starship prompt with Git and runtime information;
-- Zsh completion (powered by fzf-tab) and aliases for common Git and shell workflows;
-- an editor workflow that scales from a minimal Vim setup to a
-  developer-focused Neovim environment;
-- optional versioned language runtimes and expanded developer tooling;
-- managed configuration with safe backups where Selfishell replaces existing paths;
-- one-command updates, release notifications, checksum verification, and
-  offline rollback.
-
-Selfishell supports:
-
-- macOS on Apple Silicon and Intel;
-- native Ubuntu on AMD64 and ARM64;
-- Ubuntu on WSL.
-
-Other Linux distributions are not currently supported.
-
-## Installation
-
-### 1. Install the CLI
+Install the CLI first:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 ```
 
-The bootstrap installs only the `selfishell` CLI and its shorter `sfs` alias
-under `~/.local/bin`. If the installer reports that this directory is not in
-`PATH`, follow the `export` command it prints. The bootstrap does not modify
-shell startup files unless explicitly requested.
-
-To add the CLI directory to `~/.bashrc` or `~/.zshrc` automatically:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --add-to-path
-```
-
-The option uses the current default shell and adds an idempotent, tracked PATH
-entry. The selected startup path must be absent or a regular file; symbolic
-links and other path types are preserved and rejected. Open a new shell
-afterward, or run the printed `export` command immediately.
-
-### 2. Install a profile
-
-For the recommended development environment:
+If the installer says `~/.local/bin` is not in `PATH`, run the `export PATH=…`
+command it prints, then continue with the default development environment in a
+fresh Zsh session and verify it:
 
 ```bash
 selfishell install
-```
-
-This installs the default `developer` profile. For a lightweight shell setup
-with Vim and the core interactive tools:
-
-```bash
-selfishell install --profile minimal
-```
-
-The installer shows what it is doing and asks before changing the environment.
-On macOS, it also asks whether to install and configure Ghostty.
-If Zsh is installed, it also offers to set it as the current user's login shell.
-
-### 3. Open a new terminal
-
-Open a new terminal window after setup, or reload the current Zsh session:
-
-```bash
 exec zsh
-```
-
-### 4. Verify the installation
-
-```bash
 selfishell doctor
 selfishell status
 ```
 
-To install the CLI and the default profile non-interactively in one command:
+The bootstrap installs only the CLI. `selfishell install` selects the default
+`developer` profile. See the [installation guide](docs/INSTALLATION.md) for
+PATH setup, non-interactive and exact-version installation, offline setup,
+uninstallation, Ghostty, and platform notes.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --setup --yes
-```
+The installer guides interactive setup, including the optional macOS Ghostty
+choice. Open a new terminal after installation whenever that is more convenient
+than replacing the current shell with `exec zsh`.
 
-For company or security-sensitive environments, download and review the
-bootstrap before running it:
+## What Is Selfishell?
 
-```bash
-curl -fLO https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh
-less install.sh
-bash install.sh
-```
+Selfishell gives you a consistent, ready-to-use terminal across the machines
+where you work. It manages Zsh, a Starship prompt, useful aliases and
+completions, and editor configuration, while keeping updates and offline
+rollback straightforward.
 
-Release archives are checked against their published `SHA256SUMS` before they
-are activated.
+It supports:
+
+- macOS on Apple Silicon and Intel;
+- native Ubuntu on AMD64 and ARM64; and
+- Ubuntu on WSL.
+
+It is a good fit when you want the same polished shell on several machines
+without assembling and maintaining a shell framework yourself.
+
+Managed defaults remove routine setup work without taking ownership of your
+personal shell customizations. You can keep your own aliases, functions,
+exports, and project tooling alongside the managed environment.
+
+Selfishell is deliberately focused on the supported platforms above. It does
+not claim support for other Linux distributions.
+
+## What You Get
+
+- A readable Starship prompt with Git and runtime information.
+- Zsh aliases and interactive completions for common shell and Git workflows.
+- Editor configuration that starts with Vim and expands into Neovim for the
+  `developer` profile.
+- Safe release updates, checksum verification, and retained releases for
+  offline rollback.
+
+The resulting environment keeps common development tools close at hand without
+requiring a separate dotfiles framework. Its managed configuration is designed
+to make repeatable setup, maintenance, and recovery practical.
+
+The `developer` profile includes a practical Neovim workspace for everyday
+development.
+
+![Selfishell Neovim workspace showing the file explorer, buffer tabs, shell-script syntax highlighting, and compact statusline](img/nvim.png)
 
 ## Profiles
 
-| Profile | Included tools |
+Choose the profile that matches the machine. `developer` is the default;
+choose `minimal` explicitly when you want the lightweight shell experience.
+
+| Profile | Includes |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Vim, Starship, Zinit, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus Neovim 0.12.4 (with pinned lazy.nvim plugins), Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
+| `developer` | Everything in `minimal`, plus Neovim 0.12.4, Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
 
-`developer` is the default. Preview it without changing anything:
+Read [Profiles](docs/PROFILES.md) for the complete package list, profile
+behavior, and Neovim workflow.
 
-```bash
-selfishell install --dry-run
-```
+The profile guide also explains required and optional package behavior, the
+separate Ghostty choice on macOS, and how project `mise.toml` files can choose
+their own runtime versions.
 
-Choose `minimal` explicitly when you want the core shell experience without
-the larger development toolchain. In the `developer` profile,
-`vim` resolves to Neovim while `vi` remains the system editor.
-
-Packages marked optional by a profile are recommended packages: Selfishell
-attempts to install them automatically but continues if they are unavailable.
-Ghostty remains a separate interactive choice on macOS.
-
-## Neovim Workflow
-
-The `developer` profile includes a pinned Neovim configuration whose leader key
-is `Space`. In Normal mode, press `Space` and pause to open which-key. The popup
-shows the actions available in the current context; continue typing to narrow
-the list. Every Selfishell mapping has a description, so which-key stays aligned
-with the installed configuration without requiring a separate shortcut list.
-
-LSP actions and symbol searches become available when a configured server is
-attached. Selfishell currently configures Lua, Python, and Bash/sh, while
-Neovim 0.12's standard LSP mappings remain available as well.
-
-The configuration opens new splits to the right and below, keeps four lines of
-context above and below the cursor when possible, confirms commands that would
-discard unsaved changes, and previews `:substitute` results in a split before
-they are applied. When multiple buffers are open, bufferline shows them across
-the top of the editor; use `[b` and `]b` to move to the previous or next buffer,
-and `Space b d` to close the current buffer without closing its editor window.
-
-## Ghostty Customization
-
-On macOS, Selfishell manages two Ghostty paths and recognizes an optional
-third path for personal overrides:
-
-```text
-Selfishell-managed:
-  ${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/ghostty/config.ghostty
-
-User-owned entrypoint with a Selfishell-managed block:
-  ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty
-
-Optional, fully user-owned override:
-  ${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/user.ghostty
-```
-
-The entrypoint contains a marked Selfishell block that includes the managed
-defaults and then an optional `user.ghostty`; do not edit inside that block
-directly. Write personal settings to `user.ghostty` instead:
-
-```bash
-${EDITOR:-vim} ~/.config/ghostty/user.ghostty
-```
-
-```ini
-theme = Catppuccin Mocha
-font-size = 15
-cursor-style = bar
-```
-
-`user.ghostty` loads after the Selfishell defaults, so any key you set there
-wins over the corresponding default. `user.ghostty` is entirely yours:
-Selfishell never creates, modifies, checksums, or deletes it, and its absence
-is normal — Ghostty simply has no overrides applied.
+Choose the small profile for a machine that needs a dependable interactive
+shell, or the developer profile when you also want the editor and language
+toolchain ready for use.
 
 ## Everyday Commands
 
-```bash
-selfishell status                   # Show the active profile and managed resources
-selfishell status --check-updates   # Also check for a newer Selfishell release
-selfishell status --check-package-updates # Report available Homebrew/APT updates without installing
-selfishell doctor                   # Diagnose the current installation
-selfishell update                   # Update the CLI, profile tools, and configuration
-selfishell rollback                 # Return to the previous Selfishell release
-```
+| Command | Use it to |
+| --- | --- |
+| `selfishell status` | Show the active profile and managed resources. |
+| `selfishell status --check-updates` | Check for a newer Selfishell release. |
+| `selfishell doctor` | Diagnose the current installation. |
+| `selfishell update` | Update the CLI, profile tools, and configuration. |
+| `selfishell rollback` | Return to the previous retained release. |
+| `selfishell uninstall --restore --dry-run` | Preview restoring backed-up configuration. |
 
-`selfishell update` activates the latest CLI first and then continues with that
-release's profile, so newly added packages and configuration are applied in the
-same command. Rerunning the bootstrap follows the same retention policy: only
-the active release and one rollback release are kept.
+`sfs` is the optional short alias for `selfishell`.
 
-`sfs` is available as a shorter interactive alias for the same commands.
+Run `status` after setup to see the active profile. Use `doctor` when the
+environment does not look right, and use the dry run before restoring
+configuration so you can review the proposed changes first.
 
-Interactive Zsh sessions use a small local cache to announce new releases at
-most once per day. The network check runs in the background and never installs
-an update automatically.
+Updates keep the installed environment current; rollback uses the retained
+release when you need to return to the previous Selfishell version offline.
 
-## Uninstallation
+## Safety
 
-### Remove Selfishell configuration
-
-Preview the operation first:
-
-```bash
-selfishell uninstall --restore --dry-run
-```
-
-Then remove managed configuration and restore files backed up during
-installation:
-
-```bash
-selfishell uninstall --restore
-```
-
-If a managed file has been modified since installation, Selfishell stops before
-removing anything so that it does not overwrite your changes.
-
-### Remove everything managed by Selfishell
-
-To restore backed-up configuration and also remove the CLI, releases, cache,
-and remaining state in one operation:
-
-```bash
-selfishell uninstall --restore --purge
-```
-
-Selfishell intentionally does not uninstall Homebrew/APT packages or tools such
-as Zinit and Neovim plugins. They may be shared with other configurations and
-should be removed separately only if you no longer use them. Personal Zsh
-configuration in `~/.zshrc` is preserved; only the intact Selfishell loader
-block is removed. If installation used `--add-to-path`, purge also removes the
-unchanged PATH entry created by the installer. It stops and preserves the
-startup file if that entry was edited.
-
-## Existing Configuration and Safety
-
-During managed installation, `~/.zshrc` remains a regular, user-owned file.
-Selfishell adds one marked loader block and manages only that block, so aliases,
-exports, functions, PATH entries, and third-party installer changes can be added
-directly to `.zshrc`. Existing Vim, Starship, and Ghostty paths are moved to
-timestamped backups before Selfishell creates managed links. Configuration is
-copied under `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell`, while recovery
-metadata is kept under `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`.
-
-Package installation may request administrator privileges for Homebrew or APT.
-Network access is required for initial package and plugin downloads.
-
-Direct downloads are version-pinned and checksum-verified. Git dependencies are
-checked out at approved tags or commits defined in `dependencies.conf`.
-Developer runtimes, Neovim, and shell tools are installed by
-mise or the platform package manager from Selfishell-managed configuration.
-Project `mise.toml` files can override those defaults. Existing NVM and pyenv
-directories are left untouched.
-
-## Advanced Setup
-
-Install an exact Selfishell release:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --version <version>
-```
-
-Install configuration without package or network operations:
-
-```bash
-SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
-# or
-selfishell install --profile developer --skip-packages --yes
-```
-
-Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited by
-package managers and download commands.
-
-Add private or company packages with a local profile:
-
-```text
-# company.conf
-package macos required formula company-cli
-package ubuntu required apt company-cli
-```
-
-```bash
-selfishell install --profile developer --local-profile ./company.conf --yes
-```
-
-Add personal shell configuration directly to `~/.zshrc`, outside the marked
-Selfishell loader block. Selfishell does not checksum or manage the rest of the
-file.
-
-## Development
-
-Commands can be run directly from a source checkout while developing:
-
-```bash
-./bin/selfishell help
-./bin/selfishell install --dry-run
-bash scripts/check.sh
-```
+Selfishell installs without root into XDG-compatible user paths, backs up
+existing managed paths, keeps `.zshrc` user-owned, verifies downloaded releases
+with checksums, and never installs updates automatically during shell startup.
 
 ## Documentation
 
-- [Installation](docs/INSTALLATION.md)
-- [Profiles](docs/PROFILES.md)
-- [Python development](docs/PYTHON.md)
-- [Updates and rollback](docs/UPDATES.md)
-- [Shell performance](docs/PERFORMANCE.md)
-- [Company deployment](docs/COMPANY.md)
-- [Distribution channels](docs/DISTRIBUTION.md)
-- [Security model](docs/SECURITY.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Release process](docs/RELEASING.md)
-- [Roadmap](docs/MILESTONES.md)
-- [Vulnerability reporting](SECURITY.md)
+### User guides
 
-## Platform Notes
+- [Installation](docs/INSTALLATION.md) — setup, offline installation,
+  uninstallation, Ghostty, and platform notes.
+- [Profiles](docs/PROFILES.md) — package choices and the Neovim workflow.
+- [Python development](docs/PYTHON.md) — Python tooling and project setup.
+- [Updates and rollback](docs/UPDATES.md) — release updates and recovery.
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — common installation and shell
+  problems.
+- [Security model](docs/SECURITY.md) — managed paths and security guarantees.
+- [Company deployment](docs/COMPANY.md) — organization-specific installation.
+- [Shell performance](docs/PERFORMANCE.md) — measuring and improving startup
+  performance.
 
-- On WSL, install and select a Nerd Font in Windows Terminal or VS Code so
-  Starship icons render correctly.
-- On macOS, restart Ghostty after installation to apply its configuration.
-- Optional packages unavailable on a distribution are reported without
-  stopping required setup; missing required packages stop installation.
+Start with Installation for a new machine, then use Profiles when deciding
+which toolset belongs on it. The remaining user guides cover routine operation,
+organization-specific deployment, and problem solving.
+
+### Contributing
+
+- [Contributing](CONTRIBUTING.md) — source checkout, development commands, and
+  verification.
+
+### Maintainer guides
+
+- [Distribution channels](docs/DISTRIBUTION.md) — supported installation
+  channels.
+- [Release process](docs/RELEASING.md) — preparing and publishing releases.
+- [Roadmap](docs/MILESTONES.md) — planned project milestones.
+- [Vulnerability reporting](SECURITY.md) — report a security issue privately.
+
+The contributor and maintainer guides are separate from the quick-start path so
+new users can focus on installing and using Selfishell.
