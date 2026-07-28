@@ -138,6 +138,13 @@ managed_block_definition() {
   source "${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/zsh/zshrc"
 fi'
       ;;
+    user-zprofile)
+      MANAGED_BLOCK_LABEL='Selfishell mise shims'
+      # shellcheck disable=SC2016 # Literal for zsh to evaluate at login, not during installation.
+      MANAGED_BLOCK_BODY='if command -v mise >/dev/null 2>&1; then
+  eval "$(command mise activate zsh --shims)"
+fi'
+      ;;
     user-ghostty)
       MANAGED_BLOCK_LABEL='Selfishell ghostty'
       # config-file directives are processed in declaration order, but always
@@ -239,22 +246,7 @@ managed_preflight_block_target() {
   local resource="$1"
   local target_file="$2"
 
-  if [[ -L "$target_file" ]]; then
-    cli_error "Refusing to modify symbolic link: $target_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  fi
-  if [[ -e "$target_file" && ! -f "$target_file" ]]; then
-    cli_error "Refusing to modify non-regular block path: $target_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  fi
-
-  managed_inspect_block "$resource" "$target_file" || return
-  case "$MANAGED_BLOCK_STATUS" in
-    malformed)
-      managed_block_error "$resource" "$target_file"
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
-  esac
+  managed_install_block "$resource" "$target_file" 1 >/dev/null
 }
 
 managed_preflight_zsh_loader() {

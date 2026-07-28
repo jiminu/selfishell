@@ -18,8 +18,9 @@ selfishell install --profile developer \
 
 Set `SELFISHELL_LOCAL_PROFILE` when the same private profile should also be used
 by subsequent updates. Put private shell initialization directly in the user's
-`~/.zshrc`, outside the marked Selfishell loader block. Selfishell manages only
-that loader block.
+`~/.zshrc`, outside the marked Selfishell loader block. Selfishell also manages
+only its marked mise shims block within `~/.zprofile`; both files remain
+user-owned.
 
 Recommended deployment controls:
 
