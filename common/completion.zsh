@@ -6,7 +6,7 @@ if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
   # Pinned to the commit recorded for zsh-users/zsh-completions in
   # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
-  zinit ice blockf atpull'zinit creinstall -q .' ver'9903bae60284072de3fa0e3e20965f22368c5694'
+  zinit ice blockf atpull'zinit creinstall -q .' ver'bf2c5393295fe82d74e3b4585baa483722653ab8'
   zinit light zsh-users/zsh-completions
 fi
 
