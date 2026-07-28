@@ -9,6 +9,7 @@ opt.ruler = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
 opt.cursorline = true
+opt.wrap = false
 opt.scrolloff = 4
 opt.splitbelow = true
 opt.splitright = true
