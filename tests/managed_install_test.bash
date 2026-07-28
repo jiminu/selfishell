@@ -100,9 +100,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader was not recorded as a managed block"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 15 zsh/starship/mise/vim resources + 4 user link resources
-  # = 19 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
-  [[ "$state_count" -eq 19 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
+  # 15 zsh/starship/mise/vim resources + 5 user links/blocks
+  # = 20 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
+  [[ "$state_count" -eq 20 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -459,6 +459,32 @@ test_install_is_idempotent() {
     fail "A second installation duplicated the Zsh loader"
 }
 
+test_mise_shims_zprofile_survives_full_lifecycle() {
+  local output
+
+  printf 'export USER_ZPROFILE=kept' >"$HOME/.zprofile"
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  [[ "$(grep -Fc '# >>> Selfishell mise shims >>>' "$HOME/.zprofile")" -eq 1 ]] ||
+    fail "Install did not add exactly one mise shims block"
+  grep -Fqx 'export USER_ZPROFILE=kept' "$HOME/.zprofile" ||
+    fail "Install did not preserve existing .zprofile content"
+
+  cat >"$TEST_ROOT/bin/mise" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$HOME/mise-args"
+printf '%s\n' 'export SELFISHELL_MISE_SHIMS_TEST=loaded'
+EOF
+  chmod +x "$TEST_ROOT/bin/mise"
+  output="$(PATH="$TEST_ROOT/bin:/usr/bin:/bin" zsh -dfc 'source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"')"
+  [[ "$output" == loaded ]] || fail "The .zprofile block did not activate mise shims"
+  assert_file_content 'activate zsh --shims' "$HOME/mise-args"
+
+  run_selfishell uninstall --yes >/dev/null
+  assert_file_content 'export USER_ZPROFILE=kept' "$HOME/.zprofile"
+}
+
 test_user_zsh_changes_survive_reinstall_and_uninstall_exactly() {
   local expected="$TEST_ROOT/expected-zshrc"
   local modified="$TEST_ROOT/modified-zshrc"
@@ -510,6 +536,24 @@ test_unrelated_zshrc_symlink_is_rejected_without_changes() {
   [[ "$status" -eq 1 ]] || fail "Zsh symlink should stop installation"
   assert_symlink_to "$TEST_ROOT/dotfiles-zshrc" "$HOME/.zshrc"
   assert_file_content 'dotfiles zshrc' "$TEST_ROOT/dotfiles-zshrc"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
+}
+
+test_unrelated_zprofile_symlink_is_rejected_without_changes() {
+  local status
+
+  printf 'dotfiles zprofile\n' >"$TEST_ROOT/dotfiles-zprofile"
+  ln -s "$TEST_ROOT/dotfiles-zprofile" "$HOME/.zprofile"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Zprofile symlink should stop installation"
+  assert_symlink_to "$TEST_ROOT/dotfiles-zprofile" "$HOME/.zprofile"
+  assert_file_content 'dotfiles zprofile' "$TEST_ROOT/dotfiles-zprofile"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
 }

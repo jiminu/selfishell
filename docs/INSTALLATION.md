@@ -90,6 +90,11 @@ still want directly into the restored `~/.zshrc`, then run `selfishell install`
 again. Selfishell will add one marked loader block and leave the rest of
 `.zshrc` user-owned. It does not delete `local.zsh`.
 
+Selfishell also adds a marked block to the user-owned `~/.zprofile`. The block
+runs `mise activate zsh --shims` when mise is available, allowing login
+environments and IDEs such as VS Code to resolve mise-managed tools. Interactive
+Zsh keeps using normal mise activation from the managed `.zshrc` configuration.
+
 ## Ghostty customization
 
 On macOS, Selfishell manages two Ghostty paths and recognizes an optional third
@@ -147,8 +152,8 @@ state:
 selfishell uninstall --restore --purge
 ```
 
-Personal aliases, exports, functions, and PATH entries in `~/.zshrc` are
-preserved; uninstall removes only the intact marked Selfishell loader block.
+Personal content in `~/.zshrc` and `~/.zprofile` is preserved; uninstall removes
+only the intact marked Selfishell blocks.
 Packages installed through Apt, Homebrew, or direct tool installers are also
 preserved. If `--add-to-path` was used, purge removes the installer's unchanged
 PATH entry; a modified entry is preserved and stops the purge for review.

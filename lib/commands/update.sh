@@ -32,6 +32,7 @@ update_tools_and_configuration() {
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
   managed_preflight_zsh_loader || return
+  managed_preflight_block_target user-zprofile "$HOME/.zprofile" || return
   platform="$(detect_platform)"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
