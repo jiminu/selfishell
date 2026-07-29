@@ -70,7 +70,4 @@ test_release_scripts_share_version_validation() {
   teardown_test_home
 }
 
-test_semantic_version_validation
-printf 'PASS: test_semantic_version_validation\n'
-test_release_scripts_share_version_validation
-printf 'PASS: test_release_scripts_share_version_validation\n'
+run_discovered_tests '' teardown_test_home

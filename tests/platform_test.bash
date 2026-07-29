@@ -30,6 +30,11 @@ clear_platform_fixture() {
   unset SELFISHELL_TEST_PROC_VERSION_FILE
 }
 
+teardown_platform_test() {
+  clear_platform_fixture
+  teardown_test_home
+}
+
 test_detects_macos_arm64() {
   set_platform_fixture Darwin arm64 ignored ignored
 
@@ -80,32 +85,4 @@ test_selects_platform_package_manager() {
     fail "Expected apt-get on Ubuntu WSL"
 }
 
-run_test() {
-  local test_name="$1"
-
-  setup_test_home
-  trap 'clear_platform_fixture; teardown_test_home' RETURN
-  "$test_name"
-  trap - RETURN
-  clear_platform_fixture
-  teardown_test_home
-  printf 'PASS: %s\n' "$test_name"
-}
-
-main() {
-  local test_name
-  local failures=0
-
-  while IFS= read -r test_name; do
-    if ! run_test "$test_name"; then
-      failures=$((failures + 1))
-    fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-
-  if ((failures > 0)); then
-    printf '%d test(s) failed\n' "$failures" >&2
-    return 1
-  fi
-}
-
-main "$@"
+run_discovered_tests setup_test_home teardown_platform_test

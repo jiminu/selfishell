@@ -38,8 +38,6 @@ EOF
 test_updates_only_matching_manifest_fields() {
   local manifest metadata zsh_root
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -79,8 +77,6 @@ EOF
 test_rejects_metadata_without_manifest_entry() {
   local manifest metadata status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   printf 'git zinit v0.1.0 all all https://example.invalid/zinit.git - .zinit zinit.zsh\n' >"$manifest"
@@ -108,8 +104,6 @@ test_discovery_has_no_removed_vundle_dependency() {
 test_zsh_plugin_update_rewrites_manifest_and_pin_file() {
   local manifest metadata zsh_root other_before other_after
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -147,8 +141,6 @@ EOF
 test_zsh_plugin_update_fails_when_target_pin_missing() {
   local manifest metadata zsh_root manifest_before completion_before status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -174,8 +166,6 @@ EOF
 test_zsh_plugin_update_fails_when_manifest_entry_missing() {
   local manifest metadata zsh_root completion_before status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -197,8 +187,6 @@ test_zsh_plugin_update_fails_when_manifest_entry_missing() {
 test_zsh_plugin_update_rejects_invalid_commit_format() {
   local manifest metadata zsh_root manifest_before status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -221,8 +209,6 @@ EOF
 test_zsh_plugin_update_rejects_duplicate_pin_matches() {
   local manifest metadata zsh_root status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -250,8 +236,6 @@ EOF
 test_zsh_plugin_update_is_all_or_nothing() {
   local manifest metadata zsh_root manifest_before completion_before status
 
-  setup_test_home
-  trap teardown_test_home EXIT
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
@@ -278,21 +262,4 @@ EOF
     fail "An individually-valid pin was committed even though the batch failed"
 }
 
-test_updates_only_matching_manifest_fields
-printf 'PASS: test_updates_only_matching_manifest_fields\n'
-test_rejects_metadata_without_manifest_entry
-printf 'PASS: test_rejects_metadata_without_manifest_entry\n'
-test_discovery_has_no_removed_vundle_dependency
-printf 'PASS: test_discovery_has_no_removed_vundle_dependency\n'
-test_zsh_plugin_update_rewrites_manifest_and_pin_file
-printf 'PASS: test_zsh_plugin_update_rewrites_manifest_and_pin_file\n'
-test_zsh_plugin_update_fails_when_target_pin_missing
-printf 'PASS: test_zsh_plugin_update_fails_when_target_pin_missing\n'
-test_zsh_plugin_update_fails_when_manifest_entry_missing
-printf 'PASS: test_zsh_plugin_update_fails_when_manifest_entry_missing\n'
-test_zsh_plugin_update_rejects_invalid_commit_format
-printf 'PASS: test_zsh_plugin_update_rejects_invalid_commit_format\n'
-test_zsh_plugin_update_rejects_duplicate_pin_matches
-printf 'PASS: test_zsh_plugin_update_rejects_duplicate_pin_matches\n'
-test_zsh_plugin_update_is_all_or_nothing
-printf 'PASS: test_zsh_plugin_update_is_all_or_nothing\n'
+run_discovered_tests setup_test_home teardown_test_home

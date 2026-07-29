@@ -33,7 +33,4 @@ test_dependabot_tracks_github_actions() {
     fail ".github/dependabot.yml does not track the github-actions ecosystem"
 }
 
-test_github_actions_are_pinned_to_full_commit_shas
-printf 'PASS: test_github_actions_are_pinned_to_full_commit_shas\n'
-test_dependabot_tracks_github_actions
-printf 'PASS: test_dependabot_tracks_github_actions\n'
+run_discovered_tests

@@ -12,11 +12,13 @@ source "$ROOT_DIR/lib/platform.sh"
 source "$ROOT_DIR/lib/dependencies.sh"
 source "$ROOT_DIR/lib/installers.sh"
 
-test_direct_installer_preserves_proxy_environment() {
-  local fake_bin="$TEST_ROOT/bin"
-
-  mkdir -p "$fake_bin"
+setup_proxy_test() {
+  local fake_bin
   local payload checksum
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
   payload="$TEST_ROOT/mise"
   printf 'mise fixture' >"$payload"
   checksum="$(fixture_sha256 "$payload")"
@@ -40,6 +42,9 @@ EOF
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
   printf 'Linux version\n' >"$SELFISHELL_TEST_PROC_VERSION_FILE"
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
+}
+
+test_direct_installer_preserves_proxy_environment() {
   install_direct_package required mise 0
 
   assert_file_content "$HTTPS_PROXY" "$HOME/proxy-observed"
@@ -70,13 +75,4 @@ test_invalid_curl_policy_is_rejected_before_network_access() {
   [[ ! -e "$HOME/proxy-observed" ]] || fail "Invalid curl policy still invoked curl"
 }
 
-main() {
-  setup_test_home
-  trap teardown_test_home EXIT
-  test_direct_installer_preserves_proxy_environment
-  printf 'PASS: test_direct_installer_preserves_proxy_environment\n'
-  test_invalid_curl_policy_is_rejected_before_network_access
-  printf 'PASS: test_invalid_curl_policy_is_rejected_before_network_access\n'
-}
-
-main "$@"
+run_discovered_tests setup_proxy_test teardown_test_home

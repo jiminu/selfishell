@@ -104,7 +104,7 @@ test_skipped_fixture() {
   skip 'fixture unavailable'
 }
 
-run_discovered_tests
+run_discovered_tests '' teardown_test_home
 EOF
 
   output="$(SELFISHELL_TEST_HELPER="$ROOT_DIR/tests/test_helper.bash" bash "$fixture")"

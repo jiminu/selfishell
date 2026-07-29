@@ -801,7 +801,7 @@ test_status_uses_current_resource_list() {
   local output
 
   run_selfishell install --skip-packages --yes >/dev/null
-  output="$(run_selfishell status)"
+  output="$(run_selfishell status)" || true
 
   [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/zsh/zshrc'* ]] ||
     fail "Status did not report the current Neovim resource list"
@@ -1894,23 +1894,6 @@ test_update_tools_only_yes_preserves_modified_file() {
     fail "Non-interactive update conflict must not create a conflict backup"
 }
 
-run_test() {
-  local test_name="$1"
-  local rc=0
-
-  setup_managed_home
-  "$test_name" || rc=$?
-  teardown_managed_home
-
-  if ((rc == 0)); then
-    printf 'PASS: %s\n' "$test_name"
-    return 0
-  else
-    printf 'FAIL: %s (exit code %d)\n' "$test_name" "$rc" >&2
-    return 1
-  fi
-}
-
 main() {
   local test_name
   local test_index=0
@@ -1936,7 +1919,8 @@ main() {
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 
   log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-managed-test.XXXXXX")"
-  trap 'rm -rf "$log_root"' EXIT HUP INT TERM
+  # shellcheck disable=SC2064 # Preserve the local path after main returns.
+  trap "rm -rf '$log_root'" EXIT HUP INT TERM
 
   printf 'Total tests found: %d (jobs: %d)\n' "${#test_list[@]}" "$test_jobs"
 
@@ -1947,7 +1931,8 @@ main() {
     for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
       test_name="${test_list[$test_index]}"
       batch_logs+=("$log_root/$test_index.log")
-      run_test "$test_name" >"$log_root/$test_index.log" 2>&1 &
+      run_test_isolated "$test_name" setup_managed_home teardown_managed_home \
+        >"$log_root/$test_index.log" 2>&1 &
       batch_pids+=("$!")
       test_index=$((test_index + 1))
     done

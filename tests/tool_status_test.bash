@@ -27,7 +27,6 @@ teardown_tool_status_home() {
 }
 
 test_detects_homebrew_formula_version() {
-  setup_tool_status_home
   printf '#!/usr/bin/env bash\nprintf "starship 1.26.0\\n"\n' >"$TEST_ROOT/bin/brew"
   chmod +x "$TEST_ROOT/bin/brew"
 
@@ -36,11 +35,9 @@ test_detects_homebrew_formula_version() {
   [[ "$TOOL_STATUS_INSTALLED" == 1.26.0 ]] || fail "Homebrew version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == homebrew ]] || fail "Homebrew source was not reported"
   [[ "$TOOL_STATUS_APPROVED" == package-manager ]] || fail "Formula approval source was incorrect"
-  teardown_tool_status_home
 }
 
 test_reuses_homebrew_inventory() {
-  setup_tool_status_home
   export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
   cat >"$TEST_ROOT/bin/brew" <<'EOF'
 #!/usr/bin/env bash
@@ -66,12 +63,10 @@ EOF
 
   [[ "$(wc -l <"$MOCK_BREW_LOG" | tr -d ' ')" == 2 ]] ||
     fail "Homebrew inventory should be loaded once per package type"
-  teardown_tool_status_home
   unset MOCK_BREW_LOG
 }
 
 test_detects_apt_package_version() {
-  setup_tool_status_home
   printf '#!/usr/bin/env bash\nprintf "git\\t2.43.0-1ubuntu7\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
   chmod +x "$TEST_ROOT/bin/dpkg-query"
 
@@ -79,11 +74,9 @@ test_detects_apt_package_version() {
 
   [[ "$TOOL_STATUS_INSTALLED" == 2.43.0-1ubuntu7 ]] || fail "Apt version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == apt ]] || fail "Apt source was not reported"
-  teardown_tool_status_home
 }
 
 test_reuses_apt_inventory() {
-  setup_tool_status_home
   export MOCK_DPKG_LOG="$TEST_ROOT/dpkg.log"
   cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
 #!/usr/bin/env bash
@@ -98,12 +91,10 @@ EOF
   [[ "$(wc -l <"$MOCK_DPKG_LOG" | tr -d ' ')" == 1 ]] ||
     fail "Apt inventory should be loaded once"
   [[ "$TOOL_STATUS_INSTALLED" == 8.5.0 ]] || fail "Cached Apt inventory returned the wrong version"
-  teardown_tool_status_home
   unset MOCK_DPKG_LOG
 }
 
 test_detects_selfishell_managed_direct_dependency() {
-  setup_tool_status_home
   printf 'git zinit v3.15.0 all all file:///unused - .local/share/zinit/zinit.git zinit.zsh\n' >"$SELFISHELL_DEPENDENCIES_FILE"
   mkdir -p "$HOME/.local/share/zinit/zinit.git" "$SELFISHELL_STATE_DIR/dependencies"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
@@ -119,11 +110,9 @@ test_detects_selfishell_managed_direct_dependency() {
   tool_status_detect direct zinit macos arm64
   [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == selfishell ]] ||
     fail "Missing managed dependency marker was not detected"
-  teardown_tool_status_home
 }
 
 test_distinguishes_external_and_missing_direct_dependencies() {
-  setup_tool_status_home
   printf 'git zinit v3.15.0 all all file:///unused - .local/share/zinit/zinit.git zinit.zsh\n' >"$SELFISHELL_DEPENDENCIES_FILE"
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
@@ -136,7 +125,6 @@ test_distinguishes_external_and_missing_direct_dependencies() {
   tool_status_detect direct zinit macos arm64
   [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none ]] ||
     fail "Missing direct dependency was not distinguished"
-  teardown_tool_status_home
 }
 
 test_maps_package_name_to_executable() {
@@ -147,7 +135,6 @@ test_maps_package_name_to_executable() {
 }
 
 test_detects_mise_tool_version() {
-  setup_tool_status_home
   cat >"$TEST_ROOT/bin/mise" <<'EOF'
 #!/usr/bin/env bash
 [[ "$*" == 'current node' ]] || exit 1
@@ -162,11 +149,9 @@ EOF
   [[ "$TOOL_STATUS_INSTALLED" == 24.18.0 ]] || fail "mise tool version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == mise ]] || fail "mise tool source was not reported"
   [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise selector was not reported"
-  teardown_tool_status_home
 }
 
 test_reports_package_manager_updates_without_upgrading() {
-  setup_tool_status_home
   export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
   cat >"$TEST_ROOT/bin/brew" <<'EOF'
 #!/usr/bin/env bash
@@ -193,29 +178,7 @@ EOF
   [[ "$TOOL_STATUS_UPDATE" == available ]] || fail "Apt update was not detected"
   [[ "$(grep -Fc 'outdated --formula' "$MOCK_BREW_LOG")" == 1 ]] || fail "Homebrew outdated inventory was not cached"
 
-  teardown_tool_status_home
   unset MOCK_BREW_LOG
 }
 
-main() {
-  test_detects_apt_package_version
-  printf 'PASS: test_detects_apt_package_version\n'
-  test_detects_homebrew_formula_version
-  printf 'PASS: test_detects_homebrew_formula_version\n'
-  test_reuses_homebrew_inventory
-  printf 'PASS: test_reuses_homebrew_inventory\n'
-  test_reuses_apt_inventory
-  printf 'PASS: test_reuses_apt_inventory\n'
-  test_detects_selfishell_managed_direct_dependency
-  printf 'PASS: test_detects_selfishell_managed_direct_dependency\n'
-  test_distinguishes_external_and_missing_direct_dependencies
-  printf 'PASS: test_distinguishes_external_and_missing_direct_dependencies\n'
-  test_maps_package_name_to_executable
-  printf 'PASS: test_maps_package_name_to_executable\n'
-  test_detects_mise_tool_version
-  printf 'PASS: test_detects_mise_tool_version\n'
-  test_reports_package_manager_updates_without_upgrading
-  printf 'PASS: test_reports_package_manager_updates_without_upgrading\n'
-}
-
-main "$@"
+run_discovered_tests setup_tool_status_home teardown_tool_status_home

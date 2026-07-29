@@ -5,12 +5,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
+setup_neovim_test() {
+  setup_test_home
+  export XDG_CACHE_HOME="$HOME/.cache"
+  export XDG_CONFIG_HOME="$HOME/.config"
+  export XDG_DATA_HOME="$HOME/.local/share"
+  export XDG_STATE_HOME="$HOME/.local/state"
+  mkdir -p "$TEST_ROOT/tmp" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME"
+}
+
 test_treesitter_autocmd_uses_detected_filetypes() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_treesitter_autocmd_uses_detected_filetypes (Neovim unavailable)\n'
-    return
+    skip 'test_treesitter_autocmd_uses_detected_filetypes (Neovim unavailable)'
   fi
 
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
@@ -29,8 +37,7 @@ test_treesitter_install_rejects_false_and_missing_results() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_treesitter_install_rejects_false_and_missing_results (Neovim unavailable)\n'
-    return
+    skip 'test_treesitter_install_rejects_false_and_missing_results (Neovim unavailable)'
   fi
 
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
@@ -62,8 +69,7 @@ test_pinned_neovim_plugin_specs_load() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_pinned_neovim_plugin_specs_load (Neovim unavailable)\n'
-    return
+    skip 'test_pinned_neovim_plugin_specs_load (Neovim unavailable)'
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/nvim"
@@ -80,8 +86,7 @@ test_editor_workflow_options_and_keymaps() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_editor_workflow_options_and_keymaps (Neovim unavailable)\n'
-    return
+    skip 'test_editor_workflow_options_and_keymaps (Neovim unavailable)'
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/nvim"
@@ -98,8 +103,7 @@ test_buffer_delete_preserves_editor_window() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_buffer_delete_preserves_editor_window (Neovim unavailable)\n'
-    return
+    skip 'test_buffer_delete_preserves_editor_window (Neovim unavailable)'
   fi
 
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
@@ -117,8 +121,7 @@ test_lazy_revision_prefers_detached_head() {
   local revision
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_lazy_revision_prefers_detached_head (Neovim unavailable)\n'
-    return
+    skip 'test_lazy_revision_prefers_detached_head (Neovim unavailable)'
   fi
 
   revision="$(awk '$1 == "nvim-plugin" && $2 == "folke/lazy.nvim" { print $3 }' "$ROOT_DIR/dependencies.conf")"
@@ -141,11 +144,11 @@ test_lazy_revision_falls_back_for_symbolic_head() {
   local revision
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_lazy_revision_falls_back_for_symbolic_head (Neovim unavailable)\n'
-    return
+    skip 'test_lazy_revision_falls_back_for_symbolic_head (Neovim unavailable)'
   fi
 
   lazy_path="$XDG_DATA_HOME/selfishell/nvim/lazy/lazy.nvim"
+  mkdir -p "$lazy_path"
   rm -rf "$lazy_path/.git"
   git -C "$lazy_path" init --quiet
   git -C "$lazy_path" -c user.name=Selfishell -c user.email=selfishell@example.invalid \
@@ -168,8 +171,7 @@ test_lsp_loads_only_for_supported_filetypes() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_lsp_loads_only_for_supported_filetypes (Neovim unavailable)\n'
-    return
+    skip 'test_lsp_loads_only_for_supported_filetypes (Neovim unavailable)'
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/nvim"
@@ -186,8 +188,7 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    printf 'SKIP: test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases (Neovim unavailable)\n'
-    return
+    skip 'test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases (Neovim unavailable)'
   fi
 
   output="$(NVIM_LOG_FILE="$TEST_ROOT/nvim.log" TMPDIR="$TEST_ROOT/tmp" nvim --headless -u NONE -i NONE \
@@ -208,36 +209,4 @@ test_mason_lsp_servers_are_versioned() {
   done
 }
 
-setup_test_home
-trap teardown_test_home EXIT
-export XDG_CACHE_HOME="$HOME/.cache"
-export XDG_CONFIG_HOME="$HOME/.config"
-export XDG_DATA_HOME="$HOME/.local/share"
-export XDG_STATE_HOME="$HOME/.local/state"
-mkdir -p "$TEST_ROOT/tmp" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME"
-
-test_treesitter_autocmd_uses_detected_filetypes
-printf 'PASS: test_treesitter_autocmd_uses_detected_filetypes\n'
-test_treesitter_install_rejects_false_and_missing_results
-printf 'PASS: test_treesitter_install_rejects_false_and_missing_results\n'
-test_every_neovim_plugin_has_an_approved_revision
-printf 'PASS: test_every_neovim_plugin_has_an_approved_revision\n'
-test_pinned_neovim_plugin_specs_load
-printf 'PASS: test_pinned_neovim_plugin_specs_load\n'
-test_editor_workflow_options_and_keymaps
-printf 'PASS: test_editor_workflow_options_and_keymaps\n'
-test_buffer_delete_preserves_editor_window
-printf 'PASS: test_buffer_delete_preserves_editor_window\n'
-test_lazy_revision_prefers_detached_head
-printf 'PASS: test_lazy_revision_prefers_detached_head\n'
-test_lazy_revision_falls_back_for_symbolic_head
-printf 'PASS: test_lazy_revision_falls_back_for_symbolic_head\n'
-test_lsp_loads_only_for_supported_filetypes
-printf 'PASS: test_lsp_loads_only_for_supported_filetypes\n'
-test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases
-printf 'PASS: test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases\n'
-test_mason_lsp_servers_are_versioned
-printf 'PASS: test_mason_lsp_servers_are_versioned\n'
-
-trap - EXIT
-teardown_test_home
+run_discovered_tests setup_neovim_test teardown_test_home

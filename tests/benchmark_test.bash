@@ -94,27 +94,4 @@ test_benchmark_early_exit_paths_leave_no_temp_directory() {
   teardown_test_home
 }
 
-run_test() {
-  local test_name="$1"
-
-  "$test_name"
-  printf 'PASS: %s\n' "$test_name"
-}
-
-main() {
-  local test_name
-  local failures=0
-
-  while IFS= read -r test_name; do
-    if ! run_test "$test_name"; then
-      failures=$((failures + 1))
-    fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-
-  if ((failures > 0)); then
-    printf '%d test(s) failed\n' "$failures" >&2
-    return 1
-  fi
-}
-
-main "$@"
+run_discovered_tests '' teardown_test_home

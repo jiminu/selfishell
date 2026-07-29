@@ -73,7 +73,4 @@ test_invalid_version_is_rejected() {
   [[ "$status" -eq 2 ]] || fail "Invalid published release version should return a usage error"
 }
 
-test_published_release_verification
-printf 'PASS: test_published_release_verification\n'
-test_invalid_version_is_rejected
-printf 'PASS: test_invalid_version_is_rejected\n'
+run_discovered_tests '' teardown_test_home

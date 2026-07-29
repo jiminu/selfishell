@@ -144,17 +144,4 @@ test_release_procedures_use_published_release_verifier() {
     fail "release-selfishell skill does not use the published release verifier"
 }
 
-test_profile_vi_alias_documentation_matches_implementation
-printf 'PASS: test_profile_vi_alias_documentation_matches_implementation\n'
-test_developer_profile_docs_include_mise_tool_versions
-printf 'PASS: test_developer_profile_docs_include_mise_tool_versions\n'
-test_agents_developer_profile_tools_use_mise_source_of_truth
-printf 'PASS: test_agents_developer_profile_tools_use_mise_source_of_truth\n'
-test_milestones_profile_boundaries_match_profile_files
-printf 'PASS: test_milestones_profile_boundaries_match_profile_files\n'
-test_agents_dependency_release_rule_matches_current_gate
-printf 'PASS: test_agents_dependency_release_rule_matches_current_gate\n'
-test_performance_docs_document_full_benchmark_mode
-printf 'PASS: test_performance_docs_document_full_benchmark_mode\n'
-test_release_procedures_use_published_release_verifier
-printf 'PASS: test_release_procedures_use_published_release_verifier\n'
+run_discovered_tests

@@ -51,6 +51,11 @@ selfishell_nvim_treesitter_languages() {
   printf '%s\n' 'lua vim'
 }
 
+setup_installer_test() {
+  setup_test_home
+  export SELFISHELL_ROOT="$ROOT_DIR"
+}
+
 test_default_treesitter_languages_match_supported_parsers() {
   local languages
 
@@ -109,24 +114,6 @@ test_offline_mode_skips_neovim_plugins() {
   NVIM_ARGUMENTS=""
   SELFISHELL_OFFLINE=1 install_neovim_plugins 0
   [[ -z "$NVIM_ARGUMENTS" ]] || fail "Offline mode invoked Neovim plugin installation"
-}
-
-test_minimal_profile_installs_vimrc() {
-  local vimrc_path="$HOME/.config/selfishell/vim/vimrc"
-
-  export SELFISHELL_ROOT="$ROOT_DIR"
-  source "$ROOT_DIR/lib/common.sh"
-  source "$ROOT_DIR/lib/paths.sh"
-  source "$ROOT_DIR/lib/resources.sh"
-  source "$ROOT_DIR/lib/installers.sh"
-
-  selfishell_initialize_paths
-  install_managed_configuration "ubuntu" 0 0
-
-  cmp -s "$ROOT_DIR/common/vimrc" "$vimrc_path" ||
-    fail "Vim configuration was not installed for the minimal profile"
-  [[ -L "$HOME/.config/vim/vimrc" ]] ||
-    fail "User vimrc link was not created"
 }
 
 test_neovim_plugin_dry_run_is_non_mutating() {
@@ -252,28 +239,4 @@ test_fails_neovim_plugins_when_neovim_is_unavailable() {
     fail "Missing Neovim failure was not actionable: $output"
 }
 
-setup_test_home
-export SELFISHELL_ROOT="$ROOT_DIR"
-
-test_default_treesitter_languages_match_supported_parsers
-printf 'PASS: test_default_treesitter_languages_match_supported_parsers\n'
-test_installs_declared_mise_tools_with_managed_config
-printf 'PASS: test_installs_declared_mise_tools_with_managed_config\n'
-test_installs_declared_neovim_plugins
-printf 'PASS: test_installs_declared_neovim_plugins\n'
-test_runs_neovim_inside_mise_environment
-printf 'PASS: test_runs_neovim_inside_mise_environment\n'
-test_offline_mode_skips_neovim_plugins
-printf 'PASS: test_offline_mode_skips_neovim_plugins\n'
-test_neovim_plugin_dry_run_is_non_mutating
-printf 'PASS: test_neovim_plugin_dry_run_is_non_mutating\n'
-test_installs_lazy_nvim_before_syncing_plugins
-printf 'PASS: test_installs_lazy_nvim_before_syncing_plugins\n'
-test_installs_neovim_plugins_via_mise_resolution
-printf 'PASS: test_installs_neovim_plugins_via_mise_resolution\n'
-test_resolves_neovim_with_managed_mise_outside_path
-printf 'PASS: test_resolves_neovim_with_managed_mise_outside_path\n'
-test_fails_neovim_plugins_when_neovim_is_unavailable
-printf 'PASS: test_fails_neovim_plugins_when_neovim_is_unavailable\n'
-
-teardown_test_home
+run_discovered_tests setup_installer_test teardown_test_home

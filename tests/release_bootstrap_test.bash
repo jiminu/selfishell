@@ -880,26 +880,11 @@ test_refuses_to_replace_non_link_cli_path() {
     fail "Link preflight failure changed the active release"
 }
 
-run_test() {
-  local test_name="$1"
-
-  setup_release_home
-  trap 'teardown_release_home' RETURN
-  "$test_name"
-  trap - RETURN
-  teardown_release_home
-  printf 'PASS: %s\n' "$test_name"
-}
-
 main() {
-  local test_name
-
   setup_release_fixture
   trap teardown_release_fixture EXIT HUP INT TERM
 
-  while IFS= read -r test_name; do
-    run_test "$test_name"
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+  run_discovered_tests setup_release_home teardown_release_home
 
   trap - EXIT HUP INT TERM
   teardown_release_fixture
