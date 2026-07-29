@@ -198,5 +198,8 @@ jobs:
       - name: Install pinned Neovim toolchain
         run: ~/.local/bin/mise install neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0
 
+      - name: Run Neovim configuration tests
+        run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash tests/neovim_config_test.bash
+
       - name: Run real Neovim lifecycle
         run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash scripts/neovim-e2e.sh
