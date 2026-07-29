@@ -141,7 +141,9 @@ fi'
     user-zprofile)
       MANAGED_BLOCK_LABEL='Selfishell mise shims'
       # shellcheck disable=SC2016 # Literal for zsh to evaluate at login, not during installation.
-      MANAGED_BLOCK_BODY='if command -v mise >/dev/null 2>&1; then
+      MANAGED_BLOCK_BODY='if [[ -x "$HOME/.local/bin/mise" ]]; then
+  eval "$("$HOME/.local/bin/mise" activate zsh --shims)"
+elif command -v mise >/dev/null 2>&1; then
   eval "$(command mise activate zsh --shims)"
 fi'
       ;;

@@ -485,6 +485,24 @@ EOF
   assert_file_content 'export USER_ZPROFILE=kept' "$HOME/.zprofile"
 }
 
+test_mise_shims_zprofile_uses_selfishell_mise_outside_path() {
+  local output
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  mkdir -p "$HOME/.local/bin"
+  cat >"$HOME/.local/bin/mise" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$HOME/mise-local-args"
+printf '%s\n' 'export SELFISHELL_LOCAL_MISE_SHIMS_TEST=loaded'
+EOF
+  chmod +x "$HOME/.local/bin/mise"
+
+  output="$(PATH="/usr/bin:/bin" /bin/zsh -dfc 'source "$HOME/.zprofile"; print "${SELFISHELL_LOCAL_MISE_SHIMS_TEST-}"')"
+
+  [[ "$output" == loaded ]] || fail "The .zprofile block did not activate Selfishell mise outside PATH"
+  assert_file_content 'activate zsh --shims' "$HOME/mise-local-args"
+}
+
 test_user_zsh_changes_survive_reinstall_and_uninstall_exactly() {
   local expected="$TEST_ROOT/expected-zshrc"
   local modified="$TEST_ROOT/modified-zshrc"
