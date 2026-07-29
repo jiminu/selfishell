@@ -179,7 +179,7 @@ Keep product prose outcome-focused. Include:
 - the exact supported platform list from Global Constraints;
 - a two-row `minimal`/`developer` table using versions from Global Constraints;
 - links to `docs/PROFILES.md` for full package and Neovim detail;
-- `status`, `status --check-updates`, `doctor`, `update`, `rollback`, and `uninstall --restore --dry-run` as everyday commands;
+- `status`, `doctor`, `update`, `rollback`, and `uninstall --restore --dry-run` as everyday commands;
 - one sentence that `sfs` is the optional short alias;
 - one short safety paragraph covering non-root XDG installation, backups, user-owned `.zshrc`, checksum verification, and no automatic startup updates.
 

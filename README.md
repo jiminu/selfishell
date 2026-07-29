@@ -99,8 +99,7 @@ toolchain ready for use.
 
 | Command | Use it to |
 | --- | --- |
-| `selfishell status` | Show the active profile and managed resources. |
-| `selfishell status --check-updates` | Check for a newer Selfishell release. |
+| `selfishell status` | Show the active profile, managed resources, and available CLI release. |
 | `selfishell doctor` | Diagnose the current installation. |
 | `selfishell update` | Update the CLI, profile tools, and configuration. |
 | `selfishell rollback` | Return to the previous retained release. |
@@ -108,9 +107,11 @@ toolchain ready for use.
 
 `sfs` is the optional short alias for `selfishell`.
 
-Run `status` after setup to see the active profile. Use `doctor` when the
-environment does not look right, and use the dry run before restoring
-configuration so you can review the proposed changes first.
+Run `status` after setup to see the active profile and check for a newer CLI
+release. If release metadata cannot be reached, it reports availability as
+`unavailable` and continues with local checks. Use `doctor` when the environment
+does not look right, and use the dry run before restoring configuration so you
+can review the proposed changes first.
 
 Updates keep the installed environment current; rollback uses the retained
 release when you need to return to the previous Selfishell version offline.

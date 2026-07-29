@@ -117,23 +117,21 @@ status_rollback_version() {
 }
 
 command_status() {
-  local check_updates=0
   local check_package_updates=0
   local verbose=0
   local current_version="unknown"
   local rollback_version="none"
-  local available_version="not checked"
+  local available_version="unavailable"
   local platform profile_platform dependency_platform architecture
   local profile=""
   local resource
 
   while (("$#" > 0)); do
     case "$1" in
-      --check-updates) check_updates=1 ;;
       --check-package-updates) check_package_updates=1 ;;
       --verbose) verbose=1 ;;
       help | --help | -h)
-        printf 'Usage: selfishell status [--check-updates] [--check-package-updates] [--verbose]\n'
+        printf 'Usage: selfishell status [--check-package-updates] [--verbose]\n'
         return
         ;;
       *)
@@ -147,11 +145,8 @@ command_status() {
 
   [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
   rollback_version="$(status_rollback_version)"
-  if [[ "$check_updates" == 1 ]]; then
-    available_version="$(release_latest_version)" || {
-      cli_error "Unable to check the available CLI version."
-      available_version="unavailable"
-    }
+  if [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]]; then
+    available_version="$(release_latest_version)" || available_version="unavailable"
   fi
   printf '[CLI] Current: %s | Rollback: %s | Available: %s\n' \
     "$current_version" "$rollback_version" "$available_version"

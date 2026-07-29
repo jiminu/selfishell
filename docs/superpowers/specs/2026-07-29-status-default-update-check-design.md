@@ -2,7 +2,7 @@
 
 ## Problem
 
-`selfishell status` currently prints `Available: not checked` unless the user adds
+`selfishell status` previously printed `Available: not checked` unless the user added
 `--check-updates`. This makes the default status output incomplete even though a
 release metadata lookup is normally quick. The opt-in flag also adds an option
 that users must discover and remember.
