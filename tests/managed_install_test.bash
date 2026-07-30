@@ -426,8 +426,7 @@ EOF
   ! grep -Fq 'Updated Selfishell block:' "$TEST_ROOT/stdout" ||
     fail "A failed block replacement printed update success"
 
-  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 \
-    run_selfishell install --profile minimal --skip-packages >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   cmp -s "$clean" "$target" || fail "Retry did not finish the block replacement"
   [[ "$(sed -n '3p' "$state_file")" == active ]] ||
     fail "Retry did not activate block state"

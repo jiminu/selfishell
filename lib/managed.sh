@@ -446,7 +446,7 @@ managed_install_block() {
       mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
       cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
       printf '%sBacked up modified managed block:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
-      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_STATE_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
       managed_replace_block "$resource" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
       managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       printf '%sUpdated Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
