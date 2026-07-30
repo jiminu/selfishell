@@ -23,6 +23,17 @@ teardown_update_home() {
   teardown_test_home
 }
 
+run_dependency_install() {
+  local dependency="$1"
+
+  bash -c '
+    source "$1/lib/common.sh"
+    source "$1/lib/paths.sh"
+    source "$1/lib/dependencies.sh"
+    dependency_install "$2" linux amd64
+  ' _ "$ROOT_DIR" "$dependency"
+}
+
 test_tools_update_synchronizes_profile_packages() {
   local output
   export XDG_CONFIG_HOME="$HOME/.config"
@@ -44,7 +55,7 @@ test_download_dependency_is_checksum_verified_and_recorded() {
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 
-  output="$(bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR")"
+  output="$(run_dependency_install tool)"
   [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] || fail "Dependency install was not reported"
   assert_file_content '1.0' "$XDG_STATE_HOME/selfishell/dependencies/tool"
   [[ -x "$HOME/.local/bin/tool" ]] || fail "Verified tool was not installed"
@@ -60,7 +71,7 @@ test_checksum_failure_preserves_existing_managed_tool() {
   printf 'download tool 1.0 linux amd64 file://%s %064d .local/bin/tool raw\n' "$TEST_ROOT/tool" 0 >"$SELFISHELL_DEPENDENCIES_FILE"
 
   set +e
-  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR" >/dev/null 2>&1
+  run_dependency_install tool >/dev/null 2>&1
   status=$?
   set -e
   [[ "$status" -ne 0 ]] || fail "Invalid checksum should fail"
@@ -79,7 +90,7 @@ test_download_move_failure_does_not_report_success() {
   chmod 0555 "$HOME/.local/bin"
 
   set +e
-  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR" >/dev/null 2>&1
+  run_dependency_install tool >/dev/null 2>&1
   status=$?
   set -e
   chmod 0755 "$HOME/.local/bin"
@@ -112,7 +123,7 @@ EOF
   chmod +x "$fake_bin/mv"
 
   set +e
-  output="$(PATH="$fake_bin:$PATH" bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR" 2>&1)"
+  output="$(PATH="$fake_bin:$PATH" run_dependency_install tool 2>&1)"
   status=$?
   set -e
 
@@ -124,7 +135,7 @@ EOF
   [[ "$(find "$XDG_STATE_HOME/selfishell/dependencies" -maxdepth 1 -name 'tool.tmp.*' 2>/dev/null | wc -l)" -eq 0 ]] ||
     fail "A forced dependency-version-write failure left a temporary file behind"
 
-  output="$(bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR")"
+  output="$(run_dependency_install tool)"
   [[ "$output" == *'Externally installed; preserving'* ]] ||
     fail "Retrying after removing the forced failure did not behave as expected: $output"
 }
@@ -143,13 +154,13 @@ test_git_checkout_failure_preserves_existing_managed_tool() {
 
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'git testgit v1.0 linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
-  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install testgit linux amd64' _ "$ROOT_DIR" >/dev/null
+  run_dependency_install testgit >/dev/null
   assert_file_content 'v1.0' "$XDG_STATE_HOME/selfishell/dependencies/testgit"
   assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
 
   printf 'git testgit v9.9-missing-tag linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
   set +e
-  bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install testgit linux amd64' _ "$ROOT_DIR" >/dev/null 2>&1
+  run_dependency_install testgit >/dev/null 2>&1
   status=$?
   set -e
 

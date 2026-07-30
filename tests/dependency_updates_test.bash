@@ -35,6 +35,26 @@ EOF
   printf 'unrelated fixture content\n' >"$zsh_root/common/other.zsh"
 }
 
+run_dependency_update() {
+  local manifest="$1"
+  local metadata="$2"
+  local zsh_root="${3:-}"
+  local arguments=(--manifest "$manifest" --metadata "$metadata")
+
+  if [[ -n "$zsh_root" ]]; then
+    arguments+=(--zsh-root "$zsh_root")
+  fi
+  bash "$ROOT_DIR/scripts/update-dependencies.sh" "${arguments[@]}"
+}
+
+assert_manifest_record() {
+  local manifest="$1"
+  local message="$2"
+  shift 2
+
+  grep -Fqx "$*" "$manifest" || fail "$message"
+}
+
 test_updates_only_matching_manifest_fields() {
   local manifest metadata zsh_root
 
@@ -58,18 +78,22 @@ nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222
 zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS
 EOF
 
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root"
+  run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  grep -Fqx 'download starship 2.0.0 linux amd64 https://new/starship.tar.gz newsum .local/bin/starship starship' "$manifest" ||
-    fail "Starship metadata was not applied"
-  grep -Fqx 'download mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw' "$manifest" ||
-    fail "mise metadata was not applied"
-  grep -Fqx 'git zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh' "$manifest" ||
-    fail "Git dependency metadata was not applied"
-  grep -Fqx 'nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222 all all https://github.com/folke/lazy.nvim.git - - -' "$manifest" ||
-    fail "Neovim plugin metadata was not applied"
-  grep -Fqx "zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS all all https://github.com/zsh-users/zsh-completions.git - - -" "$manifest" ||
-    fail "Zsh plugin metadata was not applied"
+  assert_manifest_record "$manifest" "Starship metadata was not applied" \
+    download starship 2.0.0 linux amd64 \
+    https://new/starship.tar.gz newsum .local/bin/starship starship
+  assert_manifest_record "$manifest" "mise metadata was not applied" \
+    download mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw
+  assert_manifest_record "$manifest" "Git dependency metadata was not applied" \
+    git zinit v0.2.0 all all \
+    https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh
+  assert_manifest_record "$manifest" "Neovim plugin metadata was not applied" \
+    nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222 \
+    all all https://github.com/folke/lazy.nvim.git - - -
+  assert_manifest_record "$manifest" "Zsh plugin metadata was not applied" \
+    zsh-plugin zsh-users/zsh-completions "$NEW_COMPLETIONS" all all \
+    https://github.com/zsh-users/zsh-completions.git - - -
   grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/common/completion.zsh" ||
     fail "Zinit pin in completion.zsh was not updated to the new commit"
 }
@@ -83,7 +107,7 @@ test_rejects_metadata_without_manifest_entry() {
   printf 'git missing v1.0.0\n' >"$metadata"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" >/dev/null 2>&1
   status=$?
   set -e
 
@@ -119,7 +143,7 @@ zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS
 zsh-plugin Aloxaf/fzf-tab $NEW_FZF_TAB
 EOF
 
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root"
+  run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
   grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/common/completion.zsh" ||
     fail "completion.zsh pin was not bumped to the new zsh-completions commit"
@@ -127,12 +151,15 @@ EOF
     fail "interactive.zsh pin was not bumped to the new fzf-tab commit"
   grep -Fq "ver'$OLD_AUTOSUGGESTIONS'" "$zsh_root/common/interactive.zsh" ||
     fail "Unrelated zsh-autosuggestions pin was not preserved"
-  grep -Fqx "zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS all all https://github.com/zsh-users/zsh-completions.git - - -" "$manifest" ||
-    fail "Manifest zsh-completions entry was not bumped"
-  grep -Fqx "zsh-plugin Aloxaf/fzf-tab $NEW_FZF_TAB all all https://github.com/Aloxaf/fzf-tab.git - - -" "$manifest" ||
-    fail "Manifest fzf-tab entry was not bumped"
-  grep -Fqx "zsh-plugin zsh-users/zsh-autosuggestions $OLD_AUTOSUGGESTIONS all all https://github.com/zsh-users/zsh-autosuggestions.git - - -" "$manifest" ||
-    fail "Unrelated manifest entry was not preserved"
+  assert_manifest_record "$manifest" "Manifest zsh-completions entry was not bumped" \
+    zsh-plugin zsh-users/zsh-completions "$NEW_COMPLETIONS" all all \
+    https://github.com/zsh-users/zsh-completions.git - - -
+  assert_manifest_record "$manifest" "Manifest fzf-tab entry was not bumped" \
+    zsh-plugin Aloxaf/fzf-tab "$NEW_FZF_TAB" all all \
+    https://github.com/Aloxaf/fzf-tab.git - - -
+  assert_manifest_record "$manifest" "Unrelated manifest entry was not preserved" \
+    zsh-plugin zsh-users/zsh-autosuggestions "$OLD_AUTOSUGGESTIONS" all all \
+    https://github.com/zsh-users/zsh-autosuggestions.git - - -
 
   other_after="$(<"$zsh_root/common/other.zsh")"
   [[ "$other_before" == "$other_after" ]] || fail "An unrelated Zsh file was modified"
@@ -154,7 +181,7 @@ EOF
   completion_before="$(<"$zsh_root/common/completion.zsh")"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
   status=$?
   set -e
 
@@ -175,7 +202,7 @@ test_zsh_plugin_update_fails_when_manifest_entry_missing() {
   completion_before="$(<"$zsh_root/common/completion.zsh")"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
   status=$?
   set -e
 
@@ -198,7 +225,7 @@ EOF
   manifest_before="$(<"$manifest")"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
   status=$?
   set -e
 
@@ -224,7 +251,7 @@ EOF
   printf 'zsh-plugin zsh-users/zsh-completions %s\n' "$NEW_COMPLETIONS" >"$metadata"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
   status=$?
   set -e
 
@@ -252,7 +279,7 @@ EOF
   completion_before="$(<"$zsh_root/common/completion.zsh")"
 
   set +e
-  bash "$ROOT_DIR/scripts/update-dependencies.sh" --manifest "$manifest" --metadata "$metadata" --zsh-root "$zsh_root" >/dev/null 2>&1
+  run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
   status=$?
   set -e
 
