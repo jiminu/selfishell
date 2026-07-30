@@ -49,6 +49,20 @@ run_test_isolated() {
   printf 'PASS: %s\n' "$test_name"
 }
 
+runner_status_succeeded() {
+  local test_name="$1"
+  local status="$2"
+
+  case "$status" in
+    0 | 77) return 0 ;;
+    99) return 1 ;;
+    *)
+      printf 'FAIL: %s (exit code %d)\n' "$test_name" "$status" >&2
+      return 1
+      ;;
+  esac
+}
+
 run_discovered_tests() {
   local setup_name="${1:-}"
   local teardown_name="${2:-}"
@@ -62,14 +76,7 @@ run_discovered_tests() {
     status=$?
     set -e
 
-    case "$status" in
-      0 | 77) ;;
-      99) return 1 ;;
-      *)
-        printf 'FAIL: %s (exit code %d)\n' "$test_name" "$status" >&2
-        return 1
-        ;;
-    esac
+    runner_status_succeeded "$test_name" "$status" || return 1
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 }
 

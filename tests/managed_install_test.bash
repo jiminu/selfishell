@@ -1903,7 +1903,9 @@ main() {
   local test_list=()
   local batch_logs=()
   local batch_pids=()
+  local batch_tests=()
   local log_root
+  local status
 
   case "$test_jobs" in
     '' | *[!0-9]* | 0)
@@ -1927,10 +1929,12 @@ main() {
   while ((test_index < ${#test_list[@]})); do
     batch_logs=()
     batch_pids=()
+    batch_tests=()
 
     for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
       test_name="${test_list[$test_index]}"
       batch_logs+=("$log_root/$test_index.log")
+      batch_tests+=("$test_name")
       run_test_isolated "$test_name" setup_managed_home teardown_managed_home \
         >"$log_root/$test_index.log" 2>&1 &
       batch_pids+=("$!")
@@ -1938,10 +1942,14 @@ main() {
     done
 
     for batch_index in "${!batch_pids[@]}"; do
-      if ! wait "${batch_pids[$batch_index]}"; then
+      set +e
+      wait "${batch_pids[$batch_index]}"
+      status=$?
+      set -e
+      cat "${batch_logs[$batch_index]}"
+      if ! runner_status_succeeded "${batch_tests[$batch_index]}" "$status"; then
         failures=$((failures + 1))
       fi
-      cat "${batch_logs[$batch_index]}"
     done
   done
 

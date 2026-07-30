@@ -35,10 +35,22 @@ test_dependabot_tracks_github_actions() {
 
 test_pinned_neovim_job_runs_configuration_tests() {
   local workflow="$ROOT_DIR/.github/workflows/ci.yml"
-  local command='run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash tests/neovim_config_test.bash'
+  local config_command='bash tests/neovim_config_test.bash'
+  local lifecycle_command='bash scripts/neovim-e2e.sh'
+  local config_match job lifecycle_match
 
-  grep -Fqx "        $command" "$workflow" ||
+  job="$(awk '
+    /^  neovim-developer-e2e:/ { in_job = 1 }
+    in_job && /^  [[:alnum:]_-]+:/ && $1 != "neovim-developer-e2e:" { exit }
+    in_job { print }
+  ' "$workflow")"
+  config_match="$(printf '%s\n' "$job" | grep -nF "$config_command")" || true
+  lifecycle_match="$(printf '%s\n' "$job" | grep -nF "$lifecycle_command")" || true
+
+  [[ -n "$config_match" ]] ||
     fail "Pinned Neovim CI job does not run the configuration tests"
+  [[ -n "$lifecycle_match" && "${config_match%%:*}" -lt "${lifecycle_match%%:*}" ]] ||
+    fail "Pinned Neovim configuration tests must run before the lifecycle E2E"
 }
 
 run_discovered_tests
