@@ -214,7 +214,10 @@ Acceptance criteria:
   installation with an actionable error and no file changes.
 - User and third-party changes before or after the loader block do not block
   `selfishell update` and survive update and uninstall byte-for-byte.
-- A modified loader block stops replacement or removal with an actionable error;
+- An interactive install or update can back up and replace a modified loader
+  block, while skip, `--yes`, and non-interactive operation preserve it;
+  uninstall stops rather than remove a modified block.
+- An untouched loader block from an older release is upgraded atomically, and
   no unrelated user content is changed.
 - Dry-run creates no startup file, backup, state record, or loader block.
 - Tests cover empty files, files without a trailing newline, CRLF files, existing

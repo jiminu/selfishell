@@ -31,17 +31,17 @@ update_tools_and_configuration() {
   profile="$(<"$SELFISHELL_STATE_DIR/profile")"
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
-  managed_preflight_zsh_loader || return
-  managed_preflight_block_target user-zprofile "$HOME/.zprofile" || return
+  confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return
+  managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
+  managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
   platform="$(detect_platform)"
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_preflight_block_target user-ghostty \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" || return
+      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
   profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
-  confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return
 
   packages_install_profile "$platform" "$dry_run"
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
