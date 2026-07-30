@@ -58,7 +58,7 @@ install_managed_configuration() {
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
-        managed_install_block "$resource_name" "$resource_target" "$dry_run"
+        managed_install_block "$resource_name" "$resource_target" "$dry_run" "$assume_yes"
         ;;
     esac
   done < <(selfishell_managed_resources)
@@ -222,8 +222,8 @@ command_install() {
 
   confirm_action "Install Selfishell configuration?" "$assume_yes" "$dry_run" || return
   selfishell_initialize_paths
-  managed_preflight_zsh_loader || return
-  managed_preflight_block_target user-zprofile "$HOME/.zprofile" || return
+  managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
+  managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
   profile_load "$profile" "$local_profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return
@@ -244,7 +244,7 @@ command_install() {
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_preflight_block_target user-ghostty \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" || return
+      "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
   if [[ "${SELFISHELL_OFFLINE:-0}" == "1" ]]; then

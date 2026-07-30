@@ -94,6 +94,9 @@ Selfishell also adds a marked block to the user-owned `~/.zprofile`. The block
 runs `mise activate zsh --shims` when mise is available, allowing login
 environments and IDEs such as VS Code to resolve mise-managed tools. Interactive
 Zsh keeps using normal mise activation from the managed `.zshrc` configuration.
+Untouched blocks are upgraded automatically with new releases. If you edit
+inside a block, an interactive install or update offers to back up the full file
+and replace only that block, or to skip it. `--yes` preserves the edit and stops.
 
 ## Ghostty customization
 

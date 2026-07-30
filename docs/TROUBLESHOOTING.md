@@ -53,10 +53,15 @@ progressing download can finish.
 
 ## Modified Managed File
 
-Selfishell refuses to overwrite or remove a managed file whose checksum changed.
-Move the customized file aside, compare it with the corresponding file under
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell`, then rerun the command. Selfishell
-does not discard the customized copy automatically.
+For a modified managed file or marked block, an interactive install or update
+offers to overwrite or skip it. Overwrite first saves the full file under
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/backups`; skip preserves the
+file and continues. `--yes` and non-interactive runs never overwrite a detected
+modification and stop instead.
+
+Untouched marked blocks from an older Selfishell release are upgraded
+automatically. Bytes outside the block markers remain unchanged. Uninstall
+still refuses to remove a block that was modified after installation.
 
 ## Failed CLI Update
 

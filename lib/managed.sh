@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+MANAGED_BLOCK_OVERWRITE_RESOURCES=""
+MANAGED_BLOCK_SKIP_RESOURCES=""
+
 managed_checksum() {
   cksum <"$1" | awk '{print $1 ":" $2}'
 }
@@ -127,6 +130,49 @@ managed_read_conflict_answer() {
   printf '%s\n' "$answer"
 }
 
+managed_block_overwrite_selected() {
+  [[ " $MANAGED_BLOCK_OVERWRITE_RESOURCES " == *" $1 "* ]]
+}
+
+managed_block_skip_selected() {
+  [[ " $MANAGED_BLOCK_SKIP_RESOURCES " == *" $1 "* ]]
+}
+
+managed_select_block_conflict_action() {
+  local resource="$1"
+  local target_file="$2"
+  local assume_yes="$3"
+  local dry_run="$4"
+  local answer=""
+
+  if managed_block_overwrite_selected "$resource" || managed_block_skip_selected "$resource"; then
+    return 0
+  fi
+  if [[ "$dry_run" == 1 ]]; then
+    MANAGED_BLOCK_SKIP_RESOURCES="$MANAGED_BLOCK_SKIP_RESOURCES $resource"
+    return 0
+  fi
+  if [[ "$assume_yes" == 1 ]] || ! managed_conflict_is_interactive; then
+    cli_error "Managed block was modified; preserving it: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  printf '%sManaged block was modified:%s %s. Overwrite the Selfishell block? [y/N] ' \
+    "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+  if ! answer="$(managed_read_conflict_answer)"; then
+    cli_error "Managed block was modified; preserving it: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  case "$answer" in
+    y | Y | yes | YES)
+      MANAGED_BLOCK_OVERWRITE_RESOURCES="$MANAGED_BLOCK_OVERWRITE_RESOURCES $resource"
+      ;;
+    *)
+      MANAGED_BLOCK_SKIP_RESOURCES="$MANAGED_BLOCK_SKIP_RESOURCES $resource"
+      ;;
+  esac
+}
+
 managed_block_definition() {
   local resource="$1"
 
@@ -247,11 +293,15 @@ managed_block_error() {
 managed_preflight_block_target() {
   local resource="$1"
   local target_file="$2"
+  local assume_yes="${3:-0}"
+  local dry_run="${4:-0}"
 
-  managed_install_block "$resource" "$target_file" 1 >/dev/null
+  managed_install_block "$resource" "$target_file" "$dry_run" "$assume_yes" 1
 }
 
 managed_preflight_zsh_loader() {
+  local assume_yes="${1:-0}"
+  local dry_run="${2:-0}"
   local target_file="$HOME/.zshrc"
   local state_file legacy_version legacy_type
 
@@ -290,13 +340,55 @@ managed_preflight_zsh_loader() {
       fi
       ;;
   esac
+
+  managed_preflight_block_target user-zshrc "$target_file" "$assume_yes" "$dry_run"
+}
+
+managed_replace_block() {
+  local resource="$1"
+  local target_file="$2"
+  local temporary_file file_size suffix_start
+
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+  cp -p "$target_file" "$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  : >"$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  if ((MANAGED_BLOCK_START > 0)); then
+    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+  fi
+  managed_block_content "$resource" >>"$temporary_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
+  file_size="$(LC_ALL=C wc -c <"$target_file")"
+  suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
+  if ((suffix_start < file_size)); then
+    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+  fi
+  mv "$temporary_file" "$target_file" || {
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  }
 }
 
 managed_install_block() {
   local resource="$1"
   local target_file="$2"
   local dry_run="$3"
-  local expected_checksum temporary_file reference
+  local assume_yes="${4:-0}"
+  local preflight="${5:-0}"
+  local expected_checksum temporary_file reference conflict_backup
 
   if [[ -L "$target_file" ]]; then
     cli_error "Refusing to modify symbolic link: $target_file"
@@ -318,6 +410,7 @@ managed_install_block() {
       return "$SELFISHELL_EXIT_ERROR"
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$expected_checksum" ]]; then
+      [[ "$preflight" == 0 ]] || return 0
       if [[ "$dry_run" == 0 ]]; then
         managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       fi
@@ -325,14 +418,39 @@ managed_install_block() {
       return 0
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
-      # Untouched since it was installed, but Selfishell's own content for
-      # this resource changed since then (not user tampering) -- the block
-      # rewrite below only knows how to add a fresh block, not splice an
-      # updated one into an existing file, so ask for a clean reinstall
-      # rather than risk creating a duplicate block.
-      cli_error "Legacy Selfishell state was detected for: $resource"
-      cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
-      return "$SELFISHELL_EXIT_ERROR"
+      [[ "$preflight" == 0 ]] || return 0
+      if [[ "$dry_run" == 1 ]]; then
+        printf '%sWould update Selfishell block:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+        return 0
+      fi
+      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
+      managed_replace_block "$resource" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+      printf '%sUpdated Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+      return 0
+    fi
+    if [[ "$MANAGED_BLOCK_STATUS" == intact ]]; then
+      managed_select_block_conflict_action "$resource" "$target_file" "$assume_yes" "$dry_run" || return
+      [[ "$preflight" == 0 ]] || return 0
+
+      if managed_block_skip_selected "$resource"; then
+        if [[ "$dry_run" == 1 ]]; then
+          printf '%sWould preserve modified managed block:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+        else
+          printf '%sSkipped modified managed block:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+        fi
+        return 0
+      fi
+
+      conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
+      mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
+      cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
+      printf '%sBacked up modified managed block:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
+      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
+      managed_replace_block "$resource" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+      printf '%sUpdated Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+      return 0
     fi
     if [[ "$MANAGED_STATE_STATUS" != pending || "$MANAGED_BLOCK_STATUS" != absent ]]; then
       managed_block_error "$resource" "$target_file"
@@ -345,6 +463,8 @@ managed_install_block() {
     managed_block_error "$resource" "$target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
+
+  [[ "$preflight" == 0 ]] || return 0
 
   if [[ "$dry_run" == 1 ]]; then
     printf '%sWould add Selfishell block:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"

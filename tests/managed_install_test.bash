@@ -231,38 +231,205 @@ test_legacy_ghostty_link_can_be_uninstalled_for_manual_transition() {
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Reinstalled Ghostty resource was not recorded as a block"
 }
 
-test_outdated_ghostty_block_content_is_treated_as_legacy_not_modified() {
+test_outdated_ghostty_block_is_upgraded_without_changing_user_bytes() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
   local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
+  local expected="$TEST_ROOT/expected-ghostty"
   local old_body_checksum
-  local status
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  # Simulate a block installed by an older Selfishell release whose body was
-  # a single config-file line (no optional user.ghostty override yet), left
-  # completely untouched by the user since then -- content the resource's
-  # own release changed, not something the user modified.
-  printf '# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\n' \
+  printf 'font-size = 14\n# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\ncursor-style = bar\n' \
     "$managed_source" >"$target"
-  old_body_checksum="$(cksum <"$target" | awk '{print $1 ":" $2}')"
+  printf 'font-size = 14\n# >>> Selfishell ghostty >>>\nconfig-file = %s\n# To override a Selfishell default above, add it to user.ghostty instead.\nconfig-file = ?user.ghostty\n# <<< Selfishell ghostty <<<\ncursor-style = bar\n' \
+    "$managed_source" >"$expected"
+  old_body_checksum="$(printf '# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\n' \
+    "$managed_source" | cksum | awk '{print $1 ":" $2}')"
   printf '2\nblock\nactive\n%s\nselfishell-user-ghostty-block-v1\n-\n%s\n' \
     "$target" "$old_body_checksum" >"$state_file"
 
-  set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
-  status=$?
-  set -e
-  [[ "$status" -eq 1 ]] || fail "Outdated block content should require a clean reinstall, not silently overwrite"
-  grep -Fq "Legacy Selfishell state was detected" "$TEST_ROOT/stderr" ||
-    fail "Outdated (but untouched) block content was not treated as a legacy transition"
-  ! grep -Fq "Cannot manage the Selfishell" "$TEST_ROOT/stderr" ||
-    fail "Outdated (but untouched) block content was mistaken for user modification"
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  run_selfishell uninstall --restore --yes >/dev/null
-  [[ ! -e "$state_file" ]] || fail "uninstall --restore did not clear the outdated block's state"
+  cmp -s "$expected" "$target" ||
+    fail "Untouched outdated Ghostty block was not upgraded in place"
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+}
+
+test_outdated_zprofile_block_is_upgraded_without_changing_user_bytes() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local expected="$TEST_ROOT/expected-zprofile"
+  local old_block="$TEST_ROOT/old-zprofile-block"
+  local old_checksum
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  # shellcheck disable=SC2016 # Fixture must contain literal startup commands.
+  printf '# >>> Selfishell mise shims >>>\nif command -v mise >/dev/null 2>&1; then\n  eval "$(command mise activate zsh --shims)"\nfi\n# <<< Selfishell mise shims <<<\n' >"$old_block"
+  printf 'export BEFORE=1\n' >"$target"
+  cat "$old_block" >>"$target"
+  printf 'export AFTER=1\n' >>"$target"
+  # shellcheck disable=SC2016 # Fixture must contain literal startup commands.
+  printf 'export BEFORE=1\n# >>> Selfishell mise shims >>>\nif [[ -x "$HOME/.local/bin/mise" ]]; then\n  eval "$("$HOME/.local/bin/mise" activate zsh --shims)"\nelif command -v mise >/dev/null 2>&1; then\n  eval "$(command mise activate zsh --shims)"\nfi\n# <<< Selfishell mise shims <<<\nexport AFTER=1\n' >"$expected"
+  old_checksum="$(cksum <"$old_block" | awk '{print $1 ":" $2}')"
+  printf '2\nblock\nactive\n%s\nselfishell-user-zprofile-block-v1\n-\n%s\n' \
+    "$target" "$old_checksum" >"$state_file"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  cmp -s "$expected" "$target" ||
+    fail "Untouched outdated .zprofile block was not upgraded in place"
+}
+
+test_modified_zprofile_block_can_be_backed_up_and_overwritten_once() {
+  local target="$HOME/.zprofile"
+  local expected="$TEST_ROOT/expected-zprofile"
+  local modified="$TEST_ROOT/modified-zprofile"
+  local backup
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  printf 'export AFTER=1\n' >>"$target"
+  cp "$target" "$expected"
+  sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
+    "$target" >"$modified"
+  cp "$modified" "$target"
+
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 \
+    run_selfishell install --profile minimal --skip-packages >"$TEST_ROOT/stdout"
+
+  cmp -s "$expected" "$target" ||
+    fail "Accepted block overwrite changed user bytes outside the block"
+  backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'user-zprofile.backup.*' | head -1)"
+  [[ -n "$backup" ]] || fail "Accepted block overwrite did not create a backup"
+  cmp -s "$modified" "$backup" || fail "Block conflict backup did not preserve the full target"
+  [[ "$(grep -Fc 'Managed block was modified:' "$TEST_ROOT/stdout")" -eq 1 ]] ||
+    fail "Modified block prompted more than once"
+}
+
+test_modified_zprofile_block_can_be_skipped_and_install_continues() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local expected="$TEST_ROOT/modified-zprofile"
+  local saved_state="$TEST_ROOT/user-zprofile.state"
+  local status=0
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
+    "$target" >"$expected"
+  cp "$expected" "$target"
+  cp "$state_file" "$saved_state"
+
+  printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 \
+    run_selfishell install --profile minimal --skip-packages >"$TEST_ROOT/stdout" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "Skipping a modified block stopped installation"
+  cmp -s "$expected" "$target" || fail "Skipped block was changed"
+  cmp -s "$saved_state" "$state_file" || fail "Skipping a block changed its state"
+  grep -Fq 'Skipped modified managed block:' "$TEST_ROOT/stdout" ||
+    fail "Skipped block was not reported"
+  [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
+    fail "Skipping a modified block created a backup"
+}
+
+test_modified_zprofile_block_is_preserved_with_yes_flag() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local expected="$TEST_ROOT/modified-zprofile"
+  local saved_state="$TEST_ROOT/user-zprofile.state"
+  local status=0
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
+    "$target" >"$expected"
+  cp "$expected" "$target"
+  cp "$state_file" "$saved_state"
+
+  run_selfishell install --profile minimal --skip-packages --yes \
+    >/dev/null 2>"$TEST_ROOT/stderr" || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "--yes silently overwrote a modified block"
+  cmp -s "$expected" "$target" || fail "--yes changed a modified block"
+  cmp -s "$saved_state" "$state_file" || fail "--yes changed modified block state"
+  grep -Fq 'Managed block was modified; preserving it' "$TEST_ROOT/stderr" ||
+    fail "--yes block conflict did not report preservation"
+}
+
+test_modified_block_backup_failure_preserves_target_and_state() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local expected="$TEST_ROOT/modified-zprofile"
+  local saved_state="$TEST_ROOT/user-zprofile.state"
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
+    "$target" >"$expected"
+  cp "$expected" "$target"
+  cp "$state_file" "$saved_state"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/cp" <<'EOF'
+#!/usr/bin/env bash
+last=""
+for argument in "$@"; do last="$argument"; done
+case "$last" in */backups/user-zprofile.backup.*) exit 1 ;; esac
+exec /bin/cp "$@"
+EOF
+  chmod +x "$fake_bin/cp"
+
+  printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 \
+    run_selfishell install --profile minimal --skip-packages \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "A failed block backup was reported as success"
+  cmp -s "$expected" "$target" || fail "A failed block backup changed the target"
+  cmp -s "$saved_state" "$state_file" || fail "A failed block backup changed state"
+  ! grep -Fq 'Updated Selfishell block:' "$TEST_ROOT/stdout" ||
+    fail "A failed block backup printed update success"
+}
+
+test_modified_block_replace_failure_is_retryable() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local clean="$TEST_ROOT/clean-zprofile"
+  local modified="$TEST_ROOT/modified-zprofile"
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status=0
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  cp "$target" "$clean"
+  sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
+    "$target" >"$modified"
+  cp "$modified" "$target"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+last=""
+for argument in "$@"; do last="$argument"; done
+[[ "$last" == "$HOME/.zprofile" ]] && exit 1
+exec /bin/mv "$@"
+EOF
+  chmod +x "$fake_bin/mv"
+
+  printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 \
+    run_selfishell install --profile minimal --skip-packages \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "A failed block replacement was reported as success"
+  cmp -s "$modified" "$target" || fail "A failed block replacement changed the target"
+  [[ "$(sed -n '3p' "$state_file")" == pending ]] ||
+    fail "A failed block replacement was not left retryable"
+  [[ "$(find "$HOME" -maxdepth 1 -name '.zprofile.tmp.*' | wc -l)" -eq 0 ]] ||
+    fail "A failed block replacement left a temporary file"
+  ! grep -Fq 'Updated Selfishell block:' "$TEST_ROOT/stdout" ||
+    fail "A failed block replacement printed update success"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  cmp -s "$clean" "$target" || fail "Retry did not finish the block replacement"
+  [[ "$(sed -n '3p' "$state_file")" == active ]] ||
+    fail "Retry did not activate block state"
 }
 
 test_macos_install_reuses_declined_ghostty_choice() {
