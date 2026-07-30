@@ -195,18 +195,4 @@ test_homebrew_required_failure_fails() {
   fi
 }
 
-run_test() {
-  local test_name="$1"
-  "$test_name"
-  printf 'PASS: %s\n' "$test_name"
-}
-
-main() {
-  local test_name
-
-  while IFS= read -r test_name; do
-    run_test "$test_name"
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-}
-
-main "$@"
+run_discovered_tests

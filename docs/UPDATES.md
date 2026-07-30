@@ -5,7 +5,7 @@ The CLI release is switched first. If it changed, the new CLI continues the
 same command so packages newly added to that release's profile are included.
 
 ```sh
-selfishell status --check-updates
+selfishell status
 selfishell status --check-package-updates
 selfishell update --yes
 selfishell update --cli-only --yes
@@ -20,6 +20,10 @@ managed configuration, and synchronizes Neovim plugins and Tree-sitter parsers
 for the developer profile. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only installation skips this phase.
+
+The normal `status` command checks the latest CLI release metadata and reports
+it as `Available`. If offline mode is enabled or the metadata lookup fails, it
+reports `Available: unavailable` and continues with local status checks.
 
 `status --check-package-updates` reads Homebrew's outdated inventory or Apt's
 local upgradable inventory and reports `Update: available` without installing

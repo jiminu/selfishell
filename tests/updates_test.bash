@@ -25,7 +25,6 @@ teardown_update_home() {
 
 test_tools_update_synchronizes_profile_packages() {
   local output
-  setup_update_home
   export XDG_CONFIG_HOME="$HOME/.config"
   mkdir -p "$XDG_STATE_HOME/selfishell"
   printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
@@ -35,12 +34,10 @@ test_tools_update_synchronizes_profile_packages() {
     fail "Tools update did not synchronize package-manager packages"
   [[ "$output" == *'git'* ]] || fail "Tools update did not include the current profile packages"
   [[ "$output" != *'Neovim plugins'* ]] || fail "Minimal tools update included Neovim plugin setup"
-  teardown_update_home
 }
 
 test_download_dependency_is_checksum_verified_and_recorded() {
   local payload checksum output
-  setup_update_home
   payload="$TEST_ROOT/tool"
   printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
   checksum="$(fixture_sha256 "$payload")"
@@ -51,12 +48,10 @@ test_download_dependency_is_checksum_verified_and_recorded() {
   [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] || fail "Dependency install was not reported"
   assert_file_content '1.0' "$XDG_STATE_HOME/selfishell/dependencies/tool"
   [[ -x "$HOME/.local/bin/tool" ]] || fail "Verified tool was not installed"
-  teardown_update_home
 }
 
 test_checksum_failure_preserves_existing_managed_tool() {
   local status
-  setup_update_home
   mkdir -p "$HOME/.local/bin" "$XDG_STATE_HOME/selfishell/dependencies"
   printf 'old tool\n' >"$HOME/.local/bin/tool"
   printf '0.9\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
@@ -71,12 +66,10 @@ test_checksum_failure_preserves_existing_managed_tool() {
   [[ "$status" -ne 0 ]] || fail "Invalid checksum should fail"
   assert_file_content 'old tool' "$HOME/.local/bin/tool"
   assert_file_content '0.9' "$XDG_STATE_HOME/selfishell/dependencies/tool"
-  teardown_update_home
 }
 
 test_download_move_failure_does_not_report_success() {
   local status
-  setup_update_home
   mkdir -p "$HOME/.local/bin"
   printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$TEST_ROOT/tool"
   local checksum
@@ -94,13 +87,11 @@ test_download_move_failure_does_not_report_success() {
   [[ "$status" -ne 0 ]] || fail "A failed move must not report success"
   [[ ! -e "$XDG_STATE_HOME/selfishell/dependencies/tool" ]] || fail "A failed move must not be recorded as installed"
   [[ ! -e "$HOME/.local/bin/tool" ]] || fail "A failed move must not leave a partial target"
-  teardown_update_home
 }
 
 test_write_version_failure_does_not_report_success() {
   local payload checksum output status
   local fake_bin
-  setup_update_home
   payload="$TEST_ROOT/tool"
   printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
   checksum="$(fixture_sha256 "$payload")"
@@ -136,12 +127,10 @@ EOF
   output="$(bash -c 'source "$1/lib/common.sh"; source "$1/lib/paths.sh"; source "$1/lib/dependencies.sh"; dependency_install tool linux amd64' _ "$ROOT_DIR")"
   [[ "$output" == *'Externally installed; preserving'* ]] ||
     fail "Retrying after removing the forced failure did not behave as expected: $output"
-  teardown_update_home
 }
 
 test_git_checkout_failure_preserves_existing_managed_tool() {
   local status
-  setup_update_home
   local repo="$TEST_ROOT/repo"
   mkdir -p "$repo"
   git -C "$repo" init --quiet
@@ -167,22 +156,6 @@ test_git_checkout_failure_preserves_existing_managed_tool() {
   [[ "$status" -ne 0 ]] || fail "An unresolvable checkout ref must not report success"
   assert_file_content 'v1.0' "$XDG_STATE_HOME/selfishell/dependencies/testgit"
   assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
-  teardown_update_home
 }
 
-main() {
-  test_tools_update_synchronizes_profile_packages
-  printf 'PASS: test_tools_update_synchronizes_profile_packages\n'
-  test_download_dependency_is_checksum_verified_and_recorded
-  printf 'PASS: test_download_dependency_is_checksum_verified_and_recorded\n'
-  test_checksum_failure_preserves_existing_managed_tool
-  printf 'PASS: test_checksum_failure_preserves_existing_managed_tool\n'
-  test_download_move_failure_does_not_report_success
-  printf 'PASS: test_download_move_failure_does_not_report_success\n'
-  test_write_version_failure_does_not_report_success
-  printf 'PASS: test_write_version_failure_does_not_report_success\n'
-  test_git_checkout_failure_preserves_existing_managed_tool
-  printf 'PASS: test_git_checkout_failure_preserves_existing_managed_tool\n'
-}
-
-main "$@"
+run_discovered_tests setup_update_home teardown_update_home

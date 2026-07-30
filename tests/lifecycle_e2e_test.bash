@@ -56,5 +56,4 @@ test_complete_release_lifecycle() {
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" ]] || fail "Uninstall left managed configuration"
 }
 
-test_complete_release_lifecycle
-printf 'PASS: test_complete_release_lifecycle\n'
+run_discovered_tests '' teardown_test_home

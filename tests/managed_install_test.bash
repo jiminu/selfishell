@@ -485,6 +485,24 @@ EOF
   assert_file_content 'export USER_ZPROFILE=kept' "$HOME/.zprofile"
 }
 
+test_mise_shims_zprofile_uses_selfishell_mise_outside_path() {
+  local output
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  mkdir -p "$HOME/.local/bin"
+  cat >"$HOME/.local/bin/mise" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$HOME/mise-local-args"
+printf '%s\n' 'export SELFISHELL_LOCAL_MISE_SHIMS_TEST=loaded'
+EOF
+  chmod +x "$HOME/.local/bin/mise"
+
+  output="$(PATH="/usr/bin:/bin" /bin/zsh -dfc 'source "$HOME/.zprofile"; print "${SELFISHELL_LOCAL_MISE_SHIMS_TEST-}"')"
+
+  [[ "$output" == loaded ]] || fail "The .zprofile block did not activate Selfishell mise outside PATH"
+  assert_file_content 'activate zsh --shims' "$HOME/mise-local-args"
+}
+
 test_user_zsh_changes_survive_reinstall_and_uninstall_exactly() {
   local expected="$TEST_ROOT/expected-zshrc"
   local modified="$TEST_ROOT/modified-zshrc"
@@ -783,7 +801,7 @@ test_status_uses_current_resource_list() {
   local output
 
   run_selfishell install --skip-packages --yes >/dev/null
-  output="$(run_selfishell status)"
+  output="$(run_selfishell status)" || true
 
   [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/zsh/zshrc'* ]] ||
     fail "Status did not report the current Neovim resource list"
@@ -1876,23 +1894,6 @@ test_update_tools_only_yes_preserves_modified_file() {
     fail "Non-interactive update conflict must not create a conflict backup"
 }
 
-run_test() {
-  local test_name="$1"
-  local rc=0
-
-  setup_managed_home
-  "$test_name" || rc=$?
-  teardown_managed_home
-
-  if ((rc == 0)); then
-    printf 'PASS: %s\n' "$test_name"
-    return 0
-  else
-    printf 'FAIL: %s (exit code %d)\n' "$test_name" "$rc" >&2
-    return 1
-  fi
-}
-
 main() {
   local test_name
   local test_index=0
@@ -1902,7 +1903,9 @@ main() {
   local test_list=()
   local batch_logs=()
   local batch_pids=()
+  local batch_tests=()
   local log_root
+  local status
 
   case "$test_jobs" in
     '' | *[!0-9]* | 0)
@@ -1918,27 +1921,35 @@ main() {
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 
   log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-managed-test.XXXXXX")"
-  trap 'rm -rf "$log_root"' EXIT HUP INT TERM
+  # shellcheck disable=SC2064 # Preserve the local path after main returns.
+  trap "rm -rf '$log_root'" EXIT HUP INT TERM
 
   printf 'Total tests found: %d (jobs: %d)\n' "${#test_list[@]}" "$test_jobs"
 
   while ((test_index < ${#test_list[@]})); do
     batch_logs=()
     batch_pids=()
+    batch_tests=()
 
     for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
       test_name="${test_list[$test_index]}"
       batch_logs+=("$log_root/$test_index.log")
-      run_test "$test_name" >"$log_root/$test_index.log" 2>&1 &
+      batch_tests+=("$test_name")
+      run_test_isolated "$test_name" setup_managed_home teardown_managed_home \
+        >"$log_root/$test_index.log" 2>&1 &
       batch_pids+=("$!")
       test_index=$((test_index + 1))
     done
 
     for batch_index in "${!batch_pids[@]}"; do
-      if ! wait "${batch_pids[$batch_index]}"; then
+      set +e
+      wait "${batch_pids[$batch_index]}"
+      status=$?
+      set -e
+      cat "${batch_logs[$batch_index]}"
+      if ! runner_status_succeeded "${batch_tests[$batch_index]}" "$status"; then
         failures=$((failures + 1))
       fi
-      cat "${batch_logs[$batch_index]}"
     done
   done
 

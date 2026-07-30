@@ -13,14 +13,15 @@ export PATH="$HOME/.local/bin:$PATH"
 ```sh
 selfishell doctor
 selfishell status
-selfishell status --check-updates
 ```
 
 `status` reports tools from the active profile as Selfishell-managed, Homebrew,
 apt, external, or missing. Package-manager versions are reported without an
 exact approved version because those repositories control resolution. The
-command returns nonzero when required tools are missing or managed
-configuration is missing or changed. It does not modify files.
+command also checks the available CLI release. If release metadata cannot be
+reached, it reports `Available: unavailable` and continues with local checks.
+It returns nonzero when required tools are missing or managed configuration is
+missing or changed. It does not modify files.
 
 After changing an existing `developer` installation to mise, `doctor` may
 report preserved `~/.nvm` or `~/.pyenv` directories. This is informational:
@@ -32,6 +33,8 @@ replacement before removing legacy data manually.
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
 Use `SELFISHELL_OFFLINE=1` or `--skip-packages` for configuration-only setup.
+`SELFISHELL_OFFLINE=1 selfishell status` skips its release metadata lookup and
+reports availability as `unavailable`.
 
 Release and direct-tool downloads stop when they cannot connect or remain below
 the minimum transfer rate. Metadata checks also have a short total deadline.

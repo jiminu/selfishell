@@ -149,23 +149,4 @@ test_local_profile_rejects_option_like_package() {
   [[ "$status" -eq 2 ]] || fail "Option-like local package should be rejected"
 }
 
-run_test() {
-  local test_name="$1"
-
-  setup_profile_home
-  trap 'teardown_profile_home' RETURN
-  "$test_name"
-  trap - RETURN
-  teardown_profile_home
-  printf 'PASS: %s\n' "$test_name"
-}
-
-main() {
-  local test_name
-
-  while IFS= read -r test_name; do
-    run_test "$test_name"
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-}
-
-main "$@"
+run_discovered_tests setup_profile_home teardown_profile_home

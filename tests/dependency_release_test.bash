@@ -54,8 +54,6 @@ verify_diff() {
 }
 
 test_allows_manifest_only_change() {
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   sed -i.bak 's/1\.0\.0/1.0.1/' "$REPO_DIR/dependencies.conf"
   rm -f "$REPO_DIR/dependencies.conf.bak"
@@ -65,8 +63,6 @@ test_allows_manifest_only_change() {
 }
 
 test_allows_manifest_and_pin_only_zsh_changes() {
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   sed -i.bak "s/$OLD_COMPLETIONS/$NEW_COMPLETIONS/" "$REPO_DIR/dependencies.conf" "$REPO_DIR/common/completion.zsh"
   rm -f "$REPO_DIR/dependencies.conf.bak" "$REPO_DIR/common/completion.zsh.bak"
@@ -78,8 +74,6 @@ test_allows_manifest_and_pin_only_zsh_changes() {
 test_rejects_unexpected_file() {
   local status=0
 
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   sed -i.bak 's/1\.0\.0/1.0.1/' "$REPO_DIR/dependencies.conf"
   rm -f "$REPO_DIR/dependencies.conf.bak"
@@ -93,8 +87,6 @@ test_rejects_unexpected_file() {
 test_rejects_non_pin_zsh_change() {
   local status=0
 
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   sed -i.bak "s/$OLD_COMPLETIONS/$NEW_COMPLETIONS/" "$REPO_DIR/dependencies.conf" "$REPO_DIR/common/completion.zsh"
   rm -f "$REPO_DIR/dependencies.conf.bak" "$REPO_DIR/common/completion.zsh.bak"
@@ -108,8 +100,6 @@ test_rejects_non_pin_zsh_change() {
 test_rejects_zsh_change_without_manifest_zsh_plugin_change() {
   local status=0
 
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   # dependencies.conf changes, but only its unrelated download entry -- the
   # zsh-plugin record for zsh-completions is untouched.
@@ -125,8 +115,6 @@ test_rejects_zsh_change_without_manifest_zsh_plugin_change() {
 test_rejects_missing_manifest_change() {
   local status=0
 
-  setup_test_home
-  trap teardown_test_home EXIT
   init_release_repo
   sed -i.bak "s/$OLD_FZF_TAB/$NEW_FZF_TAB/" "$REPO_DIR/common/interactive.zsh"
   rm -f "$REPO_DIR/common/interactive.zsh.bak"
@@ -136,27 +124,4 @@ test_rejects_missing_manifest_change() {
   [[ "$status" -ne 0 ]] || fail "A release PR must include a dependencies.conf change"
 }
 
-run_test() {
-  local test_name="$1"
-
-  "$test_name"
-  printf 'PASS: %s\n' "$test_name"
-}
-
-main() {
-  local test_name
-  local failures=0
-
-  while IFS= read -r test_name; do
-    if ! run_test "$test_name"; then
-      failures=$((failures + 1))
-    fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-
-  if ((failures > 0)); then
-    printf '%d test(s) failed\n' "$failures" >&2
-    return 1
-  fi
-}
-
-main "$@"
+run_discovered_tests setup_test_home teardown_test_home

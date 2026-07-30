@@ -28,24 +28,17 @@ teardown_notification_test() {
 }
 
 test_creates_one_failure_issue() {
-  setup_notification_test
   bash "$ROOT_DIR/scripts/workflow-failure-issue.sh" '[automation] Test failed' failure https://example.invalid/run
   grep -Fq 'issue create --title [automation] Test failed' "$MOCK_GH_LOG" || fail "Failure issue was not created"
   grep -Fq 'label create automation-failure' "$MOCK_GH_LOG" || fail "Failure label was not ensured"
-  teardown_notification_test
 }
 
 test_reuses_and_closes_existing_issue() {
-  setup_notification_test
   export MOCK_ISSUE_NUMBER=42
   bash "$ROOT_DIR/scripts/workflow-failure-issue.sh" '[automation] Test failed' failure https://example.invalid/failure
   grep -Fq 'issue comment 42' "$MOCK_GH_LOG" || fail "Existing failure issue was not reused"
   bash "$ROOT_DIR/scripts/workflow-failure-issue.sh" '[automation] Test failed' success https://example.invalid/success
   grep -Fq 'issue close 42' "$MOCK_GH_LOG" || fail "Recovered failure issue was not closed"
-  teardown_notification_test
 }
 
-test_creates_one_failure_issue
-printf 'PASS: test_creates_one_failure_issue\n'
-test_reuses_and_closes_existing_issue
-printf 'PASS: test_reuses_and_closes_existing_issue\n'
+run_discovered_tests setup_notification_test teardown_notification_test

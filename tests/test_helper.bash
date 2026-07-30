@@ -18,7 +18,66 @@ teardown_test_home() {
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
-  exit 1
+  exit 99
+}
+
+skip() {
+  printf 'SKIP: %s\n' "$*"
+  exit 77
+}
+
+run_test_isolated() {
+  local test_name="$1"
+  local setup_name="${2:-}"
+  local teardown_name="${3:-}"
+
+  set -Eeuo pipefail
+  if [[ -n "$teardown_name" ]]; then
+    # shellcheck disable=SC2064 # Resolve the selected hook before the test runs.
+    trap "$teardown_name" EXIT
+  fi
+  if [[ -n "$setup_name" ]]; then
+    "$setup_name"
+  fi
+
+  "$test_name"
+
+  if [[ -n "$teardown_name" ]]; then
+    trap - EXIT
+    "$teardown_name"
+  fi
+  printf 'PASS: %s\n' "$test_name"
+}
+
+runner_status_succeeded() {
+  local test_name="$1"
+  local status="$2"
+
+  case "$status" in
+    0 | 77) return 0 ;;
+    99) return 1 ;;
+    *)
+      printf 'FAIL: %s (exit code %d)\n' "$test_name" "$status" >&2
+      return 1
+      ;;
+  esac
+}
+
+run_discovered_tests() {
+  local setup_name="${1:-}"
+  local teardown_name="${2:-}"
+  local test_name pid status
+
+  while IFS= read -r test_name; do
+    run_test_isolated "$test_name" "$setup_name" "$teardown_name" &
+    pid=$!
+    set +e
+    wait "$pid"
+    status=$?
+    set -e
+
+    runner_status_succeeded "$test_name" "$status" || return 1
+  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 }
 
 assert_file_content() {
