@@ -80,6 +80,62 @@ run_discovered_tests() {
   done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
 }
 
+run_discovered_tests_parallel() (
+  local test_jobs="$1"
+  local setup_name="${2:-}"
+  local teardown_name="${3:-}"
+  local test_index=0 batch_index failures=0 status
+  local test_name log_root
+  local test_list=()
+  local batch_logs=()
+  local batch_pids=()
+  local batch_tests=()
+
+  case "$test_jobs" in
+    '' | *[!0-9]* | 0)
+      printf 'Test jobs must be a positive integer.\n' >&2
+      return 2
+      ;;
+  esac
+
+  while IFS= read -r test_name; do
+    test_list+=("$test_name")
+  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
+
+  log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-parallel-test.XXXXXX")"
+  trap 'rm -rf "$log_root"' EXIT HUP INT TERM
+  printf 'Total tests found: %d (jobs: %d)\n' "${#test_list[@]}" "$test_jobs"
+
+  while ((test_index < ${#test_list[@]})); do
+    batch_logs=()
+    batch_pids=()
+    batch_tests=()
+
+    for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
+      test_name="${test_list[$test_index]}"
+      batch_logs+=("$log_root/$test_index.log")
+      batch_tests+=("$test_name")
+      run_test_isolated "$test_name" "$setup_name" "$teardown_name" \
+        >"$log_root/$test_index.log" 2>&1 &
+      batch_pids+=("$!")
+      test_index=$((test_index + 1))
+    done
+
+    for batch_index in "${!batch_pids[@]}"; do
+      set +e
+      wait "${batch_pids[$batch_index]}"
+      status=$?
+      set -e
+      cat "${batch_logs[$batch_index]}"
+      if ! runner_status_succeeded "${batch_tests[$batch_index]}" "$status"; then
+        failures=$((failures + 1))
+      fi
+    done
+  done
+
+  ((failures == 0)) || return 1
+)
+
 assert_file_content() {
   local expected="$1"
   local file="$2"

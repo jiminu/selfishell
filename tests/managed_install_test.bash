@@ -241,10 +241,22 @@ test_outdated_ghostty_block_is_upgraded_without_changing_user_bytes() {
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  printf 'font-size = 14\n# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\ncursor-style = bar\n' \
-    "$managed_source" >"$target"
-  printf 'font-size = 14\n# >>> Selfishell ghostty >>>\nconfig-file = %s\n# To override a Selfishell default above, add it to user.ghostty instead.\nconfig-file = ?user.ghostty\n# <<< Selfishell ghostty <<<\ncursor-style = bar\n' \
-    "$managed_source" >"$expected"
+  cat >"$target" <<EOF
+font-size = 14
+# >>> Selfishell ghostty >>>
+config-file = $managed_source
+# <<< Selfishell ghostty <<<
+cursor-style = bar
+EOF
+  cat >"$expected" <<EOF
+font-size = 14
+# >>> Selfishell ghostty >>>
+config-file = $managed_source
+# To override a Selfishell default above, add it to user.ghostty instead.
+config-file = ?user.ghostty
+# <<< Selfishell ghostty <<<
+cursor-style = bar
+EOF
   old_body_checksum="$(printf '# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\n' \
     "$managed_source" | cksum | awk '{print $1 ":" $2}')"
   printf '2\nblock\nactive\n%s\nselfishell-user-ghostty-block-v1\n-\n%s\n' \
@@ -266,13 +278,27 @@ test_outdated_zprofile_block_is_upgraded_without_changing_user_bytes() {
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
-  # shellcheck disable=SC2016 # Fixture must contain literal startup commands.
-  printf '# >>> Selfishell mise shims >>>\nif command -v mise >/dev/null 2>&1; then\n  eval "$(command mise activate zsh --shims)"\nfi\n# <<< Selfishell mise shims <<<\n' >"$old_block"
+  cat >"$old_block" <<'EOF'
+# >>> Selfishell mise shims >>>
+if command -v mise >/dev/null 2>&1; then
+  eval "$(command mise activate zsh --shims)"
+fi
+# <<< Selfishell mise shims <<<
+EOF
   printf 'export BEFORE=1\n' >"$target"
   cat "$old_block" >>"$target"
   printf 'export AFTER=1\n' >>"$target"
-  # shellcheck disable=SC2016 # Fixture must contain literal startup commands.
-  printf 'export BEFORE=1\n# >>> Selfishell mise shims >>>\nif [[ -x "$HOME/.local/bin/mise" ]]; then\n  eval "$("$HOME/.local/bin/mise" activate zsh --shims)"\nelif command -v mise >/dev/null 2>&1; then\n  eval "$(command mise activate zsh --shims)"\nfi\n# <<< Selfishell mise shims <<<\nexport AFTER=1\n' >"$expected"
+  cat >"$expected" <<'EOF'
+export BEFORE=1
+# >>> Selfishell mise shims >>>
+if [[ -x "$HOME/.local/bin/mise" ]]; then
+  eval "$("$HOME/.local/bin/mise" activate zsh --shims)"
+elif command -v mise >/dev/null 2>&1; then
+  eval "$(command mise activate zsh --shims)"
+fi
+# <<< Selfishell mise shims <<<
+export AFTER=1
+EOF
   old_checksum="$(cksum <"$old_block" | awk '{print $1 ":" $2}')"
   printf '2\nblock\nactive\n%s\nselfishell-user-zprofile-block-v1\n-\n%s\n' \
     "$target" "$old_checksum" >"$state_file"
@@ -2061,72 +2087,7 @@ test_update_tools_only_yes_preserves_modified_file() {
     fail "Non-interactive update conflict must not create a conflict backup"
 }
 
-main() {
-  local test_name
-  local test_index=0
-  local test_jobs="${SELFISHELL_TEST_JOBS:-4}"
-  local batch_index
-  local failures=0
-  local test_list=()
-  local batch_logs=()
-  local batch_pids=()
-  local batch_tests=()
-  local log_root
-  local status
-
-  case "$test_jobs" in
-    '' | *[!0-9]* | 0)
-      printf 'SELFISHELL_TEST_JOBS must be a positive integer.\n' >&2
-      return 2
-      ;;
-  esac
-
-  while IFS= read -r test_name; do
-    if [[ -n "$test_name" ]]; then
-      test_list+=("$test_name")
-    fi
-  done < <(declare -F | awk '{print $3}' | grep '^test_' | sort)
-
-  log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-managed-test.XXXXXX")"
-  # shellcheck disable=SC2064 # Preserve the local path after main returns.
-  trap "rm -rf '$log_root'" EXIT HUP INT TERM
-
-  printf 'Total tests found: %d (jobs: %d)\n' "${#test_list[@]}" "$test_jobs"
-
-  while ((test_index < ${#test_list[@]})); do
-    batch_logs=()
-    batch_pids=()
-    batch_tests=()
-
-    for ((batch_index = 0; batch_index < test_jobs && test_index < ${#test_list[@]}; batch_index++)); do
-      test_name="${test_list[$test_index]}"
-      batch_logs+=("$log_root/$test_index.log")
-      batch_tests+=("$test_name")
-      run_test_isolated "$test_name" setup_managed_home teardown_managed_home \
-        >"$log_root/$test_index.log" 2>&1 &
-      batch_pids+=("$!")
-      test_index=$((test_index + 1))
-    done
-
-    for batch_index in "${!batch_pids[@]}"; do
-      set +e
-      wait "${batch_pids[$batch_index]}"
-      status=$?
-      set -e
-      cat "${batch_logs[$batch_index]}"
-      if ! runner_status_succeeded "${batch_tests[$batch_index]}" "$status"; then
-        failures=$((failures + 1))
-      fi
-    done
-  done
-
-  if ((failures > 0)); then
-    printf '%d test(s) failed\n' "$failures" >&2
-    return 1
-  fi
-
-  trap - EXIT HUP INT TERM
-  rm -rf "$log_root"
-}
-
-main "$@"
+run_discovered_tests_parallel \
+  "${SELFISHELL_TEST_JOBS:-4}" \
+  setup_managed_home \
+  teardown_managed_home

@@ -150,4 +150,49 @@ EOF
   teardown_test_home
 }
 
+test_parallel_runner_finishes_batch_and_reports_each_result() {
+  local fixture output status
+
+  setup_test_home
+  fixture="$TEST_ROOT/parallel.bash"
+  cat >"$fixture" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$SELFISHELL_TEST_HELPER"
+
+test_failure() {
+  false
+}
+
+test_passes() {
+  printf 'ran\n' >"$SELFISHELL_TEST_PASS_MARKER"
+}
+
+test_skips() {
+  skip 'parallel fixture unavailable'
+}
+
+run_discovered_tests_parallel 3
+EOF
+
+  set +e
+  output="$(
+    SELFISHELL_TEST_HELPER="$ROOT_DIR/tests/test_helper.bash" \
+      SELFISHELL_TEST_PASS_MARKER="$TEST_ROOT/passed" \
+      bash "$fixture" 2>&1
+  )"
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Parallel fixture returned $status instead of 1"
+  assert_file_content 'ran' "$TEST_ROOT/passed"
+  [[ "$output" == *'FAIL: test_failure (exit code 1)'* ]] ||
+    fail "Parallel failure did not identify its test: $output"
+  [[ "$output" == *'PASS: test_passes'* ]] || fail "Parallel passing test was not reported"
+  [[ "$output" == *'SKIP: parallel fixture unavailable'* ]] ||
+    fail "Parallel skipped test was not reported"
+  [[ "$output" != *'PASS: test_skips'* ]] || fail "Parallel skipped test was also reported as passing"
+  teardown_test_home
+}
+
 run_discovered_tests '' teardown_test_home
