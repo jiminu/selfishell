@@ -81,6 +81,32 @@ return {
           return math.max(20, math.min(30, computed))
         end,
       },
+      -- nvim-tree hides gitignored entries entirely by default; show them
+      -- so they can be dimmed by the git decorator below instead.
+      filters = {
+        git_ignored = false,
+      },
+      renderer = {
+        -- Mark folders with a trailing "/" instead of an icon, and color
+        -- names by git status (including gitignored) instead of showing a
+        -- git icon, so the narrow tree spends its width on names.
+        add_trailing = true,
+        highlight_git = "name",
+        icons = {
+          show = {
+            file = false,
+            folder = false,
+            folder_arrow = true,
+            git = false,
+          },
+          glyphs = {
+            folder = {
+              arrow_closed = ">",
+              arrow_open = "v",
+            },
+          },
+        },
+      },
     },
   }),
 

@@ -114,12 +114,12 @@ number_threshold = 2
 # Display the AWS profile and Kubernetes context
 # ─────────────────────────────
 [aws]
-format = '([󰸏 $profile]($style) )'
+format = '([$profile]($style) )'
 style = 'bold fg:#ffaf00'
 
 [kubernetes]
 disabled = false
-format = '[󱃾 $context]($style) '
+format = '[$context]($style) '
 style = 'bold fg:#5fd7ff'
 detect_files = [
   'Chart.yaml',
@@ -143,16 +143,16 @@ context_alias = '$cluster'
 # Display only when related files exist in the current directory
 # ─────────────────────────────
 [python]
-format = '[( $virtualenv )]($style)'
+format = '[( $virtualenv )]($style)'
 style = 'bold fg:#ffd75f'
 
 [nodejs]
-format = '[( $version )]($style)'
+format = '[( $version )]($style)'
 version_format = 'v${major}'
 style = 'bold fg:#5faf5f'
 
 [java]
-format = '[( $version )]($style)'
+format = '[( $version )]($style)'
 version_format = 'v${major}'
 style = 'bold fg:#ff875f'
 
