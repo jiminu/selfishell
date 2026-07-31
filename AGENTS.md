@@ -159,6 +159,15 @@ especially for empty/existing paths, repeated operations, interruptions,
 unsupported platforms, offline behavior, uninstall, restore, update, and
 rollback.
 
+Keep verification proportional to the change. For incidental presentation
+changes such as spacing, prose, or glyph choices, do not add a regression test
+unless the exact presentation is a product contract or a repeated source of
+bugs; use the relevant parser, formatter, or focused smoke check instead. For a
+small option change, prefer extending an existing focused test over creating a
+new test or suite. Do not run the full repository gate for an unrelated
+cosmetic or configuration-only change when a smaller relevant validation covers
+it; the gate remains required for the change categories listed above.
+
 ## Repository Map
 
 | Path | Responsibility |
