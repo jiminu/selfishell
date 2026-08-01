@@ -1019,6 +1019,39 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
     fail "Which-key was not deferred to VeryLazy"
 }
 
+test_default_tool_aliases_keep_common_commands_and_drop_risky_shortcuts() {
+  local output
+
+  output="$(
+    ZDOTDIR="" /bin/zsh -f -c '
+      _selfishell_command_path() { return 0; }
+      source "$1/common/aliases-git.zsh"
+      source "$1/common/aliases-kubectl.zsh"
+      source "$1/common/aliases-terraform.zsh"
+      alias g gst gpf gwt k kgp kcuc tf tfp tfw
+      alias "gpf!" grhh kgcj tfap tfda 2>/dev/null || true
+    ' zsh "$ROOT_DIR"
+  )"
+
+  for expected in \
+    'g=git' \
+    "gst='git status'" \
+    "gpf='git push --force-with-lease'" \
+    "gwt='git worktree'" \
+    'k=kubectl' \
+    "kgp='kubectl get pods'" \
+    "kcuc='kubectl config use-context'" \
+    'tf=terraform' \
+    "tfp='terraform plan'" \
+    "tfw='terraform workspace'"; do
+    [[ "$output" == *"$expected"* ]] || fail "Recommended alias is missing: $expected"
+  done
+
+  for removed in 'gpf!' grhh kgcj tfap tfda; do
+    [[ "$output" != *"$removed="* ]] || fail "Non-default alias is still defined: $removed"
+  done
+}
+
 test_editor_aliases_stay_with_neovim() {
   local fake_bin output
 

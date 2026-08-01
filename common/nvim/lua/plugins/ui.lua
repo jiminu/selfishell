@@ -275,7 +275,9 @@ return {
         lualine_c = {
           {
             "branch",
-            color = lualine_mode_color,
+            color = { fg = "#5fd700", gui = "bold" },
+            icon = "",
+            padding = { left = 0, right = 1 },
           },
           {
             "filename",
@@ -298,7 +300,10 @@ return {
           },
         },
         lualine_x = {
-          "filetype",
+          {
+            "filetype",
+            icons_enabled = false,
+          },
           "location",
         },
         lualine_y = {},
