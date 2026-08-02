@@ -345,6 +345,30 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
   teardown_test_home
 }
 
+# SELFISHELL_ROOT is resolved with parameter expansion rather than `dirname`,
+# and `${path%/*}` leaves a bare filename unchanged. Every invocation form has
+# to keep finding the repository root, including through chained symlinks.
+test_cli_resolves_root_from_every_invocation_form() {
+  local expected link_dir
+
+  setup_test_home
+  expected="selfishell $(<"$ROOT_DIR/VERSION")"
+  link_dir="$TEST_ROOT/links"
+  mkdir -p "$link_dir"
+  ln -s "$ROOT_DIR/bin/selfishell" "$link_dir/direct"
+  ln -s direct "$link_dir/chained"
+
+  [[ "$(cd "$ROOT_DIR/bin" && bash selfishell version)" == "$expected" ]] ||
+    fail "A bare relative invocation did not resolve the Selfishell root"
+  [[ "$(bash "$ROOT_DIR/bin/selfishell" version)" == "$expected" ]] ||
+    fail "An absolute invocation did not resolve the Selfishell root"
+  [[ "$(bash "$link_dir/direct" version)" == "$expected" ]] ||
+    fail "A symlinked invocation did not resolve the Selfishell root"
+  [[ "$(bash "$link_dir/chained" version)" == "$expected" ]] ||
+    fail "A chained symlink invocation did not resolve the Selfishell root"
+  teardown_test_home
+}
+
 test_commands_reject_extra_arguments() {
   local status
 

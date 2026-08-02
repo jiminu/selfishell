@@ -2,16 +2,25 @@
 
 set -euo pipefail
 
+# Every command pays for this resolution, so strip the directory with
+# parameter expansion instead of an external `dirname`: that one process is
+# roughly a third of `selfishell version`'s runtime. `${path%/*}` leaves a bare
+# filename unchanged, and a path with no directory means the current one --
+# what `dirname` reports as ".".
 SELFISHELL_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SELFISHELL_SOURCE" ]]; do
-  SELFISHELL_SOURCE_DIR="$(cd "$(dirname "$SELFISHELL_SOURCE")" && pwd)"
+  SELFISHELL_SOURCE_DIR="${SELFISHELL_SOURCE%/*}"
+  [[ "$SELFISHELL_SOURCE_DIR" != "$SELFISHELL_SOURCE" ]] || SELFISHELL_SOURCE_DIR=.
+  SELFISHELL_SOURCE_DIR="$(cd "$SELFISHELL_SOURCE_DIR" && pwd)"
   SELFISHELL_SOURCE="$(readlink "$SELFISHELL_SOURCE")"
   if [[ "$SELFISHELL_SOURCE" != /* ]]; then
     SELFISHELL_SOURCE="$SELFISHELL_SOURCE_DIR/$SELFISHELL_SOURCE"
   fi
 done
 
-SELFISHELL_ROOT="$(cd "$(dirname "$SELFISHELL_SOURCE")/.." && pwd -P)"
+SELFISHELL_ROOT="${SELFISHELL_SOURCE%/*}"
+[[ "$SELFISHELL_ROOT" != "$SELFISHELL_SOURCE" ]] || SELFISHELL_ROOT=.
+SELFISHELL_ROOT="$(cd "$SELFISHELL_ROOT/.." && pwd -P)"
 export SELFISHELL_ROOT
 unset SELFISHELL_SOURCE SELFISHELL_SOURCE_DIR
 
