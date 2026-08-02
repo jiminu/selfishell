@@ -90,11 +90,12 @@ The full-profile benchmark runs under the same warn-only policy
 `*_P95_MAX_MS` variable, so it reports metrics for comparison without
 budget-overrun warnings.
 
-Every run uploads a TSV artifact: `shell-performance-<platform>` for the base
-benchmark (one per OS in the CI matrix) and `shell-performance-full-profile`
-for the full-profile benchmark. These results establish platform-specific
-baselines before budgets become blocking. Set `SELFISHELL_BENCHMARK_ENFORCE=1`
-to make an overrun fail locally or in CI.
+Each base run uploads a TSV artifact named `shell-performance-<platform>` (one
+per OS in the CI matrix). The Ubuntu `shell-performance-full-profile` artifact
+contains both `selfishell-benchmark-full.tsv` and the diagnostic
+`selfishell-startup.zprof`. These results establish platform-specific baselines
+before budgets become blocking. Set `SELFISHELL_BENCHMARK_ENFORCE=1` to make an
+overrun fail locally or in CI.
 
 The budget variables are:
 
