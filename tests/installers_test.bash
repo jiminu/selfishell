@@ -93,14 +93,19 @@ test_provisions_declared_zinit_plugins_without_loading_them() {
   mkdir -p "$(dirname "$zinit_script")"
   grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   cat >"$zinit_script" <<'EOF'
+typeset -gi light_calls=0
 zinit() {
   print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
+  if [[ "$1" == light ]]; then
+    light_calls=$((light_calls + 1))
+    [[ "$light_calls" -eq 1 ]]
+  fi
 }
 EOF
   export SELFISHELL_DEPENDENCIES_FILE="$manifest"
   export SELFISHELL_TEST_ZINIT_LOG="$TEST_ROOT/zinit-calls"
 
-  : "$(install_zinit_plugins)"
+  install_zinit_plugins
 
   while read -r _ repository revision _; do
     grep -Fqx "ice cloneonly ver$revision" "$SELFISHELL_TEST_ZINIT_LOG" ||
@@ -133,6 +138,7 @@ EOF
   export SELFISHELL_DEPENDENCIES_FILE="$manifest"
 
   status="$(command bash -c '
+    source "$SELFISHELL_ROOT/lib/common.sh"
     source "$SELFISHELL_ROOT/lib/dependencies.sh"
     source "$SELFISHELL_ROOT/lib/installers.sh"
     install_zinit_plugins

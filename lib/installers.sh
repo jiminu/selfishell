@@ -2,6 +2,10 @@
 
 install_zinit_plugins() {
   local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local type repository revision
+  local repositories=()
+  local revisions=()
+  local index
   local manifest
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
@@ -9,14 +13,26 @@ install_zinit_plugins() {
   manifest="$(dependencies_manifest_path)"
   [[ -r "$zinit_script" && -r "$manifest" ]] || return 1
 
-  command zsh -f -c '
-    source "$1" || exit 1
-    while read -r type repository revision platform architecture source checksum target marker; do
-      [[ "$type" == zsh-plugin ]] || continue
-      zinit ice cloneonly "ver${revision}" || exit 1
-      zinit light "$repository" || exit 1
-    done <"$2"
-  ' zsh "$zinit_script" "$manifest" || return 1
+  while read -r type repository revision _; do
+    [[ "$type" == zsh-plugin ]] || continue
+    repositories+=("$repository")
+    revisions+=("$revision")
+  done <"$manifest"
+
+  for ((index = 0; index < ${#repositories[@]}; index++)); do
+    repository="${repositories[$index]}"
+    revision="${revisions[$index]}"
+    (
+      command zsh -f -c '
+        source "$1" || exit 1
+        zinit ice cloneonly "ver${3}" || exit 1
+        zinit light "$2"
+      ' zsh "$zinit_script" "$repository" "$revision" </dev/null
+    ) || {
+      cli_error "Could not provision Zinit plugin: $repository"
+      return 1
+    }
+  done
 }
 
 install_direct_package() {
