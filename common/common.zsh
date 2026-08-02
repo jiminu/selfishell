@@ -7,6 +7,11 @@ _selfishell_command_path() {
   local command_name="$1"
   local directory
 
+  if [[ -z "${WSL_DISTRO_NAME:-}" ]]; then
+    builtin whence -p -- "$command_name"
+    return
+  fi
+
   for directory in $path; do
     # Selfishell installs Linux tools inside WSL. Avoid slow filesystem probes
     # through inherited Windows PATH entries when checking optional tools.

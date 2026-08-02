@@ -160,6 +160,33 @@ test_wsl_defers_windows_path_during_initialization() {
   teardown_test_home
 }
 
+test_non_wsl_command_lookup_uses_native_path_semantics() {
+  local output
+  local work_dir
+
+  setup_test_home
+  work_dir="$TEST_ROOT/work"
+  mkdir -p "$work_dir"
+  printf '#!/bin/sh\n' >"$work_dir/probe"
+  chmod +x "$work_dir/probe"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        load_nvm() { :; }
+        source "$1"
+        cd "$2"
+        path=("" /usr/bin /bin)
+        _selfishell_command_path probe || print -r -- missing
+      ' zsh "$ROOT_DIR/common/common.zsh" "$work_dir"
+  )"
+
+  [[ "$output" == probe ]] || fail "Native command lookup did not honor an empty PATH entry: $output"
+  teardown_test_home
+}
+
 test_mise_uses_selfishell_config_only_for_developer_profile() {
   local fake_bin developer_config minimal_config
 
