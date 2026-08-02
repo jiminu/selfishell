@@ -1330,7 +1330,7 @@ setup_fake_minimal_packages() {
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
   chmod +x "$HOME/.local/bin/starship"
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
-  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  printf 'zinit() { :; }\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
 }
 
 setup_fake_macos_minimal_packages() {
@@ -1347,7 +1347,7 @@ EOF
   chmod +x "$TEST_ROOT/bin/brew"
 
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
-  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  printf 'zinit() { :; }\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
 }
 
 # Copies the checkout into its own root so a test can change a managed
