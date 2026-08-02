@@ -23,6 +23,12 @@ test_complete_release_lifecycle() {
   export PATH="$TEST_ROOT/bin:$PATH"
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  # A real install provisions the pinned plugins alongside Zinit itself. Model
+  # that here so doctor sees a complete state instead of the degraded one it
+  # must report.
+  while read -r _ repository _; do
+    mkdir -p "$HOME/.local/share/zinit/plugins/${repository//\//---}/.git"
+  done < <(grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf")
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"
   export XDG_CONFIG_HOME="$HOME/.config"

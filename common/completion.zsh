@@ -5,12 +5,6 @@ ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
 
-  _selfishell_zinit_plugin_ready() {
-    local repository="$1"
-    [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1
-    [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}" ]]
-  }
-
   if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
     # Pinned to the commit recorded for zsh-users/zsh-completions in
     # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).

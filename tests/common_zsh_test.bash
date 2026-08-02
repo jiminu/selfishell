@@ -75,10 +75,10 @@ test_shell_startup_loads_preprovisioned_zinit_plugins() {
   zinit_home="$HOME/.local/share/zinit/zinit.git"
   zinit_log="$TEST_ROOT/zinit-calls"
   mkdir -p "$fake_bin" "$zinit_home" \
-    "$plugins_dir/zsh-users---zsh-completions" \
-    "$plugins_dir/Aloxaf---fzf-tab" \
-    "$plugins_dir/zsh-users---zsh-autosuggestions" \
-    "$plugins_dir/zdharma-continuum---fast-syntax-highlighting"
+    "$plugins_dir/zsh-users---zsh-completions/.git" \
+    "$plugins_dir/Aloxaf---fzf-tab/.git" \
+    "$plugins_dir/zsh-users---zsh-autosuggestions/.git" \
+    "$plugins_dir/zdharma-continuum---fast-syntax-highlighting/.git"
   cat >"$fake_bin/fzf" <<'EOF'
 #!/bin/sh
 printf ':\n'
@@ -107,6 +107,50 @@ EOF
   [[ -z "$output" ]] || fail "Provisioned plugins emitted startup noise: $output"
   [[ "$(grep -c '^light ' "$zinit_log")" -eq 4 ]] ||
     fail "Shell startup did not load all four provisioned plugins"
+  teardown_test_home
+}
+
+# An interrupted clone leaves the plugin directory behind without a repository.
+# Loading it would make Zinit fail during startup, and the installer preserves
+# an existing plugin path, so startup must treat it the same as a missing one.
+test_shell_startup_skips_an_incomplete_zinit_plugin_checkout() {
+  local output
+  local plugins_dir
+  local zinit_home
+  local zinit_log
+
+  setup_test_home
+  plugins_dir="$HOME/.local/share/zinit/plugins"
+  zinit_home="$HOME/.local/share/zinit/zinit.git"
+  zinit_log="$TEST_ROOT/zinit-calls"
+  mkdir -p "$zinit_home" \
+    "$plugins_dir/zsh-users---zsh-completions" \
+    "$plugins_dir/zsh-users---zsh-autosuggestions" \
+    "$plugins_dir/zdharma-continuum---fast-syntax-highlighting"
+  cat >"$zinit_home/zinit.zsh" <<'EOF'
+typeset -gA ZINIT
+ZINIT[PLUGINS_DIR]="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
+zinit() {
+  print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
+}
+EOF
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_TEST_ZINIT_LOG="$zinit_log" \
+      ZDOTDIR="" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        load_nvm() { :; }
+        source "$1"
+      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+  )"
+
+  [[ -z "$output" ]] || fail "Incomplete plugin checkouts emitted startup noise: $output"
+  if [[ -r "$zinit_log" ]] && grep -q '^light ' "$zinit_log"; then
+    fail "Shell startup loaded a plugin directory without a repository"
+  fi
   teardown_test_home
 }
 
