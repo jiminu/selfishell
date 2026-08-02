@@ -38,7 +38,10 @@ mise() {
 git() {
   GIT_ARGUMENTS="$*"
   GIT_CALLS+=("$*")
-  if [[ "$1" == "clone" ]]; then
+  if [[ "$1" == "-C" && "$3" == "rev-parse" && "$4" == "HEAD" ]]; then
+    [[ -r "$2/.git/selfishell-approved-revision" ]] || return 1
+    command cat "$2/.git/selfishell-approved-revision"
+  elif [[ "$1" == "clone" ]]; then
     mkdir -p "${@: -1}"
   fi
 }
@@ -94,10 +97,16 @@ test_provisions_declared_zinit_plugins_without_loading_them() {
   grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   cat >"$zinit_script" <<'EOF'
 typeset -gi light_calls=0
+typeset -g approved_revision
 zinit() {
   print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
-  if [[ "$1" == light ]]; then
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
     light_calls=$((light_calls + 1))
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
     [[ "$light_calls" -eq 1 ]]
   fi
 }
@@ -146,6 +155,49 @@ EOF
   ')"
 
   [[ "$status" -ne 0 ]] || fail "Zinit plugin provisioning failure was ignored"
+}
+
+test_rejects_fresh_zinit_plugin_at_unapproved_revision() {
+  local manifest
+  local status=0
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+zinit() {
+  if [[ "$1" == light ]]; then
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  install_zinit_plugins || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "Installer accepted a fresh Zinit checkout without the approved revision"
+}
+
+test_preserves_preexisting_zinit_plugin_path() {
+  local manifest
+  local plugin_dir
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  plugin_dir="$HOME/.local/share/zinit/plugins/zsh-users---zsh-completions"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir"
+  printf '%s\n' 'user data' >"$plugin_dir/preserved"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  printf '%s\n' 'zinit() { :; }' >"$zinit_script"
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  install_zinit_plugins
+
+  [[ "$(<"$plugin_dir/preserved")" == 'user data' ]] || fail "Installer changed a pre-existing Zinit plugin path"
 }
 
 test_offline_mode_skips_zinit_plugin_provisioning() {

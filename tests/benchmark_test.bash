@@ -90,6 +90,24 @@ EOF
   teardown_test_home
 }
 
+test_benchmark_ignores_ambient_xdg_data_home() {
+  local ambient_data sentinel
+
+  setup_test_home
+  ambient_data="$TEST_ROOT/ambient-data"
+  sentinel="$TEST_ROOT/ambient-zinit-loaded"
+  mkdir -p "$ambient_data/zinit/zinit.git"
+  cat >"$ambient_data/zinit/zinit.git/zinit.zsh" <<EOF
+print -r -- loaded >"$sentinel"
+EOF
+
+  XDG_DATA_HOME="$ambient_data" SELFISHELL_BENCHMARK_ITERATIONS=1 \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode base >/dev/null
+
+  [[ ! -e "$sentinel" ]] || fail "Benchmark sourced Zinit from the caller's XDG data directory"
+  teardown_test_home
+}
+
 test_benchmark_profile_env_var_is_equivalent_to_mode_flag() {
   local output
 

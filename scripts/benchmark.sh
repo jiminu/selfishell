@@ -65,9 +65,10 @@ esac
 # leave a benchmark temp directory behind.
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
+TEST_DATA_HOME="$TEST_HOME/.local/share"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/mise" \
-  "$TEST_HOME/.config/selfishell/zsh" "$TEST_HOME/.local/bin"
+  "$TEST_HOME/.config/selfishell/zsh" "$TEST_HOME/.local/bin" "$TEST_DATA_HOME"
 : >"$TEST_HOME/.config/mise/config.toml"
 
 case "$(uname -s)" in
@@ -102,7 +103,8 @@ install_full_profile_integrations() {
   local name status=0
 
   for name in mise starship zinit; do
-    HOME="$TEST_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" \
+      XDG_CACHE_HOME="$TEST_HOME/.cache" \
       SELFISHELL_ROOT="$ROOT_DIR" \
       bash -c '
         source "$1/lib/common.sh"
@@ -197,7 +199,7 @@ run_common_zsh() {
   # In full mode, $TEST_HOME/.local/bin holds the pinned integrations. Base
   # mode uses it only for the benchmark-only macOS brew barrier.
   cd "$TEST_HOME"
-  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+  HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
     MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
     PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" TERM=xterm-256color \
     /bin/zsh -f -c 'source "$1"' \
@@ -207,7 +209,7 @@ run_common_zsh() {
 run_interactive_zsh() {
   cd "$TEST_HOME"
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
     MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
     PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
     /bin/zsh -d -i -c exit >/dev/null 2>&1
@@ -219,7 +221,7 @@ profile_interactive_zsh() {
   printf 'zmodload zsh/zprof\n' >"$TEST_HOME/.zshenv"
   cd "$TEST_HOME"
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
     MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
     PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
     /bin/zsh -d -i -c 'zprof' >"$ZPROF_FILE" 2>&1 || profile_status=$?
@@ -263,7 +265,7 @@ record_result "$baseline_result"
 # The first run creates the completion dump. Following measurements represent
 # the cached common configuration used during ordinary startup.
 export -f run_common_zsh run_interactive_zsh
-export ROOT_DIR TEST_HOME INTERACTIVE_PATH
+export ROOT_DIR TEST_HOME TEST_DATA_HOME INTERACTIVE_PATH
 record_result "$(benchmark common-first 1 bash -c 'run_common_zsh')"
 common_result="$(benchmark common-cached "$ITERATIONS" bash -c 'run_common_zsh')"
 record_result "$common_result"

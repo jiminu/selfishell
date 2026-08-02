@@ -7,6 +7,7 @@ install_zinit_plugins() {
   local revisions=()
   local index
   local manifest
+  local plugin_dir plugin_was_missing current_revision
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
   [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]] || return 0
@@ -22,6 +23,9 @@ install_zinit_plugins() {
   for ((index = 0; index < ${#repositories[@]}; index++)); do
     repository="${repositories[$index]}"
     revision="${revisions[$index]}"
+    plugin_dir="$data_home/zinit/plugins/${repository//\//---}"
+    plugin_was_missing=0
+    [[ -e "$plugin_dir" || -L "$plugin_dir" ]] || plugin_was_missing=1
     (
       command zsh -f -c '
         source "$1" || exit 1
@@ -32,6 +36,20 @@ install_zinit_plugins() {
       cli_error "Could not provision Zinit plugin: $repository"
       return 1
     }
+    if [[ "$plugin_was_missing" == 1 ]]; then
+      if [[ ! -d "$plugin_dir/.git" ]]; then
+        cli_error "Zinit plugin checkout is missing after provisioning: $repository"
+        return 1
+      fi
+      current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" || {
+        cli_error "Could not inspect Zinit plugin after provisioning: $repository"
+        return 1
+      }
+      if [[ "$current_revision" != "$revision" ]]; then
+        cli_error "Zinit plugin revision does not match after provisioning: $repository"
+        return 1
+      fi
+    fi
   done
 }
 
