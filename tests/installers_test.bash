@@ -38,7 +38,10 @@ mise() {
 git() {
   GIT_ARGUMENTS="$*"
   GIT_CALLS+=("$*")
-  if [[ "$1" == "clone" ]]; then
+  if [[ "$1" == "-C" && "$3" == "rev-parse" && "$4" == "HEAD" ]]; then
+    [[ -r "$2/.git/selfishell-approved-revision" ]] || return 1
+    command cat "$2/.git/selfishell-approved-revision"
+  elif [[ "$1" == "clone" ]]; then
     mkdir -p "${@: -1}"
   fi
 }
@@ -80,6 +83,145 @@ test_installs_declared_mise_tools_with_managed_config() {
     fail "mise tools were not installed together"
   [[ "$MISE_CONFIG" == "$ROOT_DIR/common/mise.toml" ]] ||
     fail "mise install did not use the Selfishell config"
+}
+
+test_provisions_declared_zinit_plugins_without_loading_them() {
+  local manifest
+  local repository
+  local revision
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+typeset -gi light_calls=0
+typeset -g approved_revision
+zinit() {
+  print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    light_calls=$((light_calls + 1))
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+    [[ "$light_calls" -eq 1 ]]
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_ZINIT_LOG="$TEST_ROOT/zinit-calls"
+
+  install_zinit_plugins
+
+  while read -r _ repository revision _; do
+    grep -Fqx "ice cloneonly ver$revision" "$SELFISHELL_TEST_ZINIT_LOG" ||
+      fail "$repository was not provisioned at its approved commit"
+    grep -Fqx "light $repository" "$SELFISHELL_TEST_ZINIT_LOG" ||
+      fail "$repository was not passed to Zinit"
+  done <"$manifest"
+  [[ "$(grep -c '^light ' "$SELFISHELL_TEST_ZINIT_LOG")" -eq 4 ]] ||
+    fail "Installer did not provision exactly four Zsh plugins"
+}
+
+test_fails_when_zinit_plugin_provisioning_fails() {
+  local manifest
+  local status
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+typeset -gi light_calls=0
+zinit() {
+  if [[ "$1" == light ]]; then
+    light_calls=$((light_calls + 1))
+    [[ "$light_calls" -gt 1 ]]
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  status="$(command bash -c '
+    source "$SELFISHELL_ROOT/lib/common.sh"
+    source "$SELFISHELL_ROOT/lib/dependencies.sh"
+    source "$SELFISHELL_ROOT/lib/installers.sh"
+    install_zinit_plugins
+    printf "%s\n" "$?"
+  ')"
+
+  [[ "$status" -ne 0 ]] || fail "Zinit plugin provisioning failure was ignored"
+}
+
+test_cleans_failed_fresh_zinit_plugin_for_retry() {
+  local manifest
+  local plugin_dir
+  local status=0
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  plugin_dir="$HOME/.local/share/zinit/plugins/zsh-users---zsh-completions"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+typeset -g approved_revision
+zinit() {
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    attempts=0
+    [[ ! -r "$SELFISHELL_TEST_ZINIT_ATTEMPTS" ]] || attempts="$(<"$SELFISHELL_TEST_ZINIT_ATTEMPTS")"
+    attempts=$((attempts + 1))
+    print -r -- "$attempts" >"$SELFISHELL_TEST_ZINIT_ATTEMPTS"
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    if ((attempts > 1)); then
+      print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+    fi
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_ZINIT_ATTEMPTS="$TEST_ROOT/zinit-attempts"
+
+  install_zinit_plugins || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "Installer accepted a fresh Zinit checkout without the approved revision"
+  [[ ! -e "$plugin_dir" && ! -L "$plugin_dir" ]] || fail "Installer left a failed fresh Zinit checkout in place"
+
+  install_zinit_plugins
+
+  [[ -d "$plugin_dir/.git" ]] || fail "Installer could not retry Zinit provisioning after cleanup"
+}
+
+test_preserves_preexisting_zinit_plugin_path() {
+  local manifest
+  local plugin_dir
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  plugin_dir="$HOME/.local/share/zinit/plugins/zsh-users---zsh-completions"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir"
+  printf '%s\n' 'user data' >"$plugin_dir/preserved"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  printf '%s\n' 'zinit() { :; }' >"$zinit_script"
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  install_zinit_plugins
+
+  [[ "$(<"$plugin_dir/preserved")" == 'user data' ]] || fail "Installer changed a pre-existing Zinit plugin path"
+}
+
+test_offline_mode_skips_zinit_plugin_provisioning() {
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/missing-dependencies.conf"
+
+  SELFISHELL_OFFLINE=1 install_zinit_plugins
 }
 
 test_installs_declared_neovim_plugins() {

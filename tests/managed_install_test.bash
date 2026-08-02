@@ -1319,6 +1319,35 @@ test_mise_global_config_ownership() {
 # makes dependency_install treat them as already present. This is host- and
 # platform-independent: it works whether the test runs on the Ubuntu or
 # macOS CI runner, since it never depends on a real apt-get or network path.
+setup_fake_zinit() {
+  local real_git
+
+  real_git="$(command -v git)"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git"
+  cat >"$HOME/.local/share/zinit/zinit.git/zinit.zsh" <<'EOF'
+typeset -g selfishell_test_revision
+zinit() {
+  if [[ "$1" == ice ]]; then
+    selfishell_test_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    print -r -- "$selfishell_test_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  fi
+}
+EOF
+  cat >"$TEST_ROOT/bin/git" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == -C && "\${3:-}" == rev-parse && "\${4:-}" == HEAD &&
+      -r "\$2/.git/selfishell-approved-revision" ]]; then
+  cat "\$2/.git/selfishell-approved-revision"
+  exit 0
+fi
+exec "$real_git" "\$@"
+EOF
+  chmod +x "$TEST_ROOT/bin/git"
+}
+
 setup_fake_minimal_packages() {
   mkdir -p "$TEST_ROOT/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt-get"
@@ -1329,8 +1358,7 @@ setup_fake_minimal_packages() {
   mkdir -p "$HOME/.local/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
   chmod +x "$HOME/.local/bin/starship"
-  mkdir -p "$HOME/.local/share/zinit/zinit.git"
-  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  setup_fake_zinit
 }
 
 setup_fake_macos_minimal_packages() {
@@ -1346,8 +1374,7 @@ fi
 EOF
   chmod +x "$TEST_ROOT/bin/brew"
 
-  mkdir -p "$HOME/.local/share/zinit/zinit.git"
-  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  setup_fake_zinit
 }
 
 # Copies the checkout into its own root so a test can change a managed

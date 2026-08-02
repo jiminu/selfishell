@@ -4,10 +4,19 @@ ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 
 if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
-  # Pinned to the commit recorded for zsh-users/zsh-completions in
-  # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
-  zinit ice blockf atpull'zinit creinstall -q .' ver'bf2c5393295fe82d74e3b4585baa483722653ab8'
-  zinit light zsh-users/zsh-completions
+
+  _selfishell_zinit_plugin_ready() {
+    local repository="$1"
+    [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1
+    [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}" ]]
+  }
+
+  if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
+    # Pinned to the commit recorded for zsh-users/zsh-completions in
+    # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
+    zinit ice blockf atpull'zinit creinstall -q .' ver'bf2c5393295fe82d74e3b4585baa483722653ab8'
+    zinit light zsh-users/zsh-completions
+  fi
 fi
 
 zstyle ':completion:*' matcher-list \

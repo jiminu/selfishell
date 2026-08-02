@@ -7,13 +7,14 @@ ITERATIONS="${SELFISHELL_BENCHMARK_ITERATIONS:-30}"
 ENFORCE_BUDGETS="${SELFISHELL_BENCHMARK_ENFORCE:-0}"
 PROFILE_MODE="${SELFISHELL_BENCHMARK_PROFILE:-base}"
 RESULTS_FILE="${SELFISHELL_BENCHMARK_RESULTS_FILE:-}"
+ZPROF_FILE="${SELFISHELL_BENCHMARK_ZPROF_FILE:-}"
 
 usage() {
   cat <<'EOF'
 Usage: scripts/benchmark.sh [--mode base|full]
 
   base  Selfishell's own startup cost, independent of external integrations
-        (mise/starship/zinit/fzf/zoxide measured only if already on PATH).
+        (mise/starship/zinit/fzf/zoxide are excluded).
         This is the default and what CI runs on every push/PR.
 
   full  Installs the pinned mise, starship, and zinit (with its pinned
@@ -64,13 +65,21 @@ esac
 # leave a benchmark temp directory behind.
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
+TEST_DATA_HOME="$TEST_HOME/.local/share"
 trap 'rm -rf "$TEST_ROOT"' EXIT
-mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/selfishell/zsh"
+mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/mise" \
+  "$TEST_HOME/.config/selfishell/zsh" "$TEST_HOME/.local/bin" "$TEST_DATA_HOME"
+: >"$TEST_HOME/.config/mise/config.toml"
 
 case "$(uname -s)" in
   Darwin) PLATFORM_CONFIG="$ROOT_DIR/mac/.zshrc" ;;
   *) PLATFORM_CONFIG="$ROOT_DIR/ubuntu/.zshrc" ;;
 esac
+
+if [[ "$PROFILE_MODE" == base && "$(uname -s)" == Darwin ]]; then
+  printf '#!/bin/sh\nexit 0\n' >"$TEST_HOME/.local/bin/brew"
+  chmod +x "$TEST_HOME/.local/bin/brew"
+fi
 
 ln -s "$ROOT_DIR/common/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
 ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
@@ -91,30 +100,20 @@ date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 # the platform package manager -- installing packages is out of scope for
 # this script -- so provision them separately before running --mode full.
 install_full_profile_integrations() {
-  local platform dependency_platform architecture
   local name status=0
 
-  platform="$(
-    source "$ROOT_DIR/lib/common.sh"
-    source "$ROOT_DIR/lib/platform.sh"
-    detect_platform
-  )"
-  case "$platform" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$platform" ;; esac
-  architecture="$(
-    source "$ROOT_DIR/lib/common.sh"
-    source "$ROOT_DIR/lib/platform.sh"
-    detect_architecture
-  )"
-
   for name in mise starship zinit; do
-    HOME="$TEST_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" \
+      XDG_CACHE_HOME="$TEST_HOME/.cache" \
       SELFISHELL_ROOT="$ROOT_DIR" \
       bash -c '
         source "$1/lib/common.sh"
         source "$1/lib/paths.sh"
+        source "$1/lib/platform.sh"
         source "$1/lib/dependencies.sh"
-        dependency_install "$2" "$3" "$4"
-      ' _ "$ROOT_DIR" "$name" "$dependency_platform" "$architecture" || status=1
+        source "$1/lib/installers.sh"
+        install_direct_package required "$2" 0
+      ' _ "$ROOT_DIR" "$name" || status=1
   done
 
   ((status == 0)) || {
@@ -125,8 +124,12 @@ install_full_profile_integrations() {
 
 if [[ "$PROFILE_MODE" == full ]]; then
   install_full_profile_integrations
-  PATH="$TEST_HOME/.local/bin:$PATH"
 fi
+
+case "$PROFILE_MODE" in
+  base) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:/usr/bin:/bin" ;;
+  full) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:$PATH" ;;
+esac
 
 validate_iterations() {
   case "$ITERATIONS" in
@@ -193,18 +196,37 @@ record_result() {
 }
 
 run_common_zsh() {
-  # $TEST_HOME/.local/bin is only populated (and only matters) in --mode
-  # full, where it holds the pinned mise/starship provisioned above;
-  # prepending it is a no-op in base mode.
-  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" \
+  # In full mode, $TEST_HOME/.local/bin holds the pinned integrations. Base
+  # mode uses it only for the benchmark-only macOS brew barrier.
+  cd "$TEST_HOME"
+  HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" TERM=xterm-256color \
     /bin/zsh -f -c 'source "$1"' \
     zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
 }
 
 run_interactive_zsh() {
+  cd "$TEST_HOME"
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$ROOT_DIR/bin:$PATH" \
+    XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
     /bin/zsh -d -i -c exit >/dev/null 2>&1
+}
+
+profile_interactive_zsh() {
+  local profile_status=0
+
+  printf 'zmodload zsh/zprof\n' >"$TEST_HOME/.zshenv"
+  cd "$TEST_HOME"
+  HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
+    XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
+    /bin/zsh -d -i -c 'zprof' >"$ZPROF_FILE" 2>&1 || profile_status=$?
+  rm -f "$TEST_HOME/.zshenv"
+  return "$profile_status"
 }
 
 describe_integrations() {
@@ -212,7 +234,7 @@ describe_integrations() {
   local summary="Interactive integrations:"
 
   for integration in starship fzf zoxide; do
-    if PATH="$TEST_HOME/.local/bin:$PATH" command -v "$integration" >/dev/null 2>&1; then
+    if PATH="$INTERACTIVE_PATH" command -v "$integration" >/dev/null 2>&1; then
       status=enabled
     else
       status=absent
@@ -243,7 +265,7 @@ record_result "$baseline_result"
 # The first run creates the completion dump. Following measurements represent
 # the cached common configuration used during ordinary startup.
 export -f run_common_zsh run_interactive_zsh
-export ROOT_DIR TEST_HOME PATH
+export ROOT_DIR TEST_HOME TEST_DATA_HOME INTERACTIVE_PATH
 record_result "$(benchmark common-first 1 bash -c 'run_common_zsh')"
 common_result="$(benchmark common-cached "$ITERATIONS" bash -c 'run_common_zsh')"
 record_result "$common_result"
@@ -269,3 +291,7 @@ check_budget cli-version "$(printf '%s\n' "$version_result" | awk -F '\t' '{ pri
   "${SELFISHELL_BENCHMARK_VERSION_P95_MAX_MS:-}"
 check_budget cli-help "$(printf '%s\n' "$help_result" | awk -F '\t' '{ print $4 }')" \
   "${SELFISHELL_BENCHMARK_HELP_P95_MAX_MS:-}"
+
+if [[ -n "$ZPROF_FILE" ]]; then
+  profile_interactive_zsh
+fi

@@ -1,5 +1,61 @@
 #!/usr/bin/env bash
 
+install_zinit_plugins() {
+  local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local type repository revision
+  local repositories=()
+  local revisions=()
+  local index
+  local manifest
+  local plugin_dir plugin_was_missing current_revision
+  local failure_message
+  local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
+
+  [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]] || return 0
+  manifest="$(dependencies_manifest_path)"
+  [[ -r "$zinit_script" && -r "$manifest" ]] || return 1
+
+  while read -r type repository revision _; do
+    [[ "$type" == zsh-plugin ]] || continue
+    repositories+=("$repository")
+    revisions+=("$revision")
+  done <"$manifest"
+
+  for ((index = 0; index < ${#repositories[@]}; index++)); do
+    repository="${repositories[$index]}"
+    revision="${revisions[$index]}"
+    plugin_dir="$data_home/zinit/plugins/${repository//\//---}"
+    plugin_was_missing=0
+    [[ -e "$plugin_dir" || -L "$plugin_dir" ]] || plugin_was_missing=1
+    failure_message=""
+    if ! (
+      command zsh -f -c '
+        source "$1" || exit 1
+        zinit ice cloneonly "ver${3}" || exit 1
+        zinit light "$2"
+      ' zsh "$zinit_script" "$repository" "$revision" </dev/null
+    ); then
+      failure_message="Could not provision Zinit plugin: $repository"
+    elif [[ "$plugin_was_missing" == 1 ]]; then
+      if [[ ! -d "$plugin_dir/.git" ]]; then
+        failure_message="Zinit plugin checkout is missing after provisioning: $repository"
+      elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)"; then
+        failure_message="Could not inspect Zinit plugin after provisioning: $repository"
+      elif [[ "$current_revision" != "$revision" ]]; then
+        failure_message="Zinit plugin revision does not match after provisioning: $repository"
+      fi
+    fi
+    if [[ -n "$failure_message" ]]; then
+      if [[ "$plugin_was_missing" == 1 && (-e "$plugin_dir" || -L "$plugin_dir") ]] &&
+        ! (command rm -rf -- "$plugin_dir"); then
+        cli_error "Could not clean failed Zinit plugin checkout: $repository"
+      fi
+      cli_error "$failure_message"
+      return 1
+    fi
+  done
+}
+
 install_direct_package() {
   local requirement="$1"
   local package="$2"
@@ -11,10 +67,16 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | mise | zinit)
+    starship | mise)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
+      ;;
+    zinit)
+      local dependency_platform
+      case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
+      dependency_install "$package" "$dependency_platform" "$(detect_architecture)" || return
+      install_zinit_plugins
       ;;
     *)
       cli_error "Unknown direct package: $package"

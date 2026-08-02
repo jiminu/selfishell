@@ -25,9 +25,14 @@ interactive Zsh through the platform `.zshrc`.
 
 Base mode is the default, and what CI runs on every push/PR. It measures
 Selfishell's own startup cost independent of external integrations: Starship,
-fzf, zoxide, and Zinit are included only if they already happen to be on
-`PATH` (Zinit only if it exists inside the isolated benchmark home), so a
-normal local run does not execute or modify the developer's plugin checkout.
+fzf, zoxide, and Zinit are excluded even if they are installed on the caller's
+`PATH`. The fixed benchmark path makes results independent of tools installed
+on the developer machine. Every measured shell starts from the isolated home
+directory with an empty isolated mise config. On macOS, base mode also places a
+benchmark-only no-op `brew` ahead of Homebrew discovery so `brew shellenv`
+cannot reintroduce host tools. A normal local run therefore does not read the
+developer's mise configuration or execute or modify the developer's plugin
+checkout.
 
 ### Full-profile mode
 
@@ -39,6 +44,8 @@ the runner's `PATH`. It:
 
 - uses an isolated, temporary `HOME`; the real user `HOME` is never read or
   changed;
+- uses that home as its working directory and gives mise an isolated global
+  config;
 - installs the pinned mise, Starship, and Zinit (with its pinned plugins)
   into that isolated `HOME`;
 - measures fzf and zoxide only if they are already on `PATH` -- installing
@@ -53,6 +60,22 @@ the runner's `PATH`. It:
 `common-first` is the once-per-day completion cache generation cost.
 `common-cached` and `interactive-cached` represent ordinary warm startup. The
 first-run metric is informational and does not have a performance budget.
+
+## Startup profiling
+
+Set `SELFISHELL_BENCHMARK_ZPROF_FILE` to collect one Zsh profiler report after
+the normal timed measurements:
+
+```sh
+SELFISHELL_BENCHMARK_ZPROF_FILE=/tmp/selfishell-startup.zprof \
+  bash scripts/benchmark.sh --mode full
+```
+
+The report ranks initialization functions by time and is intended for finding
+expensive startup paths. The benchmark loads Zsh's built-in `zsh/zprof` module
+only for this additional diagnostic startup, after every reported metric and
+budget check has completed. It adds no code or dependency to ordinary shell
+startup and does not enforce a performance threshold.
 
 ## CI budgets
 
@@ -73,11 +96,12 @@ The full-profile benchmark runs under the same warn-only policy
 `*_P95_MAX_MS` variable, so it reports metrics for comparison without
 budget-overrun warnings.
 
-Every run uploads a TSV artifact: `shell-performance-<platform>` for the base
-benchmark (one per OS in the CI matrix) and `shell-performance-full-profile`
-for the full-profile benchmark. These results establish platform-specific
-baselines before budgets become blocking. Set `SELFISHELL_BENCHMARK_ENFORCE=1`
-to make an overrun fail locally or in CI.
+Each base run uploads a TSV artifact named `shell-performance-<platform>` (one
+per OS in the CI matrix). The Ubuntu `shell-performance-full-profile` artifact
+contains both `selfishell-benchmark-full.tsv` and the diagnostic
+`selfishell-startup.zprof`. These results establish platform-specific baselines
+before budgets become blocking. Set `SELFISHELL_BENCHMARK_ENFORCE=1` to make an
+overrun fail locally or in CI.
 
 The budget variables are:
 

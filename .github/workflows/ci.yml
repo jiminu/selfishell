@@ -125,13 +125,16 @@ jobs:
           # startup, not just what happens to be on the runner's PATH.
           SELFISHELL_BENCHMARK_ENFORCE: 0
           SELFISHELL_BENCHMARK_RESULTS_FILE: ${{ runner.temp }}/selfishell-benchmark-full.tsv
+          SELFISHELL_BENCHMARK_ZPROF_FILE: ${{ runner.temp }}/selfishell-startup.zprof
         run: bash scripts/benchmark.sh --mode full
 
       - name: Upload full-profile performance result
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: shell-performance-full-profile
-          path: ${{ runner.temp }}/selfishell-benchmark-full.tsv
+          path: |
+            ${{ runner.temp }}/selfishell-benchmark-full.tsv
+            ${{ runner.temp }}/selfishell-startup.zprof
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E
@@ -195,11 +198,31 @@ jobs:
           source lib/dependencies.sh
           dependency_install mise linux amd64
 
+      - name: Read pinned Neovim toolchain
+        run: |
+          mise_version() {
+            awk -v requested="$1" '
+              /^\[/ { in_tools = ($0 == "[tools]"); next }
+              in_tools && $1 == requested {
+                gsub(/[[:space:]"]/, "", $3)
+                print $3
+                exit
+              }
+            ' common/mise.toml
+          }
+
+          neovim_version="$(mise_version neovim)"
+          tree_sitter_version="$(mise_version tree-sitter)"
+          node_version="$(mise_version node)"
+          [[ -n "$neovim_version" && -n "$tree_sitter_version" && -n "$node_version" ]]
+          printf 'MISE_E2E_TOOLS=neovim@%s tree-sitter@%s node@%s\n' \
+            "$neovim_version" "$tree_sitter_version" "$node_version" >>"$GITHUB_ENV"
+
       - name: Install pinned Neovim toolchain
-        run: ~/.local/bin/mise install neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0
+        run: ~/.local/bin/mise install $MISE_E2E_TOOLS
 
       - name: Run Neovim configuration tests
-        run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash tests/neovim_config_test.bash
+        run: ~/.local/bin/mise exec $MISE_E2E_TOOLS -- bash tests/neovim_config_test.bash
 
       - name: Run real Neovim lifecycle
-        run: ~/.local/bin/mise exec neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 -- bash scripts/neovim-e2e.sh
+        run: ~/.local/bin/mise exec $MISE_E2E_TOOLS -- bash scripts/neovim-e2e.sh

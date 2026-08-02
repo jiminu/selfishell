@@ -12,6 +12,18 @@ selfishell install
 `selfishell install` selects the recommended `developer` profile. Use
 `selfishell install --profile minimal` for a lightweight shell setup.
 
+## Verification coverage
+
+Automated verification currently exercises the Ubuntu 24.04 container
+installation lifecycle, the configuration lifecycle on a GitHub-hosted macOS
+runner, and the pinned Neovim developer lifecycle on Ubuntu. Shell checks and
+base performance measurements run on Ubuntu and macOS; the full developer
+profile performance measurement runs on Ubuntu.
+
+The supported-platform list is broader than this runner matrix. WSL and every
+advertised architecture are not exercised as separate CI runners, although
+their detection and platform-specific behavior have isolated test coverage.
+
 ## Bootstrap options
 
 ### Add the CLI directory to PATH

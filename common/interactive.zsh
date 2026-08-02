@@ -96,19 +96,25 @@ if _selfishell_fzf_bin="$(command -v fzf)"; then
 fi
 unset _selfishell_fzf_bin
 
-if (($+functions[zinit])); then
+if (( $+functions[zinit] && $+functions[_selfishell_zinit_plugin_ready] )); then
   # Pinned to the commits recorded in dependencies.conf; keep the two in
   # sync (see tests/common_zsh_test.bash).
   # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
-  if command -v fzf >/dev/null 2>&1; then
+  if command -v fzf >/dev/null 2>&1 && _selfishell_zinit_plugin_ready Aloxaf/fzf-tab; then
     zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
     zinit light Aloxaf/fzf-tab
   fi
-  zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
-  zinit light zsh-users/zsh-autosuggestions
-  zinit ice wait'0' lucid ver'3d574ccf48804b10dca52625df13da5edae7f553'
-  zinit light zdharma-continuum/fast-syntax-highlighting
+  if _selfishell_zinit_plugin_ready zsh-users/zsh-autosuggestions; then
+    zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
+    zinit light zsh-users/zsh-autosuggestions
+  fi
+  if _selfishell_zinit_plugin_ready zdharma-continuum/fast-syntax-highlighting; then
+    zinit ice wait'0' lucid ver'3d574ccf48804b10dca52625df13da5edae7f553'
+    zinit light zdharma-continuum/fast-syntax-highlighting
+  fi
 fi
+
+unfunction _selfishell_zinit_plugin_ready 2>/dev/null
 
 if _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
