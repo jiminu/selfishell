@@ -82,6 +82,72 @@ test_installs_declared_mise_tools_with_managed_config() {
     fail "mise install did not use the Selfishell config"
 }
 
+test_provisions_declared_zinit_plugins_without_loading_them() {
+  local manifest
+  local repository
+  local revision
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+zinit() {
+  print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_ZINIT_LOG="$TEST_ROOT/zinit-calls"
+
+  : "$(install_zinit_plugins)"
+
+  while read -r _ repository revision _; do
+    grep -Fqx "ice cloneonly ver$revision" "$SELFISHELL_TEST_ZINIT_LOG" ||
+      fail "$repository was not provisioned at its approved commit"
+    grep -Fqx "light $repository" "$SELFISHELL_TEST_ZINIT_LOG" ||
+      fail "$repository was not passed to Zinit"
+  done <"$manifest"
+  [[ "$(grep -c '^light ' "$SELFISHELL_TEST_ZINIT_LOG")" -eq 4 ]] ||
+    fail "Installer did not provision exactly four Zsh plugins"
+}
+
+test_fails_when_zinit_plugin_provisioning_fails() {
+  local manifest
+  local status
+  local zinit_script
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  mkdir -p "$(dirname "$zinit_script")"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  cat >"$zinit_script" <<'EOF'
+typeset -gi light_calls=0
+zinit() {
+  if [[ "$1" == light ]]; then
+    light_calls=$((light_calls + 1))
+    [[ "$light_calls" -gt 1 ]]
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  status="$(command bash -c '
+    source "$SELFISHELL_ROOT/lib/dependencies.sh"
+    source "$SELFISHELL_ROOT/lib/installers.sh"
+    install_zinit_plugins
+    printf "%s\n" "$?"
+  ')"
+
+  [[ "$status" -ne 0 ]] || fail "Zinit plugin provisioning failure was ignored"
+}
+
+test_offline_mode_skips_zinit_plugin_provisioning() {
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/missing-dependencies.conf"
+
+  SELFISHELL_OFFLINE=1 install_zinit_plugins
+}
+
 test_installs_declared_neovim_plugins() {
   NVIM_CALLS=()
   install_neovim_plugins 0

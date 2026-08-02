@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
 
+install_zinit_plugins() {
+  local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local manifest
+  local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
+
+  [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]] || return 0
+  manifest="$(dependencies_manifest_path)"
+  [[ -r "$zinit_script" && -r "$manifest" ]] || return 1
+
+  command zsh -f -c '
+    source "$1" || exit 1
+    while read -r type repository revision platform architecture source checksum target marker; do
+      [[ "$type" == zsh-plugin ]] || continue
+      zinit ice cloneonly "ver${revision}" || exit 1
+      zinit light "$repository" || exit 1
+    done <"$2"
+  ' zsh "$zinit_script" "$manifest" || return 1
+}
+
 install_direct_package() {
   local requirement="$1"
   local package="$2"
@@ -11,10 +30,16 @@ install_direct_package() {
   fi
 
   case "$package" in
-    starship | mise | zinit)
+    starship | mise)
       local dependency_platform
       case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
+      ;;
+    zinit)
+      local dependency_platform
+      case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
+      dependency_install "$package" "$dependency_platform" "$(detect_architecture)" || return
+      install_zinit_plugins
       ;;
     *)
       cli_error "Unknown direct package: $package"
