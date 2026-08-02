@@ -87,23 +87,20 @@ return {
         git_ignored = false,
       },
       renderer = {
-        -- Mark folders with a trailing "/" instead of an icon, and color
-        -- names by git status (including gitignored) instead of showing a
-        -- git icon, so the narrow tree spends its width on names.
+        -- Keep folders distinct without spending the narrow tree's width on
+        -- icons, and show native branch guides for nested directories.
         add_trailing = true,
         highlight_git = "name",
+        indent_markers = {
+          enable = true,
+          inline_arrows = true,
+        },
         icons = {
           show = {
             file = false,
             folder = false,
             folder_arrow = true,
             git = false,
-          },
-          glyphs = {
-            folder = {
-              arrow_closed = ">",
-              arrow_open = "v",
-            },
           },
         },
       },

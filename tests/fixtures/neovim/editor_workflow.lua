@@ -98,6 +98,12 @@ vim.o.columns = 200
 assert(tree.opts.view.width() == 30, "width should clamp to the 30-column maximum")
 vim.o.columns = original_columns
 assert(type(tree.opts.on_attach) == "function", "NvimTree does not preserve window navigation mappings")
+assert(tree.opts.renderer.indent_markers.enable, "NvimTree indent markers should be enabled")
+assert(tree.opts.renderer.indent_markers.inline_arrows, "NvimTree arrows should align with indent markers")
+assert(not tree.opts.renderer.icons.glyphs, "NvimTree should use its default icon glyphs")
+assert(not tree.opts.renderer.icons.padding, "NvimTree folder arrows should use the default padding")
+assert(tree.opts.renderer.icons.show.file == false, "NvimTree file icons should remain hidden")
+assert(tree.opts.renderer.icons.show.folder == false, "NvimTree folder icons should remain hidden")
 assert(
   plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>",
   "missing current-file tree mapping"
