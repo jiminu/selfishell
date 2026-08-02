@@ -154,6 +154,40 @@ EOF
   teardown_test_home
 }
 
+# compinit's security audit (compaudit) is the most expensive part of startup
+# and is meant to run once a day, not on every shell. Its freshness check needs
+# EXTENDED_GLOB to glob at all, and without it every dump reads as stale.
+test_completion_audits_the_dump_once_a_day() {
+  local audits_when_fresh audits_when_stale
+
+  setup_test_home
+  mkdir -p "$HOME/.cache/selfishell" "$HOME/.local/share"
+
+  count_startup_audits() {
+    XDG_CACHE_HOME="$HOME/.cache" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -i -c '
+        load_nvm() { :; }
+        zmodload zsh/zprof
+        source "$1"
+        zprof
+      ' zsh "$ROOT_DIR/common/common.zsh" 2>/dev/null | grep -c compaudit || true
+  }
+
+  count_startup_audits >/dev/null
+  audits_when_fresh="$(count_startup_audits)"
+  [[ "$audits_when_fresh" -eq 0 ]] ||
+    fail "A fresh completion dump was audited again on startup"
+
+  touch -t 202001010000 "$HOME/.zcompdump"
+  audits_when_stale="$(count_startup_audits)"
+  [[ "$audits_when_stale" -gt 0 ]] ||
+    fail "A day-old completion dump was not re-audited"
+  teardown_test_home
+}
+
 test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   local fake_bin
 
