@@ -96,7 +96,7 @@ if _selfishell_fzf_bin="$(command -v fzf)"; then
 fi
 unset _selfishell_fzf_bin
 
-if (( $+functions[zinit] && $+functions[_selfishell_zinit_plugin_ready] )); then
+if (($+functions[zinit])); then
   # Pinned to the commits recorded in dependencies.conf; keep the two in
   # sync (see tests/common_zsh_test.bash).
   # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
@@ -113,8 +113,6 @@ if (( $+functions[zinit] && $+functions[_selfishell_zinit_plugin_ready] )); then
     zinit light zdharma-continuum/fast-syntax-highlighting
   fi
 fi
-
-unfunction _selfishell_zinit_plugin_ready 2>/dev/null
 
 if _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"

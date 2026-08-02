@@ -152,7 +152,6 @@ organization-specific deployment, and problem solving.
 - [Distribution channels](docs/DISTRIBUTION.md) — supported installation
   channels.
 - [Release process](docs/RELEASING.md) — preparing and publishing releases.
-- [Roadmap](docs/MILESTONES.md) — planned project milestones.
 - [Vulnerability reporting](SECURITY.md) — report a security issue privately.
 
 The contributor and maintainer guides are separate from the quick-start path so

@@ -14,7 +14,6 @@ user experience consistent across supported platforms.
 - `profiles/*.conf` defines built-in package profiles.
 - `dependencies.conf` pins direct downloads and Git dependencies.
 - `common/mise.toml` pins mise-managed developer tools.
-- `docs/MILESTONES.md` is the roadmap, not a default task queue.
 - `docs/RELEASING.md` is the release procedure.
 
 The public installer currently lives in this GitHub repository. The
@@ -178,18 +177,20 @@ it; the gate remains required for the change categories listed above.
 | `tests/` | Isolated unit and lifecycle coverage |
 | `scripts/` | Validation, benchmarks, dependency discovery, release builds |
 | `.github/` | CI, dependency automation, and release publication |
-| `docs/` | User, maintainer, security, and roadmap documentation |
+| `docs/` | User, maintainer, and security documentation |
 
 ## Working Process
 
-1. Follow the user's requested scope. Consult the roadmap only for roadmap work
-   or when no task has been selected.
+1. Follow the user's requested scope.
 2. Check the worktree before editing and preserve unrelated user changes.
 3. Keep changes to one reviewable feature, fix, or documentation slice.
 4. Add or update tests for behavioral changes.
-5. Update milestone checkboxes only after their acceptance criteria pass.
-6. Record durable architecture decisions in this file or a focused document
+5. Record durable architecture decisions in this file or a focused document
    under `docs/`; keep transient status and dated run logs out of agent rules.
+6. Keep planning artifacts out of the repository. Implementation plans, design
+   drafts, task checklists, and roadmaps are working notes for one change: they
+   go stale the moment the change merges, and the merged diff plus its tests are
+   the durable record. Write them outside the checkout.
 7. Report only checks actually run. Separate local results, GitHub Actions
    results, and checks that were unavailable; never imply an unrun check passed.
 8. After merging a branch into `main`, delete the remote branch (e.g.

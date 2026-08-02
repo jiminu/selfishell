@@ -32,6 +32,34 @@ doctor_report_package() {
   fi
 }
 
+# Shell startup never downloads a Zsh plugin: it silently skips one whose
+# Zinit checkout is missing or incomplete. Without this check a degraded shell
+# has no visible cause, because the zinit package itself still reports as
+# installed.
+doctor_report_zinit_plugins() {
+  local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local manifest record_type repository
+  local missing=()
+
+  [[ -s "$data_home/zinit/zinit.git/zinit.zsh" ]] || return 0
+  manifest="$(dependencies_manifest_path)"
+  [[ -r "$manifest" ]] || return 0
+
+  while read -r record_type repository _; do
+    [[ "$record_type" == zsh-plugin ]] || continue
+    [[ -d "$data_home/zinit/plugins/${repository//\//---}/.git" ]] || missing+=("$repository")
+  done <"$manifest"
+
+  if ((${#missing[@]} > 0)); then
+    doctor_error "Zsh plugins: ${#missing[@]} not provisioned (${missing[*]})"
+    printf "        Run '%sselfishell install%s' to provision them; shell startup never downloads plugins.\n" \
+      "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
+    DOCTOR_RESULT="$SELFISHELL_EXIT_ERROR"
+    return
+  fi
+  doctor_ok "Zsh plugins: provisioned"
+}
+
 command_doctor() {
   require_no_arguments doctor "$@" || return
 
@@ -127,6 +155,7 @@ command_doctor() {
     esac
     DOCTOR_RESULT="$result"
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" doctor_report_package "$profile_platform"
+    doctor_report_zinit_plugins
     result="$DOCTOR_RESULT"
   fi
 

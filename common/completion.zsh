@@ -5,12 +5,6 @@ ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   source "$ZINIT_HOME/zinit.zsh"
 
-  _selfishell_zinit_plugin_ready() {
-    local repository="$1"
-    [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1
-    [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}" ]]
-  }
-
   if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
     # Pinned to the commit recorded for zsh-users/zsh-completions in
     # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
@@ -38,13 +32,24 @@ selfishell_completion_prepare_cache() {
   fi
 }
 
+# The (#q) glob qualifier is only recognized when EXTENDED_GLOB is set, and it
+# is off by default. Without it this test never globs, reports every dump as
+# stale, and makes compinit re-run compaudit on every interactive startup --
+# about 10ms. Enable the option locally so the once-a-day audit works as
+# intended (see tests/common_zsh_test.bash).
+_selfishell_zcompdump_is_stale() {
+  setopt localoptions extendedglob
+  [[ -n "$1"(#qN.mh+24) ]]
+}
+
 if [[ ! -o interactive ]]; then
   compinit -u -C -d "$ZCOMPDUMP"
-elif [[ -n "$ZCOMPDUMP"(#qN.mh+24) ]]; then
+elif _selfishell_zcompdump_is_stale "$ZCOMPDUMP"; then
   compinit -u -d "$ZCOMPDUMP"
 else
   compinit -u -C -d "$ZCOMPDUMP"
 fi
+unfunction _selfishell_zcompdump_is_stale
 
 if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
   zcompile "$ZCOMPDUMP"

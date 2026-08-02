@@ -300,6 +300,75 @@ test_doctor_does_not_require_compiler_for_minimal_profile() {
   teardown_test_home
 }
 
+# Shell startup skips a Zsh plugin whose Zinit checkout is missing or
+# incomplete instead of downloading it, so doctor is the only place that can
+# explain a silently degraded shell.
+test_doctor_reports_unprovisioned_zsh_plugins() {
+  local output plugins_dir repository
+
+  setup_test_home
+  plugins_dir="$HOME/.local/share/zinit/plugins"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
+    "$HOME/.local/share/zinit/zinit.git"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+  printf '# zinit\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  run_doctor() {
+    set +e
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+    set -e
+  }
+
+  output="$(run_doctor)"
+  [[ "$output" == *'Zsh plugins: 4 not provisioned'* ]] ||
+    fail "Doctor did not report unprovisioned Zsh plugins: $output"
+  [[ "$output" == *'zsh-users/zsh-autosuggestions'* ]] ||
+    fail "Doctor did not name the unprovisioned plugins: $output"
+
+  while read -r _ repository _; do
+    mkdir -p "$plugins_dir/${repository//\//---}/.git"
+  done < <(grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf")
+
+  output="$(run_doctor)"
+  [[ "$output" == *'Zsh plugins: provisioned'* ]] ||
+    fail "Doctor did not accept provisioned Zsh plugins: $output"
+  teardown_test_home
+}
+
+# SELFISHELL_ROOT is resolved with parameter expansion rather than `dirname`,
+# and `${path%/*}` leaves a bare filename unchanged. Every invocation form has
+# to keep finding the repository root, including through chained symlinks.
+test_cli_resolves_root_from_every_invocation_form() {
+  local expected link_dir
+
+  setup_test_home
+  expected="selfishell $(<"$ROOT_DIR/VERSION")"
+  link_dir="$TEST_ROOT/links"
+  mkdir -p "$link_dir"
+  ln -s "$ROOT_DIR/bin/selfishell" "$link_dir/direct"
+  ln -s direct "$link_dir/chained"
+
+  [[ "$(cd "$ROOT_DIR/bin" && bash selfishell version)" == "$expected" ]] ||
+    fail "A bare relative invocation did not resolve the Selfishell root"
+  [[ "$(bash "$ROOT_DIR/bin/selfishell" version)" == "$expected" ]] ||
+    fail "An absolute invocation did not resolve the Selfishell root"
+  [[ "$(bash "$link_dir/direct" version)" == "$expected" ]] ||
+    fail "A symlinked invocation did not resolve the Selfishell root"
+  [[ "$(bash "$link_dir/chained" version)" == "$expected" ]] ||
+    fail "A chained symlink invocation did not resolve the Selfishell root"
+  teardown_test_home
+}
+
 test_commands_reject_extra_arguments() {
   local status
 

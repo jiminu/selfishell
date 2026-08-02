@@ -26,6 +26,16 @@ _selfishell_command_path() {
   return 1
 }
 
+# Selfishell provisions every pinned Zsh plugin during installation; startup
+# never downloads one. Require a complete checkout rather than just the plugin
+# directory, so an interrupted or partial clone stays quiet instead of making
+# Zinit fail during startup. `selfishell doctor` reports the missing checkout.
+_selfishell_zinit_plugin_ready() {
+  local repository="$1"
+  [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1
+  [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}/.git" ]]
+}
+
 source "$SELFISHELL_COMMON_DIR/runtime.zsh"
 source "$SELFISHELL_COMMON_DIR/completion.zsh"
 source "$SELFISHELL_COMMON_DIR/interactive.zsh"

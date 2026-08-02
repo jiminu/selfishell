@@ -85,31 +85,32 @@ test_agents_developer_profile_tools_use_mise_source_of_truth() {
   done
 }
 
-# docs/MILESTONES.md's M3 profile-boundary description must match
-# the actual profiles/minimal.conf and profiles/developer.conf package lists.
-test_milestones_profile_boundaries_match_profile_files() {
+# docs/PROFILES.md's profile table must match the actual profiles/minimal.conf
+# and profiles/developer.conf package lists.
+test_profile_table_boundaries_match_profile_files() {
   local minimal_line developer_line tool
 
-  # The backtick-quoted labels are literal patterns, not expansions.
+  # The backtick-quoted labels are literal table cells, not expansions.
   # shellcheck disable=SC2016
-  minimal_line="$(join_wrapped_match '`minimal`:' "$ROOT_DIR/docs/MILESTONES.md")"
+  minimal_line="$(grep -F '| `minimal` |' "$ROOT_DIR/docs/PROFILES.md")"
   # shellcheck disable=SC2016
-  developer_line="$(join_wrapped_match '`developer`:' "$ROOT_DIR/docs/MILESTONES.md")"
+  developer_line="$(grep -F '| `developer` |' "$ROOT_DIR/docs/PROFILES.md")"
 
-  [[ -n "$minimal_line" ]] || fail "MILESTONES.md no longer documents the minimal profile boundary"
-  [[ -n "$developer_line" ]] || fail "MILESTONES.md no longer documents the developer profile boundary"
+  [[ -n "$minimal_line" ]] || fail "docs/PROFILES.md no longer documents the minimal profile boundary"
+  [[ -n "$developer_line" ]] || fail "docs/PROFILES.md no longer documents the developer profile boundary"
 
   for tool in fzf zoxide ripgrep eza bat jq; do
     [[ "$minimal_line" != *"$tool"* ]] ||
-      fail "MILESTONES.md claims minimal includes $tool, but profiles/minimal.conf does not"
+      fail "docs/PROFILES.md claims minimal includes $tool, but profiles/minimal.conf does not"
     grep -Fqi "$tool" "$ROOT_DIR/profiles/minimal.conf" &&
       fail "profiles/minimal.conf now installs $tool; the minimal boundary description needs a matching update"
   done
   for tool in Temurin kubectl kubectx; do
     [[ "$developer_line" != *"$tool"* ]] ||
-      fail "MILESTONES.md still claims developer manages $tool via mise"
+      fail "docs/PROFILES.md still claims developer manages $tool via mise"
   done
-  [[ "$developer_line" == *uv* ]] || fail "MILESTONES.md's developer boundary does not mention uv"
+  [[ "$developer_line" == *uv* ]] || fail "docs/PROFILES.md's developer boundary does not mention uv"
+  return 0
 }
 
 # AGENTS.md's automatic dependency-release rule must match the actual gate
