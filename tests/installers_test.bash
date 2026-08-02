@@ -157,28 +157,46 @@ EOF
   [[ "$status" -ne 0 ]] || fail "Zinit plugin provisioning failure was ignored"
 }
 
-test_rejects_fresh_zinit_plugin_at_unapproved_revision() {
+test_cleans_failed_fresh_zinit_plugin_for_retry() {
   local manifest
+  local plugin_dir
   local status=0
   local zinit_script
 
   manifest="$TEST_ROOT/dependencies.conf"
   zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  plugin_dir="$HOME/.local/share/zinit/plugins/zsh-users---zsh-completions"
   mkdir -p "$(dirname "$zinit_script")"
   grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
   cat >"$zinit_script" <<'EOF'
+typeset -g approved_revision
 zinit() {
-  if [[ "$1" == light ]]; then
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    attempts=0
+    [[ ! -r "$SELFISHELL_TEST_ZINIT_ATTEMPTS" ]] || attempts="$(<"$SELFISHELL_TEST_ZINIT_ATTEMPTS")"
+    attempts=$((attempts + 1))
+    print -r -- "$attempts" >"$SELFISHELL_TEST_ZINIT_ATTEMPTS"
     plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
     command mkdir -p "$plugin_dir/.git"
+    if ((attempts > 1)); then
+      print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+    fi
   fi
 }
 EOF
   export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_ZINIT_ATTEMPTS="$TEST_ROOT/zinit-attempts"
 
   install_zinit_plugins || status=$?
 
   [[ "$status" -ne 0 ]] || fail "Installer accepted a fresh Zinit checkout without the approved revision"
+  [[ ! -e "$plugin_dir" && ! -L "$plugin_dir" ]] || fail "Installer left a failed fresh Zinit checkout in place"
+
+  install_zinit_plugins
+
+  [[ -d "$plugin_dir/.git" ]] || fail "Installer could not retry Zinit provisioning after cleanup"
 }
 
 test_preserves_preexisting_zinit_plugin_path() {

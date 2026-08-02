@@ -8,6 +8,7 @@ install_zinit_plugins() {
   local index
   local manifest
   local plugin_dir plugin_was_missing current_revision
+  local failure_message
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
   [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]] || return 0
@@ -26,29 +27,31 @@ install_zinit_plugins() {
     plugin_dir="$data_home/zinit/plugins/${repository//\//---}"
     plugin_was_missing=0
     [[ -e "$plugin_dir" || -L "$plugin_dir" ]] || plugin_was_missing=1
-    (
+    failure_message=""
+    if ! (
       command zsh -f -c '
         source "$1" || exit 1
         zinit ice cloneonly "ver${3}" || exit 1
         zinit light "$2"
       ' zsh "$zinit_script" "$repository" "$revision" </dev/null
-    ) || {
-      cli_error "Could not provision Zinit plugin: $repository"
-      return 1
-    }
-    if [[ "$plugin_was_missing" == 1 ]]; then
+    ); then
+      failure_message="Could not provision Zinit plugin: $repository"
+    elif [[ "$plugin_was_missing" == 1 ]]; then
       if [[ ! -d "$plugin_dir/.git" ]]; then
-        cli_error "Zinit plugin checkout is missing after provisioning: $repository"
-        return 1
+        failure_message="Zinit plugin checkout is missing after provisioning: $repository"
+      elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)"; then
+        failure_message="Could not inspect Zinit plugin after provisioning: $repository"
+      elif [[ "$current_revision" != "$revision" ]]; then
+        failure_message="Zinit plugin revision does not match after provisioning: $repository"
       fi
-      current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" || {
-        cli_error "Could not inspect Zinit plugin after provisioning: $repository"
-        return 1
-      }
-      if [[ "$current_revision" != "$revision" ]]; then
-        cli_error "Zinit plugin revision does not match after provisioning: $repository"
-        return 1
+    fi
+    if [[ -n "$failure_message" ]]; then
+      if [[ "$plugin_was_missing" == 1 && (-e "$plugin_dir" || -L "$plugin_dir") ]] &&
+        ! (command rm -rf -- "$plugin_dir"); then
+        cli_error "Could not clean failed Zinit plugin checkout: $repository"
       fi
+      cli_error "$failure_message"
+      return 1
     fi
   done
 }
