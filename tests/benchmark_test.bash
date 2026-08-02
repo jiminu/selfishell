@@ -63,10 +63,12 @@ test_benchmark_base_mode_runs_without_network() {
 }
 
 test_benchmark_base_mode_ignores_ambient_integrations() {
-  local fake_bin output tool
+  local fake_bin output profile_file real_home tool
 
+  real_home="$HOME"
   setup_test_home
   fake_bin="$TEST_ROOT/bin"
+  profile_file="$TEST_ROOT/base.zprof"
   mkdir -p "$fake_bin"
   for tool in starship fzf zoxide; do
     cat >"$fake_bin/$tool" <<'EOF'
@@ -77,10 +79,14 @@ EOF
   done
 
   output="$(PATH="$fake_bin:$PATH" SELFISHELL_BENCHMARK_ITERATIONS=1 \
+    SELFISHELL_BENCHMARK_ZPROF_FILE="$profile_file" \
     bash "$ROOT_DIR/scripts/benchmark.sh" --mode base)"
 
   [[ "$output" == *'starship=absent fzf=absent zoxide=absent zinit=absent'* ]] ||
     fail "Base mode inherited optional integrations from PATH: $output"
+  ! grep -qi 'starship' "$profile_file" || fail "Base profiler executed ambient Starship"
+  ! grep -Fq "$real_home/.config/mise" "$profile_file" ||
+    fail "Benchmark profiler read the developer mise configuration"
   teardown_test_home
 }
 

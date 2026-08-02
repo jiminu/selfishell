@@ -66,12 +66,19 @@ esac
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
 trap 'rm -rf "$TEST_ROOT"' EXIT
-mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/selfishell/zsh"
+mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/mise" \
+  "$TEST_HOME/.config/selfishell/zsh" "$TEST_HOME/.local/bin"
+: >"$TEST_HOME/.config/mise/config.toml"
 
 case "$(uname -s)" in
   Darwin) PLATFORM_CONFIG="$ROOT_DIR/mac/.zshrc" ;;
   *) PLATFORM_CONFIG="$ROOT_DIR/ubuntu/.zshrc" ;;
 esac
+
+if [[ "$PROFILE_MODE" == base && "$(uname -s)" == Darwin ]]; then
+  printf '#!/bin/sh\nexit 0\n' >"$TEST_HOME/.local/bin/brew"
+  chmod +x "$TEST_HOME/.local/bin/brew"
+fi
 
 ln -s "$ROOT_DIR/common/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
 ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
@@ -92,20 +99,7 @@ date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 # the platform package manager -- installing packages is out of scope for
 # this script -- so provision them separately before running --mode full.
 install_full_profile_integrations() {
-  local platform dependency_platform architecture
   local name status=0
-
-  platform="$(
-    source "$ROOT_DIR/lib/common.sh"
-    source "$ROOT_DIR/lib/platform.sh"
-    detect_platform
-  )"
-  case "$platform" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$platform" ;; esac
-  architecture="$(
-    source "$ROOT_DIR/lib/common.sh"
-    source "$ROOT_DIR/lib/platform.sh"
-    detect_architecture
-  )"
 
   for name in mise starship zinit; do
     HOME="$TEST_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" XDG_CACHE_HOME="$TEST_HOME/.cache" \
@@ -113,9 +107,11 @@ install_full_profile_integrations() {
       bash -c '
         source "$1/lib/common.sh"
         source "$1/lib/paths.sh"
+        source "$1/lib/platform.sh"
         source "$1/lib/dependencies.sh"
-        dependency_install "$2" "$3" "$4"
-      ' _ "$ROOT_DIR" "$name" "$dependency_platform" "$architecture" || status=1
+        source "$1/lib/installers.sh"
+        install_direct_package required "$2" 0
+      ' _ "$ROOT_DIR" "$name" || status=1
   done
 
   ((status == 0)) || {
@@ -198,17 +194,22 @@ record_result() {
 }
 
 run_common_zsh() {
-  # $TEST_HOME/.local/bin is only populated (and only matters) in --mode
-  # full, where it holds the pinned mise/starship provisioned above;
-  # prepending it is a no-op in base mode.
-  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" \
+  # In full mode, $TEST_HOME/.local/bin holds the pinned integrations. Base
+  # mode uses it only for the benchmark-only macOS brew barrier.
+  cd "$TEST_HOME"
+  HOME="$TEST_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" TERM=xterm-256color \
     /bin/zsh -f -c 'source "$1"' \
     zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
 }
 
 run_interactive_zsh() {
+  cd "$TEST_HOME"
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$INTERACTIVE_PATH" \
+    XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
     /bin/zsh -d -i -c exit >/dev/null 2>&1
 }
 
@@ -216,8 +217,11 @@ profile_interactive_zsh() {
   local profile_status=0
 
   printf 'zmodload zsh/zprof\n' >"$TEST_HOME/.zshenv"
+  cd "$TEST_HOME"
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$INTERACTIVE_PATH" \
+    XDG_CACHE_HOME="$TEST_HOME/.cache" \
+    MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+    PATH="$INTERACTIVE_PATH" TERM=xterm-256color \
     /bin/zsh -d -i -c 'zprof' >"$ZPROF_FILE" 2>&1 || profile_status=$?
   rm -f "$TEST_HOME/.zshenv"
   return "$profile_status"

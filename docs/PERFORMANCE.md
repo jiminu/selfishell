@@ -27,8 +27,12 @@ Base mode is the default, and what CI runs on every push/PR. It measures
 Selfishell's own startup cost independent of external integrations: Starship,
 fzf, zoxide, and Zinit are excluded even if they are installed on the caller's
 `PATH`. The fixed benchmark path makes results independent of tools installed
-on the developer machine, and a normal local run does not execute or modify the
-developer's plugin checkout.
+on the developer machine. Every measured shell starts from the isolated home
+directory with an empty isolated mise config. On macOS, base mode also places a
+benchmark-only no-op `brew` ahead of Homebrew discovery so `brew shellenv`
+cannot reintroduce host tools. A normal local run therefore does not read the
+developer's mise configuration or execute or modify the developer's plugin
+checkout.
 
 ### Full-profile mode
 
@@ -40,6 +44,8 @@ the runner's `PATH`. It:
 
 - uses an isolated, temporary `HOME`; the real user `HOME` is never read or
   changed;
+- uses that home as its working directory and gives mise an isolated global
+  config;
 - installs the pinned mise, Starship, and Zinit (with its pinned plugins)
   into that isolated `HOME`;
 - measures fzf and zoxide only if they are already on `PATH` -- installing
