@@ -25,9 +25,10 @@ interactive Zsh through the platform `.zshrc`.
 
 Base mode is the default, and what CI runs on every push/PR. It measures
 Selfishell's own startup cost independent of external integrations: Starship,
-fzf, zoxide, and Zinit are included only if they already happen to be on
-`PATH` (Zinit only if it exists inside the isolated benchmark home), so a
-normal local run does not execute or modify the developer's plugin checkout.
+fzf, zoxide, and Zinit are excluded even if they are installed on the caller's
+`PATH`. The fixed benchmark path makes results independent of tools installed
+on the developer machine, and a normal local run does not execute or modify the
+developer's plugin checkout.
 
 ### Full-profile mode
 
@@ -53,6 +54,22 @@ the runner's `PATH`. It:
 `common-first` is the once-per-day completion cache generation cost.
 `common-cached` and `interactive-cached` represent ordinary warm startup. The
 first-run metric is informational and does not have a performance budget.
+
+## Startup profiling
+
+Set `SELFISHELL_BENCHMARK_ZPROF_FILE` to collect one Zsh profiler report after
+the normal timed measurements:
+
+```sh
+SELFISHELL_BENCHMARK_ZPROF_FILE=/tmp/selfishell-startup.zprof \
+  bash scripts/benchmark.sh --mode full
+```
+
+The report ranks initialization functions by time and is intended for finding
+expensive startup paths. The benchmark loads Zsh's built-in `zsh/zprof` module
+only for this additional diagnostic startup, after every reported metric and
+budget check has completed. It adds no code or dependency to ordinary shell
+startup and does not enforce a performance threshold.
 
 ## CI budgets
 

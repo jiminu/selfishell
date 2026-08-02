@@ -7,13 +7,14 @@ ITERATIONS="${SELFISHELL_BENCHMARK_ITERATIONS:-30}"
 ENFORCE_BUDGETS="${SELFISHELL_BENCHMARK_ENFORCE:-0}"
 PROFILE_MODE="${SELFISHELL_BENCHMARK_PROFILE:-base}"
 RESULTS_FILE="${SELFISHELL_BENCHMARK_RESULTS_FILE:-}"
+ZPROF_FILE="${SELFISHELL_BENCHMARK_ZPROF_FILE:-}"
 
 usage() {
   cat <<'EOF'
 Usage: scripts/benchmark.sh [--mode base|full]
 
   base  Selfishell's own startup cost, independent of external integrations
-        (mise/starship/zinit/fzf/zoxide measured only if already on PATH).
+        (mise/starship/zinit/fzf/zoxide are excluded).
         This is the default and what CI runs on every push/PR.
 
   full  Installs the pinned mise, starship, and zinit (with its pinned
@@ -125,8 +126,12 @@ install_full_profile_integrations() {
 
 if [[ "$PROFILE_MODE" == full ]]; then
   install_full_profile_integrations
-  PATH="$TEST_HOME/.local/bin:$PATH"
 fi
+
+case "$PROFILE_MODE" in
+  base) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:/usr/bin:/bin" ;;
+  full) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:$PATH" ;;
+esac
 
 validate_iterations() {
   case "$ITERATIONS" in
@@ -203,8 +208,19 @@ run_common_zsh() {
 
 run_interactive_zsh() {
   HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
-    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$ROOT_DIR/bin:$PATH" \
+    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$INTERACTIVE_PATH" \
     /bin/zsh -d -i -c exit >/dev/null 2>&1
+}
+
+profile_interactive_zsh() {
+  local profile_status=0
+
+  printf 'zmodload zsh/zprof\n' >"$TEST_HOME/.zshenv"
+  HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
+    XDG_CACHE_HOME="$TEST_HOME/.cache" PATH="$INTERACTIVE_PATH" \
+    /bin/zsh -d -i -c 'zprof' >"$ZPROF_FILE" 2>&1 || profile_status=$?
+  rm -f "$TEST_HOME/.zshenv"
+  return "$profile_status"
 }
 
 describe_integrations() {
@@ -212,7 +228,7 @@ describe_integrations() {
   local summary="Interactive integrations:"
 
   for integration in starship fzf zoxide; do
-    if PATH="$TEST_HOME/.local/bin:$PATH" command -v "$integration" >/dev/null 2>&1; then
+    if PATH="$INTERACTIVE_PATH" command -v "$integration" >/dev/null 2>&1; then
       status=enabled
     else
       status=absent
@@ -243,7 +259,7 @@ record_result "$baseline_result"
 # The first run creates the completion dump. Following measurements represent
 # the cached common configuration used during ordinary startup.
 export -f run_common_zsh run_interactive_zsh
-export ROOT_DIR TEST_HOME PATH
+export ROOT_DIR TEST_HOME INTERACTIVE_PATH
 record_result "$(benchmark common-first 1 bash -c 'run_common_zsh')"
 common_result="$(benchmark common-cached "$ITERATIONS" bash -c 'run_common_zsh')"
 record_result "$common_result"
@@ -269,3 +285,7 @@ check_budget cli-version "$(printf '%s\n' "$version_result" | awk -F '\t' '{ pri
   "${SELFISHELL_BENCHMARK_VERSION_P95_MAX_MS:-}"
 check_budget cli-help "$(printf '%s\n' "$help_result" | awk -F '\t' '{ print $4 }')" \
   "${SELFISHELL_BENCHMARK_HELP_P95_MAX_MS:-}"
+
+if [[ -n "$ZPROF_FILE" ]]; then
+  profile_interactive_zsh
+fi

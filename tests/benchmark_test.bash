@@ -62,6 +62,28 @@ test_benchmark_base_mode_runs_without_network() {
     fail "Base-mode benchmark did not report the expected metrics: $output"
 }
 
+test_benchmark_base_mode_ignores_ambient_integrations() {
+  local fake_bin output tool
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  for tool in starship fzf zoxide; do
+    cat >"$fake_bin/$tool" <<'EOF'
+#!/bin/sh
+printf ':\n'
+EOF
+    chmod +x "$fake_bin/$tool"
+  done
+
+  output="$(PATH="$fake_bin:$PATH" SELFISHELL_BENCHMARK_ITERATIONS=1 \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode base)"
+
+  [[ "$output" == *'starship=absent fzf=absent zoxide=absent zinit=absent'* ]] ||
+    fail "Base mode inherited optional integrations from PATH: $output"
+  teardown_test_home
+}
+
 test_benchmark_profile_env_var_is_equivalent_to_mode_flag() {
   local output
 
@@ -69,6 +91,21 @@ test_benchmark_profile_env_var_is_equivalent_to_mode_flag() {
 
   [[ "$output" == *'must be "base" or "full"'* ]] ||
     fail "SELFISHELL_BENCHMARK_PROFILE was not honored as a --mode equivalent: $output"
+}
+
+test_benchmark_writes_opt_in_zprof_report() {
+  local profile_file
+
+  setup_test_home
+  profile_file="$TEST_ROOT/startup.zprof"
+
+  SELFISHELL_BENCHMARK_ITERATIONS=1 \
+    SELFISHELL_BENCHMARK_ZPROF_FILE="$profile_file" \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode base >/dev/null
+
+  [[ -s "$profile_file" ]] || fail "Benchmark did not write the requested zprof report"
+  grep -Fq 'num  calls' "$profile_file" || fail "Benchmark output is not a zprof report"
+  teardown_test_home
 }
 
 # Argument parsing and mode validation must happen before benchmark.sh
