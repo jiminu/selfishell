@@ -8,8 +8,21 @@ _selfishell_command_path() {
   local directory
 
   if [[ -z "${WSL_DISTRO_NAME:-}" ]]; then
-    builtin whence -p -- "$command_name"
-    return
+    for directory in $path; do
+      if [[ -n "$directory" && "$directory" != /* ]]; then
+        builtin whence -p -- "$command_name"
+        return
+      fi
+    done
+    if (( ${path[(I)]} )) && [[ -x "$command_name" && ! -d "$command_name" ]]; then
+      print -r -- "$command_name"
+      return 0
+    fi
+    if (( ${+commands[$command_name]} )); then
+      print -r -- "${commands[$command_name]}"
+      return 0
+    fi
+    return 1
   fi
 
   for directory in $path; do

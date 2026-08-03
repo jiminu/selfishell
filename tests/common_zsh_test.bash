@@ -240,13 +240,19 @@ test_wsl_defers_windows_path_during_initialization() {
 
 test_non_wsl_command_lookup_uses_native_path_semantics() {
   local output
+  local path_dir
+  local relative_dir
   local work_dir
 
   setup_test_home
   work_dir="$TEST_ROOT/work"
-  mkdir -p "$work_dir"
-  printf '#!/bin/sh\n' >"$work_dir/probe"
-  chmod +x "$work_dir/probe"
+  path_dir="$TEST_ROOT/bin"
+  relative_dir="$TEST_ROOT/relative-bin"
+  mkdir -p "$work_dir" "$path_dir" "$relative_dir"
+  printf '#!/bin/sh\n' >"$work_dir/cwd-probe"
+  printf '#!/bin/sh\n' >"$path_dir/path-probe"
+  printf '#!/bin/sh\n' >"$relative_dir/relative-probe"
+  chmod +x "$work_dir/cwd-probe" "$path_dir/path-probe" "$relative_dir/relative-probe"
 
   output="$(
     XDG_CACHE_HOME="$HOME/.cache" \
@@ -256,12 +262,22 @@ test_non_wsl_command_lookup_uses_native_path_semantics() {
         load_nvm() { :; }
         source "$1"
         cd "$2"
-        path=("" /usr/bin /bin)
-        _selfishell_command_path probe || print -r -- missing
-      ' zsh "$ROOT_DIR/common/common.zsh" "$work_dir"
+        path=("" ../relative-bin "$3" /usr/bin /bin)
+        print -r -- "current=$(_selfishell_command_path cwd-probe)"
+        print -r -- "relative=$(_selfishell_command_path relative-probe)"
+        print -r -- "path=$(_selfishell_command_path path-probe)"
+        if _selfishell_command_path missing-probe >/dev/null; then
+          print -r -- "missing=found"
+        else
+          print -r -- "missing=absent"
+        fi
+      ' zsh "$ROOT_DIR/common/common.zsh" "$work_dir" "$path_dir"
   )"
 
-  [[ "$output" == probe ]] || fail "Native command lookup did not honor an empty PATH entry: $output"
+  [[ "$output" == "current=cwd-probe
+relative=../relative-bin/relative-probe
+path=$path_dir/path-probe
+missing=absent" ]] || fail "Native command lookup did not preserve PATH semantics: $output"
   teardown_test_home
 }
 
