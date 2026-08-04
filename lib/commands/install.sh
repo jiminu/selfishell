@@ -194,15 +194,16 @@ install_nvim_user_extension() {
 
   cat >"$temporary_file" <<'EOF'
 -- Optional Neovim LSP servers, on top of Selfishell's defaults (lua_ls,
--- pyright, bashls). Selfishell never edits or removes this file.
+-- pyright, bashls, ts_ls). Selfishell never edits or removes this file.
 --
--- Uncomment an entry to enable a server. `filetypes` controls both when the
--- LSP plugin loads and which buffers it attaches to. Names must match what
--- mason-lspconfig / nvim-lspconfig expect (clangd, jdtls, ts_ls, gopls, ...).
+-- Uncomment an entry to enable a server. Names must match what
+-- mason-lspconfig / nvim-lspconfig expect (clangd, jdtls, gopls, ...).
+-- Selfishell looks up the server's filetypes in nvim-lspconfig automatically;
+-- add `filetypes = { ... }` yourself only to override that.
 
 return {
   -- servers = {
-  --   clangd = { filetypes = { "c", "cpp" } },
+  --   clangd = {},
   -- },
 }
 EOF
