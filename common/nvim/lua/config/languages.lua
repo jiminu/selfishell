@@ -3,6 +3,7 @@ local M = {
     "lua_ls@3.18.2",
     "pyright@1.1.411",
     "bashls@5.6.0",
+    "ts_ls@5.3.0",
   },
   -- Union of the filetypes supported by the configured LSP servers.
   lsp_filetypes = {
@@ -10,6 +11,10 @@ local M = {
     "python",
     "sh",
     "bash",
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact",
   },
 }
 
