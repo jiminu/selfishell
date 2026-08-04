@@ -193,21 +193,18 @@ install_nvim_user_extension() {
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
   cat >"$temporary_file" <<'EOF'
--- Optional Neovim LSP servers, on top of Selfishell's defaults
--- (lua_ls, pyright, bashls). Selfishell never edits or removes this file.
+-- Optional Neovim LSP servers, on top of Selfishell's defaults (lua_ls,
+-- pyright, bashls). Selfishell never edits or removes this file.
 --
--- Uncomment and adjust to enable a server. `filetypes` controls both when
--- the LSP plugin loads and which buffers it attaches to. Server names must
--- match what mason-lspconfig / nvim-lspconfig expect (for example: clangd,
--- jdtls, ts_ls, rust_analyzer, gopls).
---
--- return {
---   servers = {
---     clangd = { filetypes = { "c", "cpp" } },
---   },
--- }
+-- Uncomment an entry to enable a server. `filetypes` controls both when the
+-- LSP plugin loads and which buffers it attaches to. Names must match what
+-- mason-lspconfig / nvim-lspconfig expect (clangd, jdtls, ts_ls, gopls, ...).
 
-return {}
+return {
+  -- servers = {
+  --   clangd = { filetypes = { "c", "cpp" } },
+  -- },
+}
 EOF
 
   if [[ ! -s "$temporary_file" ]]; then

@@ -67,6 +67,22 @@ with the installed configuration without a separate shortcut list.
 Lua, Python, Bash, and sh LSP support appears when a configured server
 attaches. Neovim's standard LSP mappings remain available as well.
 
+Additional LSP servers can be declared in
+`${XDG_CONFIG_HOME:-~/.config}/selfishell/nvim.user.lua`. This file is
+optional and user-owned: `selfishell install --profile developer` creates it
+once, with a commented example, if it does not already exist, then never
+edits, checksums, or removes it — it survives `selfishell update` and
+`selfishell uninstall`. Its schema is `return { servers = { <name> = {
+filetypes = { ... } } } }`; `filetypes` is required per server, and the
+server name must be one that mason-lspconfig / nvim-lspconfig recognize
+(Selfishell does not maintain a catalog of allowed names). A malformed file
+produces a startup notification and Neovim falls back to the default servers
+(lua_ls, pyright, bashls) rather than blocking startup or having Selfishell
+rewrite the file. If a declared server needs an external prerequisite
+Selfishell does not manage (currently only `jdtls`, which needs a JDK),
+Neovim warns at startup when it is missing from PATH rather than installing
+anything.
+
 New splits open to the right and below, four lines of context remain above and
 below the cursor when possible, commands that would discard unsaved changes ask
 for confirmation, and `:substitute` results preview in a split before they are

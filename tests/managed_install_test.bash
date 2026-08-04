@@ -1289,6 +1289,29 @@ test_nvim_user_extension_creation_on_developer_install() {
     fail "nvim.user.lua template does not document the servers schema"
 }
 
+test_nvim_user_extension_uncommented_example_is_valid_lua() {
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_nvim_user_extension_uncommented_example_is_valid_lua (Neovim unavailable)'
+  fi
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  local template_file="$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+  local uncommented_file="$TEST_ROOT/nvim.user.uncommented.lua"
+
+  # Reproduce exactly what the template's own comment instructs a user to do:
+  # uncomment the indented example lines, leaving everything else untouched.
+  sed 's/^  -- /  /' "$template_file" >"$uncommented_file"
+
+  grep -Fq '  servers = {' "$uncommented_file" ||
+    fail "Uncommenting the template did not produce an active servers table"
+
+  local output
+  output="$(nvim --headless -u NONE -i NONE "+lua dofile('$uncommented_file')" +qa 2>&1)"
+  [[ -z "$output" ]] ||
+    fail "Uncommented nvim.user.lua template failed to load as Lua: $output"
+}
+
 test_nvim_user_extension_absent_on_minimal_profile() {
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
@@ -1323,9 +1346,13 @@ test_nvim_user_extension_dry_run_creates_nothing() {
 
 test_nvim_user_extension_is_not_a_managed_resource() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  [[ ! -f "$XDG_STATE_HOME/selfishell/resources/nvim-user-lua.state" ]] &&
-    [[ ! -f "$XDG_STATE_HOME/selfishell/resources/nvim.user.lua.state" ]] ||
-    fail "nvim.user.lua must not have managed-resource state"
+
+  local declared_resources
+  declared_resources="$(
+    SELFISHELL_CONFIG_DIR="$XDG_CONFIG_HOME/selfishell" SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c 'source "$1/lib/resources.sh"; selfishell_managed_resources' _ "$ROOT_DIR"
+  )"
+  [[ "$declared_resources" != *'nvim.user.lua'* ]] || fail "nvim.user.lua must not be a declared managed resource"
 
   local status_out
   status_out="$(run_selfishell status 2>&1)" || true

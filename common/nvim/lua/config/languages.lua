@@ -53,6 +53,19 @@ local function load_user_extension()
   return result
 end
 
+local function lsp_base_name(entry)
+  return entry:match("^([^@]+)")
+end
+
+local function is_already_managed(name)
+  for _, existing in ipairs(M.lsp) do
+    if lsp_base_name(existing) == name then
+      return true
+    end
+  end
+  return false
+end
+
 local function apply_user_extension()
   local extension = load_user_extension()
   if not extension or not extension.servers then
@@ -65,10 +78,17 @@ local function apply_user_extension()
         "Selfishell: nvim.user.lua server '" .. tostring(name) .. "' must set a `filetypes` list; skipping",
         vim.log.levels.ERROR
       )
+    elseif is_already_managed(name) then
+      vim.notify(
+        "Selfishell: '" .. name .. "' is already managed by Selfishell's defaults; ignoring the nvim.user.lua entry",
+        vim.log.levels.WARN
+      )
     else
       table.insert(M.lsp, name)
       for _, filetype in ipairs(spec.filetypes) do
-        table.insert(M.lsp_filetypes, filetype)
+        if type(filetype) == "string" then
+          table.insert(M.lsp_filetypes, filetype)
+        end
       end
 
       local required_executable = EXECUTABLE_REQUIREMENTS[name]
