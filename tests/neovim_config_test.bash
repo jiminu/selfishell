@@ -250,6 +250,35 @@ EOF
     fail "Filetypes were not auto-derived from nvim-lspconfig: $output"
 }
 
+test_lsp_user_extension_empty_filetypes_falls_back_to_nvim_lspconfig() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_empty_filetypes_falls_back_to_nvim_lspconfig (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    fake_server = { filetypes = {} },
+  },
+}
+EOF
+
+  mkdir -p "$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp"
+  cat >"$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp/fake_server.lua" <<'EOF'
+return {
+  filetypes = { "fake_ft" },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_auto_filetypes.lua)"
+
+  [[ "$output" == *'User extension auto filetypes: OK'* ]] ||
+    fail "An empty filetypes list did not fall back to nvim-lspconfig: $output"
+}
+
 test_lsp_user_extension_without_filetypes_or_lspconfig_match_is_rejected() {
   local output
 
@@ -336,6 +365,84 @@ EOF
 
   [[ "$output" == *'User extension invalid filetype element: OK'* ]] ||
     fail "A non-string filetype element was not rejected: $output"
+}
+
+test_lsp_user_extension_derives_filetypes_when_lspconfig_file_requires_a_sibling_module() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_derives_filetypes_when_lspconfig_file_requires_a_sibling_module (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    needs_require = {},
+  },
+}
+EOF
+
+  # Several real nvim-lspconfig lsp/<name>.lua files (eslint, tailwindcss,
+  # biome, ...) `require` a sibling module such as lspconfig.util. Reproduce
+  # that shape here rather than only the bare-table fixture the other
+  # auto-derive test uses.
+  mkdir -p "$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp" "$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lua"
+  cat >"$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lua/sibling_module.lua" <<'EOF'
+return {}
+EOF
+  cat >"$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp/needs_require.lua" <<'EOF'
+require("sibling_module")
+return {
+  filetypes = { "needs_require_ft" },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_lspconfig_with_require.lua)"
+
+  [[ "$output" == *'User extension lspconfig require: OK'* ]] ||
+    fail "Filetypes were not derived when the nvim-lspconfig file requires a sibling module: $output"
+}
+
+test_lsp_user_extension_rejects_file_with_no_return_value() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_rejects_file_with_no_return_value (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return false
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_no_return_value.lua)"
+
+  [[ "$output" == *'User extension no return value: OK'* ]] ||
+    fail "A nvim.user.lua returning false was not rejected with a notification: $output"
+}
+
+test_lsp_user_extension_rejects_invalid_server_names() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_rejects_invalid_server_names (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    [""] = { filetypes = { "c" } },
+    ["../../etc/passwd"] = { filetypes = { "c" } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_invalid_name.lua)"
+
+  [[ "$output" == *'User extension invalid name: OK'* ]] ||
+    fail "Invalid server names were not rejected: $output"
 }
 
 test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {

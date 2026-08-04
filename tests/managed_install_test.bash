@@ -1350,6 +1350,17 @@ test_nvim_user_extension_directory_error() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null 2>&1 || rc=$?
   ((rc != 0)) || fail "install did not return error when nvim.user.lua is a directory"
   [[ -d "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] || fail "invalid existing directory was changed"
+
+  # The preflight must fire before any other managed configuration is
+  # written -- mirrors test_mise_config_global_dry_run_and_directory_error's
+  # "nothing else was installed" assertions, adapted since nvim.user.lua's
+  # own target path lives inside $XDG_CONFIG_HOME/selfishell.
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "preflight failure created Selfishell state"
+  [[ ! -e "$HOME/.zshenv" ]] || fail "preflight failure created the managed zshenv link"
+  local remaining
+  remaining="$(find "$XDG_CONFIG_HOME/selfishell" -mindepth 1 -maxdepth 1)"
+  [[ "$remaining" == "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
+    fail "preflight failure installed other managed configuration: $remaining"
 }
 
 test_nvim_user_extension_is_not_a_managed_resource() {

@@ -108,17 +108,30 @@ install_default_shell() {
   fi
 }
 
-preflight_mise_global_config() {
-  local target_file="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+# Read-only counterpart to install_atomic_user_file_once: fails fast, before
+# any package installation or managed-configuration writes, if the target
+# path exists as something install_atomic_user_file_once would refuse to
+# touch (anything but a regular file or symlink).
+preflight_atomic_user_file_once() {
+  local target_file="$1"
+  local label="$2"
 
   if [[ -L "$target_file" || -f "$target_file" ]]; then
     return 0
   fi
 
   if [[ -e "$target_file" ]]; then
-    cli_error "mise global config path is not a regular file or symlink: $target_file"
+    cli_error "$label path is not a regular file or symlink: $target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
+}
+
+preflight_mise_global_config() {
+  preflight_atomic_user_file_once "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml" "user mise config"
+}
+
+preflight_nvim_user_extension() {
+  preflight_atomic_user_file_once "$SELFISHELL_CONFIG_DIR/nvim.user.lua" "user Neovim LSP extension"
 }
 
 # Atomically creates $target_file with the content read from stdin, but
@@ -159,7 +172,7 @@ install_atomic_user_file_once() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  if ln "$temporary_file" "$target_file" 2>/dev/null; then
+  if ln "$temporary_file" "$target_file" 2>/dev/null && [[ -f "$target_file" ]]; then
     rm -f "$temporary_file"
     printf '%sCreated %s:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
@@ -167,7 +180,7 @@ install_atomic_user_file_once() {
 
   rm -f "$temporary_file"
 
-  if [[ -e "$target_file" || -L "$target_file" ]]; then
+  if [[ -L "$target_file" || -f "$target_file" ]]; then
     printf '%s%s appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
@@ -255,6 +268,7 @@ command_install() {
   profile_load "$profile" "$local_profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return
+    preflight_nvim_user_extension || return
   fi
 
   if [[ "$platform" == "macos" ]]; then
