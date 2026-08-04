@@ -1012,6 +1012,23 @@ test_uninstall_restores_original_files() {
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Managed state remains"
 }
 
+test_uninstall_restores_zshrc_and_preserves_nvim_user_lua_on_developer_profile() {
+  printf 'original zshrc' >"$HOME/.zshrc"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  run_selfishell uninstall --restore --yes >/dev/null
+
+  assert_file_content 'original zshrc' "$HOME/.zshrc"
+  [[ -f "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
+    fail "nvim.user.lua should survive uninstall --restore on the developer profile"
+  [[ -d "$XDG_CONFIG_HOME/selfishell" ]] ||
+    fail "selfishell config directory should remain after uninstall when nvim.user.lua exists"
+  local remaining
+  remaining="$(find "$XDG_CONFIG_HOME/selfishell" -type f -not -name nvim.user.lua 2>/dev/null)"
+  [[ -z "$remaining" ]] ||
+    fail "Only nvim.user.lua should remain under \$XDG_CONFIG_HOME/selfishell after uninstall --restore on developer profile, found: $remaining"
+}
+
 test_uninstall_dry_run_changes_nothing() {
   local state_count
 
