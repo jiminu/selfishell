@@ -317,6 +317,49 @@ return {
     },
   }),
 
+  -- Tree-sitter-aware scope markers use the matching rainbow delimiter color.
+  plugin("lukas-reineke/indent-blankline.nvim", {
+    main = "ibl",
+    event = { "BufReadPost", "BufNewFile" },
+    opts = {
+      indent = {
+        char = " ",
+      },
+      scope = {
+        enabled = true,
+        char = "│",
+        show_start = false,
+        show_end = false,
+        highlight = {
+          "RainbowDelimiterRed",
+          "RainbowDelimiterYellow",
+          "RainbowDelimiterBlue",
+          "RainbowDelimiterOrange",
+          "RainbowDelimiterGreen",
+          "RainbowDelimiterViolet",
+          "RainbowDelimiterCyan",
+        },
+      },
+      exclude = {
+        filetypes = {
+          "NvimTree",
+          "TelescopePrompt",
+          "help",
+          "lazy",
+          "log",
+          "markdown",
+          "mason",
+          "text",
+        },
+      },
+    },
+    config = function(_, opts)
+      require("ibl").setup(opts)
+      local hooks = require("ibl.hooks")
+      hooks.register(hooks.type.SCOPE_HIGHLIGHT, hooks.builtin.scope_highlight_from_extmark)
+    end,
+  }),
+
   -- Git changes, hunk actions, and blame information.
   plugin("lewis6991/gitsigns.nvim", {
     event = { "BufReadPre", "BufNewFile" },
