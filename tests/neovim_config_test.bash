@@ -171,6 +171,100 @@ test_lsp_loads_only_for_supported_filetypes() {
   [[ "$output" == *'LSP filetype scope: OK'* ]] || fail "LSP filetype scope is invalid: $output"
 }
 
+test_lsp_user_extension_is_ignored_when_absent() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_is_ignored_when_absent (Neovim unavailable)'
+  fi
+
+  output="$(run_neovim_fixture lsp_user_extension_absent.lua)"
+
+  [[ "$output" == *'User extension absent: OK'* ]] ||
+    fail "Default LSP and filetypes were changed when no nvim.user.lua exists: $output"
+}
+
+test_lsp_user_extension_merges_valid_servers() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_merges_valid_servers (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    clangd = { filetypes = { "c", "cpp" } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_merge.lua)"
+
+  [[ "$output" == *'User extension merge: OK'* ]] || fail "LSP user extension did not merge: $output"
+}
+
+test_lsp_user_extension_ignores_malformed_file() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_ignores_malformed_file (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  printf 'this is not valid lua {{{\n' >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+
+  output="$(run_neovim_fixture lsp_user_extension_malformed.lua)"
+
+  [[ "$output" == *'User extension malformed handling: OK'* ]] ||
+    fail "Malformed LSP user extension was not handled: $output"
+}
+
+test_lsp_user_extension_warns_on_missing_executable() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_warns_on_missing_executable (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    jdtls = { filetypes = { "java" } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_missing_executable.lua)"
+
+  [[ "$output" == *'User extension executable check: OK'* ]] ||
+    fail "Missing-executable warning for jdtls did not fire: $output"
+}
+
+test_lsp_user_extension_redeclaring_default_server_does_not_duplicate() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_redeclaring_default_server_does_not_duplicate (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    pyright = { filetypes = { "python" } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_redeclares_default.lua)"
+
+  [[ "$output" == *'User extension redeclare handling: OK'* ]] ||
+    fail "Redeclaring a default server duplicated its lsp entry: $output"
+}
+
 test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
   local output
 

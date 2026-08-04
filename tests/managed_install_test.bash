@@ -1004,12 +1004,29 @@ test_status_uses_current_resource_list() {
 
 test_uninstall_restores_original_files() {
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --skip-packages --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
 
   assert_file_content 'original zshrc' "$HOME/.zshrc"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Managed configuration remains"
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Managed state remains"
+}
+
+test_uninstall_restores_zshrc_and_preserves_nvim_user_lua_on_developer_profile() {
+  printf 'original zshrc' >"$HOME/.zshrc"
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  run_selfishell uninstall --restore --yes >/dev/null
+
+  assert_file_content 'original zshrc' "$HOME/.zshrc"
+  [[ -f "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
+    fail "nvim.user.lua should survive uninstall --restore on the developer profile"
+  [[ -d "$XDG_CONFIG_HOME/selfishell" ]] ||
+    fail "selfishell config directory should remain after uninstall when nvim.user.lua exists"
+  local remaining
+  remaining="$(find "$XDG_CONFIG_HOME/selfishell" -type f -not -name nvim.user.lua 2>/dev/null)"
+  [[ -z "$remaining" ]] ||
+    fail "Only nvim.user.lua should remain under \$XDG_CONFIG_HOME/selfishell after uninstall --restore on developer profile, found: $remaining"
 }
 
 test_uninstall_dry_run_changes_nothing() {
@@ -1262,6 +1279,84 @@ test_mise_config_global_dry_run_and_directory_error() {
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "preflight failure created Selfishell configuration"
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "preflight failure created Selfishell state"
   [[ ! -L "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml" ]] || fail "preflight failure created the managed mise link"
+}
+
+test_nvim_user_extension_creation_on_developer_install() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  [[ -f "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
+    fail "nvim.user.lua was not created on developer install"
+  grep -q 'servers' "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ||
+    fail "nvim.user.lua template does not document the servers schema"
+}
+
+test_nvim_user_extension_uncommented_example_is_valid_lua() {
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_nvim_user_extension_uncommented_example_is_valid_lua (Neovim unavailable)'
+  fi
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  local template_file="$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+  local uncommented_file="$TEST_ROOT/nvim.user.uncommented.lua"
+
+  # Reproduce exactly what the template's own comment instructs a user to do:
+  # uncomment the indented example lines, leaving everything else untouched.
+  sed 's/^  -- /  /' "$template_file" >"$uncommented_file"
+
+  grep -Fq '  servers = {' "$uncommented_file" ||
+    fail "Uncommenting the template did not produce an active servers table"
+
+  local output
+  output="$(nvim --headless -u NONE -i NONE "+lua dofile('$uncommented_file')" +qa 2>&1)"
+  [[ -z "$output" ]] ||
+    fail "Uncommented nvim.user.lua template failed to load as Lua: $output"
+}
+
+test_nvim_user_extension_absent_on_minimal_profile() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] ||
+    fail "nvim.user.lua should not be created for minimal profile"
+}
+
+test_nvim_user_extension_preserves_existing_content() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'return { servers = { clangd = { filetypes = { "c" } } } }\n' \
+    >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'return { servers = { clangd = { filetypes = { "c" } } } }' \
+    "$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+}
+
+test_nvim_user_extension_survives_uninstall() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  printf 'return { servers = { jdtls = { filetypes = { "java" } } } }\n' \
+    >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+
+  run_selfishell uninstall --restore --yes >/dev/null
+
+  assert_file_content 'return { servers = { jdtls = { filetypes = { "java" } } } }' \
+    "$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+}
+
+test_nvim_user_extension_dry_run_creates_nothing() {
+  run_selfishell install --profile developer --skip-packages --dry-run --yes >/dev/null
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] || fail "dry-run created nvim.user.lua"
+}
+
+test_nvim_user_extension_is_not_a_managed_resource() {
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+
+  local declared_resources
+  declared_resources="$(
+    SELFISHELL_CONFIG_DIR="$XDG_CONFIG_HOME/selfishell" SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c 'source "$1/lib/resources.sh"; selfishell_managed_resources' _ "$ROOT_DIR"
+  )"
+  [[ "$declared_resources" != *'nvim.user.lua'* ]] || fail "nvim.user.lua must not be a declared managed resource"
+
+  local status_out
+  status_out="$(run_selfishell status 2>&1)" || true
+  [[ "$status_out" != *'nvim.user.lua'* ]] || fail "nvim.user.lua should not be reported by status"
 }
 
 test_mise_global_config_env_runtime() {

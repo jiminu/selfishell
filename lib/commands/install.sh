@@ -171,6 +171,64 @@ install_mise_global_config() {
   return "$SELFISHELL_EXIT_ERROR"
 }
 
+install_nvim_user_extension() {
+  local dry_run="$1"
+  local target_file="$SELFISHELL_CONFIG_DIR/nvim.user.lua"
+  local temporary_file
+
+  if [[ -e "$target_file" || -L "$target_file" ]]; then
+    if [[ "$dry_run" == "1" ]]; then
+      printf '%sUser Neovim LSP extension exists; preserving it:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    fi
+    return 0
+  fi
+
+  if [[ "$dry_run" == "1" ]]; then
+    printf '%sWould create user Neovim LSP extension:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    return 0
+  fi
+
+  mkdir -p "$SELFISHELL_CONFIG_DIR" || return "$SELFISHELL_EXIT_ERROR"
+
+  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+
+  cat >"$temporary_file" <<'EOF'
+-- Optional Neovim LSP servers, on top of Selfishell's defaults (lua_ls,
+-- pyright, bashls). Selfishell never edits or removes this file.
+--
+-- Uncomment an entry to enable a server. `filetypes` controls both when the
+-- LSP plugin loads and which buffers it attaches to. Names must match what
+-- mason-lspconfig / nvim-lspconfig expect (clangd, jdtls, ts_ls, gopls, ...).
+
+return {
+  -- servers = {
+  --   clangd = { filetypes = { "c", "cpp" } },
+  -- },
+}
+EOF
+
+  if [[ ! -s "$temporary_file" ]]; then
+    rm -f "$temporary_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  if ln "$temporary_file" "$target_file" 2>/dev/null; then
+    rm -f "$temporary_file"
+    printf '%sCreated user Neovim LSP extension:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    return 0
+  fi
+
+  rm -f "$temporary_file"
+
+  if [[ -e "$target_file" || -L "$target_file" ]]; then
+    printf '%sUser Neovim LSP extension appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+    return 0
+  fi
+
+  cli_error "Failed to create user Neovim LSP extension: $target_file"
+  return "$SELFISHELL_EXIT_ERROR"
+}
+
 command_install() {
   local assume_yes=0
   local dry_run=0
@@ -263,6 +321,7 @@ command_install() {
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
   if [[ "$profile" == "developer" ]]; then
     install_mise_global_config "$dry_run" || return
+    install_nvim_user_extension "$dry_run" || return
   fi
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
