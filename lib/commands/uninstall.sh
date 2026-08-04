@@ -163,7 +163,9 @@ uninstall_purge() {
 
   rm -f "$bin_dir/sfs" "$bin_dir/selfishell" || return
   rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
-  printf 'Selfishell configuration, CLI, releases, cache, and state removed.\n'
+  printf '%s\n' \
+    'Selfishell configuration, CLI, releases, cache, and state removed.' \
+    'User-owned files it created once and never manages, such as nvim.user.lua and the mise config.toml, are left in place.'
 }
 
 command_uninstall() {
@@ -264,7 +266,7 @@ command_uninstall() {
       printf '%s\n' \
         'Selfishell configuration uninstalled.' \
         'The Selfishell CLI is still installed.' \
-        "Run '${SELFISHELL_COLOR_BOLD}selfishell uninstall --purge${SELFISHELL_COLOR_RESET}' to remove the CLI and all remaining data."
+        "Run '${SELFISHELL_COLOR_BOLD}selfishell uninstall --purge${SELFISHELL_COLOR_RESET}' to also remove the CLI, releases, cache, and state."
     fi
   fi
 
