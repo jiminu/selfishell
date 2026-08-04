@@ -310,10 +310,32 @@ return {
 }
 EOF
 
-  output="$(run_neovim_fixture lsp_user_extension_redeclares_default_with_version.lua)"
+  output="$(run_neovim_fixture lsp_user_extension_redeclares_default.lua)"
 
-  [[ "$output" == *'User extension versioned redeclare handling: OK'* ]] ||
+  [[ "$output" == *'User extension redeclare handling: OK'* ]] ||
     fail "Redeclaring a default server with a version suffix duplicated its lsp entry: $output"
+}
+
+test_lsp_user_extension_rejects_non_string_filetype_element() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_rejects_non_string_filetype_element (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    clangd = { filetypes = { "c", 42 } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_invalid_filetype_element.lua)"
+
+  [[ "$output" == *'User extension invalid filetype element: OK'* ]] ||
+    fail "A non-string filetype element was not rejected: $output"
 }
 
 test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {

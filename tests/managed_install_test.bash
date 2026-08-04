@@ -1344,6 +1344,14 @@ test_nvim_user_extension_dry_run_creates_nothing() {
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] || fail "dry-run created nvim.user.lua"
 }
 
+test_nvim_user_extension_directory_error() {
+  mkdir -p "$XDG_CONFIG_HOME/selfishell/nvim.user.lua"
+  local rc=0
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null 2>&1 || rc=$?
+  ((rc != 0)) || fail "install did not return error when nvim.user.lua is a directory"
+  [[ -d "$XDG_CONFIG_HOME/selfishell/nvim.user.lua" ]] || fail "invalid existing directory was changed"
+}
+
 test_nvim_user_extension_is_not_a_managed_resource() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
 

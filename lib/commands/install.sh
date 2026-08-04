@@ -121,26 +121,31 @@ preflight_mise_global_config() {
   fi
 }
 
-install_mise_global_config() {
+# Atomically creates $target_file with the content read from stdin, but
+# only if it doesn't already exist -- Selfishell never edits or removes it
+# afterward. Shared by every "create once on install, then it's entirely the
+# user's" file: install_mise_global_config and install_nvim_user_extension.
+install_atomic_user_file_once() {
   local dry_run="$1"
-  local target_file="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+  local target_file="$2"
+  local label="$3"
   local parent_dir
   local temporary_file
 
   if [[ -L "$target_file" || -f "$target_file" ]]; then
     if [[ "$dry_run" == "1" ]]; then
-      printf '%sUser mise config exists; preserving it:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+      printf '%s%s exists; preserving it:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     fi
     return 0
   fi
 
   if [[ -e "$target_file" ]]; then
-    cli_error "mise global config path is not a regular file or symlink: $target_file"
+    cli_error "$label path is not a regular file or symlink: $target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould create user mise config:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    printf '%sWould create %s:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
@@ -149,50 +154,35 @@ install_mise_global_config() {
 
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
-  if ! : >"$temporary_file"; then
+  if ! cat >"$temporary_file"; then
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
   if ln "$temporary_file" "$target_file" 2>/dev/null; then
     rm -f "$temporary_file"
-    printf '%sCreated user mise config:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    printf '%sCreated %s:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
   rm -f "$temporary_file"
 
   if [[ -e "$target_file" || -L "$target_file" ]]; then
-    printf '%sUser mise config appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+    printf '%s%s appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$label" "$SELFISHELL_COLOR_RESET" "$target_file"
     return 0
   fi
 
-  cli_error "Failed to create user mise config: $target_file"
+  cli_error "Failed to create $label: $target_file"
   return "$SELFISHELL_EXIT_ERROR"
 }
 
+install_mise_global_config() {
+  install_atomic_user_file_once "$1" "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml" "user mise config" \
+    </dev/null
+}
+
 install_nvim_user_extension() {
-  local dry_run="$1"
-  local target_file="$SELFISHELL_CONFIG_DIR/nvim.user.lua"
-  local temporary_file
-
-  if [[ -e "$target_file" || -L "$target_file" ]]; then
-    if [[ "$dry_run" == "1" ]]; then
-      printf '%sUser Neovim LSP extension exists; preserving it:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
-    fi
-    return 0
-  fi
-
-  if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould create user Neovim LSP extension:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
-    return 0
-  fi
-
-  mkdir -p "$SELFISHELL_CONFIG_DIR" || return "$SELFISHELL_EXIT_ERROR"
-
-  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
-
-  cat >"$temporary_file" <<'EOF'
+  install_atomic_user_file_once "$1" "$SELFISHELL_CONFIG_DIR/nvim.user.lua" "user Neovim LSP extension" <<'EOF'
 -- Optional Neovim LSP servers, on top of Selfishell's defaults (lua_ls,
 -- pyright, bashls, ts_ls). Selfishell never edits or removes this file.
 --
@@ -207,27 +197,6 @@ return {
   -- },
 }
 EOF
-
-  if [[ ! -s "$temporary_file" ]]; then
-    rm -f "$temporary_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  fi
-
-  if ln "$temporary_file" "$target_file" 2>/dev/null; then
-    rm -f "$temporary_file"
-    printf '%sCreated user Neovim LSP extension:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
-    return 0
-  fi
-
-  rm -f "$temporary_file"
-
-  if [[ -e "$target_file" || -L "$target_file" ]]; then
-    printf '%sUser Neovim LSP extension appeared concurrently; preserving it:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
-    return 0
-  fi
-
-  cli_error "Failed to create user Neovim LSP extension: $target_file"
-  return "$SELFISHELL_EXIT_ERROR"
 }
 
 command_install() {
