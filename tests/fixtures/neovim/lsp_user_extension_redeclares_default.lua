@@ -6,6 +6,7 @@ for _, entry in ipairs(languages.lsp) do
     pyright_count = pyright_count + 1
   end
   assert(entry ~= "pyright", "redeclaring pyright must not add a second, unpinned entry")
+  assert(entry ~= "pyright@2.0.0", "a versioned redeclaration must not add a second, differently-pinned entry")
 end
 assert(pyright_count == 1, "pyright@1.1.411 must remain present exactly once")
 

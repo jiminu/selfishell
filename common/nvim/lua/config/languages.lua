@@ -26,21 +26,37 @@ local function user_extension_path()
   return config_home .. "/selfishell/nvim.user.lua"
 end
 
-local function load_user_extension()
-  local path = user_extension_path()
+-- Stats, loads, and executes a Lua file, without raising. `existed` is
+-- false only when the file is absent -- distinct from the file existing but
+-- returning nil/false, which callers must still be able to notice and
+-- report. `err` is set when the file failed to parse or raised while
+-- running; `result` is whatever it returned (possibly nil) otherwise.
+local function dofile_safe(path)
   if not vim.uv.fs_stat(path) then
-    return nil
+    return false, nil, nil
   end
 
   local chunk, load_error = loadfile(path)
   if not chunk then
-    vim.notify("Selfishell: nvim.user.lua failed to load: " .. tostring(load_error), vim.log.levels.ERROR)
-    return nil
+    return true, nil, load_error
   end
 
   local ok, result = pcall(chunk)
   if not ok then
-    vim.notify("Selfishell: nvim.user.lua raised an error: " .. tostring(result), vim.log.levels.ERROR)
+    return true, nil, result
+  end
+
+  return true, result, nil
+end
+
+local function load_user_extension()
+  local existed, result, err = dofile_safe(user_extension_path())
+  if not existed then
+    return nil
+  end
+
+  if err then
+    vim.notify("Selfishell: nvim.user.lua failed to load: " .. tostring(err), vim.log.levels.ERROR)
     return nil
   end
 
@@ -69,24 +85,75 @@ end
 -- nvim-lspconfig ships a default `filetypes` list for every server it knows
 -- about, in a `lsp/<name>.lua` file under its own plugin directory. Reading
 -- that file directly needs neither lazy.nvim nor the plugin to be loaded --
--- selfishell install already clones it to a fixed, well-known path.
+-- selfishell install already clones it to a fixed, well-known path. Some of
+-- these files `require` sibling modules (e.g. `lspconfig.util`), which
+-- aren't reachable through the normal require path with the plugin off
+-- runtimepath, so extend package.path just for this call.
 local function nvim_lspconfig_filetypes(name)
-  local path = vim.fn.stdpath("data") .. "/lazy/nvim-lspconfig/lsp/" .. name .. ".lua"
-  if not vim.uv.fs_stat(path) then
+  local plugin_root = vim.fn.stdpath("data") .. "/lazy/nvim-lspconfig"
+  local original_package_path = package.path
+  package.path = plugin_root .. "/lua/?.lua;" .. plugin_root .. "/lua/?/init.lua;" .. original_package_path
+
+  local _, config = dofile_safe(plugin_root .. "/lsp/" .. name .. ".lua")
+
+  package.path = original_package_path
+
+  if type(config) ~= "table" or type(config.filetypes) ~= "table" then
     return nil
   end
-
-  local chunk = loadfile(path)
-  if not chunk then
-    return nil
-  end
-
-  local ok, config = pcall(chunk)
-  if not ok or type(config) ~= "table" or type(config.filetypes) ~= "table" then
-    return nil
-  end
-
   return config.filetypes
+end
+
+local function filetypes_are_valid(filetypes)
+  for _, filetype in ipairs(filetypes) do
+    if type(filetype) ~= "string" then
+      return false
+    end
+  end
+  return true
+end
+
+local function apply_user_server(name, spec)
+  if type(name) ~= "string" or not name:match("^[%w_%-]+$") or type(spec) ~= "table" then
+    vim.notify(
+      "Selfishell: nvim.user.lua server '" .. tostring(name) .. "' is invalid; skipping",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  if spec.filetypes ~= nil and (type(spec.filetypes) ~= "table" or not filetypes_are_valid(spec.filetypes)) then
+    vim.notify(
+      "Selfishell: nvim.user.lua server '" .. name .. "' has an invalid `filetypes` list; skipping",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  if is_already_managed(name) then
+    vim.notify(
+      "Selfishell: '" .. name .. "' is already managed by Selfishell's defaults; ignoring the nvim.user.lua entry",
+      vim.log.levels.WARN
+    )
+    return
+  end
+
+  local has_explicit_filetypes = spec.filetypes and #spec.filetypes > 0
+  local filetypes = has_explicit_filetypes and spec.filetypes or nvim_lspconfig_filetypes(name)
+  if not filetypes then
+    vim.notify(
+      "Selfishell: nvim.user.lua server '"
+        .. name
+        .. "' has no `filetypes` and none could be found for it in nvim-lspconfig; skipping",
+      vim.log.levels.ERROR
+    )
+    return
+  end
+
+  table.insert(M.lsp, name)
+  for _, filetype in ipairs(filetypes) do
+    table.insert(M.lsp_filetypes, filetype)
+  end
 end
 
 local function apply_user_extension()
@@ -96,38 +163,7 @@ local function apply_user_extension()
   end
 
   for name, spec in pairs(extension.servers) do
-    if
-      type(name) ~= "string"
-      or type(spec) ~= "table"
-      or (spec.filetypes ~= nil and type(spec.filetypes) ~= "table")
-    then
-      vim.notify(
-        "Selfishell: nvim.user.lua server '" .. tostring(name) .. "' is invalid; skipping",
-        vim.log.levels.ERROR
-      )
-    elseif is_already_managed(name) then
-      vim.notify(
-        "Selfishell: '" .. name .. "' is already managed by Selfishell's defaults; ignoring the nvim.user.lua entry",
-        vim.log.levels.WARN
-      )
-    else
-      local filetypes = spec.filetypes or nvim_lspconfig_filetypes(name)
-      if not filetypes then
-        vim.notify(
-          "Selfishell: nvim.user.lua server '"
-            .. name
-            .. "' has no `filetypes` and none could be found for it in nvim-lspconfig; skipping",
-          vim.log.levels.ERROR
-        )
-      else
-        table.insert(M.lsp, name)
-        for _, filetype in ipairs(filetypes) do
-          if type(filetype) == "string" then
-            table.insert(M.lsp_filetypes, filetype)
-          end
-        end
-      end
-    end
+    apply_user_server(name, spec)
   end
 end
 
