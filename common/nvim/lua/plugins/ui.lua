@@ -90,12 +90,19 @@ return {
         -- Keep folders distinct without spending the narrow tree's width on
         -- icons, and show native branch guides for nested directories.
         add_trailing = true,
+        group_empty = true,
         highlight_git = "name",
         indent_markers = {
           enable = true,
           inline_arrows = true,
         },
         icons = {
+          glyphs = {
+            folder = {
+              arrow_closed = ">",
+              arrow_open = "v",
+            },
+          },
           show = {
             file = false,
             folder = false,
