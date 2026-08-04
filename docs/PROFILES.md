@@ -73,16 +73,15 @@ Additional LSP servers can be declared in
 optional and user-owned: `selfishell install --profile developer` creates it
 once, with a commented example, if it does not already exist, then never
 edits, checksums, or removes it — it survives `selfishell update` and
-`selfishell uninstall`. Its schema is `return { servers = { <name> = {
-filetypes = { ... } } } }`; `filetypes` is required per server, and the
-server name must be one that mason-lspconfig / nvim-lspconfig recognize
-(Selfishell does not maintain a catalog of allowed names). A malformed file
-produces a startup notification and Neovim falls back to the default servers
-(lua_ls, pyright, bashls, ts_ls) rather than blocking startup or having Selfishell
-rewrite the file. If a declared server needs an external prerequisite
-Selfishell does not manage (currently only `jdtls`, which needs a JDK),
-Neovim warns at startup when it is missing from PATH rather than installing
-anything.
+`selfishell uninstall`. Its schema is `return { servers = { <name> = { ... } } }`;
+the server name must be one that mason-lspconfig / nvim-lspconfig recognize
+(Selfishell does not maintain a catalog of allowed names). `filetypes` is
+optional per server: if omitted, Selfishell looks up nvim-lspconfig's own
+default filetypes for that server name; if neither is available, that server
+is skipped. A malformed file, an unrecognized server, or one with no
+filetypes anywhere produces a startup notification and Neovim falls back to
+the default servers (lua_ls, pyright, bashls, ts_ls) rather than blocking
+startup or having Selfishell rewrite the file.
 
 New splits open to the right and below, four lines of context remain above and
 below the cursor when possible, commands that would discard unsaved changes ask

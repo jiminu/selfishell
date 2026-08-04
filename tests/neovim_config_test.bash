@@ -221,26 +221,55 @@ test_lsp_user_extension_ignores_malformed_file() {
     fail "Malformed LSP user extension was not handled: $output"
 }
 
-test_lsp_user_extension_warns_on_missing_executable() {
+test_lsp_user_extension_derives_filetypes_from_nvim_lspconfig() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    skip 'test_lsp_user_extension_warns_on_missing_executable (Neovim unavailable)'
+    skip 'test_lsp_user_extension_derives_filetypes_from_nvim_lspconfig (Neovim unavailable)'
   fi
 
   mkdir -p "$XDG_CONFIG_HOME/selfishell"
   cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
 return {
   servers = {
-    jdtls = { filetypes = { "java" } },
+    fake_server = {},
   },
 }
 EOF
 
-  output="$(run_neovim_fixture lsp_user_extension_missing_executable.lua)"
+  mkdir -p "$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp"
+  cat >"$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp/fake_server.lua" <<'EOF'
+return {
+  filetypes = { "fake_ft" },
+}
+EOF
 
-  [[ "$output" == *'User extension executable check: OK'* ]] ||
-    fail "Missing-executable warning for jdtls did not fire: $output"
+  output="$(run_neovim_fixture lsp_user_extension_auto_filetypes.lua)"
+
+  [[ "$output" == *'User extension auto filetypes: OK'* ]] ||
+    fail "Filetypes were not auto-derived from nvim-lspconfig: $output"
+}
+
+test_lsp_user_extension_without_filetypes_or_lspconfig_match_is_rejected() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_without_filetypes_or_lspconfig_match_is_rejected (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    unknown_server = {},
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_no_filetypes_found.lua)"
+
+  [[ "$output" == *'User extension no filetypes found: OK'* ]] ||
+    fail "A server with no filetypes and no nvim-lspconfig match was not rejected cleanly: $output"
 }
 
 test_lsp_user_extension_redeclaring_default_server_does_not_duplicate() {
