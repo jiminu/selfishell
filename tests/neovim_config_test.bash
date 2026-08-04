@@ -265,6 +265,28 @@ EOF
     fail "Redeclaring a default server duplicated its lsp entry: $output"
 }
 
+test_lsp_user_extension_redeclaring_default_server_with_version_does_not_duplicate() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_redeclaring_default_server_with_version_does_not_duplicate (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    ["pyright@2.0.0"] = { filetypes = { "python" } },
+  },
+}
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_redeclares_default_with_version.lua)"
+
+  [[ "$output" == *'User extension versioned redeclare handling: OK'* ]] ||
+    fail "Redeclaring a default server with a version suffix duplicated its lsp entry: $output"
+}
+
 test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
   local output
 

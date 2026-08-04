@@ -63,8 +63,9 @@ local function lsp_base_name(entry)
 end
 
 local function is_already_managed(name)
+  local base = lsp_base_name(name)
   for _, existing in ipairs(M.lsp) do
-    if lsp_base_name(existing) == name then
+    if lsp_base_name(existing) == base then
       return true
     end
   end
