@@ -8,9 +8,12 @@ local languages = require("config.languages")
 
 vim.notify = original_notify
 
-assert(#languages.lsp == 3, "Malformed nvim.user.lua must not change the default lsp list")
+assert(#languages.lsp == 4, "Malformed nvim.user.lua must not change the default lsp list")
 assert(
-  vim.deep_equal(languages.lsp_filetypes, { "lua", "python", "sh", "bash" }),
+  vim.deep_equal(
+    languages.lsp_filetypes,
+    { "lua", "python", "sh", "bash", "javascript", "javascriptreact", "typescript", "typescriptreact" }
+  ),
   "Malformed nvim.user.lua must not change the default filetypes"
 )
 assert(#notifications > 0, "Malformed nvim.user.lua must raise a notification")

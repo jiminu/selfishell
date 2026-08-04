@@ -281,7 +281,7 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
 test_mason_lsp_servers_are_versioned() {
   local server
 
-  for server in lua_ls pyright bashls; do
+  for server in lua_ls pyright bashls ts_ls; do
     grep -Eq '"'"$server"'@[0-9]+\.[0-9]+\.[0-9]+"' "$ROOT_DIR/common/nvim/lua/config/languages.lua" ||
       fail "Mason LSP server is not versioned: $server"
   done
