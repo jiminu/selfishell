@@ -956,6 +956,39 @@ test_purge_removes_installer_path_entry() {
     fail "Purge retained the installer PATH entry"
 }
 
+test_purge_path_entry_removal_revalidates_before_mutating() {
+  local status marker='# Added by Selfishell installer' entry_line
+
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  # Duplicate the marker+entry pair, simulating a startup file edited
+  # between the early preflight (command_uninstall's own
+  # uninstall_validate_path_entry call, before confirm_action's interactive
+  # pause) and this later removal step: uninstall_remove_path_entry must
+  # re-validate immediately before mutating, not just once at the top.
+  entry_line="$(grep -A1 -F "$marker" "$HOME/.bashrc" | tail -1)"
+  printf '%s\n%s\n' "$marker" "$entry_line" >>"$HOME/.bashrc"
+
+  set +e
+  bash -c '
+    set -euo pipefail
+    SELFISHELL_ROOT="$(cd "$1/share/selfishell/current" && pwd -P)"
+    source "$SELFISHELL_ROOT/lib/common.sh"
+    source "$SELFISHELL_ROOT/lib/releases.sh"
+    source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
+    release_installation_paths
+    uninstall_remove_path_entry "$1" 0
+  ' _ "$TEST_ROOT/prefix" >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "uninstall_remove_path_entry accepted a duplicated PATH entry"
+  grep -Fq 'modified; preserving' "$TEST_ROOT/stderr" ||
+    fail "uninstall_remove_path_entry did not report the duplicated entry as modified: $(cat "$TEST_ROOT/stderr")"
+  [[ "$(grep -Fc "$marker" "$HOME/.bashrc")" -eq 2 ]] ||
+    fail "uninstall_remove_path_entry changed the startup file despite rejecting it"
+}
+
 test_purge_rejects_symlink_startup_file() {
   local output status target="$TEST_ROOT/user-bashrc"
   SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
