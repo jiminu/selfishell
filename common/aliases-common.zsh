@@ -7,5 +7,6 @@ elif _selfishell_command_path batcat >/dev/null; then
 fi
 
 if _selfishell_command_path eza >/dev/null; then
-  alias ls='eza'
+  alias ls='eza --group-directories-first'
+  alias ll='eza -l --group-directories-first --git'
 fi
