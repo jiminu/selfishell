@@ -17,8 +17,9 @@ selfishell rollback --yes
 The tools/configuration phase synchronizes apt or Homebrew packages from the
 installed profile, installs directly managed tools at the approved versions in
 `dependencies.conf`, synchronizes mise-managed developer tools, reapplies
-managed configuration, and synchronizes Neovim plugins and Tree-sitter parsers
-for the developer profile. Already installed operating-system packages remain
+managed configuration, and synchronizes Neovim plugins for the developer
+profile; Tree-sitter parsers install lazily the first time their filetype is
+opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only installation skips this phase.
 

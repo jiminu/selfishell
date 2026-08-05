@@ -9,7 +9,6 @@ source "$ROOT_DIR/lib/dependencies.sh"
 source "$ROOT_DIR/lib/installers.sh"
 
 NVIM_ARGUMENTS=""
-NVIM_TREESITTER_LANGUAGES=""
 MISE_ARGUMENTS=""
 MISE_CONFIG=""
 GIT_ARGUMENTS=""
@@ -20,7 +19,6 @@ NVIM_PLUGINS_VERIFIED=0
 
 nvim() {
   NVIM_ARGUMENTS="$*"
-  NVIM_TREESITTER_LANGUAGES="${SELFISHELL_NVIM_TREESITTER_LANGUAGES:-}"
   NVIM_CALLS+=("$*")
 }
 
@@ -50,28 +48,9 @@ verify_neovim_plugins() {
   NVIM_PLUGINS_VERIFIED=1
 }
 
-selfishell_nvim_treesitter_languages() {
-  printf '%s\n' 'lua vim'
-}
-
 setup_installer_test() {
   setup_test_home
   export SELFISHELL_ROOT="$ROOT_DIR"
-}
-
-test_default_treesitter_languages_match_supported_parsers() {
-  local languages
-
-  languages="$(bash -c 'source "$1/lib/installers.sh"; selfishell_nvim_treesitter_languages' _ "$ROOT_DIR")"
-
-  for language in gitcommit git_rebase git_config gitignore gitattributes diff; do
-    [[ " $languages " == *" $language "* ]] ||
-      fail "Default Tree-sitter languages are missing Git parser: $language"
-  done
-  for language in jsonc markdown_inline helm; do
-    [[ " $languages " != *" $language "* ]] ||
-      fail "Default Tree-sitter languages include redundant parser: $language"
-  done
 }
 
 test_installs_declared_mise_tools_with_managed_config() {
@@ -229,10 +208,7 @@ test_installs_declared_neovim_plugins() {
   install_neovim_plugins 0
   [[ "${NVIM_CALLS[0]}" == *'pcall(vim.cmd, "Lazy! sync")'* ]] ||
     fail "Neovim plugin installation was not invoked"
-  [[ "${NVIM_CALLS[1]}" == *'require("config.treesitter").install(languages)'* ]] ||
-    fail "Current Tree-sitter parser installation API was not invoked"
-  [[ "$NVIM_TREESITTER_LANGUAGES" == 'lua vim' ]] ||
-    fail "Tree-sitter parser languages were not passed to Neovim"
+  [[ "${#NVIM_CALLS[@]}" == "1" ]] || fail "Neovim was invoked more times than expected: ${NVIM_CALLS[*]}"
   [[ "$NVIM_PLUGINS_VERIFIED" == "1" ]] || fail "Installed Neovim plugin revisions were not verified"
 }
 
@@ -266,8 +242,6 @@ test_neovim_plugin_dry_run_is_non_mutating() {
     fail "Neovim plugin dry run was not reported"
   [[ "$output" == *'Would install lazy.nvim bootstrap repository.'* ]] ||
     fail "lazy.nvim dry run was not reported"
-  [[ "$output" == *'Would install Tree-sitter parsers.'* ]] ||
-    fail "Tree-sitter dry run was not reported"
   [[ -z "$NVIM_ARGUMENTS" ]] || fail "Neovim plugin dry run invoked Neovim"
 }
 
@@ -287,8 +261,6 @@ test_installs_lazy_nvim_before_syncing_plugins() {
   [[ "${GIT_CALLS[*]}" == *'checkout --quiet --detach 306a05526ada86a7b30af95c5cc81ffba93fef97'* ]] ||
     fail "lazy.nvim bootstrap did not check out the approved revision"
   [[ "${NVIM_CALLS[*]}" == *'Lazy! sync'* ]] || fail "Neovim plugin sync did not run"
-  [[ "${NVIM_CALLS[*]}" == *'require("config.treesitter").install(languages)'* ]] ||
-    fail "Tree-sitter parsers were not prepared"
 }
 
 test_lazy_nvim_recovers_from_stale_temporary_path() {

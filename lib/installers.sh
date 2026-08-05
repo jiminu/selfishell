@@ -242,7 +242,6 @@ install_neovim_plugins() {
   local log_file
   local nvim_command
   local lazypath
-  local treesitter_languages
 
   lazypath="${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/nvim/lazy/lazy.nvim"
 
@@ -250,7 +249,6 @@ install_neovim_plugins() {
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould install declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     printf '%sWould install lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
-    printf '%sWould install Tree-sitter parsers.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
 
@@ -275,23 +273,7 @@ install_neovim_plugins() {
     rm -f "$log_file"
     return 1
   fi
-
-  treesitter_languages="$(selfishell_nvim_treesitter_languages)"
-  if [[ -n "$treesitter_languages" ]] &&
-    ! SELFISHELL_NVIM_TREESITTER_LANGUAGES="$treesitter_languages" selfishell_run_nvim "$nvim_command" --headless \
-      '+lua local ok, message = xpcall(function() local languages = vim.split(vim.env.SELFISHELL_NVIM_TREESITTER_LANGUAGES, "%s+", { trimempty = true }); require("config.treesitter").install(languages) end, debug.traceback); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
-      +qa >"$log_file" 2>&1; then
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    cli_error "Could not install Tree-sitter parsers."
-    return 1
-  fi
   rm -f "$log_file"
-}
-
-selfishell_nvim_treesitter_languages() {
-  printf '%s\n' \
-    'lua vim vimdoc query c cpp python java bash zsh javascript typescript tsx html css json yaml toml properties xml dockerfile hcl terraform markdown sql gitcommit git_rebase git_config gitignore gitattributes diff'
 }
 
 selfishell_nvim_command() {

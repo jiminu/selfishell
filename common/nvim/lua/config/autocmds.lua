@@ -4,11 +4,42 @@ local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true 
 -- nvim-treesitter plugin no longer enables it through setup()/opts.
 vim.treesitter.language.register("terraform", "tf")
 
+-- nvim-treesitter 1.0+ also dropped ensure_installed/auto_install from
+-- setup(), so install a missing parser the first time its filetype is
+-- opened rather than maintaining a separate static list to bulk-install
+-- ahead of time.
+local function ensure_parser_installed(buf, lang)
+  local ok, treesitter = pcall(require, "nvim-treesitter")
+  if not ok then
+    return
+  end
+
+  if vim.list_contains(treesitter.get_installed("parsers"), lang) then
+    return
+  end
+  if not vim.list_contains(treesitter.get_available(), lang) then
+    return
+  end
+
+  treesitter.install(lang):await(function(_, installed)
+    if installed and vim.api.nvim_buf_is_valid(buf) then
+      pcall(vim.treesitter.start, buf, lang)
+    end
+  end)
+end
+
 vim.api.nvim_create_autocmd("FileType", {
   group = group,
   pattern = "*",
   callback = function(args)
-    pcall(vim.treesitter.start, args.buf)
+    if pcall(vim.treesitter.start, args.buf) then
+      return
+    end
+
+    local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+    if lang then
+      ensure_parser_installed(args.buf, lang)
+    end
   end,
 })
 
