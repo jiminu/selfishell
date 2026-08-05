@@ -10,6 +10,7 @@ selfishell status --check-package-updates
 selfishell update --yes
 selfishell update --cli-only --yes
 selfishell update --tools-only --yes
+selfishell update --skip-packages --yes
 selfishell rollback --yes
 ```
 
@@ -20,6 +21,10 @@ managed configuration, and synchronizes Neovim plugins and Tree-sitter parsers
 for the developer profile. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only installation skips this phase.
+
+`SELFISHELL_OFFLINE=1` and `--skip-packages` synchronize managed configuration
+and pinned direct/mise tools without touching apt/Homebrew or the network for
+package operations, the same contract `selfishell install` follows.
 
 The normal `status` command checks the latest CLI release metadata and reports
 it as `Available`. If offline mode is enabled or the metadata lookup fails, it

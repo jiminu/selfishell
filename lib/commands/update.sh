@@ -4,12 +4,15 @@ print_update_help() {
   cat <<'EOF'
 Usage:
   selfishell update [--cli-only | --tools-only] [--version VERSION]
-                     [--dry-run] [--yes]
+                     [--skip-packages] [--dry-run] [--yes]
 
 By default, update the Selfishell CLI release first, then synchronize all
 profile packages, approved tools, and managed configuration. Use --cli-only or
 --tools-only to limit the scope.
 --version selects an exact CLI release and cannot be used with --tools-only.
+--skip-packages (also implied by SELFISHELL_OFFLINE=1) synchronizes managed
+configuration and pinned direct/mise tools without touching apt/Homebrew or
+the network for package operations.
 
 Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned
@@ -22,8 +25,10 @@ update_tools_and_configuration() {
   local assume_yes="$1"
   local dry_run="$2"
   local require_configuration="$3"
+  local skip_packages="$4"
   local profile platform ghostty_enabled=0
 
+  [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || skip_packages=1
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     if [[ "$require_configuration" == 1 ]]; then
@@ -48,12 +53,16 @@ update_tools_and_configuration() {
 
   profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
 
-  packages_install_profile "$platform" "$dry_run"
-  if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
-    homebrew_install_packages optional cask "$dry_run" ghostty
+  if [[ "$skip_packages" == "1" ]]; then
+    printf 'Skipping package installation.\n'
+  else
+    packages_install_profile "$platform" "$dry_run"
+    if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
+      homebrew_install_packages optional cask "$dry_run" ghostty
+    fi
   fi
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
-  if [[ "$profile" == "developer" ]]; then
+  if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
   if [[ "$dry_run" == 1 ]]; then
@@ -93,9 +102,11 @@ update_cli_release() {
 
 continue_update_with_new_cli() {
   local assume_yes="$1"
+  local skip_packages="$2"
   local arguments=(update --continue-after-cli-update)
 
   [[ "$assume_yes" == 0 ]] || arguments+=(--yes)
+  [[ "$skip_packages" == 0 ]] || arguments+=(--skip-packages)
   exec "$SELFISHELL_SHARE_DIR/current/bin/selfishell" "${arguments[@]}"
 }
 
@@ -105,6 +116,7 @@ command_update() {
   local mode=all
   local version=""
   local continuation=0
+  local skip_packages=0
 
   SELFISHELL_CLI_UPDATED=0
 
@@ -132,6 +144,7 @@ command_update() {
         }
         version="${1#v}"
         ;;
+      --skip-packages) skip_packages=1 ;;
       --dry-run) dry_run=1 ;;
       --yes) assume_yes=1 ;;
       --continue-after-cli-update)
@@ -160,15 +173,15 @@ command_update() {
     # errexit inside functions used by `if`, `!`, `&&`, or `||`.
     update_cli_release "$version" "$assume_yes" "$dry_run"
     if [[ "$mode" == all && "$dry_run" == 0 && "$SELFISHELL_CLI_UPDATED" == 1 ]]; then
-      continue_update_with_new_cli "$assume_yes"
+      continue_update_with_new_cli "$assume_yes" "$skip_packages"
     fi
   fi
 
   if [[ "$mode" != cli ]]; then
     if [[ "$mode" == tools && "$continuation" == 0 ]]; then
-      update_tools_and_configuration "$assume_yes" "$dry_run" 1
+      update_tools_and_configuration "$assume_yes" "$dry_run" 1 "$skip_packages"
     else
-      update_tools_and_configuration "$assume_yes" "$dry_run" 0
+      update_tools_and_configuration "$assume_yes" "$dry_run" 0 "$skip_packages"
     fi
   fi
 }
