@@ -94,9 +94,17 @@ local function nvim_lspconfig_filetypes(name)
   local original_package_path = package.path
   package.path = plugin_root .. "/lua/?.lua;" .. plugin_root .. "/lua/?/init.lua;" .. original_package_path
 
-  local _, config = dofile_safe(plugin_root .. "/lsp/" .. name .. ".lua")
+  local existed, config, err = dofile_safe(plugin_root .. "/lsp/" .. name .. ".lua")
 
   package.path = original_package_path
+
+  if existed and err then
+    vim.notify(
+      "Selfishell: nvim-lspconfig's default filetypes for '" .. name .. "' failed to load: " .. tostring(err),
+      vim.log.levels.ERROR
+    )
+    return nil
+  end
 
   if type(config) ~= "table" or type(config.filetypes) ~= "table" then
     return nil
