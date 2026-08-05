@@ -39,7 +39,15 @@ jobs:
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             classification=$'runtime=true\nubuntu_container_e2e=true'
           else
-            classification="$(bash scripts/classify-ci-changes.sh "$BASE_SHA" "$GITHUB_SHA")"
+            # Run the classifier as it exists at $BASE_SHA, not the checked-out
+            # (possibly PR-modified) copy -- otherwise a PR could edit this
+            # script to always report "nothing changed" and suppress its own
+            # e2e coverage. $BASE_SHA predates the PR/push, so its content
+            # can't have been written by it.
+            classifier_script="$(mktemp)"
+            git show "$BASE_SHA:scripts/classify-ci-changes.sh" >"$classifier_script"
+            classification="$(bash "$classifier_script" "$BASE_SHA" "$GITHUB_SHA")"
+            rm -f "$classifier_script"
           fi
           printf '%s\n' "$classification" >>"$GITHUB_OUTPUT"
           {
