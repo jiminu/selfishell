@@ -86,6 +86,20 @@ test_pinned_neovim_plugin_specs_load() {
   [[ "$output" == *'pinned plugin specs: OK'* ]] || fail "Pinned Neovim plugin specs did not load: $output"
 }
 
+test_plugin_versions_module_tolerates_missing_manifest() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_plugin_versions_module_tolerates_missing_manifest (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/nvim"
+  output="$(run_neovim_fixture plugin_versions_missing_manifest.lua)"
+
+  [[ "$output" == *'plugin_versions missing manifest: OK'* ]] ||
+    fail "config.plugin_versions crashed on a missing manifest instead of degrading gracefully: $output"
+}
+
 test_editor_workflow_options_and_keymaps() {
   local output
 
