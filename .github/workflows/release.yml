@@ -16,32 +16,54 @@ on:
         default: main
         type: string
 
-permissions:
-  artifact-metadata: write
-  attestations: write
-  contents: write
-  id-token: write
-  issues: write
-
 concurrency:
   group: release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
   cancel-in-progress: false
 
 jobs:
+  # Resolves the requested ref to one immutable commit SHA before anything
+  # else runs, so verify and publish are guaranteed to check out the exact
+  # same commit. Without this, each job independently re-resolving
+  # `inputs.ref` (which defaults to the mutable branch "main") could let a
+  # push land between verify finishing and publish starting, so publish
+  # would release a commit that was never verified.
+  resolve:
+    name: Resolve release commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+
+    steps:
+      - name: Check out requested ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
+          fetch-depth: 1
+
+      - name: Resolve to a single commit SHA
+        id: resolve
+        run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
   verify:
     name: Verify release (${{ matrix.os }})
+    needs: resolve
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
     steps:
-      - name: Check out tagged source
+      - name: Check out resolved commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -57,16 +79,21 @@ jobs:
         run: bash scripts/check.sh
 
   publish:
-    needs: verify
+    needs: [resolve, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+      artifact-metadata: write
 
     steps:
-      - name: Check out tagged source
+      - name: Check out resolved commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Validate release tag
         id: version
@@ -149,6 +176,9 @@ jobs:
     if: always()
     needs: [verify, publish]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Check out notification script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

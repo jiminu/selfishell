@@ -33,6 +33,60 @@ test_dependabot_tracks_github_actions() {
     fail ".github/dependabot.yml does not track the github-actions ecosystem"
 }
 
+# A workflow_dispatch release with the default `ref: main` is a mutable
+# branch: if verify and publish each independently re-resolved it, a push
+# landing between the two could let publish release a commit verify never
+# tested. The `resolve` job pins the ref to one commit SHA up front so both
+# jobs are guaranteed to check out the exact same, already-verified commit.
+extract_workflow_job() {
+  local workflow="$1"
+  local job="$2"
+
+  awk -v job="  $job:" '
+    $0 == job { in_job = 1; print; next }
+    in_job && /^  [[:alnum:]_-]+:/ { exit }
+    in_job { print }
+  ' "$workflow"
+}
+
+test_release_workflow_pins_verify_and_publish_to_one_resolved_sha() {
+  local workflow="$ROOT_DIR/.github/workflows/release.yml"
+  local resolve_job verify_job publish_job
+
+  resolve_job="$(extract_workflow_job "$workflow" resolve)"
+  verify_job="$(extract_workflow_job "$workflow" verify)"
+  publish_job="$(extract_workflow_job "$workflow" publish)"
+
+  [[ -n "$resolve_job" ]] || fail "release.yml has no resolve job to pin one immutable commit"
+  printf '%s\n' "$resolve_job" | grep -Fq 'sha:' ||
+    fail "resolve job does not declare a sha output"
+
+  printf '%s\n' "$verify_job" | grep -Fq 'needs: resolve' ||
+    fail "verify job does not depend on resolve"
+  # shellcheck disable=SC2016 # Matching a literal GitHub Actions expression.
+  printf '%s\n' "$verify_job" | grep -Fq 'ref: ${{ needs.resolve.outputs.sha }}' ||
+    fail "verify job does not check out the resolved commit SHA"
+
+  printf '%s\n' "$publish_job" | grep -Eq 'needs:.*resolve' ||
+    fail "publish job does not depend on resolve"
+  # shellcheck disable=SC2016 # Matching a literal GitHub Actions expression.
+  printf '%s\n' "$publish_job" | grep -Fq 'ref: ${{ needs.resolve.outputs.sha }}' ||
+    fail "publish job does not check out the resolved commit SHA"
+}
+
+test_release_workflow_scopes_permissions_per_job() {
+  local workflow="$ROOT_DIR/.github/workflows/release.yml"
+  local job
+
+  grep -qE '^permissions:' "$workflow" &&
+    fail "release.yml declares a shared top-level permissions block instead of per-job scoping"
+
+  for job in resolve verify publish notify; do
+    extract_workflow_job "$workflow" "$job" | grep -Fq 'permissions:' ||
+      fail "release.yml job \"$job\" does not declare its own permissions"
+  done
+}
+
 test_pinned_neovim_job_runs_configuration_tests() {
   local workflow="$ROOT_DIR/.github/workflows/ci.yml"
   local config_command='bash tests/neovim_config_test.bash'
