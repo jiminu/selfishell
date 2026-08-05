@@ -105,4 +105,79 @@ local exec_ok_absent = run_scenario("plugin-absent", {
 })
 assert(exec_ok_absent, "FileType autocmd raised an error when nvim-treesitter was unavailable")
 
+-- Neovim fires FileType more than once for the same buffer during startup
+-- (observed when opening a file from the command line), and separate
+-- buffers can independently request the same not-yet-installed language.
+-- Either way, install() must only be called once per language while a
+-- request is in flight, and every waiting buffer must still get retried
+-- once it resolves.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local retried_bufs = {}
+  local original_start = vim.treesitter.start
+  vim.treesitter.start = function(buf, lang)
+    if lang == nil then
+      error("simulated missing parser")
+    end
+    table.insert(retried_bufs, buf)
+  end
+
+  local install_calls = {}
+  local pending_callback
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function(lang)
+        table.insert(install_calls, lang)
+        return {
+          await = function(_, callback)
+            pending_callback = callback
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  local buf_a = vim.api.nvim_get_current_buf()
+  vim.bo.filetype = "widgetlang" -- first FileType fire for buf_a
+  vim.api.nvim_exec_autocmds("FileType", { buffer = buf_a }) -- simulates Neovim's observed second fire
+
+  vim.cmd("enew")
+  local buf_b = vim.api.nvim_get_current_buf()
+  vim.bo.filetype = "widgetlang" -- a second buffer requesting the same in-flight language
+
+  assert(
+    #install_calls == 1,
+    "install() was called more than once for a language already in flight: " .. vim.inspect(install_calls)
+  )
+  assert(pending_callback, "install() was never invoked for the concurrent-request scenario")
+
+  pending_callback(nil, true)
+
+  table.sort(retried_bufs)
+  -- buf_a queued twice (once per FileType fire); a duplicate retry on the
+  -- same already-started buffer is harmless, so it isn't deduplicated.
+  local expected = { buf_a, buf_a, buf_b }
+  table.sort(expected)
+  assert(
+    vim.deep_equal(retried_bufs, expected),
+    "Not every buffer waiting on the in-flight install was retried: " .. vim.inspect(retried_bufs)
+  )
+
+  vim.treesitter.start = original_start
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 print("Tree-sitter auto-install: OK")

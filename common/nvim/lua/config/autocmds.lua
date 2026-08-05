@@ -8,6 +8,15 @@ vim.treesitter.language.register("terraform", "tf")
 -- setup(), so install a missing parser the first time its filetype is
 -- opened rather than maintaining a separate static list to bulk-install
 -- ahead of time.
+--
+-- Neovim fires FileType for a buffer more than once during startup (e.g.
+-- opening a file from the command line), so track in-flight installs per
+-- language ourselves: calling nvim-treesitter's install() a second time
+-- before the first finishes routes through its own concurrent-install
+-- guard, which blocks on a *nested* vim.wait() -- timing-sensitive enough
+-- that it was observed to leave a buffer's highlighter never started.
+local pending_installs = {}
+
 local function ensure_parser_installed(buf, lang)
   local ok, treesitter = pcall(require, "nvim-treesitter")
   if not ok then
@@ -21,9 +30,23 @@ local function ensure_parser_installed(buf, lang)
     return
   end
 
+  if pending_installs[lang] then
+    table.insert(pending_installs[lang], buf)
+    return
+  end
+  pending_installs[lang] = { buf }
+
   treesitter.install(lang):await(function(_, installed)
-    if installed and vim.api.nvim_buf_is_valid(buf) then
-      pcall(vim.treesitter.start, buf, lang)
+    local buffers = pending_installs[lang]
+    pending_installs[lang] = nil
+    if not installed then
+      return
+    end
+
+    for _, pending_buf in ipairs(buffers) do
+      if vim.api.nvim_buf_is_valid(pending_buf) then
+        pcall(vim.treesitter.start, pending_buf, lang)
+      end
     end
   end)
 end
