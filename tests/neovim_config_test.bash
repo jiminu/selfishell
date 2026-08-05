@@ -43,17 +43,17 @@ test_treesitter_autocmd_uses_detected_filetypes() {
     fail "Tree-sitter autocmd did not use FileType values and Terraform mapping: $output"
 }
 
-test_treesitter_install_rejects_false_and_missing_results() {
+test_treesitter_auto_installs_missing_parsers_on_filetype() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    skip 'test_treesitter_install_rejects_false_and_missing_results (Neovim unavailable)'
+    skip 'test_treesitter_auto_installs_missing_parsers_on_filetype (Neovim unavailable)'
   fi
 
-  output="$(run_neovim_fixture treesitter_install.lua)"
+  output="$(run_neovim_fixture treesitter_auto_install.lua)"
 
-  [[ "$output" == *'Tree-sitter install verification: OK'* ]] ||
-    fail "Tree-sitter install verification is incomplete: $output"
+  [[ "$output" == *'Tree-sitter auto-install: OK'* ]] ||
+    fail "Tree-sitter auto-install on FileType is broken: $output"
 }
 
 test_every_neovim_plugin_has_an_approved_revision() {

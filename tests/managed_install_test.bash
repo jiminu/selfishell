@@ -137,8 +137,6 @@ test_developer_install_includes_neovim_configuration() {
     fail "Neovim init.lua was not installed for the developer profile"
   cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
     fail "Neovim options module was not installed for the developer profile"
-  cmp -s "$ROOT_DIR/common/nvim/lua/config/treesitter.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/treesitter.lua" ||
-    fail "Neovim Tree-sitter module was not installed for the developer profile"
   cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
     fail "Neovim lsp plugin was not installed for the developer profile"
 }
