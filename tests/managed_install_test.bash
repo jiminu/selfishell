@@ -1476,6 +1476,8 @@ setup_fake_minimal_packages() {
   chmod +x "$TEST_ROOT/bin/apt-get"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/dpkg"
   chmod +x "$TEST_ROOT/bin/dpkg"
+  printf '#!/usr/bin/env bash\nprintf "install ok installed\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
+  chmod +x "$TEST_ROOT/bin/dpkg-query"
 
   mkdir -p "$HOME/.local/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
