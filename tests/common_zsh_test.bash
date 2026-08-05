@@ -196,17 +196,7 @@ test_insecure_completion_directory_does_not_block_startup() {
   chmod 0777 "$HOME/.cache/selfishell/completions"
   touch -t 202001010000 "$HOME/.zcompdump"
 
-  output="$(
-    XDG_CACHE_HOME="$HOME/.cache" \
-      XDG_DATA_HOME="$HOME/.local/share" \
-      ZDOTDIR="$HOME" \
-      PATH="/usr/bin:/bin" \
-      /bin/zsh -f -i -c '
-        load_nvm() { :; }
-        source "$1"
-        print STARTUP_COMPLETE
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
-  )"
+  output="$(run_completion_startup_probe)"
 
   [[ "$output" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete with an insecure completion directory present: $output"
@@ -215,30 +205,47 @@ test_insecure_completion_directory_does_not_block_startup() {
   teardown_test_home
 }
 
+run_completion_startup_probe() {
+  XDG_CACHE_HOME="$HOME/.cache" \
+    XDG_DATA_HOME="$HOME/.local/share" \
+    ZDOTDIR="$HOME" \
+    PATH="/usr/bin:/bin" \
+    /bin/zsh -f -i -c '
+      load_nvm() { :; }
+      source "$1"
+      print STARTUP_COMPLETE
+    ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+}
+
 test_secure_completion_directory_is_silent_and_used() {
-  local output
+  local with_dir without_dir with_warned without_warned
 
   setup_test_home
   mkdir -p "$HOME/.cache/selfishell/completions" "$HOME/.local/share"
   chmod 0755 "$HOME/.cache/selfishell/completions"
   touch -t 202001010000 "$HOME/.zcompdump"
+  with_dir="$(run_completion_startup_probe)"
+  [[ "$with_dir" == *STARTUP_COMPLETE* ]] ||
+    fail "Shell startup did not complete with a secure completion directory: $with_dir"
 
-  output="$(
-    XDG_CACHE_HOME="$HOME/.cache" \
-      XDG_DATA_HOME="$HOME/.local/share" \
-      ZDOTDIR="$HOME" \
-      PATH="/usr/bin:/bin" \
-      /bin/zsh -f -i -c '
-        load_nvm() { :; }
-        source "$1"
-        print STARTUP_COMPLETE
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
-  )"
+  # Compare against the same startup with our directory absent entirely, so
+  # this stays hermetic against any *pre-existing, unrelated* insecure
+  # directory the host's own default $fpath might already contain (observed
+  # on a real Ubuntu CI runner, outside Selfishell's control) -- what matters
+  # here is that adding our own secure directory doesn't itself introduce a
+  # new warning, not that the whole host environment is spotless.
+  rm -rf "$HOME/.cache/selfishell/completions"
+  touch -t 202001010000 "$HOME/.zcompdump"
+  without_dir="$(run_completion_startup_probe)"
+  [[ "$without_dir" == *STARTUP_COMPLETE* ]] ||
+    fail "Shell startup did not complete without a completion directory: $without_dir"
 
-  [[ "$output" == *STARTUP_COMPLETE* ]] ||
-    fail "Shell startup did not complete with a secure completion directory: $output"
-  [[ "$output" != *'insecure completion directories detected'* ]] ||
-    fail "A secure completion directory was reported as insecure: $output"
+  with_warned=0
+  [[ "$with_dir" != *'insecure completion directories detected'* ]] || with_warned=1
+  without_warned=0
+  [[ "$without_dir" != *'insecure completion directories detected'* ]] || without_warned=1
+  [[ "$with_warned" == "$without_warned" ]] ||
+    fail "Adding our own secure completion directory changed the insecure-directory warning (with=$with_dir without=$without_dir)"
   teardown_test_home
 }
 

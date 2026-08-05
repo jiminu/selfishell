@@ -99,11 +99,20 @@ doctor_report_completion_security() {
   # compaudit exits non-zero when it finds an insecure directory, and this
   # runs under `set -e`, so the substitution's own failure must be caught
   # here rather than left to abort the rest of doctor.
+  # compaudit reports every insecure entry across the whole fpath it is
+  # given, so fpath is replaced (not prepended) with just our own directory
+  # right before calling it -- otherwise this would also surface, and
+  # misattribute to $completion_dir, any insecure *system* completion
+  # directory this check has no business reporting on. `+X` force-loads
+  # compaudit's own definition first, while fpath still has zsh's real
+  # default (compaudit is itself autoloaded from there); without it,
+  # restricting fpath beforehand would leave compaudit unable to find its
+  # own function body.
   insecure="$(
     zsh -f -c '
       [[ -d "$1" ]] || exit 0
-      fpath=("$1" $fpath)
-      autoload -Uz compaudit
+      autoload -Uz +X compaudit
+      fpath=("$1")
       compaudit
     ' _ "$completion_dir" 2>/dev/null
   )" || true
