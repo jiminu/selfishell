@@ -164,6 +164,14 @@ test_removed_legacy_install_command_is_rejected() {
   [[ "$status" -eq 2 ]] || fail "Removed legacy-install command should return usage error"
 }
 
+test_update_help_explains_package_upgrade_policy() {
+  local output
+
+  output="$(bash "$ROOT_DIR/bin/selfishell" update --help)"
+  [[ "$output" == *'left at their current version'* ]] ||
+    fail "update --help does not explain that apt/Homebrew packages are not upgraded: $output"
+}
+
 test_update_rejects_conflicting_scopes() {
   local status
 
@@ -304,9 +312,10 @@ test_doctor_does_not_require_compiler_for_minimal_profile() {
 # incomplete instead of downloading it, so doctor is the only place that can
 # explain a silently degraded shell.
 test_doctor_reports_unprovisioned_zsh_plugins() {
-  local output plugins_dir repository
+  local output plugins_dir repository revision plugin_dir manifest
 
   setup_test_home
+  manifest="$TEST_ROOT/dependencies.conf"
   plugins_dir="$HOME/.local/share/zinit/plugins"
   mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
     "$HOME/.local/share/zinit/zinit.git"
@@ -316,11 +325,14 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
   chmod +x "$TEST_ROOT/bin/apt"
   printf '# zinit\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >>"$manifest"
 
   run_doctor() {
     set +e
     PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
       XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_DEPENDENCIES_FILE="$manifest" \
       SELFISHELL_TEST_SYSTEM_NAME=Linux \
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
@@ -335,13 +347,185 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
   [[ "$output" == *'zsh-users/zsh-autosuggestions'* ]] ||
     fail "Doctor did not name the unprovisioned plugins: $output"
 
+  # Doctor now compares HEAD against the manifest's pinned revision, so each
+  # fixture checkout must be a real repository whose HEAD the manifest
+  # actually pins -- real upstream commit hashes can't be reproduced
+  # locally, so the zsh-plugin lines are rewritten to pin whatever commit
+  # the local fixture repo actually produces (other entries, e.g. starship
+  # and mise, are left as-is so the rest of doctor keeps working).
+  grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   while read -r _ repository _; do
-    mkdir -p "$plugins_dir/${repository//\//---}/.git"
+    plugin_dir="$plugins_dir/${repository//\//---}"
+    mkdir -p "$plugin_dir"
+    git -C "$plugin_dir" init --quiet
+    git -C "$plugin_dir" config user.email test@example.com
+    git -C "$plugin_dir" config user.name test
+    git -C "$plugin_dir" commit --quiet --allow-empty -m initial
+    revision="$(git -C "$plugin_dir" rev-parse HEAD)"
+    printf 'zsh-plugin %s %s all all - - - -\n' "$repository" "$revision" >>"$manifest"
   done < <(grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf")
 
   output="$(run_doctor)"
   [[ "$output" == *'Zsh plugins: provisioned'* ]] ||
     fail "Doctor did not accept provisioned Zsh plugins: $output"
+  teardown_test_home
+}
+
+test_doctor_reports_zinit_plugin_revision_drift() {
+  local output plugins_dir manifest repository plugin_dir approved_revision
+
+  setup_test_home
+  plugins_dir="$HOME/.local/share/zinit/plugins"
+  manifest="$TEST_ROOT/dependencies.conf"
+  repository="test-owner/test-plugin"
+  plugin_dir="$plugins_dir/${repository//\//---}"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
+    "$HOME/.local/share/zinit/zinit.git" "$plugin_dir"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+  printf '# zinit\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  git -C "$plugin_dir" init --quiet
+  git -C "$plugin_dir" config user.email test@example.com
+  git -C "$plugin_dir" config user.name test
+  git -C "$plugin_dir" commit --quiet --allow-empty -m initial
+  approved_revision="$(git -C "$plugin_dir" rev-parse HEAD)"
+  git -C "$plugin_dir" commit --quiet --allow-empty -m drifted
+  grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  printf 'zsh-plugin %s %s all all - - - -\n' "$repository" "$approved_revision" >>"$manifest"
+
+  run_doctor() {
+    set +e
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_DEPENDENCIES_FILE="$manifest" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+    set -e
+  }
+
+  output="$(run_doctor)"
+  [[ "$output" == *'Zsh plugins: 1 at an unapproved revision'* ]] ||
+    fail "Doctor did not report the drifted Zsh plugin: $output"
+  [[ "$output" == *"$repository"* ]] || fail "Doctor did not name the drifted plugin: $output"
+  # Doctor only reports; it must never modify the checkout it is inspecting.
+  [[ "$(git -C "$plugin_dir" rev-parse HEAD)" != "$approved_revision" ]] ||
+    fail "Doctor auto-corrected a drifted Zsh plugin instead of only reporting it"
+  teardown_test_home
+}
+
+test_doctor_reports_dirty_zinit_plugin_checkout() {
+  local output plugins_dir manifest repository plugin_dir approved_revision
+
+  setup_test_home
+  plugins_dir="$HOME/.local/share/zinit/plugins"
+  manifest="$TEST_ROOT/dependencies.conf"
+  repository="test-owner/test-plugin"
+  plugin_dir="$plugins_dir/${repository//\//---}"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
+    "$HOME/.local/share/zinit/zinit.git" "$plugin_dir"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+  printf '# zinit\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+
+  git -C "$plugin_dir" init --quiet
+  git -C "$plugin_dir" config user.email test@example.com
+  git -C "$plugin_dir" config user.name test
+  printf 'tracked\n' >"$plugin_dir/tracked-file"
+  git -C "$plugin_dir" add tracked-file
+  git -C "$plugin_dir" commit --quiet -m initial
+  approved_revision="$(git -C "$plugin_dir" rev-parse HEAD)"
+  printf 'modified\n' >>"$plugin_dir/tracked-file"
+  grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
+  printf 'zsh-plugin %s %s all all - - - -\n' "$repository" "$approved_revision" >>"$manifest"
+
+  run_doctor() {
+    set +e
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_DEPENDENCIES_FILE="$manifest" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+    set -e
+  }
+
+  output="$(run_doctor)"
+  [[ "$output" == *'Zsh plugins: 1 modified locally'* ]] ||
+    fail "Doctor did not report the dirty Zsh plugin checkout: $output"
+  [[ "$output" == *"$repository"* ]] || fail "Doctor did not name the dirty plugin: $output"
+  assert_file_content $'tracked\nmodified' "$plugin_dir/tracked-file"
+  teardown_test_home
+}
+
+test_doctor_reports_insecure_completion_directory() {
+  local output completion_dir
+
+  setup_test_home
+  completion_dir="$HOME/.cache/selfishell/completions"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+  chmod 0777 "$completion_dir"
+
+  set +e
+  output="$(
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+  )"
+  set -e
+
+  [[ "$output" == *'insecure permissions'* ]] ||
+    fail "Doctor did not report the insecure completion directory: $output"
+  [[ "$output" == *"$completion_dir"* ]] ||
+    fail "Doctor did not name the insecure completion directory: $output"
+  teardown_test_home
+}
+
+test_doctor_reports_secure_completion_directory() {
+  local output completion_dir
+
+  setup_test_home
+  completion_dir="$HOME/.cache/selfishell/completions"
+  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
+  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
+  chmod +x "$TEST_ROOT/bin/apt"
+  chmod 0755 "$completion_dir"
+
+  set +e
+  output="$(
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      SELFISHELL_TEST_SYSTEM_NAME=Linux \
+      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
+      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+  )"
+  set -e
+
+  [[ "$output" == *'Zsh completion directory: secure'* ]] ||
+    fail "Doctor did not report the completion directory as secure: $output"
   teardown_test_home
 }
 

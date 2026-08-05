@@ -188,6 +188,60 @@ test_completion_audits_the_dump_once_a_day() {
   teardown_test_home
 }
 
+test_insecure_completion_directory_does_not_block_startup() {
+  local output
+
+  setup_test_home
+  mkdir -p "$HOME/.cache/selfishell/completions" "$HOME/.local/share"
+  chmod 0777 "$HOME/.cache/selfishell/completions"
+  touch -t 202001010000 "$HOME/.zcompdump"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -i -c '
+        load_nvm() { :; }
+        source "$1"
+        print STARTUP_COMPLETE
+      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+  )"
+
+  [[ "$output" == *STARTUP_COMPLETE* ]] ||
+    fail "Shell startup did not complete with an insecure completion directory present: $output"
+  [[ "$output" == *'insecure completion directories detected'* ]] ||
+    fail "Shell startup did not warn about the insecure completion directory: $output"
+  teardown_test_home
+}
+
+test_secure_completion_directory_is_silent_and_used() {
+  local output
+
+  setup_test_home
+  mkdir -p "$HOME/.cache/selfishell/completions" "$HOME/.local/share"
+  chmod 0755 "$HOME/.cache/selfishell/completions"
+  touch -t 202001010000 "$HOME/.zcompdump"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -i -c '
+        load_nvm() { :; }
+        source "$1"
+        print STARTUP_COMPLETE
+      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+  )"
+
+  [[ "$output" == *STARTUP_COMPLETE* ]] ||
+    fail "Shell startup did not complete with a secure completion directory: $output"
+  [[ "$output" != *'insecure completion directories detected'* ]] ||
+    fail "A secure completion directory was reported as insecure: $output"
+  teardown_test_home
+}
+
 test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
   local fake_bin
 

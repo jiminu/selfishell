@@ -12,6 +12,10 @@ test_complete_release_lifecycle() {
   local release_store
   local artifacts
   local tool
+  local manifest
+  local repository
+  local plugin_dir
+  local revision
 
   setup_test_home
   trap teardown_test_home EXIT
@@ -25,10 +29,24 @@ test_complete_release_lifecycle() {
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
   # A real install provisions the pinned plugins alongside Zinit itself. Model
   # that here so doctor sees a complete state instead of the degraded one it
-  # must report.
+  # must report. Doctor now compares each checkout's HEAD against the
+  # manifest's pinned revision, so these must be real repositories -- real
+  # upstream commit hashes can't be reproduced locally, so the manifest is
+  # pointed at a rewritten copy that pins whatever commit each local fixture
+  # repo actually produces.
+  manifest="$TEST_ROOT/dependencies.conf"
+  grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   while read -r _ repository _; do
-    mkdir -p "$HOME/.local/share/zinit/plugins/${repository//\//---}/.git"
+    plugin_dir="$HOME/.local/share/zinit/plugins/${repository//\//---}"
+    mkdir -p "$plugin_dir"
+    git -C "$plugin_dir" init --quiet
+    git -C "$plugin_dir" config user.email test@example.com
+    git -C "$plugin_dir" config user.name test
+    git -C "$plugin_dir" commit --quiet --allow-empty -m initial
+    revision="$(git -C "$plugin_dir" rev-parse HEAD)"
+    printf 'zsh-plugin %s %s all all - - - -\n' "$repository" "$revision" >>"$manifest"
   done < <(grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf")
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
   prefix="$TEST_ROOT/prefix"
   release_store="$TEST_ROOT/releases"
   export XDG_CONFIG_HOME="$HOME/.config"
