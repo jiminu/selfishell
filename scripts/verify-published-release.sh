@@ -79,13 +79,24 @@ gh release download "$tag" --repo "$repository" --dir "$download_dir"
   fi
 )
 
+# Every release asset is documented (docs/RELEASING.md) as receiving signed
+# build provenance before publication, so an unverifiable attestation must
+# not let this script still report the release as fully verified -- that
+# would silently downgrade to checksum self-consistency only (which proves
+# the archives match their own SHA256SUMS, not that SHA256SUMS reflects what
+# CI actually built) while still exiting 0. Requires an explicit opt-out for
+# environments stuck on a gh CLI that predates `gh attestation`.
 if gh attestation verify --help >/dev/null 2>&1; then
   for archive in "$download_dir"/selfishell-"$version"-*.tar.gz; do
     gh attestation verify "$archive" --repo "$repository" >/dev/null
   done
   printf 'Artifact attestations verified.\n'
+elif [[ "${SELFISHELL_VERIFY_SKIP_ATTESTATION:-0}" == "1" ]]; then
+  printf 'Artifact attestation verification unavailable; skipped (SELFISHELL_VERIFY_SKIP_ATTESTATION=1).\n'
 else
-  printf 'Artifact attestation verification unavailable; skipped.\n'
+  printf 'gh CLI does not support attestation verification (needs a newer gh CLI with the attestation subcommand).\n' >&2
+  printf 'Set SELFISHELL_VERIFY_SKIP_ATTESTATION=1 to explicitly verify without it.\n' >&2
+  exit 1
 fi
 
 installer="$temporary_root/install.sh"
