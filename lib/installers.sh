@@ -178,12 +178,8 @@ install_lazy_nvim() {
     return 1
   fi
 
-  temporary="${lazypath}.tmp.$$"
-  previous="${lazypath}.previous.$$"
-  [[ ! -e "$temporary" && ! -e "$previous" ]] || {
-    cli_error "Temporary lazy.nvim path already exists."
-    return 1
-  }
+  temporary="$(selfishell_unique_path "${lazypath}.tmp.$$")"
+  previous="$(selfishell_unique_path "${lazypath}.previous.$$")"
   mkdir -p "$(dirname "$lazypath")"
   git clone --quiet --filter=blob:none "$source" "$temporary" || return
   git -C "$temporary" checkout --quiet --detach "$revision" || {

@@ -801,7 +801,7 @@ test_malformed_managed_file_state_variants_are_rejected_without_changes() {
   before_content="$(<"$target")"
 
   for label in truncated-1-line truncated-6-lines empty-type unknown-type \
-    unknown-status empty-target unsupported-version no-final-newline; do
+    unknown-status empty-target unsupported-version no-final-newline symlinked-state; do
     case "$label" in
       truncated-1-line) printf '2\n' >"$state_file" ;;
       truncated-6-lines) printf '2\nfile\nactive\n%s\nref\nbackup\n' "$target" >"$state_file" ;;
@@ -811,6 +811,14 @@ test_malformed_managed_file_state_variants_are_rejected_without_changes() {
       empty-target) printf '2\nfile\nactive\n\nref\nbackup\nchecksum\n' >"$state_file" ;;
       unsupported-version) printf '3\nfile\nactive\n%s\nref\nbackup\nchecksum\n' "$target" >"$state_file" ;;
       no-final-newline) printf '2\nfile\nactive\n%s\nref\nbackup\nchecksum' "$target" >"$state_file" ;;
+      # A well-formed state file is still rejected when the state *path*
+      # itself is a symlink, so a redirected state read/write can't be used
+      # to smuggle another resource's (or an attacker's) state in its place.
+      symlinked-state)
+        printf '2\nfile\nactive\n%s\nref\nbackup\nchecksum\n' "$target" >"$TEST_ROOT/symlinked-state-target"
+        rm -f "$state_file"
+        ln -s "$TEST_ROOT/symlinked-state-target" "$state_file"
+        ;;
     esac
 
     set +e
@@ -1468,6 +1476,8 @@ setup_fake_minimal_packages() {
   chmod +x "$TEST_ROOT/bin/apt-get"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/dpkg"
   chmod +x "$TEST_ROOT/bin/dpkg"
+  printf '#!/usr/bin/env bash\nprintf "install ok installed\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
+  chmod +x "$TEST_ROOT/bin/dpkg-query"
 
   mkdir -p "$HOME/.local/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"

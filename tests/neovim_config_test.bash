@@ -86,6 +86,20 @@ test_pinned_neovim_plugin_specs_load() {
   [[ "$output" == *'pinned plugin specs: OK'* ]] || fail "Pinned Neovim plugin specs did not load: $output"
 }
 
+test_plugin_versions_module_tolerates_missing_manifest() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_plugin_versions_module_tolerates_missing_manifest (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/nvim"
+  output="$(run_neovim_fixture plugin_versions_missing_manifest.lua)"
+
+  [[ "$output" == *'plugin_versions missing manifest: OK'* ]] ||
+    fail "config.plugin_versions crashed on a missing manifest instead of degrading gracefully: $output"
+}
+
 test_editor_workflow_options_and_keymaps() {
   local output
 
@@ -402,6 +416,37 @@ EOF
 
   [[ "$output" == *'User extension lspconfig require: OK'* ]] ||
     fail "Filetypes were not derived when the nvim-lspconfig file requires a sibling module: $output"
+}
+
+test_lsp_user_extension_lspconfig_load_error_is_surfaced() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_lsp_user_extension_lspconfig_load_error_is_surfaced (Neovim unavailable)'
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/selfishell"
+  cat >"$XDG_CONFIG_HOME/selfishell/nvim.user.lua" <<'EOF'
+return {
+  servers = {
+    broken_server = {},
+  },
+}
+EOF
+
+  # A real nvim-lspconfig lsp/<name>.lua file that errors while loading
+  # (corrupted checkout, or missing a sibling module the package.path shim
+  # doesn't provide) must be reported distinctly from a name nvim-lspconfig
+  # simply has no entry for.
+  mkdir -p "$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp"
+  cat >"$XDG_DATA_HOME/nvim/lazy/nvim-lspconfig/lsp/broken_server.lua" <<'EOF'
+error("simulated real breakage")
+EOF
+
+  output="$(run_neovim_fixture lsp_user_extension_lspconfig_load_error.lua)"
+
+  [[ "$output" == *'User extension lspconfig load error: OK'* ]] ||
+    fail "A real nvim-lspconfig load failure was not distinguished from 'not found': $output"
 }
 
 test_lsp_user_extension_rejects_file_with_no_return_value() {

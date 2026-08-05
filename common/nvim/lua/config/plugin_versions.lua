@@ -2,11 +2,21 @@ local M = {}
 local revisions = {}
 local manifest = vim.fn.stdpath("config") .. "/plugin-versions.conf"
 
-for line in io.lines(manifest) do
-  local kind, repository, revision = line:match("^(%S+)%s+(%S+)%s+(%S+)")
-  if kind == "nvim-plugin" then
-    revisions[repository] = revision
+-- io.lines(manifest) throws immediately if the manifest is missing (a
+-- partial/interrupted install, or Neovim pointed straight at this config
+-- without running the installer), which would crash `require` for every
+-- caller with a raw traceback. Degrade to an empty manifest instead; callers
+-- already report a clear error for an individual missing/mismatched
+-- revision (see config/lazy.lua's "lazy.nvim revision does not match").
+local file = io.open(manifest, "r")
+if file then
+  for line in file:lines() do
+    local kind, repository, revision = line:match("^(%S+)%s+(%S+)%s+(%S+)")
+    if kind == "nvim-plugin" then
+      revisions[repository] = revision
+    end
   end
+  file:close()
 end
 
 function M.spec(repository, options)

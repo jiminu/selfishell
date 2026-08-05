@@ -67,10 +67,13 @@ After the workflow completes:
 bash scripts/verify-published-release.sh 1.2.3
 ```
 
-This verifies the exact asset set, checksums, available GitHub Artifact
-Attestations, the tag's `install.sh`, an isolated exact-version bootstrap, and
-`releases/latest/download/VERSION` for stable releases. Record failures as
-issues and publish a new patch release after fixes.
+This verifies the exact asset set, checksums, GitHub Artifact Attestations, the
+tag's `install.sh`, an isolated exact-version bootstrap, and
+`releases/latest/download/VERSION` for stable releases. Attestation
+verification requires a gh CLI with the `attestation` subcommand and fails the
+script by default if it is unavailable; set `SELFISHELL_VERIFY_SKIP_ATTESTATION=1`
+to explicitly verify without it. Record failures as issues and publish a new
+patch release after fixes.
 
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.

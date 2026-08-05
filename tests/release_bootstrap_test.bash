@@ -360,6 +360,263 @@ test_cli_update_and_offline_rollback() {
     fail "Status did not update the rollback release after rollback"
 }
 
+test_release_validate_extracted_members_accepts_safe_symlinks() {
+  local status=0
+
+  bash -c '
+    set -euo pipefail
+    source "$1/lib/common.sh"
+    source "$1/lib/releases.sh"
+    mkdir -p "$2/bin"
+    printf ok >"$2/bin/selfishell"
+    ln -s selfishell "$2/bin/sfs"
+    release_validate_extracted_members "$2"
+  ' _ "$ROOT_DIR" "$TEST_ROOT/member-fixture-ok" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "A release archive with a safe sibling symlink was rejected"
+}
+
+test_release_validate_extracted_members_rejects_fifo() {
+  local status=0
+
+  bash -c '
+    set -euo pipefail
+    source "$1/lib/common.sh"
+    source "$1/lib/releases.sh"
+    mkdir -p "$2/bin"
+    printf ok >"$2/bin/selfishell"
+    mkfifo "$2/bin/evil-fifo"
+    ! release_validate_extracted_members "$2"
+  ' _ "$ROOT_DIR" "$TEST_ROOT/member-fixture-fifo" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "A release archive containing a FIFO was accepted"
+}
+
+test_release_validate_extracted_members_rejects_traversal_symlink() {
+  local status=0
+
+  bash -c '
+    set -euo pipefail
+    source "$1/lib/common.sh"
+    source "$1/lib/releases.sh"
+    mkdir -p "$2/bin"
+    printf ok >"$2/bin/selfishell"
+    ln -s ../../../etc/passwd "$2/bin/evil-link"
+    ! release_validate_extracted_members "$2"
+  ' _ "$ROOT_DIR" "$TEST_ROOT/member-fixture-traversal" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "A release archive containing a traversal symlink was accepted"
+}
+
+test_release_validate_extracted_members_rejects_dangling_symlink() {
+  local status=0
+
+  bash -c '
+    set -euo pipefail
+    source "$1/lib/common.sh"
+    source "$1/lib/releases.sh"
+    mkdir -p "$2/bin"
+    printf ok >"$2/bin/selfishell"
+    ln -s does-not-exist "$2/bin/evil-link"
+    ! release_validate_extracted_members "$2"
+  ' _ "$ROOT_DIR" "$TEST_ROOT/member-fixture-dangling" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "A release archive containing a dangling symlink was accepted"
+}
+
+test_release_atomic_link_recovers_from_stale_temporary_path() {
+  local status=0
+
+  # Simulates debris left by a process killed mid-swap (a killed prior run
+  # sharing this same PID): release_atomic_link must not hard-fail just
+  # because its usual temporary name is already occupied.
+  bash -c '
+    set -euo pipefail
+    source "$1/lib/common.sh"
+    source "$1/lib/releases.sh"
+    mkdir -p "$2"
+    ln -s target-a "$2/link.tmp.$$"
+    release_atomic_link target-b "$2/link"
+    [[ "$(readlink "$2/link")" == target-b ]]
+  ' _ "$ROOT_DIR" "$TEST_ROOT/atomic-link-fixture" || status=$?
+
+  [[ "$status" -eq 0 ]] || fail "release_atomic_link did not recover from a stale temporary path"
+}
+
+test_update_rejects_preexisting_incomplete_release_directory() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3/bin"
+  printf 'not-selfishell\n' >"$TEST_ROOT/prefix/share/selfishell/releases/0.2.3/bin/selfishell"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] ||
+    fail "update activated an incomplete pre-existing release directory"
+  grep -Fq 'Existing release is incomplete' "$TEST_ROOT/stderr" ||
+    fail "update did not report the incomplete release directory"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_update_tolerates_duplicate_identical_checksum_entry() {
+  local version archive_name checksum_file line
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  # release_install (used by `update`) resolves its platform from the real
+  # `uname -s` rather than the SELFISHELL_TEST_SYSTEM_NAME override, so the
+  # archive it actually fetches must be named after the real host platform.
+  archive_name="selfishell-0.2.3-$([[ "$(uname -s)" == Darwin ]] && printf macos || printf linux)-amd64.tar.gz"
+  checksum_file="$TEST_ROOT/releases/download/v0.2.3/SHA256SUMS"
+  line="$(awk -v name="$archive_name" '$2 == name' "$checksum_file")"
+  printf '%s\n' "$line" >>"$checksum_file"
+
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_update_rejects_conflicting_duplicate_checksum_entry() {
+  local version archive_name checksum_file status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  archive_name="selfishell-0.2.3-$([[ "$(uname -s)" == Darwin ]] && printf macos || printf linux)-amd64.tar.gz"
+  checksum_file="$TEST_ROOT/releases/download/v0.2.3/SHA256SUMS"
+  printf '%064d  %s\n' 0 "$archive_name" >>"$checksum_file"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "update accepted a conflicting duplicate checksum entry"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_rollback_accepts_v_prefixed_version() {
+  local version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  "$TEST_ROOT/prefix/bin/selfishell" rollback "v$version" --yes >/dev/null
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_rollback_to_currently_active_version_is_noop() {
+  local version output
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" rollback "$version" --yes)"
+  [[ "$output" == *'Release is already active:'* ]] ||
+    fail "Rolling back to the active version should be a no-op"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_rollback_rejects_invalid_semver() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  for bad_version in 'not-a-version' '1.2'; do
+    set +e
+    "$TEST_ROOT/prefix/bin/selfishell" rollback "$bad_version" --yes \
+      >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+
+    [[ "$status" -eq 2 ]] ||
+      fail "Invalid rollback version '$bad_version' should exit with usage status 2, got $status"
+    grep -Fq 'Invalid semantic version' "$TEST_ROOT/stderr" ||
+      fail "Invalid rollback version '$bad_version' did not report an error"
+    assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  done
+}
+
+test_rollback_rejects_path_traversal_version() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  for malicious in '../current' '../../tmp' '/absolute/path'; do
+    set +e
+    "$TEST_ROOT/prefix/bin/selfishell" rollback "$malicious" --yes \
+      >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+
+    [[ "$status" -ne 0 ]] || fail "rollback accepted a malicious version: '$malicious'"
+    [[ -L "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+      fail "rollback with '$malicious' left 'current' as a non-symlink"
+    assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  done
+}
+
+test_rollback_rejects_release_directory_with_mismatched_version_file() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  printf '9.9.9\n' >"$TEST_ROOT/prefix/share/selfishell/releases/$version/VERSION"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" rollback "$version" --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] ||
+    fail "rollback accepted a release directory whose VERSION file does not match its name"
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_rollback_rejects_traversal_shaped_previous_link() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  rm "$TEST_ROOT/prefix/share/selfishell/previous"
+  ln -s 'releases/../current' "$TEST_ROOT/prefix/share/selfishell/previous"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" rollback --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "rollback followed a traversal-shaped previous link"
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_rollback_rejects_previous_link_outside_releases() {
+  local version status
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  rm "$TEST_ROOT/prefix/share/selfishell/previous"
+  ln -s '/etc/passwd' "$TEST_ROOT/prefix/share/selfishell/previous"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" rollback --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "rollback followed a previous link pointing outside releases/"
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
 test_cli_update_to_current_version_preserves_rollback() {
   local output version
   version="$(<"$ROOT_DIR/VERSION")"
@@ -697,6 +954,39 @@ test_purge_removes_installer_path_entry() {
     fail "Purge retained the installer PATH marker"
   [[ "$(<"$HOME/.bashrc")" != *"$TEST_ROOT/prefix/bin"* ]] ||
     fail "Purge retained the installer PATH entry"
+}
+
+test_purge_path_entry_removal_revalidates_before_mutating() {
+  local status marker='# Added by Selfishell installer' entry_line
+
+  SELFISHELL_BOOTSTRAP_SHELL=/bin/bash run_bootstrap --add-to-path >/dev/null
+
+  # Duplicate the marker+entry pair, simulating a startup file edited
+  # between the early preflight (command_uninstall's own
+  # uninstall_validate_path_entry call, before confirm_action's interactive
+  # pause) and this later removal step: uninstall_remove_path_entry must
+  # re-validate immediately before mutating, not just once at the top.
+  entry_line="$(grep -A1 -F "$marker" "$HOME/.bashrc" | tail -1)"
+  printf '%s\n%s\n' "$marker" "$entry_line" >>"$HOME/.bashrc"
+
+  set +e
+  bash -c '
+    set -euo pipefail
+    SELFISHELL_ROOT="$(cd "$1/share/selfishell/current" && pwd -P)"
+    source "$SELFISHELL_ROOT/lib/common.sh"
+    source "$SELFISHELL_ROOT/lib/releases.sh"
+    source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
+    release_installation_paths
+    uninstall_remove_path_entry "$1" 0
+  ' _ "$TEST_ROOT/prefix" >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "uninstall_remove_path_entry accepted a duplicated PATH entry"
+  grep -Fq 'modified; preserving' "$TEST_ROOT/stderr" ||
+    fail "uninstall_remove_path_entry did not report the duplicated entry as modified: $(cat "$TEST_ROOT/stderr")"
+  [[ "$(grep -Fc "$marker" "$HOME/.bashrc")" -eq 2 ]] ||
+    fail "uninstall_remove_path_entry changed the startup file despite rejecting it"
 }
 
 test_purge_rejects_symlink_startup_file() {

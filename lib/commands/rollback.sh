@@ -30,7 +30,11 @@ command_rollback() {
   release_installation_paths || return
   current_target="$(readlink "$SELFISHELL_SHARE_DIR/current")"
   if [[ -n "$requested" ]]; then
-    [[ -d "$SELFISHELL_RELEASES_DIR/$requested" && -x "$SELFISHELL_RELEASES_DIR/$requested/bin/selfishell" ]] || {
+    selfishell_version_is_valid "$requested" || {
+      cli_error "Invalid semantic version: $requested"
+      return "$SELFISHELL_EXIT_USAGE"
+    }
+    release_directory_is_valid "$requested" || {
       cli_error "Retained release not found: $requested"
       return "$SELFISHELL_EXIT_ERROR"
     }
@@ -41,6 +45,17 @@ command_rollback() {
       return "$SELFISHELL_EXIT_ERROR"
     }
     target="$(readlink "$SELFISHELL_SHARE_DIR/previous")"
+    # `previous` is only ever written by release_atomic_link as
+    # "releases/<version>" (see release_install, rollback below), so require
+    # it to still have exactly that shape before trusting it: a hand-edited
+    # or corrupted link must never repoint `current` at an unvalidated path.
+    requested="${target#releases/}"
+    if [[ "$target" != "releases/$requested" ]] ||
+      ! selfishell_version_is_valid "$requested" ||
+      ! release_directory_is_valid "$requested"; then
+      cli_error "Retained previous release is invalid: ${target##*/}"
+      return "$SELFISHELL_EXIT_ERROR"
+    fi
   fi
   [[ "$target" != "$current_target" ]] || {
     printf '%sRelease is already active:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "${target##*/}"

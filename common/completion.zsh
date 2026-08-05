@@ -18,7 +18,7 @@ zstyle ':completion:*' matcher-list \
   'm:{a-zA-Z}={A-Za-z}' \
   'l:|=* r:|=*'
 
-autoload -Uz compinit
+autoload -Uz compinit compaudit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
 SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
 [[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
@@ -43,11 +43,22 @@ _selfishell_zcompdump_is_stale() {
 }
 
 if [[ ! -o interactive ]]; then
-  compinit -u -C -d "$ZCOMPDUMP"
+  # -C skips compaudit entirely regardless of -u/-i, so there is no security
+  # check to perform (or bypass) on this path.
+  compinit -C -d "$ZCOMPDUMP"
 elif _selfishell_zcompdump_is_stale "$ZCOMPDUMP"; then
-  compinit -u -d "$ZCOMPDUMP"
+  # Run the real insecure-directory scan ourselves so we can decide how to
+  # respond: warn and continue (-i, silent) rather than let compinit's
+  # default behavior block startup on a `read -q` prompt, or -u's blanket
+  # "treat everything as secure" skip the scan entirely.
+  if [[ -n "$(compaudit 2>/dev/null)" ]]; then
+    print -u2 "selfishell: insecure completion directories detected; run 'selfishell doctor' for details."
+    compinit -i -d "$ZCOMPDUMP"
+  else
+    compinit -d "$ZCOMPDUMP"
+  fi
 else
-  compinit -u -C -d "$ZCOMPDUMP"
+  compinit -C -d "$ZCOMPDUMP"
 fi
 unfunction _selfishell_zcompdump_is_stale
 

@@ -41,7 +41,11 @@ apt_install_managed_packages() {
   fi
 
   for package in "$@"; do
-    if dpkg -s "$package" >/dev/null 2>&1; then
+    # dpkg -s exits 0 for a package dpkg still has any record of, including
+    # one that was removed but not purged ("rc" status: config files remain,
+    # binaries gone) -- which would silently skip reinstalling it. Checking
+    # the actual Status field distinguishes that from a real "ii" install.
+    if dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
       installed_packages+=("$package")
     else
       missing_packages+=("$package")

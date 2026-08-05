@@ -20,6 +20,7 @@ MOCK_BREW_FORMULAE=""
 MOCK_BREW_CASKS=""
 MOCK_APT_UPDATE_COUNT=0
 MOCK_DPKG_PACKAGES=""
+MOCK_DPKG_RC_PACKAGES=""
 
 have_command() {
   [[ "$1" != "sudo" || "$MOCK_HAVE_SUDO" == "1" ]]
@@ -30,8 +31,18 @@ id() {
   printf '%s\n' "$MOCK_UID"
 }
 
-dpkg() {
-  [[ " $MOCK_DPKG_PACKAGES " == *" $2 "* ]]
+dpkg-query() {
+  local package="${*: -1}"
+
+  if [[ " $MOCK_DPKG_PACKAGES " == *" $package "* ]]; then
+    printf 'install ok installed\n'
+    return 0
+  fi
+  if [[ " $MOCK_DPKG_RC_PACKAGES " == *" $package "* ]]; then
+    printf 'deinstall ok config-files\n'
+    return 0
+  fi
+  return 1
 }
 
 apt-cache() {
@@ -84,10 +95,23 @@ reset_package_mocks() {
   MOCK_BREW_CASKS=""
   MOCK_APT_UPDATE_COUNT=0
   MOCK_DPKG_PACKAGES=""
+  MOCK_DPKG_RC_PACKAGES=""
   SELFISHELL_BREW_FORMULAE=""
   SELFISHELL_BREW_CASKS=""
   SELFISHELL_BREW_FORMULAE_READY=0
   SELFISHELL_BREW_CASKS_READY=0
+}
+
+test_apt_reinstalls_removed_but_not_purged_package() {
+  reset_package_mocks
+  MOCK_DPKG_PACKAGES="second"
+  MOCK_DPKG_RC_PACKAGES="first"
+  MOCK_AVAILABLE_PACKAGES="first"
+
+  apt_install_managed_packages required 0 first second
+
+  [[ "$MOCK_INSTALLED_PACKAGES" == "first" ]] ||
+    fail "A removed-but-not-purged (rc) package was not reinstalled: got [$MOCK_INSTALLED_PACKAGES]"
 }
 
 test_apt_skips_index_update_when_packages_are_installed() {

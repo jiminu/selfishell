@@ -109,7 +109,13 @@ uninstall_remove_path_entry() {
   local marker='# Added by Selfishell installer'
   local temporary
 
-  uninstall_path_entry_values "$prefix" || return
+  # Re-validates (not just re-reads) the recorded PATH entry immediately
+  # before mutating it, matching every other resource this command removes
+  # (managed_uninstall_resource, uninstall_prepare_purge): the early
+  # preflight in command_uninstall runs before confirm_action's interactive
+  # pause, so a startup file edited while the user sits at that prompt must
+  # not make this step blindly strip whatever it finds.
+  uninstall_validate_path_entry "$prefix" || return
   [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
   if [[ "$dry_run" == 1 ]]; then
     printf 'Would remove Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"

@@ -12,7 +12,10 @@ managed_state_path() {
 }
 
 managed_state_exists() {
-  [[ -e "$(managed_state_path "$1")" ]]
+  local state_file
+  state_file="$(managed_state_path "$1")"
+
+  [[ -e "$state_file" || -L "$state_file" ]]
 }
 
 # Returns 1 for both a missing state file and a malformed one (short,
@@ -24,7 +27,7 @@ managed_read_state() {
   local state_file
   state_file="$(managed_state_path "$1")"
 
-  [[ -r "$state_file" ]] || return 1
+  [[ -r "$state_file" && ! -L "$state_file" ]] || return 1
 
   if ! {
     IFS= read -r MANAGED_STATE_VERSION
