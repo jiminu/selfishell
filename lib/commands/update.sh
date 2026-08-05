@@ -10,6 +10,11 @@ By default, update the Selfishell CLI release first, then synchronize all
 profile packages, approved tools, and managed configuration. Use --cli-only or
 --tools-only to limit the scope.
 --version selects an exact CLI release and cannot be used with --tools-only.
+
+Already installed apt/Homebrew packages are left at their current version
+(mise-managed and Selfishell direct tools are synced to their pinned
+versions); use 'selfishell status --check-package-updates' to see what apt or
+Homebrew consider outdated.
 EOF
 }
 
