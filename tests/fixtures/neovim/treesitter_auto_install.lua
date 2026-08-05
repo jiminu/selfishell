@@ -70,7 +70,11 @@ assert(
   #install_calls == 1 and install_calls[1] == "widgetlang",
   "Missing-but-available parser was not installed: " .. vim.inspect(install_calls)
 )
-assert(start_calls == 2, "Tree-sitter highlighting was not retried after installing the parser: " .. start_calls)
+-- 3 calls: the initial failing attempt, the direct retry after install, and
+-- one more from the FileType autocmd re-firing (so other FileType-based,
+-- Tree-sitter-dependent plugins like rainbow-delimiters get a chance too) --
+-- which now finds a parser and returns without another install attempt.
+assert(start_calls == 3, "Tree-sitter highlighting was not retried after installing the parser: " .. start_calls)
 
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {

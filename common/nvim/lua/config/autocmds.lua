@@ -46,6 +46,10 @@ local function ensure_parser_installed(buf, lang)
     for _, pending_buf in ipairs(buffers) do
       if vim.api.nvim_buf_is_valid(pending_buf) then
         pcall(vim.treesitter.start, pending_buf, lang)
+        -- Other plugins (e.g. rainbow-delimiters) attach on their own
+        -- FileType autocmd and assume a parser is already available there;
+        -- re-fire it now that one exists so they get a chance to attach too.
+        pcall(vim.api.nvim_exec_autocmds, "FileType", { buffer = pending_buf })
       end
     end
   end)
