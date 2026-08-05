@@ -884,7 +884,10 @@ main() {
   setup_release_fixture
   trap teardown_release_fixture EXIT HUP INT TERM
 
-  run_discovered_tests setup_release_home teardown_release_home
+  run_discovered_tests_parallel \
+    "${SELFISHELL_TEST_JOBS:-8}" \
+    setup_release_home \
+    teardown_release_home
 
   trap - EXIT HUP INT TERM
   teardown_release_fixture

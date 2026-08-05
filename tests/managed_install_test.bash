@@ -2229,6 +2229,6 @@ test_update_tools_only_yes_preserves_modified_file() {
 }
 
 run_discovered_tests_parallel \
-  "${SELFISHELL_TEST_JOBS:-4}" \
+  "${SELFISHELL_TEST_JOBS:-8}" \
   setup_managed_home \
   teardown_managed_home
