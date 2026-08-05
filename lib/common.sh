@@ -66,6 +66,22 @@ have_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Returns an unused path starting from $1, appending an incrementing suffix
+# on collision (mirroring install.sh's bootstrap_atomic_link). Used to name
+# temporary/backup paths for atomic swaps so a leftover from a killed prior
+# run -- however it got there -- never blocks a later retry.
+selfishell_unique_path() {
+  local base="$1"
+  local candidate="$base"
+  local suffix=0
+
+  while [[ -e "$candidate" || -L "$candidate" ]]; do
+    suffix=$((suffix + 1))
+    candidate="${base}.${suffix}"
+  done
+  printf '%s\n' "$candidate"
+}
+
 selfishell_version_is_valid() {
   local version="${1:-}"
   local prerelease identifier

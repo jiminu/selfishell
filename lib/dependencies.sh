@@ -75,7 +75,7 @@ dependency_write_version() {
 }
 
 dependency_install_download() {
-  local temporary_dir archive extracted
+  local temporary_dir archive extracted previous_target
   temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency.XXXXXX")"
   archive="$temporary_dir/archive"
   selfishell_curl transfer "$DEPENDENCY_SOURCE" -o "$archive" || {
@@ -110,24 +110,37 @@ dependency_install_download() {
     rm -rf "$temporary_dir"
     return 1
   }
+  # A pre-existing target (e.g. replaced by a directory, or a stale/tampered
+  # install) would otherwise make `mv` nest $extracted inside it instead of
+  # replacing it -- silently leaving the approved binary unreachable while
+  # still reporting success. Move it aside first, mirroring
+  # dependency_install_git's existing-target handling, so mv only ever
+  # renames onto an absent path and a failed activation can be restored.
+  if [[ -e "$DEPENDENCY_TARGET" ]]; then
+    previous_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.previous.$$")"
+    mv "$DEPENDENCY_TARGET" "$previous_target" || {
+      rm -rf "$temporary_dir"
+      return 1
+    }
+  fi
   # Guarded explicitly: dependency_install_download runs with errexit
   # disabled (it's called as `dependency_install_download || return`), so an
   # unguarded mv failure here would fall through to `rm -rf`, silently
   # deleting the freshly extracted binary and reporting success.
   if ! mv "$extracted" "$DEPENDENCY_TARGET"; then
+    [[ -z "${previous_target:-}" || ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
     rm -rf "$temporary_dir"
     return 1
   fi
+  [[ -z "${previous_target:-}" ]] || rm -rf "$previous_target"
   rm -rf "$temporary_dir"
 }
 
 dependency_install_git() {
-  local temporary_target="${DEPENDENCY_TARGET}.tmp.$$"
-  local previous_target="${DEPENDENCY_TARGET}.previous.$$"
-  [[ ! -e "$temporary_target" ]] || {
-    cli_error "Temporary dependency path already exists: $temporary_target"
-    return 1
-  }
+  local temporary_target previous_target
+
+  temporary_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.tmp.$$")"
+  previous_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.previous.$$")"
   git clone --quiet "$DEPENDENCY_SOURCE" "$temporary_target" || {
     rm -rf "$temporary_target"
     return 1

@@ -291,6 +291,27 @@ test_installs_lazy_nvim_before_syncing_plugins() {
     fail "Tree-sitter parsers were not prepared"
 }
 
+test_lazy_nvim_recovers_from_stale_temporary_path() {
+  local lazy_path
+
+  lazy_path="$HOME/.local/share/selfishell/nvim/lazy/lazy.nvim"
+  rm -rf "$HOME/.local/share/selfishell/nvim"
+  NVIM_CALLS=()
+  GIT_CALLS=()
+
+  # Simulates debris left by a process that was killed mid-install (a killed
+  # prior run sharing this same PID): install_lazy_nvim must not hard-fail
+  # just because its usual temporary name is already occupied.
+  mkdir -p "${lazy_path}.tmp.$$"
+  printf 'stale\n' >"${lazy_path}.tmp.$$/stale-marker"
+
+  install_neovim_plugins 0
+
+  [[ -d "$lazy_path" ]] || fail "lazy.nvim was not prepared despite a stale temporary path"
+  [[ ! -e "$lazy_path/stale-marker" ]] ||
+    fail "A stale temporary path leaked into the activated lazy.nvim checkout"
+}
+
 test_installs_neovim_plugins_via_mise_resolution() {
   local fake_bin
   local original_path
