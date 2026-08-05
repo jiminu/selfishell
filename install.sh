@@ -218,6 +218,36 @@ bootstrap_validate_link_path() {
   fi
 }
 
+# Rejects anything a release archive should never contain (FIFOs, device
+# nodes, sockets, ...) and any symlink that isn't a plain, existing sibling
+# path inside the archive (the release build packages "bin/sfs -> selfishell"
+# this way) -- absolute, traversal-shaped, or dangling targets are rejected
+# so extraction can't smuggle a link pointing outside the release directory.
+bootstrap_reject_unexpected_members() {
+  local staging="$1"
+  local unexpected link target
+
+  unexpected="$(find "$staging" ! -type f ! -type d ! -type l)"
+  if [[ -n "$unexpected" ]]; then
+    bootstrap_error "Release archive contains unsupported file types."
+    return 1
+  fi
+
+  while IFS= read -r link; do
+    target="$(readlink "$link")"
+    case "$target" in
+      /* | .. | ../* | */.. | */../*)
+        bootstrap_error "Release archive contains a link pointing outside the release."
+        return 1
+        ;;
+    esac
+    if [[ ! -e "$link" ]]; then
+      bootstrap_error "Release archive contains a dangling link."
+      return 1
+    fi
+  done < <(find "$staging" -type l)
+}
+
 bootstrap_prune_releases() {
   local releases_dir="$1"
   local current_target="$2"
@@ -506,7 +536,12 @@ main() {
   bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
   bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
 
-  expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file")"
+  # A duplicate SHA256SUMS line for this archive (even a legitimate,
+  # identical one) would otherwise turn $expected_checksum into a multi-line
+  # value that can never match a single-line hash; `sort -u` collapses
+  # agreeing duplicates while still failing the checks below on genuinely
+  # conflicting ones.
+  expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file" | sort -u)"
   if [[ -z "$expected_checksum" || "$expected_checksum" == *[!0-9a-fA-F]* ]]; then
     bootstrap_error "No valid checksum found for $archive_name"
     return 1
@@ -542,6 +577,7 @@ main() {
     staging_dir="$(mktemp -d "$releases_dir/.${version}.tmp.XXXXXX")"
     SELFISHELL_STAGING_DIR="$staging_dir"
     tar -xzf "$archive_file" -C "$staging_dir"
+    bootstrap_reject_unexpected_members "$staging_dir" || return 1
     if [[ ! -r "$staging_dir/VERSION" || "$(<"$staging_dir/VERSION")" != "$version" || ! -x "$staging_dir/bin/selfishell" ]]; then
       bootstrap_error "Release archive is invalid or has the wrong version."
       return 1
