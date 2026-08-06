@@ -48,6 +48,18 @@ vim.api.nvim_create_autocmd("User", {
   end,
 })
 
+-- pcall's success/failure, not its return value, is what matters here:
+-- vim.treesitter.query.get returns nil (no error) for a language that
+-- genuinely ships no highlights query, which is fine -- but it *throws* if
+-- a highlights.scm exists and references a node type the installed parser
+-- doesn't have. That happens for real: a parser binary can be stale
+-- relative to the query file symlinked straight from nvim-treesitter's own
+-- checkout (observed with the `diff` grammar). A directory-existence check
+-- alone can't see that; only actually asking for the query can.
+local function has_parseable_queries(lang)
+  return pcall(vim.treesitter.query.get, lang, "highlights")
+end
+
 local function is_ready(treesitter, lang)
   if known_good_langs[lang] then
     return true
@@ -55,11 +67,18 @@ local function is_ready(treesitter, lang)
   if not vim.list_contains(treesitter.get_installed("parsers"), lang) then
     return false
   end
-  if queryless_langs[lang] or vim.list_contains(treesitter.get_installed("queries"), lang) then
+  if queryless_langs[lang] then
     known_good_langs[lang] = true
     return true
   end
-  return false
+  if not vim.list_contains(treesitter.get_installed("queries"), lang) then
+    return false
+  end
+  if not has_parseable_queries(lang) then
+    return false
+  end
+  known_good_langs[lang] = true
+  return true
 end
 
 local function ensure_parser_installed(buf, lang)
@@ -94,24 +113,30 @@ local function ensure_parser_installed(buf, lang)
       return
     end
 
-    if vim.list_contains(treesitter.get_installed("queries"), lang) then
+    -- The buffer's earlier vim.treesitter.start() (parser present, queries
+    -- missing or unparseable) already had a Highlighter query the *global*
+    -- query cache for "highlights" and got a result cached; re-reading the
+    -- query files we just (re)installed would otherwise keep returning that
+    -- same stale result for the rest of this Neovim session even though
+    -- they've changed on disk. Clear the whole cache (cheap, and this path
+    -- only runs once per broken language) before checking, rather than
+    -- guessing which query types were queried and cached before the repair.
+    pcall(function()
+      vim.treesitter.query.get:clear()
+    end)
+
+    -- Either genuinely no queries were installed, or the ones installed
+    -- still don't parse against the freshly (re)installed parser (a
+    -- persistent grammar/query mismatch that reinstalling doesn't fix).
+    -- Either way, one real install attempt is all we get: retrying on
+    -- every future open of a language whose queries will never validate
+    -- would hammer the network/compiler for nothing.
+    if vim.list_contains(treesitter.get_installed("queries"), lang) and has_parseable_queries(lang) then
       known_good_langs[lang] = true
     else
       queryless_langs[lang] = true
       known_good_langs[lang] = true
     end
-
-    -- The buffer's earlier vim.treesitter.start() (parser present, queries
-    -- missing) already had a Highlighter query the *global* query cache for
-    -- "highlights" and got nil back; that nil is memoized, so re-reading the
-    -- query files we just installed would otherwise keep returning the same
-    -- stale nil for the rest of this Neovim session even though they now
-    -- exist on disk. Clear the whole cache (cheap, and this path only runs
-    -- once per broken language) rather than guessing which query types were
-    -- queried and cached before the repair.
-    pcall(function()
-      vim.treesitter.query.get:clear()
-    end)
 
     for _, pending_buf in ipairs(buffers) do
       if vim.api.nvim_buf_is_valid(pending_buf) then
