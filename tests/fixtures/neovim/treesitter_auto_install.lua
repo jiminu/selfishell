@@ -4,10 +4,11 @@
 -- filetype is opened, instead of relying on a pre-populated static list.
 
 --- @param name string
---- @param opts { start_fails_until: number, available: string[], installed: string[], install_succeeds: boolean?, filetype: string?, mock_treesitter: boolean? }
+--- @param opts { start_fails_until: number, available: string[], installed: string[], installed_queries: string[]?, install_succeeds: boolean?, install_produces_queries: boolean?, filetype: string?, mock_treesitter: boolean? }
 --- @return boolean exec_ok
 --- @return number start_calls
 --- @return string[] install_calls
+--- @return table<string, number> get_installed_calls count of get_installed() calls, keyed by type
 local function run_scenario(name, opts)
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil
@@ -22,18 +23,48 @@ local function run_scenario(name, opts)
     end
   end
 
+  -- Real nvim-treesitter installs parsers and their highlight queries as
+  -- two separate steps: a parser can be "installed" while its queries are
+  -- not (interrupted install, etc.). The mock tracks them as two separate
+  -- lists -- via a mutable `queries_installed` set that install() can grow --
+  -- rather than folding both into one list, so scenarios can exercise that
+  -- gap the same way a real corrupted install would.
   local install_calls = {}
+  local get_installed_calls = { parsers = 0, queries = 0 }
+  local queries_installed = {}
+  for _, lang in ipairs(opts.installed_queries or opts.installed or {}) do
+    queries_installed[lang] = true
+  end
+
   if opts.mock_treesitter ~= false then
     package.preload["nvim-treesitter"] = function()
       return {
-        get_installed = function()
+        get_installed = function(type)
+          get_installed_calls[type] = (get_installed_calls[type] or 0) + 1
+          if type == "queries" then
+            return vim.tbl_keys(queries_installed)
+          end
           return opts.installed or {}
         end,
         get_available = function()
           return opts.available or {}
         end,
-        install = function(lang)
-          table.insert(install_calls, lang)
+        install = function(lang, install_opts)
+          table.insert(install_calls, { lang = lang, force = (install_opts and install_opts.force) or false })
+
+          -- Real nvim-treesitter's install_lang() silently no-ops (reports
+          -- success without doing anything) when the language already
+          -- satisfies its own parser-OR-queries "installed" check, unless
+          -- force is passed -- that's exactly the trap force = true in the
+          -- real code works around, so the mock has to reproduce it for the
+          -- repair scenarios below to mean anything.
+          local already_installed_by_ts = vim.list_contains(opts.installed or {}, lang) or queries_installed[lang] == true
+          local will_run = (install_opts and install_opts.force) or not already_installed_by_ts
+
+          if will_run and opts.install_succeeds ~= false and opts.install_produces_queries ~= false then
+            queries_installed[lang] = true
+          end
+
           return {
             await = function(_, callback)
               callback(nil, opts.install_succeeds ~= false)
@@ -56,7 +87,7 @@ local function run_scenario(name, opts)
   package.preload["nvim-treesitter"] = nil
   package.loaded["nvim-treesitter"] = nil
 
-  return exec_ok, start_calls, install_calls
+  return exec_ok, start_calls, install_calls, get_installed_calls
 end
 
 -- A missing-but-known parser is installed, then highlighting is retried.
@@ -67,7 +98,7 @@ local exec_ok, start_calls, install_calls = run_scenario("install-and-retry", {
 })
 assert(exec_ok, "FileType autocmd raised an error during install-and-retry")
 assert(
-  #install_calls == 1 and install_calls[1] == "widgetlang",
+  #install_calls == 1 and install_calls[1].lang == "widgetlang",
   "Missing-but-available parser was not installed: " .. vim.inspect(install_calls)
 )
 -- 3 calls: the initial failing attempt, the direct retry after install, and
@@ -75,6 +106,127 @@ assert(
 -- Tree-sitter-dependent plugins like rainbow-delimiters get a chance too) --
 -- which now finds a parser and returns without another install attempt.
 assert(start_calls == 3, "Tree-sitter highlighting was not retried after installing the parser: " .. start_calls)
+
+-- A parser can be installed while its highlight queries are not (an install
+-- interrupted between the two steps -- Neovim killed mid-install, etc.).
+-- vim.treesitter.start only needs the parser, so it "succeeds" immediately
+-- here (start_fails_until = 0), the way it does for real against a
+-- parser-only install -- this must still trigger a real reinstall to pick up
+-- the missing queries rather than treating the language as done.
+local exec_ok_partial, _, install_calls_partial = run_scenario("parser-installed-queries-missing", {
+  start_fails_until = 0,
+  available = { "widgetlang" },
+  installed = { "widgetlang" },
+  installed_queries = {},
+})
+assert(exec_ok_partial, "FileType autocmd raised an error when queries were missing for an installed parser")
+assert(
+  #install_calls_partial == 1 and install_calls_partial[1].lang == "widgetlang",
+  "A parser installed without its queries was not reinstalled: " .. vim.inspect(install_calls_partial)
+)
+assert(
+  install_calls_partial[1].force == true,
+  "install() was not called with force = true, so nvim-treesitter's own "
+    .. "installed-parser-OR-queries check would have silently no-op'd it: "
+    .. vim.inspect(install_calls_partial)
+)
+
+-- The buffer's initial (failing-to-highlight) vim.treesitter.start() already
+-- asked the real, process-wide vim.treesitter.query.get for "highlights" and
+-- it cached the nil it got back -- that memoization has no idea a repair
+-- just wrote real query files to disk, so without busting it explicitly,
+-- the language would look permanently queryless for the rest of the running
+-- Neovim session even though get_installed("queries") now reports it fine.
+do
+  local original_clear = vim.treesitter.query.get.clear
+  local clear_calls = 0
+  vim.treesitter.query.get.clear = function(...)
+    clear_calls = clear_calls + 1
+    return original_clear(...)
+  end
+
+  local exec_ok_clears_cache = run_scenario("parser-installed-queries-missing-clears-cache", {
+    start_fails_until = 0,
+    available = { "widgetlang" },
+    installed = { "widgetlang" },
+    installed_queries = {},
+  })
+
+  vim.treesitter.query.get.clear = original_clear
+
+  assert(exec_ok_clears_cache, "FileType autocmd raised an error while clearing the query cache after repair")
+  assert(
+    clear_calls > 0,
+    "A repaired language's query cache was never cleared -- highlighting would stay broken for the "
+      .. "rest of the session even though the queries are now installed on disk"
+  )
+end
+
+-- A language whose install() never produces queries (nvim-treesitter simply
+-- ships none for it) must be attempted once, not retried on every open --
+-- otherwise every file of that filetype pays for a redundant install() call.
+do
+  local exec_ok_queryless, _, install_calls_first, installed_calls_first = run_scenario("queryless-language", {
+    start_fails_until = 1,
+    available = { "widgetlang" },
+    installed = {},
+    install_produces_queries = false,
+  })
+  assert(exec_ok_queryless, "FileType autocmd raised an error for a queryless language")
+  assert(
+    #install_calls_first == 1,
+    "A queryless language was not installed on first open: " .. vim.inspect(install_calls_first)
+  )
+  assert(installed_calls_first.queries and installed_calls_first.queries > 0, "queries were never checked at all")
+end
+
+-- Once a language is confirmed fully ready (parser + queries, or parser +
+-- confirmed-queryless), opening more buffers of the same filetype must not
+-- re-scan the parser/query install directories -- that scan is the whole
+-- cost this caching exists to avoid paying on every file open.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local get_installed_calls = { parsers = 0, queries = 0 }
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function(type)
+        get_installed_calls[type] = (get_installed_calls[type] or 0) + 1
+        return { "widgetlang" }
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function()
+        error("install() must not be called for an already fully-installed language")
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+  local calls_after_first_open = vim.deepcopy(get_installed_calls)
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+
+  assert(
+    vim.deep_equal(get_installed_calls, calls_after_first_open),
+    "Repeat opens of an already-ready language re-scanned install state: "
+      .. vim.inspect(calls_after_first_open)
+      .. " -> "
+      .. vim.inspect(get_installed_calls)
+  )
+
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
 
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {
@@ -139,8 +291,8 @@ do
       get_available = function()
         return { "widgetlang" }
       end,
-      install = function(lang)
-        table.insert(install_calls, lang)
+      install = function(lang, install_opts)
+        table.insert(install_calls, { lang = lang, force = (install_opts and install_opts.force) or false })
         return {
           await = function(_, callback)
             pending_callback = callback
@@ -166,6 +318,7 @@ do
     "install() was called more than once for a language already in flight: " .. vim.inspect(install_calls)
   )
   assert(pending_callback, "install() was never invoked for the concurrent-request scenario")
+  assert(install_calls[1].force == true, "install() was not called with force = true: " .. vim.inspect(install_calls))
 
   pending_callback(nil, true)
 

@@ -17,13 +17,45 @@ vim.treesitter.language.register("terraform", "tf")
 -- that it was observed to leave a buffer's highlighter never started.
 local pending_installs = {}
 
+-- nvim-treesitter installs a parser and its highlight queries as two
+-- separate steps of one install() call. `vim.treesitter.start` only needs
+-- the parser, so it happily "succeeds" with the queries step never having
+-- run (interrupted install, killed Neovim, etc.), silently leaving a buffer
+-- with a working parser but no highlighting at all. So "installed" has to
+-- mean parser *and* queries, not just the parser nvim-treesitter's own
+-- get_installed("parsers") reports.
+--
+-- Checking both is two directory scans instead of one, which only matters
+-- if paid on every FileType. It isn't: once a language is confirmed ready
+-- it's cached in known_good_langs for the rest of the session, so repeat
+-- opens of an already-working filetype (the overwhelmingly common case) cost
+-- a table lookup, same as before this change. Languages that ship no
+-- queries at all are cached in queryless_langs after one real install
+-- attempt confirms that, so they don't get reinstalled on every open either.
+local known_good_langs = {}
+local queryless_langs = {}
+
+local function is_ready(treesitter, lang)
+  if known_good_langs[lang] then
+    return true
+  end
+  if not vim.list_contains(treesitter.get_installed("parsers"), lang) then
+    return false
+  end
+  if queryless_langs[lang] or vim.list_contains(treesitter.get_installed("queries"), lang) then
+    known_good_langs[lang] = true
+    return true
+  end
+  return false
+end
+
 local function ensure_parser_installed(buf, lang)
   local ok, treesitter = pcall(require, "nvim-treesitter")
   if not ok then
     return
   end
 
-  if vim.list_contains(treesitter.get_installed("parsers"), lang) then
+  if is_ready(treesitter, lang) then
     return
   end
   if not vim.list_contains(treesitter.get_available(), lang) then
@@ -36,15 +68,47 @@ local function ensure_parser_installed(buf, lang)
   end
   pending_installs[lang] = { buf }
 
-  treesitter.install(lang):await(function(_, installed)
+  -- nvim-treesitter's own install() treats a language as done and no-ops
+  -- if *either* its parser or its queries are already present (it doesn't
+  -- know we specifically need queries too) -- so a plain install() call here
+  -- would silently do nothing for exactly the parser-without-queries case
+  -- this function exists to repair. force = true is the only way through
+  -- that public API to make it actually redo the work.
+  treesitter.install(lang, { force = true }):await(function(_, installed)
     local buffers = pending_installs[lang]
     pending_installs[lang] = nil
     if not installed then
       return
     end
 
+    if vim.list_contains(treesitter.get_installed("queries"), lang) then
+      known_good_langs[lang] = true
+    else
+      queryless_langs[lang] = true
+      known_good_langs[lang] = true
+    end
+
+    -- The buffer's earlier vim.treesitter.start() (parser present, queries
+    -- missing) already had a Highlighter query the *global* query cache for
+    -- "highlights" and got nil back; that nil is memoized, so re-reading the
+    -- query files we just installed would otherwise keep returning the same
+    -- stale nil for the rest of this Neovim session even though they now
+    -- exist on disk. Clear the whole cache (cheap, and this path only runs
+    -- once per broken language) rather than guessing which query types were
+    -- queried and cached before the repair.
+    pcall(function()
+      vim.treesitter.query.get:clear()
+    end)
+
     for _, pending_buf in ipairs(buffers) do
       if vim.api.nvim_buf_is_valid(pending_buf) then
+        -- A buffer whose parser was already present (only queries were
+        -- missing) got a working vim.treesitter.start() earlier in the
+        -- FileType callback, before this repair ran. start() never tears
+        -- down a prior highlighter for the same buffer -- it just points
+        -- the buffer at a second one -- so stop() first or the old instance
+        -- leaks, still attached to the parse tree's callbacks forever.
+        pcall(vim.treesitter.stop, pending_buf)
         pcall(vim.treesitter.start, pending_buf, lang)
         -- Other plugins (e.g. rainbow-delimiters) attach on their own
         -- FileType autocmd and assume a parser is already available there;
@@ -59,11 +123,19 @@ vim.api.nvim_create_autocmd("FileType", {
   group = group,
   pattern = "*",
   callback = function(args)
-    if pcall(vim.treesitter.start, args.buf) then
-      return
+    local start_ok = pcall(vim.treesitter.start, args.buf)
+    local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+
+    if start_ok then
+      if not lang then
+        return
+      end
+      local ok, treesitter = pcall(require, "nvim-treesitter")
+      if not ok or is_ready(treesitter, lang) then
+        return
+      end
     end
 
-    local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
     if lang then
       ensure_parser_installed(args.buf, lang)
     end
