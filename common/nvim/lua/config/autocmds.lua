@@ -17,6 +17,12 @@ vim.treesitter.language.register("terraform", "tf")
 -- that it was observed to leave a buffer's highlighter never started.
 local pending_installs = {}
 
+-- Languages whose install() has already failed once and been reported to
+-- the user this session. Cleared on TSUpdate alongside the readiness
+-- caches so a manual retry (or nvim-treesitter itself changing state) gets
+-- a fresh chance to notify again if it fails again.
+local notified_failures = {}
+
 -- nvim-treesitter installs a parser and its highlight queries as two
 -- separate steps of one install() call. `vim.treesitter.start` only needs
 -- the parser, so it happily "succeeds" with the queries step never having
@@ -45,6 +51,7 @@ vim.api.nvim_create_autocmd("User", {
   callback = function()
     known_good_langs = {}
     queryless_langs = {}
+    notified_failures = {}
   end,
 })
 
@@ -94,11 +101,15 @@ local function ensure_parser_installed(buf, lang)
     return
   end
 
+  -- A set keyed by buffer, not a list: Neovim fires FileType for the same
+  -- buffer more than once (see above), and without deduping here that
+  -- buffer would get queued twice and be retried twice below -- a harmless
+  -- but wasteful double stop/start/FileType-refire on install completion.
   if pending_installs[lang] then
-    table.insert(pending_installs[lang], buf)
+    pending_installs[lang][buf] = true
     return
   end
-  pending_installs[lang] = { buf }
+  pending_installs[lang] = { [buf] = true }
 
   -- nvim-treesitter's own install() treats a language as done and no-ops
   -- if *either* its parser or its queries are already present (it doesn't
@@ -110,6 +121,22 @@ local function ensure_parser_installed(buf, lang)
     local buffers = pending_installs[lang]
     pending_installs[lang] = nil
     if not installed then
+      -- Network down, no compiler, disk full, an nvim-treesitter internal
+      -- error -- whatever it was, tell the user once per language per
+      -- session instead of leaving highlighting silently missing with no
+      -- explanation. pending_installs is already cleared above, so the
+      -- next time any buffer of this language opens, a fresh attempt runs.
+      if not notified_failures[lang] then
+        notified_failures[lang] = true
+        vim.notify(
+          "Selfishell: Tree-sitter failed to install '"
+            .. lang
+            .. "'; highlighting won't be available until it succeeds. Will retry the next time a "
+            .. lang
+            .. " file is opened.",
+          vim.log.levels.WARN
+        )
+      end
       return
     end
 
@@ -138,8 +165,16 @@ local function ensure_parser_installed(buf, lang)
       known_good_langs[lang] = true
     end
 
-    for _, pending_buf in ipairs(buffers) do
-      if vim.api.nvim_buf_is_valid(pending_buf) then
+    for pending_buf in pairs(buffers) do
+      -- The install ran asynchronously and could take a while (network +
+      -- compile); the buffer may have loaded a different file (or a
+      -- different filetype in the same buffer) by the time it resolves.
+      -- Confirm it's still the language this install was for before
+      -- touching it, or a stale parser could get attached to content it
+      -- doesn't belong to.
+      local current_lang = vim.api.nvim_buf_is_valid(pending_buf)
+        and vim.treesitter.language.get_lang(vim.bo[pending_buf].filetype)
+      if current_lang == lang then
         -- A buffer whose parser was already present (only queries were
         -- missing) got a working vim.treesitter.start() earlier in the
         -- FileType callback, before this repair ran. start() never tears
