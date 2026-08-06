@@ -107,6 +107,88 @@ assert(
 -- which now finds a parser and returns without another install attempt.
 assert(start_calls == 3, "Tree-sitter highlighting was not retried after installing the parser: " .. start_calls)
 
+-- A freshly created LanguageTree isn't parsed yet -- that happens lazily.
+-- Other FileType-triggered plugins (rainbow-delimiters, for real) query the
+-- tree immediately when re-fired and silently get nothing back from an
+-- empty one, with no redraw in a headless instance to ever trigger the real
+-- parse afterwards -- reproduced directly against the real plugins, not
+-- just inferred. The retry sequence must force a parse between starting the
+-- parser and re-firing FileType, not just stop-then-start-then-refire.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local sequence = {}
+  local original_start = vim.treesitter.start
+  vim.treesitter.start = function(buf, lang)
+    if lang == nil then
+      error("simulated missing parser")
+    end
+    table.insert(sequence, "start")
+  end
+
+  local original_stop = vim.treesitter.stop
+  vim.treesitter.stop = function()
+    table.insert(sequence, "stop")
+  end
+
+  local original_get_parser = vim.treesitter.get_parser
+  vim.treesitter.get_parser = function(...)
+    table.insert(sequence, "get_parser")
+    return {
+      parse = function()
+        table.insert(sequence, "parse")
+      end,
+    }
+  end
+
+  local original_exec_autocmds = vim.api.nvim_exec_autocmds
+  vim.api.nvim_exec_autocmds = function(event, opts)
+    if event == "FileType" then
+      table.insert(sequence, "refire")
+    end
+    return original_exec_autocmds(event, opts)
+  end
+
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function()
+        return {
+          await = function(_, callback)
+            callback(nil, true)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  vim.bo.filetype = "widgetlang"
+
+  assert(
+    vim.deep_equal(sequence, { "stop", "start", "get_parser", "parse", "refire" }),
+    "the retry sequence must stop, start, force a parse, then re-fire FileType, in that order: "
+      .. vim.inspect(sequence)
+  )
+
+  vim.treesitter.start = original_start
+  vim.treesitter.stop = original_stop
+  vim.treesitter.get_parser = original_get_parser
+  vim.api.nvim_exec_autocmds = original_exec_autocmds
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 -- A parser can be installed while its highlight queries are not (an install
 -- interrupted between the two steps -- Neovim killed mid-install, etc.).
 -- vim.treesitter.start only needs the parser, so it "succeeds" immediately
@@ -293,7 +375,9 @@ end
 -- cached as ready (known_good_langs/queryless_langs must stay untouched)
 -- and must not leave pending_installs stuck thinking one is still in
 -- flight, or every later open of that filetype would silently do nothing
--- forever instead of retrying.
+-- forever instead of retrying. It must also tell the user once -- silently
+-- broken highlighting with no explanation is its own bug -- but not spam a
+-- notification on every subsequent failed retry of the same language.
 do
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil
@@ -302,6 +386,12 @@ do
   local original_start = vim.treesitter.start
   vim.treesitter.start = function()
     error("simulated missing parser")
+  end
+
+  local notify_calls = {}
+  local original_notify = vim.notify
+  vim.notify = function(msg, level)
+    table.insert(notify_calls, { msg = msg, level = level })
   end
 
   local install_calls = {}
@@ -329,6 +419,11 @@ do
   vim.cmd("enew")
   vim.bo.filetype = "widgetlang"
   assert(#install_calls == 1, "a failed install should still have been attempted once")
+  assert(#notify_calls == 1, "a failed install should notify the user once: " .. vim.inspect(notify_calls))
+  assert(
+    notify_calls[1].msg:find("widgetlang", 1, true) ~= nil,
+    "the failure notification should name the affected language: " .. vim.inspect(notify_calls[1])
+  )
 
   vim.cmd("enew")
   vim.bo.filetype = "widgetlang"
@@ -337,7 +432,89 @@ do
     "a failed install must be retried on the next open, not treated as ready or stuck in flight: "
       .. vim.inspect(install_calls)
   )
+  assert(
+    #notify_calls == 1,
+    "a repeat failure of the same language must not notify again this session: " .. vim.inspect(notify_calls)
+  )
 
+  vim.notify = original_notify
+  vim.treesitter.start = original_start
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
+-- install() runs asynchronously and can take a while (network + compile).
+-- The buffer it was requested for can move on before it resolves -- loaded
+-- a different file, had its filetype changed, or (as observed directly:
+-- :enew frees an unmodified buffer's number and the very next :enew reuses
+-- it) become a completely different buffer that happens to share the same
+-- number. Only nvim_buf_is_valid() was checked before; a buffer that's
+-- valid but now a different language must not get the stale language's
+-- parser started on it, and must not have FileType wrongly re-fired either.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local original_start = vim.treesitter.start
+  local start_calls = {}
+  vim.treesitter.start = function(buf, lang)
+    if lang == nil then
+      error("simulated missing parser")
+    end
+    table.insert(start_calls, { buf = buf, lang = lang })
+  end
+
+  local refire_count = 0
+  local original_exec_autocmds = vim.api.nvim_exec_autocmds
+  vim.api.nvim_exec_autocmds = function(event, opts)
+    if event == "FileType" then
+      refire_count = refire_count + 1
+    end
+    return original_exec_autocmds(event, opts)
+  end
+
+  local pending_callback
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function()
+        return {
+          await = function(_, callback)
+            pending_callback = callback
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  vim.bo.filetype = "widgetlang" -- kicks off the (still in-flight) install
+  assert(pending_callback, "install() was never invoked")
+
+  -- The buffer moves on to a different language before the install resolves.
+  vim.bo[buf].filetype = "otherlang"
+
+  pending_callback(nil, true)
+
+  assert(
+    #start_calls == 0,
+    "a stale language's parser must not be started on a buffer that changed language: " .. vim.inspect(start_calls)
+  )
+  assert(
+    refire_count == 0,
+    "FileType must not be re-fired for a buffer that no longer matches the installed language"
+  )
+
+  vim.api.nvim_exec_autocmds = original_exec_autocmds
   vim.treesitter.start = original_start
   package.preload["nvim-treesitter"] = nil
   package.loaded["nvim-treesitter"] = nil
@@ -531,13 +708,17 @@ do
 
   require("config.autocmds")
 
-  vim.cmd("enew")
-  local buf_a = vim.api.nvim_get_current_buf()
+  -- vim.api.nvim_create_buf, not :enew: leaving an unmodified :enew buffer
+  -- for another lets Neovim free and immediately reuse its number, which
+  -- would silently collapse buf_a and buf_b into the same buffer and defeat
+  -- the point of this scenario (two genuinely distinct buffers).
+  local buf_a = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf_a)
   vim.bo.filetype = "widgetlang" -- first FileType fire for buf_a
   vim.api.nvim_exec_autocmds("FileType", { buffer = buf_a }) -- simulates Neovim's observed second fire
 
-  vim.cmd("enew")
-  local buf_b = vim.api.nvim_get_current_buf()
+  local buf_b = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf_b)
   vim.bo.filetype = "widgetlang" -- a second buffer requesting the same in-flight language
 
   assert(
@@ -550,13 +731,15 @@ do
   pending_callback(nil, true)
 
   table.sort(retried_bufs)
-  -- buf_a queued twice (once per FileType fire); a duplicate retry on the
-  -- same already-started buffer is harmless, so it isn't deduplicated.
-  local expected = { buf_a, buf_a, buf_b }
+  -- buf_a was queued twice (once per FileType fire) but must be retried
+  -- exactly once: pending_installs tracks buffers as a set, not a list, so
+  -- the same buffer firing FileType twice while an install is in flight
+  -- doesn't cause a redundant double stop/start/FileType-refire on it.
+  local expected = { buf_a, buf_b }
   table.sort(expected)
   assert(
     vim.deep_equal(retried_bufs, expected),
-    "Not every buffer waiting on the in-flight install was retried: " .. vim.inspect(retried_bufs)
+    "Every waiting buffer must be retried exactly once: " .. vim.inspect(retried_bufs)
   )
 
   vim.treesitter.start = original_start
