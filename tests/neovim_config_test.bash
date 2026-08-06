@@ -515,7 +515,7 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
 }
 
 test_mason_lsp_servers_are_versioned() {
-  local declared_servers declared_filetypes server filetype
+  local declared_servers declared_filetypes server
 
   declared_servers="$(sed -n '/^  lsp = {/,/^  },/p' "$ROOT_DIR/common/nvim/lua/config/languages.lua" |
     grep -oE '"[^"]+"' | tr -d '"')"
