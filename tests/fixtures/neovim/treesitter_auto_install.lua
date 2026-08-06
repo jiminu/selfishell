@@ -405,6 +405,12 @@ do
       end,
       install = function(lang)
         table.insert(install_calls, lang)
+        -- Real nvim-treesitter's install() fires User TSUpdate synchronously
+        -- at its own start (reload_parsers()), before the async work even
+        -- begins -- including on a retry's own install() call. The mock has
+        -- to do the same, or a bug where that TSUpdate wipes state it
+        -- shouldn't (like the notified-once record) goes uncaught.
+        vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
         return {
           await = function(_, callback)
             callback(nil, false) -- the install genuinely failed
@@ -434,7 +440,9 @@ do
   )
   assert(
     #notify_calls == 1,
-    "a repeat failure of the same language must not notify again this session: " .. vim.inspect(notify_calls)
+    "a repeat failure of the same language must not notify again this session, even though the "
+      .. "retry's own install() call fires User TSUpdate before it resolves: "
+      .. vim.inspect(notify_calls)
   )
 
   vim.notify = original_notify
@@ -583,16 +591,26 @@ do
 end
 
 -- Same version-mismatch setup, but this time reinstalling doesn't fix it
--- (a persistent, not transient, grammar/query mismatch). One real attempt
--- is all it should get -- retrying on every future open of a language
--- whose queries will never validate would hammer the network/compiler for
--- nothing, forever.
+-- (a persistent, not transient, grammar/query mismatch). install() itself
+-- reports success -- the parser and queries are genuinely both on disk --
+-- but that's not the same thing as highlighting actually working, and this
+-- must not be filed away as a normal "no queries at all" language either:
+-- one real repair attempt is all it gets, the user is told once, and
+-- highlighting honestly stays off (vim.treesitter.start keeps failing)
+-- rather than being reported as fine. Only a manual TSUpdate reopens it
+-- for a recheck.
 do
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil
   package.preload["nvim-treesitter"] = nil
 
   vim.treesitter.query.set("lua", "highlights", "(nonexistent_node_type_xyz) @foo")
+
+  local notify_calls = {}
+  local original_notify = vim.notify
+  vim.notify = function(msg, level)
+    table.insert(notify_calls, { msg = msg, level = level })
+  end
 
   local install_calls = {}
   package.preload["nvim-treesitter"] = function()
@@ -607,7 +625,7 @@ do
         table.insert(install_calls, lang) -- reinstalling does NOT fix the mismatch this time
         return {
           await = function(_, callback)
-            callback(nil, true)
+            callback(nil, true) -- install() itself reports success
           end,
         }
       end,
@@ -619,6 +637,22 @@ do
   vim.cmd("enew")
   vim.bo.filetype = "lua"
   assert(#install_calls == 1, "an unrepairable version mismatch should still get one real attempt")
+  assert(
+    #notify_calls == 1,
+    "an install() that succeeds but leaves queries incompatible should still warn once: " .. vim.inspect(notify_calls)
+  )
+  assert(
+    notify_calls[1].msg:find("lua", 1, true) ~= nil and notify_calls[1].msg:find(":TSUpdate", 1, true) ~= nil,
+    "the repair-failure warning should name the language and suggest a fix: " .. vim.inspect(notify_calls[1])
+  )
+  -- Externally observable proxy for "not known_good and not queryless":
+  -- the query is still genuinely broken, so a fresh buffer's real (not
+  -- mocked) vim.treesitter.start must keep failing on it -- never silently
+  -- treated as working.
+  assert(
+    not pcall(vim.treesitter.start, vim.api.nvim_create_buf(true, false), "lua"),
+    "a language with an unrepaired parser/query mismatch must not be reported as working"
+  )
 
   vim.cmd("enew")
   vim.bo.filetype = "lua"
@@ -626,7 +660,23 @@ do
     #install_calls == 1,
     "an unrepairable version mismatch must not be retried on every future open: " .. vim.inspect(install_calls)
   )
+  assert(
+    #notify_calls == 1,
+    "an unrepaired mismatch must not warn again on every future open: " .. vim.inspect(notify_calls)
+  )
 
+  -- A manual :TSUpdate (or :TSInstall/:TSUninstall) is a deliberate signal
+  -- to recheck, not just another automatic retry -- so it's allowed to open
+  -- the door again, unlike the plain install-failure case.
+  vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(
+    #install_calls == 2,
+    "TSUpdate should let a previously-unrepaired language be rechecked and reattempted: " .. vim.inspect(install_calls)
+  )
+
+  vim.notify = original_notify
   vim.treesitter.query.set("lua", "highlights", nil) -- restore the real bundled query
   package.preload["nvim-treesitter"] = nil
   package.loaded["nvim-treesitter"] = nil
