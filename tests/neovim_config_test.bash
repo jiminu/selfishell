@@ -57,17 +57,28 @@ test_treesitter_auto_installs_missing_parsers_on_filetype() {
 }
 
 test_every_neovim_plugin_has_an_approved_revision() {
-  local repository revision
-  local plugin_count=0
+  local repository revision declared_plugins configured_plugins diff_output
+
+  # lazy.nvim bootstraps itself (config/lazy.lua) rather than being declared
+  # via plugin(...) in common/nvim/lua/plugins/*.lua, so it's pinned in
+  # dependencies.conf without a matching Lua declaration -- checked
+  # separately below instead of folded into the set comparison.
+  declared_plugins="$(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/common/nvim/lua/plugins/*.lua | sort -u)"
+  configured_plugins="$(awk '$1 == "nvim-plugin" && $2 != "folke/lazy.nvim" { print $2 }' "$ROOT_DIR/dependencies.conf" | sort -u)"
+
+  [[ -n "$declared_plugins" ]] || fail "No Neovim plugins were discovered in common/nvim/lua/plugins/*.lua"
+
+  diff_output="$(diff <(printf '%s\n' "$declared_plugins") <(printf '%s\n' "$configured_plugins") || true)"
+  [[ -z "$diff_output" ]] ||
+    fail "Neovim plugins declared in common/nvim/lua/plugins/*.lua and nvim-plugin entries in dependencies.conf differ:
+$diff_output"
 
   while IFS= read -r repository; do
     revision="$(awk -v repository="$repository" '$1 == "nvim-plugin" && $2 == repository { print $3 }' "$ROOT_DIR/dependencies.conf")"
     [[ "$revision" =~ ^[0-9a-f]{40}$ ]] ||
       fail "Neovim plugin is missing an approved revision: $repository"
-    plugin_count=$((plugin_count + 1))
-  done < <(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/common/nvim/lua/plugins/*.lua | sort -u)
+  done <<<"$declared_plugins"
 
-  [[ "$plugin_count" -eq 24 ]] || fail "Expected 24 pinned Neovim plugins, got $plugin_count"
   revision="$(awk '$1 == "nvim-plugin" && $2 == "folke/lazy.nvim" { print $3 }' "$ROOT_DIR/dependencies.conf")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || fail "lazy.nvim is missing an approved revision"
 }
@@ -504,12 +515,22 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
 }
 
 test_mason_lsp_servers_are_versioned() {
-  local server
+  local declared_servers declared_filetypes server filetype
 
-  for server in lua_ls pyright bashls ts_ls; do
-    grep -Eq '"'"$server"'@[0-9]+\.[0-9]+\.[0-9]+"' "$ROOT_DIR/common/nvim/lua/config/languages.lua" ||
-      fail "Mason LSP server is not versioned: $server"
-  done
+  declared_servers="$(sed -n '/^  lsp = {/,/^  },/p' "$ROOT_DIR/common/nvim/lua/config/languages.lua" |
+    grep -oE '"[^"]+"' | tr -d '"')"
+  [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
+
+  while IFS= read -r server; do
+    [[ "$server" =~ ^[A-Za-z0-9_-]+@[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+      fail "Default LSP server is not pinned as 'name@x.y.z': $server"
+  done <<<"$declared_servers"
+
+  declared_filetypes="$(sed -n '/^  lsp_filetypes = {/,/^  },/p' "$ROOT_DIR/common/nvim/lua/config/languages.lua" |
+    grep -oE '"[^"]+"' | tr -d '"')"
+  [[ -n "$declared_filetypes" ]] || fail "No default LSP filetypes were discovered in languages.lua"
+  [[ "$(printf '%s\n' "$declared_filetypes" | sort -u | wc -l)" -eq "$(printf '%s\n' "$declared_filetypes" | wc -l)" ]] ||
+    fail "Default LSP filetypes list contains a duplicate entry"
 }
 
 run_discovered_tests setup_neovim_test teardown_test_home
