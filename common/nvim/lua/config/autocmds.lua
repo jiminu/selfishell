@@ -18,9 +18,12 @@ vim.treesitter.language.register("terraform", "tf")
 local pending_installs = {}
 
 -- Languages whose install() has already failed once and been reported to
--- the user this session. Cleared on TSUpdate alongside the readiness
--- caches so a manual retry (or nvim-treesitter itself changing state) gets
--- a fresh chance to notify again if it fails again.
+-- the user this session. Deliberately NOT cleared on TSUpdate: nvim-
+-- treesitter's own install() fires User TSUpdate synchronously at its own
+-- start (reload_parsers()), before the async work even begins -- including
+-- on the retry's own install() call. Clearing this here would wipe the
+-- just-set record before that same retry's failure is even known, and the
+-- next failure would notify again, defeating "once per session" entirely.
 local notified_failures = {}
 
 -- nvim-treesitter installs a parser and its highlight queries as two
@@ -41,9 +44,25 @@ local notified_failures = {}
 local known_good_langs = {}
 local queryless_langs = {}
 
+-- Languages where a real install() completed (parser and queries both
+-- exist on disk) but the queries still fail to parse against the installed
+-- parser -- a persistent grammar/query mismatch a reinstall didn't fix.
+-- Kept separate from queryless_langs/known_good_langs so this broken state
+-- is never silently reported as fine (it must not be treated as "ready" or
+-- as "genuinely has no queries"), and separate from notified_failures
+-- (install() itself succeeded here, unlike that case) so each gets its own
+-- once-per-session notification. Unlike notified_failures, this one *is*
+-- cleared on TSUpdate: ensure_parser_installed short-circuits on
+-- repair_failed_langs before ever calling install() again, so -- unlike
+-- the install-failure case -- clearing it here can't be wiped out by a
+-- retry's own install() call; it only opens the door to a recheck the next
+-- time that language's file is opened, e.g. after a manual :TSUpdate.
+local repair_failed_langs = {}
+local notified_repair_failures = {}
+
 -- nvim-treesitter fires User TSUpdate at the start of install(), update(),
 -- and uninstall() alike. A manual :TSUninstall on a language we'd already
--- cached as good would otherwise never be re-checked -- reset both caches
+-- cached as good would otherwise never be re-checked -- reset those caches
 -- on that event so they can't outlive what's actually on disk.
 vim.api.nvim_create_autocmd("User", {
   group = group,
@@ -51,7 +70,8 @@ vim.api.nvim_create_autocmd("User", {
   callback = function()
     known_good_langs = {}
     queryless_langs = {}
-    notified_failures = {}
+    repair_failed_langs = {}
+    notified_repair_failures = {}
   end,
 })
 
@@ -94,6 +114,12 @@ local function ensure_parser_installed(buf, lang)
     return
   end
 
+  -- Give up retrying a language whose queries are known not to validate
+  -- even after a real reinstall -- only TSUpdate (see above) reopens this,
+  -- not another failed vim.treesitter.start() on the next file open.
+  if repair_failed_langs[lang] then
+    return
+  end
   if is_ready(treesitter, lang) then
     return
   end
@@ -152,17 +178,40 @@ local function ensure_parser_installed(buf, lang)
       vim.treesitter.query.get:clear()
     end)
 
-    -- Either genuinely no queries were installed, or the ones installed
-    -- still don't parse against the freshly (re)installed parser (a
-    -- persistent grammar/query mismatch that reinstalling doesn't fix).
-    -- Either way, one real install attempt is all we get: retrying on
-    -- every future open of a language whose queries will never validate
-    -- would hammer the network/compiler for nothing.
-    if vim.list_contains(treesitter.get_installed("queries"), lang) and has_parseable_queries(lang) then
-      known_good_langs[lang] = true
-    else
+    local queries_installed = vim.list_contains(treesitter.get_installed("queries"), lang)
+
+    if not queries_installed then
+      -- nvim-treesitter genuinely ships no highlights query for this
+      -- language. Nothing more to try, and nothing wrong to report.
       queryless_langs[lang] = true
       known_good_langs[lang] = true
+    elseif has_parseable_queries(lang) then
+      -- A real success: install() completed and the queries it produced
+      -- actually parse against the parser it just (re)installed.
+      known_good_langs[lang] = true
+    else
+      -- Queries exist but still don't parse against the parser we just
+      -- (re)installed -- a persistent grammar/query mismatch, not the
+      -- "ships no queries at all" case, and not fixed by reinstalling.
+      -- Leaving this queryless_langs/known_good_langs, as before, silently
+      -- reported the language as fine forever: no highlighting, no retry,
+      -- no warning, treated internally like nothing was ever wrong.
+      -- Instead: it stays unable to start (vim.treesitter.start keeps
+      -- throwing, honestly reflecting the broken state), isn't retried on
+      -- every future open (repair_failed_langs short-circuits that
+      -- above), and is reported once so the user knows and can act.
+      repair_failed_langs[lang] = true
+      if not notified_repair_failures[lang] then
+        notified_repair_failures[lang] = true
+        vim.notify(
+          "Selfishell: Tree-sitter queries for '"
+            .. lang
+            .. "' remain incompatible after reinstall. Run :TSUpdate "
+            .. lang
+            .. " and check :messages.",
+          vim.log.levels.WARN
+        )
+      end
     end
 
     for pending_buf in pairs(buffers) do
