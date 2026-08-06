@@ -343,6 +343,118 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
+-- A parser and its queries can both be "installed" by directory-existence
+-- (nvim-treesitter's own bookkeeping) while the query content doesn't parse
+-- against the installed parser -- a stale parser paired with a newer query
+-- file, observed for real with the `diff` grammar ("Invalid node type
+-- change"). vim.treesitter.query.get throws in that case; a directory scan
+-- alone can't see it. Use the real "lua" language (bundled with Neovim, so
+-- a real parser is always loadable) with an explicit broken query to
+-- reproduce the exact throw, rather than mocking query.get itself.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  vim.treesitter.query.set("lua", "highlights", "(nonexistent_node_type_xyz) @foo")
+
+  local install_calls = {}
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return { "lua" }
+      end,
+      get_available = function()
+        return { "lua" }
+      end,
+      install = function(lang, install_opts)
+        table.insert(install_calls, lang)
+        if install_opts and install_opts.force then
+          -- Simulate a real reinstall recompiling a matching parser/query pair.
+          vim.treesitter.query.set("lua", "highlights", "(comment) @comment")
+        end
+        return {
+          await = function(_, callback)
+            callback(nil, true)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(
+    #install_calls == 1,
+    "a parser/query version mismatch (both 'installed' but the query throws) was not repaired: "
+      .. vim.inspect(install_calls)
+  )
+  assert(pcall(vim.treesitter.query.get, "lua", "highlights"), "the repair should have produced a parseable query")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(
+    #install_calls == 1,
+    "a language repaired once should not be reinstalled again on the next open: " .. vim.inspect(install_calls)
+  )
+
+  vim.treesitter.query.set("lua", "highlights", nil) -- restore the real bundled query
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
+-- Same version-mismatch setup, but this time reinstalling doesn't fix it
+-- (a persistent, not transient, grammar/query mismatch). One real attempt
+-- is all it should get -- retrying on every future open of a language
+-- whose queries will never validate would hammer the network/compiler for
+-- nothing, forever.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  vim.treesitter.query.set("lua", "highlights", "(nonexistent_node_type_xyz) @foo")
+
+  local install_calls = {}
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return { "lua" }
+      end,
+      get_available = function()
+        return { "lua" }
+      end,
+      install = function(lang)
+        table.insert(install_calls, lang) -- reinstalling does NOT fix the mismatch this time
+        return {
+          await = function(_, callback)
+            callback(nil, true)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(#install_calls == 1, "an unrepairable version mismatch should still get one real attempt")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(
+    #install_calls == 1,
+    "an unrepairable version mismatch must not be retried on every future open: " .. vim.inspect(install_calls)
+  )
+
+  vim.treesitter.query.set("lua", "highlights", nil) -- restore the real bundled query
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {
   start_fails_until = math.huge,
