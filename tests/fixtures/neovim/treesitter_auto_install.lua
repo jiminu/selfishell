@@ -288,6 +288,61 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
+-- install() can fail outright (network down, no compiler, disk full --
+-- anything try_install_lang() surfaces as an error). That must not get
+-- cached as ready (known_good_langs/queryless_langs must stay untouched)
+-- and must not leave pending_installs stuck thinking one is still in
+-- flight, or every later open of that filetype would silently do nothing
+-- forever instead of retrying.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local original_start = vim.treesitter.start
+  vim.treesitter.start = function()
+    error("simulated missing parser")
+  end
+
+  local install_calls = {}
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function(lang)
+        table.insert(install_calls, lang)
+        return {
+          await = function(_, callback)
+            callback(nil, false) -- the install genuinely failed
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+  assert(#install_calls == 1, "a failed install should still have been attempted once")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+  assert(
+    #install_calls == 2,
+    "a failed install must be retried on the next open, not treated as ready or stuck in flight: "
+      .. vim.inspect(install_calls)
+  )
+
+  vim.treesitter.start = original_start
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {
   start_fails_until = math.huge,
