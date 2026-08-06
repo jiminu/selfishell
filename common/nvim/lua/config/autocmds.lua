@@ -183,6 +183,15 @@ local function ensure_parser_installed(buf, lang)
         -- leaks, still attached to the parse tree's callbacks forever.
         pcall(vim.treesitter.stop, pending_buf)
         pcall(vim.treesitter.start, pending_buf, lang)
+        -- A freshly created LanguageTree isn't parsed yet -- that happens
+        -- lazily. Other plugins that attach on FileType and immediately
+        -- query the tree (rainbow-delimiters does) get an empty one and
+        -- silently produce nothing, with no redraw in a headless instance
+        -- to ever trigger the real parse afterwards. Force it up front so
+        -- whoever attaches next, below, sees a fully parsed tree.
+        pcall(function()
+          vim.treesitter.get_parser(pending_buf, lang):parse()
+        end)
         -- Other plugins (e.g. rainbow-delimiters) attach on their own
         -- FileType autocmd and assume a parser is already available there;
         -- re-fire it now that one exists so they get a chance to attach too.

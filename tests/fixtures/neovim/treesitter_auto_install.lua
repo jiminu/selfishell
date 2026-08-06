@@ -107,6 +107,88 @@ assert(
 -- which now finds a parser and returns without another install attempt.
 assert(start_calls == 3, "Tree-sitter highlighting was not retried after installing the parser: " .. start_calls)
 
+-- A freshly created LanguageTree isn't parsed yet -- that happens lazily.
+-- Other FileType-triggered plugins (rainbow-delimiters, for real) query the
+-- tree immediately when re-fired and silently get nothing back from an
+-- empty one, with no redraw in a headless instance to ever trigger the real
+-- parse afterwards -- reproduced directly against the real plugins, not
+-- just inferred. The retry sequence must force a parse between starting the
+-- parser and re-firing FileType, not just stop-then-start-then-refire.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local sequence = {}
+  local original_start = vim.treesitter.start
+  vim.treesitter.start = function(buf, lang)
+    if lang == nil then
+      error("simulated missing parser")
+    end
+    table.insert(sequence, "start")
+  end
+
+  local original_stop = vim.treesitter.stop
+  vim.treesitter.stop = function()
+    table.insert(sequence, "stop")
+  end
+
+  local original_get_parser = vim.treesitter.get_parser
+  vim.treesitter.get_parser = function(...)
+    table.insert(sequence, "get_parser")
+    return {
+      parse = function()
+        table.insert(sequence, "parse")
+      end,
+    }
+  end
+
+  local original_exec_autocmds = vim.api.nvim_exec_autocmds
+  vim.api.nvim_exec_autocmds = function(event, opts)
+    if event == "FileType" then
+      table.insert(sequence, "refire")
+    end
+    return original_exec_autocmds(event, opts)
+  end
+
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function()
+        return {
+          await = function(_, callback)
+            callback(nil, true)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buf)
+  vim.bo.filetype = "widgetlang"
+
+  assert(
+    vim.deep_equal(sequence, { "stop", "start", "get_parser", "parse", "refire" }),
+    "the retry sequence must stop, start, force a parse, then re-fire FileType, in that order: "
+      .. vim.inspect(sequence)
+  )
+
+  vim.treesitter.start = original_start
+  vim.treesitter.stop = original_stop
+  vim.treesitter.get_parser = original_get_parser
+  vim.api.nvim_exec_autocmds = original_exec_autocmds
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 -- A parser can be installed while its highlight queries are not (an install
 -- interrupted between the two steps -- Neovim killed mid-install, etc.).
 -- vim.treesitter.start only needs the parser, so it "succeeds" immediately
