@@ -228,6 +228,66 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
+-- A manual :TSUninstall (or :TSUpdate/:TSInstall) fires User TSUpdate; the
+-- known-good cache must not outlive that, or a language removed out from
+-- under it would keep being reported ready forever.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local original_start = vim.treesitter.start
+  vim.treesitter.start = function()
+    error("simulated missing parser")
+  end
+
+  local installed = { "widgetlang" }
+  local install_calls = {}
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return installed
+      end,
+      get_available = function()
+        return { "widgetlang" }
+      end,
+      install = function(lang, install_opts)
+        table.insert(install_calls, lang)
+        if install_opts and install_opts.force then
+          installed = { "widgetlang" }
+        end
+        return {
+          await = function(_, callback)
+            callback(nil, true)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang" -- caches widgetlang as known-good
+  assert(#install_calls == 0, "widgetlang should have started fully installed")
+
+  -- Simulate ":TSUninstall widgetlang" happening out from under the cache.
+  installed = {}
+  vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
+
+  vim.cmd("enew")
+  vim.bo.filetype = "widgetlang"
+  assert(
+    #install_calls == 1 and install_calls[1] == "widgetlang",
+    "User TSUpdate did not invalidate the known-good cache for an uninstalled language: "
+      .. vim.inspect(install_calls)
+  )
+
+  vim.treesitter.start = original_start
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {
   start_fails_until = math.huge,

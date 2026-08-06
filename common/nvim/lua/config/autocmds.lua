@@ -35,6 +35,19 @@ local pending_installs = {}
 local known_good_langs = {}
 local queryless_langs = {}
 
+-- nvim-treesitter fires User TSUpdate at the start of install(), update(),
+-- and uninstall() alike. A manual :TSUninstall on a language we'd already
+-- cached as good would otherwise never be re-checked -- reset both caches
+-- on that event so they can't outlive what's actually on disk.
+vim.api.nvim_create_autocmd("User", {
+  group = group,
+  pattern = "TSUpdate",
+  callback = function()
+    known_good_langs = {}
+    queryless_langs = {}
+  end,
+})
+
 local function is_ready(treesitter, lang)
   if known_good_langs[lang] then
     return true
