@@ -64,6 +64,17 @@ local notified_repair_failures = {}
 -- and uninstall() alike. A manual :TSUninstall on a language we'd already
 -- cached as good would otherwise never be re-checked -- reset those caches
 -- on that event so they can't outlive what's actually on disk.
+--
+-- vim.treesitter.query.get itself also needs clearing here, not just our
+-- own tables: it memoizes a *successful* result (including nil for
+-- "genuinely no query"), though never a thrown one -- so a language that
+-- throws (repair_failed_langs) is always safe to recheck, but a language
+-- that was genuinely known_good and gets its query/parser swapped for an
+-- incompatible pair by an external :TSUpdate (a bare :TSUpdate touches
+-- every language, not just the one a user might be thinking of) would keep
+-- returning its stale cached success otherwise -- our own query.get:clear()
+-- call elsewhere only runs inside our own repair flow, which a language
+-- reported as already fine never reaches.
 vim.api.nvim_create_autocmd("User", {
   group = group,
   pattern = "TSUpdate",
@@ -72,6 +83,9 @@ vim.api.nvim_create_autocmd("User", {
     queryless_langs = {}
     repair_failed_langs = {}
     notified_repair_failures = {}
+    pcall(function()
+      vim.treesitter.query.get:clear()
+    end)
   end,
 })
 

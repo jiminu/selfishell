@@ -682,6 +682,51 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
+-- vim.treesitter.query.get memoizes a *successful* result (including nil
+-- for "genuinely no query"), though never a thrown one. A language that
+-- was genuinely known_good in this session and then has its query broken
+-- by something outside our own repair flow (a bare :TSUpdate touches every
+-- language, not just the one an install elsewhere was for; Neovim
+-- concatenates query contributions from every runtimepath entry for a
+-- given lang/query_name, so a single bad one anywhere breaks the whole
+-- query) would otherwise keep returning its stale cached success forever --
+-- our own query.get:clear() call only runs inside our own repair path,
+-- which a language already reported as fine never reaches. Use "lua"
+-- (bundled, so a real success is cheap to produce) and a genuinely broken
+-- contributor file added to the runtimepath (not vim.treesitter.query.set,
+-- which has its own cache-busting side effect and so can't exercise this)
+-- to reproduce the exact staleness.
+do
+  assert(pcall(vim.treesitter.query.get, "lua", "highlights"), "lua's bundled highlights query should work normally")
+
+  local scratch_dir = vim.fn.tempname()
+  vim.fn.mkdir(scratch_dir .. "/queries/lua", "p")
+  local file = assert(io.open(scratch_dir .. "/queries/lua/highlights.scm", "w"))
+  file:write("(nonexistent_node_type_xyz) @foo")
+  file:close()
+  vim.opt.runtimepath:prepend(scratch_dir)
+
+  assert(
+    pcall(vim.treesitter.query.get, "lua", "highlights"),
+    "sanity check: Neovim's query cache is expected to still be stale immediately after a new "
+      .. "runtimepath entry adds a broken contributor"
+  )
+
+  package.loaded["config.autocmds"] = nil
+  require("config.autocmds")
+  vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
+
+  assert(
+    not pcall(vim.treesitter.query.get, "lua", "highlights"),
+    "TSUpdate must clear vim.treesitter.query.get's cache, not just this file's own state tables, "
+      .. "or a language broken by an unrelated TSUpdate keeps reporting its stale cached success"
+  )
+
+  vim.opt.runtimepath:remove(scratch_dir)
+  vim.fn.delete(scratch_dir, "rf")
+  vim.treesitter.query.get:clear("lua", "highlights") -- leave the real query usable for later tests/sessions
+end
+
 -- A language nvim-treesitter has no parser for at all must never be installed.
 local exec_ok_unavailable, _, install_calls_unavailable = run_scenario("unavailable-language", {
   start_fails_until = math.huge,
