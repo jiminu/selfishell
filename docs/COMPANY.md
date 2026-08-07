@@ -4,23 +4,9 @@ Company-specific packages and shell settings must stay outside the public
 repository. Store them in a private configuration repository or endpoint and
 inject them during provisioning.
 
-A local profile contains only `package` records:
-
-```text
-package macos required formula company-cli
-package ubuntu required apt company-cli
-```
-
-```sh
-selfishell install --profile developer \
-  --local-profile /path/to/company.conf --yes
-```
-
-Set `SELFISHELL_LOCAL_PROFILE` when the same private profile should also be used
-by subsequent updates. Put private shell initialization directly in the user's
-`~/.zshrc`, outside the marked Selfishell loader block. Selfishell also manages
-only its marked mise shims block within `~/.zprofile`; both files remain
-user-owned.
+Put private shell initialization directly in the user's `~/.zshrc`, outside the
+marked Selfishell loader block. Selfishell also manages only its marked mise
+shims block within `~/.zprofile`; both files remain user-owned.
 
 Recommended deployment controls:
 

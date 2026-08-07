@@ -19,7 +19,7 @@ setup_profile_home() {
 }
 
 teardown_profile_home() {
-  unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE SELFISHELL_LOCAL_PROFILE
+  unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
   teardown_test_home
@@ -104,17 +104,6 @@ test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
     fail "Ghostty was not included in the macOS dry run"
 }
 
-test_local_profile_adds_private_package() {
-  local output
-  local local_profile="$TEST_ROOT/company.conf"
-
-  printf 'package ubuntu optional apt company-cli\n' >"$local_profile"
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --local-profile "$local_profile" --dry-run)"
-
-  [[ "$output" == *'optional apt packages:'* && "$output" == *'company-cli'* ]] ||
-    fail "Local profile package was not included"
-}
-
 test_offline_mode_skips_package_operations() {
   local output
   export SELFISHELL_OFFLINE=1
@@ -136,17 +125,24 @@ test_unknown_profile_returns_usage_error() {
   [[ "$status" -eq 2 ]] || fail "Unknown profile should return exit code 2"
 }
 
-test_local_profile_rejects_option_like_package() {
-  local local_profile="$TEST_ROOT/company.conf"
+test_profile_read_file_rejects_option_like_package() {
+  local profile_file="$TEST_ROOT/profile-record.conf"
   local status
 
-  printf 'package ubuntu required apt --allow-unauthenticated\n' >"$local_profile"
+  # profile_read_file() is the shared parser built-in profiles use too;
+  # exercise it directly rather than through a CLI entry point.
+  printf 'package ubuntu required apt --allow-unauthenticated\n' >"$profile_file"
+
   set +e
-  bash "$ROOT_DIR/bin/selfishell" install --profile minimal --local-profile "$local_profile" --dry-run >/dev/null 2>&1
+  bash -c '
+    source "$1/lib/common.sh"
+    source "$1/lib/profiles.sh"
+    profile_read_file "$2"
+  ' _ "$ROOT_DIR" "$profile_file" >/dev/null 2>&1
   status=$?
   set -e
 
-  [[ "$status" -eq 2 ]] || fail "Option-like local package should be rejected"
+  [[ "$status" -eq 2 ]] || fail "Option-like package name should be rejected"
 }
 
 run_discovered_tests setup_profile_home teardown_profile_home

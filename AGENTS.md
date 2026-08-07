@@ -111,8 +111,6 @@ The developer profile's mise-managed tools are declared in `common/mise.toml`;
 treat that file as the source of truth. Do not delete legacy NVM or pyenv data
 during migration.
 
-Local additions use `--local-profile FILE` or `SELFISHELL_LOCAL_PROFILE`. Local
-profiles may contain package records only and may not include another profile.
 `--skip-packages` and `SELFISHELL_OFFLINE=1` must perform configuration-only
 installation without package or network commands. `optional` packages are
 attempted automatically but remain non-fatal.

@@ -3,13 +3,11 @@
 print_install_help() {
   cat <<'EOF'
 Usage:
-  selfishell install [--profile NAME] [--local-profile FILE]
-                      [--skip-packages] [--dry-run] [--yes]
+  selfishell install [--profile NAME] [--skip-packages] [--dry-run] [--yes]
 
 Options:
-  --profile NAME       Select minimal or developer (default: developer)
-  --local-profile FILE Add private platform package records
-  --skip-packages      Install configuration without package operations
+  --profile NAME  Select minimal or developer (default: developer)
+  --skip-packages Install configuration without package operations
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -193,7 +191,6 @@ command_install() {
   local assume_yes=0
   local dry_run=0
   local profile=developer
-  local local_profile="${SELFISHELL_LOCAL_PROFILE:-}"
   local skip_packages=0
   local platform
   local ghostty_enabled=0
@@ -211,14 +208,6 @@ command_install() {
           return "$SELFISHELL_EXIT_USAGE"
         fi
         profile="$1"
-        ;;
-      --local-profile)
-        shift
-        if (("$#" == 0)); then
-          cli_error "--local-profile requires a file"
-          return "$SELFISHELL_EXIT_USAGE"
-        fi
-        local_profile="$1"
         ;;
       help | --help | -h)
         print_install_help
@@ -242,7 +231,7 @@ command_install() {
   selfishell_initialize_paths
   managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
   managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
-  profile_load "$profile" "$local_profile"
+  profile_load "$profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return
   fi

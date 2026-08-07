@@ -38,7 +38,6 @@ profile_add_package() {
 
 profile_read_file() {
   local profile_file="$1"
-  local allow_include="$2"
   local record
   local first
   local second
@@ -56,7 +55,7 @@ profile_read_file() {
 
     case "$record" in
       include)
-        if [[ "$allow_include" != "1" || -z "$first" || -n "$second" ]]; then
+        if [[ -z "$first" || -n "$second" ]]; then
           cli_error "Invalid include in profile: $profile_file"
           return "$SELFISHELL_EXIT_ERROR"
         fi
@@ -106,17 +105,12 @@ profile_load_builtin() {
     return "$SELFISHELL_EXIT_USAGE"
   fi
 
-  profile_read_file "$SELFISHELL_ROOT/profiles/$profile.conf" 1
+  profile_read_file "$SELFISHELL_ROOT/profiles/$profile.conf"
 }
 
 profile_load() {
   local profile="$1"
-  local local_config="$2"
 
   profile_reset
   profile_load_builtin "$profile"
-
-  if [[ -n "$local_config" ]]; then
-    profile_read_file "$local_config" 0
-  fi
 }

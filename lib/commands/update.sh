@@ -50,7 +50,7 @@ update_tools_and_configuration() {
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
-  profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
+  profile_load "$profile"
 
   if [[ "$skip_packages" == "1" ]]; then
     printf 'Skipping package installation.\n'
