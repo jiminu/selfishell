@@ -117,11 +117,10 @@ profiles may contain package records only and may not include another profile.
 installation without package or network commands. `optional` packages are
 attempted automatically but remain non-fatal.
 
-Automated dependency discovery may open a review PR but must never auto-merge.
-A maintainer merge of `automation/dependency-updates` may dispatch a stable
-patch release only when `dependencies.conf` changes and the remaining diff is
-limited to matching commit-pin replacements in `common/completion.zsh` and
-`common/interactive.zsh`. Any other change must block automatic publication.
+Automated dependency discovery may open a review PR but must never auto-merge
+or auto-publish a release. A maintainer reviews and merges
+`automation/dependency-updates`, then runs the normal manual release process
+described below.
 
 ## Release Rules
 

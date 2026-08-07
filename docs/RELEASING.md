@@ -78,15 +78,13 @@ patch release after fixes.
 Do not replace assets on an existing release. Publish a new patch version so the
 version-to-checksum relationship remains immutable.
 
-## Approved dependency patch releases
+## Approved dependency updates
 
 The weekly dependency workflow opens or refreshes a PR from
-`automation/dependency-updates`. It never merges the PR. When a maintainer merges
-that exact branch and the PR changes only `dependencies.conf`, the dependency
-release workflow calculates the next patch after the latest stable tag and
-dispatches the regular release workflow against the merge commit. Verification,
-artifact building, the exact-version smoke test, tag creation, and GitHub Release
-publication all remain part of the regular release gate.
+`automation/dependency-updates`. It never merges the PR or publishes a release.
+Review the diff and CI results, merge when ready, then publish a normal patch
+release through the process above — accept `next patch` to have
+`scripts/next-patch-version.sh` calculate it.
 
 Every release asset receives signed build provenance through GitHub Artifact
 Attestations before publication. Verification requires GitHub CLI:
@@ -95,11 +93,7 @@ Attestations before publication. Verification requires GitHub CLI:
 gh attestation verify PATH_TO_ARCHIVE --repo jiminu/selfishell
 ```
 
-Release, dependency discovery, and dependency patch-dispatch failures create a
-deduplicated `automation-failure` issue. A later successful run closes the open
-issue. Maintainers receive email when GitHub issue or repository-watch email
+Release and dependency discovery failures create a deduplicated
+`automation-failure` issue. A later successful run closes the open issue.
+Maintainers receive email when GitHub issue or repository-watch email
 notifications are enabled in their account settings.
-
-General feature and documentation PRs never trigger this path. If an automated
-dependency PR needs another file changed, close it and use the normal manual
-release process instead.
