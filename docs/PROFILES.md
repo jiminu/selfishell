@@ -70,9 +70,10 @@ well.
 
 Additional LSP servers are installed with `:LspInstall <server>`, the standard
 mason-lspconfig command; installed servers auto-enable on the next matching
-buffer. Change a server's settings only by adding
-`~/.config/nvim/after/lsp/<server>.lua`, returning a config table Neovim's
-built-in LSP client merges in (see `:help lsp-config`).
+buffer. For a server Selfishell does not manage by default, customize its
+settings by adding `~/.config/nvim/after/lsp/<server>.lua` (for example
+`after/lsp/rust_analyzer.lua`), returning a config table Neovim's built-in
+LSP client merges in (see `:help lsp-config`).
 
 New splits open to the right and below, four lines of context remain above and
 below the cursor when possible, commands that would discard unsaved changes ask
