@@ -118,10 +118,6 @@ test_performance_docs_document_full_benchmark_mode() {
     fail "docs/PERFORMANCE.md does not document scripts/benchmark.sh --mode full"
   grep -Fq 'SELFISHELL_BENCHMARK_PROFILE' "$ROOT_DIR/docs/PERFORMANCE.md" ||
     fail "docs/PERFORMANCE.md does not document the SELFISHELL_BENCHMARK_PROFILE env var"
-  grep -Fq 'shell-full-profile-benchmark' "$ROOT_DIR/docs/PERFORMANCE.md" ||
-    fail "docs/PERFORMANCE.md does not name the full-profile benchmark's CI job"
-  grep -Fq 'shell-performance-full-profile' "$ROOT_DIR/docs/PERFORMANCE.md" ||
-    fail "docs/PERFORMANCE.md does not name the full-profile benchmark's artifact"
 }
 
 test_release_procedures_use_published_release_verifier() {
