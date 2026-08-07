@@ -817,25 +817,23 @@ test_unrelated_zshenv_symlink_is_rejected_without_changes() {
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
 }
 
-test_macos_install_does_not_manage_zshenv() {
+test_macos_lifecycle_never_touches_existing_zshenv() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  run_selfishell update --tools-only --skip-packages --yes >/dev/null
-
-  [[ ! -e "$HOME/.zshenv" ]] || fail "macOS install/update created ~/.zshenv"
-  [[ ! -e "$XDG_STATE_HOME/selfishell/resources/user-zshenv.state" ]] ||
-    fail "macOS install/update created a user-zshenv managed state"
-
+  # Whether install/update ever *creates* ~/.zshenv on a clean macOS HOME is
+  # covered by scripts/macos-configuration-e2e.sh; this test instead covers
+  # the user-data contract for a ~/.zshenv that already exists.
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
   printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   run_selfishell update --tools-only --skip-packages --yes >/dev/null
   run_selfishell uninstall --yes >/dev/null
 
   # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
   assert_file_content '. "$HOME/.cargo/env"' "$HOME/.zshenv"
   [[ ! -e "$XDG_STATE_HOME/selfishell/resources/user-zshenv.state" ]] ||
-    fail "macOS update created a user-zshenv managed state for an existing file"
+    fail "macOS lifecycle created a user-zshenv managed state for an existing file"
 }
 
 test_malformed_managed_file_state_variants_are_rejected_without_changes() {
