@@ -180,53 +180,38 @@ test_ghostty_defaults_include_precedes_user_override_include() {
     fail "Ghostty managed defaults include must precede the user.ghostty override include (defaults at line $defaults_line, override at line $override_line)"
 }
 
-test_legacy_ghostty_link_state_is_rejected_without_changes() {
-  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local target="$XDG_CONFIG_HOME/ghostty/config"
-  local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
-  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
+test_managed_block_state_identity_mismatch_is_rejected() {
+  local target="$HOME/.zprofile"
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zprofile.state"
+  local before_content
   local status
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  before_content="$(<"$target")"
 
-  rm -f "$XDG_CONFIG_HOME/ghostty/config.ghostty"
-  ln -s "$managed_source" "$target"
-  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$target" "$managed_source" >"$state_file"
-
+  # case A: state type is a different valid type (file), well-formed otherwise.
+  printf '2\nfile\nactive\n%s\n-\n-\nbogus-checksum\n' "$target" >"$state_file"
   set +e
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
+  [[ "$status" -eq 1 ]] || fail "A state type mismatch should stop installation"
+  [[ "$(<"$target")" == "$before_content" ]] || fail "A state type mismatch changed the user target"
+  [[ "$(sed -n '2p' "$state_file")" == file ]] || fail "A state type mismatch changed the existing state"
+  grep -Fq 'State conflict for managed block' "$TEST_ROOT/stderr" ||
+    fail "State type mismatch did not report a state conflict"
 
-  [[ "$status" -eq 1 ]] || fail "Legacy Ghostty link state should stop installation"
-  assert_symlink_to "$managed_source" "$target"
-  [[ "$(sed -n '2p' "$state_file")" == link ]] || fail "Legacy state was changed"
-  grep -Fq "Run 'selfishell uninstall --restore --yes', then reinstall." "$TEST_ROOT/stderr" ||
-    fail "Legacy state error did not explain how to recover"
-}
-
-test_legacy_ghostty_link_can_be_uninstalled_for_manual_transition() {
-  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local legacy_target="$XDG_CONFIG_HOME/ghostty/config"
-  local managed_source="$XDG_CONFIG_HOME/selfishell/ghostty/config"
-  local state_file="$XDG_STATE_HOME/selfishell/resources/user-ghostty.state"
-
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-
-  rm -f "$XDG_CONFIG_HOME/ghostty/config.ghostty"
-  ln -s "$managed_source" "$legacy_target"
-  printf '2\nlink\nactive\n%s\n%s\n-\n-\n' "$legacy_target" "$managed_source" >"$state_file"
-
-  run_selfishell uninstall --yes >/dev/null
-  [[ ! -e "$state_file" ]] || fail "Legacy Ghostty link state was not removed"
-  [[ ! -e "$legacy_target" ]] || fail "Legacy Ghostty link was not removed"
-
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-
-  local target="$XDG_CONFIG_HOME/ghostty/config.ghostty"
-  [[ -f "$target" && ! -L "$target" ]] || fail "Reinstall did not create a user-owned Ghostty config"
-  grep -Fqx '# >>> Selfishell ghostty >>>' "$target" || fail "Reinstalled Ghostty config is missing the include block"
-  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Reinstalled Ghostty resource was not recorded as a block"
+  # case B: state type matches (block) but the recorded target does not.
+  printf '2\nblock\nactive\n%s.other\n-\n-\nbogus-checksum\n' "$target" >"$state_file"
+  set +e
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "A state target mismatch should stop installation"
+  [[ "$(<"$target")" == "$before_content" ]] || fail "A state target mismatch changed the user target"
+  [[ "$(sed -n '4p' "$state_file")" == "$target.other" ]] || fail "A state target mismatch changed the existing state"
+  grep -Fq 'State conflict for managed block' "$TEST_ROOT/stderr" ||
+    fail "State target mismatch did not report a state conflict"
 }
 
 test_outdated_ghostty_block_is_upgraded_without_changing_user_bytes() {
@@ -257,7 +242,7 @@ cursor-style = bar
 EOF
   old_body_checksum="$(printf '# >>> Selfishell ghostty >>>\nconfig-file = %s\n# <<< Selfishell ghostty <<<\n' \
     "$managed_source" | cksum | awk '{print $1 ":" $2}')"
-  printf '2\nblock\nactive\n%s\nselfishell-user-ghostty-block-v1\n-\n%s\n' \
+  printf '2\nblock\nactive\n%s\n-\n-\n%s\n' \
     "$target" "$old_body_checksum" >"$state_file"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
@@ -298,7 +283,7 @@ fi
 export AFTER=1
 EOF
   old_checksum="$(cksum <"$old_block" | awk '{print $1 ":" $2}')"
-  printf '2\nblock\nactive\n%s\nselfishell-user-zprofile-block-v1\n-\n%s\n' \
+  printf '2\nblock\nactive\n%s\n-\n-\n%s\n' \
     "$target" "$old_checksum" >"$state_file"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
@@ -755,7 +740,7 @@ test_unrelated_zprofile_symlink_is_rejected_without_changes() {
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
 }
 
-test_install_preserves_existing_zshenv_content_on_ubuntu() {
+test_zshenv_user_content_survives_ubuntu_lifecycle() {
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshenv.state"
 
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
@@ -771,29 +756,18 @@ test_install_preserves_existing_zshenv_content_on_ubuntu() {
   [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
     fail "Zshenv block marker appears more than once"
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Zshenv resource was not recorded as a managed block"
-}
-
-test_reinstall_does_not_duplicate_zshenv_block() {
-  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
-  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
 
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  run_selfishell update --tools-only --skip-packages --yes >/dev/null
-
   [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
-    fail "Reinstall/update duplicated the Zshenv block marker"
+    fail "Reinstall duplicated the Zshenv block marker"
+
+  run_selfishell update --tools-only --skip-packages --yes >/dev/null
+  [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
+    fail "Update duplicated the Zshenv block marker"
   # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
   grep -Fqx '. "$HOME/.cargo/env"' "$HOME/.zshenv" || fail "Original .zshenv content was lost across reinstall/update"
-}
 
-test_uninstall_preserves_zshenv_user_content() {
-  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
-  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
-
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
   run_selfishell uninstall --yes >/dev/null
-
   ! grep -Fq '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Uninstall did not remove the Zshenv block"
   # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
   assert_file_content '. "$HOME/.cargo/env"' "$HOME/.zshenv"
@@ -1604,7 +1578,7 @@ case "$2" in
   mktemp) mktemp() { return 1; } ;;
   mv) mv() { return 1; } ;;
 esac
-managed_write_state user-zshrc block active "$3" selfishell-user-zshrc-block-v1 - forged-checksum
+managed_write_state user-zshrc block active "$3" - - forged-checksum
 EOF
 
   for scenario in mktemp mv; do

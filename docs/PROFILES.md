@@ -51,10 +51,6 @@ On macOS, interactive installation separately asks whether to install Ghostty
 and manage its configuration. `--yes` accepts that choice automatically. The
 choice is saved and reused by `selfishell update`.
 
-The former `kubernetes` and `full` profiles were removed during the beta. A
-machine that recorded either profile should run `selfishell install --profile
-developer --yes` once to select the new profile structure.
-
 ## Neovim workflow
 
 The `developer` profile includes a pinned Neovim configuration whose leader key

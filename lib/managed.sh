@@ -386,7 +386,7 @@ managed_install_block() {
   local dry_run="$3"
   local assume_yes="${4:-0}"
   local preflight="${5:-0}"
-  local expected_checksum temporary_file reference conflict_backup
+  local expected_checksum temporary_file conflict_backup
 
   if [[ -L "$target_file" ]]; then
     cli_error "Refusing to modify symbolic link: $target_file"
@@ -399,18 +399,16 @@ managed_install_block() {
 
   expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
   managed_inspect_block "$resource" "$target_file" || return
-  reference="selfishell-${resource}-block-v1"
 
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
-      cli_error "Legacy Selfishell state was detected for: $resource"
-      cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
+      cli_error "State conflict for managed block: $resource"
       return "$SELFISHELL_EXIT_ERROR"
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$expected_checksum" ]]; then
       [[ "$preflight" == 0 ]] || return 0
       if [[ "$dry_run" == 0 ]]; then
-        managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+        managed_write_state "$resource" block active "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       fi
       printf '%sUnchanged Selfishell block:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
       return 0
@@ -421,9 +419,9 @@ managed_install_block() {
         printf '%sWould update Selfishell block:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
         return 0
       fi
-      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block pending "$target_file" - - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
       managed_replace_block "$resource" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
-      managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block active "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       printf '%sUpdated Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
       return 0
     fi
@@ -444,9 +442,9 @@ managed_install_block() {
       mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
       cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
       printf '%sBacked up modified managed block:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
-      managed_write_state "$resource" block pending "$target_file" "$reference" - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block pending "$target_file" - - "$MANAGED_BLOCK_CHECKSUM" || return "$SELFISHELL_EXIT_ERROR"
       managed_replace_block "$resource" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
-      managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+      managed_write_state "$resource" block active "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       printf '%sUpdated Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
       return 0
     fi
@@ -469,7 +467,7 @@ managed_install_block() {
     return 0
   fi
 
-  managed_write_state "$resource" block pending "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+  managed_write_state "$resource" block pending "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
   mkdir -p "$(dirname "$target_file")" || return "$SELFISHELL_EXIT_ERROR"
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
   if [[ -f "$target_file" ]]; then
@@ -501,7 +499,7 @@ managed_install_block() {
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   }
-  managed_write_state "$resource" block active "$target_file" "$reference" - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
+  managed_write_state "$resource" block active "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
   printf '%sAdded Selfishell block:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
 }
 
@@ -755,10 +753,6 @@ managed_uninstall_resource() {
         return "$SELFISHELL_EXIT_ERROR"
       fi
       ;;
-    *)
-      cli_error "Unknown managed resource type: $MANAGED_STATE_TYPE"
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
   esac
 
   if [[ "$restore" == "1" && "$MANAGED_STATE_BACKUP" != "-" && (-e "$MANAGED_STATE_BACKUP" || -L "$MANAGED_STATE_BACKUP") ]]; then
@@ -820,10 +814,6 @@ managed_validate_uninstall_resource() {
         cli_error "Managed file path changed type; preserving it: $MANAGED_STATE_TARGET"
         return "$SELFISHELL_EXIT_ERROR"
       fi
-      ;;
-    *)
-      cli_error "Unknown managed resource type: $MANAGED_STATE_TYPE"
-      return "$SELFISHELL_EXIT_ERROR"
       ;;
   esac
 }

@@ -139,31 +139,6 @@ test_unknown_command_returns_usage_error() {
   [[ "$output" == *'Unknown command: unknown'* ]] || fail "Missing unknown command error"
 }
 
-test_removed_self_update_command_is_rejected() {
-  local output
-  local status
-
-  set +e
-  output="$(bash "$ROOT_DIR/bin/selfishell" self-update 2>&1)"
-  status=$?
-  set -e
-
-  [[ "$status" -eq 2 ]] || fail "Removed self-update command should return exit code 2"
-  [[ "$output" == *'Unknown command: self-update'* ]] ||
-    fail "Removed self-update command should be reported as unknown"
-}
-
-test_removed_legacy_install_command_is_rejected() {
-  local status
-
-  set +e
-  bash "$ROOT_DIR/bin/selfishell" legacy-install >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 2 ]] || fail "Removed legacy-install command should return usage error"
-}
-
 test_update_help_explains_package_upgrade_policy() {
   local output
 
