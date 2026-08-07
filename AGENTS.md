@@ -55,10 +55,16 @@ The installed product must work after the source checkout is removed.
 Treat every existing path as user data. Back it up safely, never overwrite a
 backup, and never restore over an occupied target.
 
-Managed configuration is copied under `~/.config/selfishell`; user-facing paths
-link to those copies. `~/.zshrc` remains user-owned and contains one bounded
-loader block that sources the managed platform entrypoint. Personal aliases,
-exports, PATH entries, and functions belong outside that block.
+Managed defaults are copied under `~/.config/selfishell`. User-facing
+integration uses either managed links or bounded blocks in user-owned
+configuration files.
+
+`~/.zshrc` and `~/.zprofile` remain user-owned, each holding one bounded
+Selfishell block. `~/.zshrc`'s block sources the managed platform entrypoint;
+personal aliases, exports, PATH entries, and functions belong outside it. On
+Ubuntu/WSL, `~/.zshenv` is also user-owned and contains only Selfishell's
+bounded zshenv block (`skip_global_compinit=1`); macOS `~/.zshenv` is not
+managed.
 
 Preserve these lifecycle invariants:
 

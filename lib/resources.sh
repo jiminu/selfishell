@@ -3,7 +3,6 @@
 selfishell_managed_resources() {
   cat <<EOF
 file	zshrc-config	$SELFISHELL_CONFIG_DIR/zsh/zshrc	$SELFISHELL_ROOT/mac/.zshrc
-file	zshenv-config	$SELFISHELL_CONFIG_DIR/zsh/zshenv	$SELFISHELL_ROOT/common/zshenv
 file	zsh-runtime	$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh	$SELFISHELL_ROOT/common/runtime.zsh
 file	mise-config-file	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml	$SELFISHELL_ROOT/common/mise.toml
 link	mise-config-link	${XDG_CONFIG_HOME:-$HOME/.config}/mise/conf.d/selfishell.toml	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml
@@ -35,7 +34,7 @@ file	nvim-lua-plugins-telescope	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/telescop
 file	nvim-after-lsp-lua_ls	$SELFISHELL_CONFIG_DIR/nvim/after/lsp/lua_ls.lua	$SELFISHELL_ROOT/common/nvim/after/lsp/lua_ls.lua
 block	user-zshrc	$HOME/.zshrc	-
 block	user-zprofile	$HOME/.zprofile	-
-link	user-zshenv	$HOME/.zshenv	$SELFISHELL_CONFIG_DIR/zsh/zshenv
+block	user-zshenv	$HOME/.zshenv	-
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
 link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
 link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvim

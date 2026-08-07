@@ -56,6 +56,12 @@ install_managed_configuration() {
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
+        if [[ "$resource_name" == user-zshenv ]]; then
+          case "$platform" in
+            ubuntu | ubuntu-wsl) ;;
+            *) continue ;;
+          esac
+        fi
         managed_install_block "$resource_name" "$resource_target" "$dry_run" "$assume_yes"
         ;;
     esac
@@ -231,6 +237,11 @@ command_install() {
   selfishell_initialize_paths
   managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
   managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
+  case "$platform" in
+    ubuntu | ubuntu-wsl)
+      managed_preflight_block_target user-zshenv "$HOME/.zshenv" "$assume_yes" "$dry_run" || return
+      ;;
+  esac
   profile_load "$profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return

@@ -97,6 +97,11 @@ Untouched blocks are upgraded automatically with new releases. If you edit
 inside a block, an interactive install or update offers to back up the full file
 and replace only that block, or to skip it. `--yes` preserves the edit and stops.
 
+On Ubuntu and Ubuntu on WSL, `~/.zshenv` also remains user-owned. Selfishell
+manages only a bounded block containing `skip_global_compinit=1` so Ubuntu's
+system-wide Zsh configuration does not initialize `compinit` before
+Selfishell's own. Selfishell does not manage `~/.zshenv` on macOS.
+
 ## Ghostty customization
 
 On macOS, Selfishell manages two Ghostty paths and recognizes an optional third
@@ -154,8 +159,9 @@ state:
 selfishell uninstall --restore --purge
 ```
 
-Personal content in `~/.zshrc` and `~/.zprofile` is preserved; uninstall removes
-only the intact marked Selfishell blocks.
+Personal content in `~/.zshrc` and `~/.zprofile`, and in `~/.zshenv` on
+Ubuntu/WSL, is preserved; uninstall removes only the intact marked Selfishell
+blocks.
 Packages installed through Apt, Homebrew, or direct tool installers are also
 preserved. If `--add-to-path` was used, purge removes the installer's unchanged
 PATH entry; a modified entry is preserved and stops the purge for review.

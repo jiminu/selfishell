@@ -196,6 +196,10 @@ elif command -v mise >/dev/null 2>&1; then
   eval "$(command mise activate zsh --shims)"
 fi'
       ;;
+    user-zshenv)
+      MANAGED_BLOCK_LABEL='Selfishell zshenv'
+      MANAGED_BLOCK_BODY='skip_global_compinit=1'
+      ;;
     user-ghostty)
       MANAGED_BLOCK_LABEL='Selfishell ghostty'
       # config-file directives are processed in declaration order, but always

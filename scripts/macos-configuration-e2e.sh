@@ -109,15 +109,18 @@ run_primary_lifecycle() {
   [[ "$loader_count" == 1 ]] || fail "install did not add exactly one loader block (found $loader_count)"
   [[ -d "$XDG_CONFIG_HOME/selfishell" ]] || fail "managed configuration was not created under XDG_CONFIG_HOME"
   [[ -d "$XDG_STATE_HOME/selfishell" ]] || fail "managed state was not created under XDG_STATE_HOME"
-  # The managed *links* (.zshenv, starship.toml, vim/vimrc, mise's conf.d
-  # entry) live under $HOME itself, pointing into the copied
-  # $XDG_CONFIG_HOME/selfishell tree -- never directly at the source
-  # checkout that this script runs from.
+  # The managed *links* (starship.toml, vim/vimrc, mise's conf.d entry) live
+  # under $HOME itself, pointing into the copied $XDG_CONFIG_HOME/selfishell
+  # tree -- never directly at the source checkout that this script runs from.
   while IFS= read -r -d '' link; do
     case "$(readlink "$link")" in
       "$ROOT_DIR"*) fail "$link links directly into the source checkout instead of the copied managed configuration" ;;
     esac
   done < <(find "$HOME" -type l -print0)
+
+  # Selfishell never manages ~/.zshenv on macOS -- skip_global_compinit=1
+  # exists only to work around Ubuntu's system-wide compinit.
+  [[ ! -e "$HOME/.zshenv" ]] || fail "install created ~/.zshenv on macOS"
 
   starship_backup="$(find "$XDG_CONFIG_HOME" -maxdepth 1 -name 'starship.toml.backup.*')"
   [[ -n "$starship_backup" ]] || fail "a pre-existing starship.toml was not backed up"
