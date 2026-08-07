@@ -306,18 +306,9 @@ managed_preflight_zsh_loader() {
   local assume_yes="${1:-0}"
   local dry_run="${2:-0}"
   local target_file="$HOME/.zshrc"
-  local state_file legacy_version legacy_type
+  local state_file
 
   state_file="$(managed_state_path user-zshrc)"
-  if [[ -r "$state_file" ]]; then
-    legacy_version="$(sed -n '1p' "$state_file")"
-    legacy_type="$(sed -n '2p' "$state_file")"
-    if [[ "$legacy_version" != 2 || "$legacy_type" != block ]]; then
-      cli_error "Legacy Selfishell .zshrc management was detected."
-      cli_error "Run 'selfishell uninstall --restore --yes', move any wanted local.zsh settings into ~/.zshrc, then reinstall."
-      return "$SELFISHELL_EXIT_ERROR"
-    fi
-  fi
 
   if [[ -L "$target_file" ]]; then
     cli_error "Refusing to modify symbolic link: $target_file"

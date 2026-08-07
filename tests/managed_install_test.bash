@@ -622,18 +622,6 @@ test_status_does_not_inspect_user_ghostty() {
     fail "A dangling user.ghostty changed status output"
 }
 
-test_local_zsh_extension_is_retired_and_preserved() {
-  local output
-
-  mkdir -p "$XDG_CONFIG_HOME/selfishell"
-  printf 'export SELFISHELL_COMPANY_TEST=loaded\n' >"$XDG_CONFIG_HOME/selfishell/local.zsh"
-  run_selfishell install --skip-packages --yes >/dev/null
-
-  output="$(HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" zsh -dfc 'source "$HOME/.zshrc" >/dev/null 2>&1; print "${SELFISHELL_COMPANY_TEST-}"')"
-  [[ -z "$output" ]] || fail "Retired local.zsh was still loaded"
-  assert_file_content 'export SELFISHELL_COMPANY_TEST=loaded' "$XDG_CONFIG_HOME/selfishell/local.zsh"
-}
-
 test_install_is_idempotent() {
   local first_backup_count
   local second_backup_count
@@ -767,26 +755,6 @@ test_unrelated_zprofile_symlink_is_rejected_without_changes() {
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
 }
 
-test_legacy_zshrc_state_is_rejected_without_changes() {
-  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-  local status
-
-  mkdir -p "$(dirname "$state_file")" "$XDG_CONFIG_HOME/selfishell/zsh"
-  printf 'legacy managed zshrc\n' >"$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
-  ln -s "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
-  printf '1\nlink\nactive\n%s\n%s\n-\n-\n' \
-    "$HOME/.zshrc" "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" >"$state_file"
-
-  set +e
-  run_selfishell install --skip-packages --yes >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "Legacy Zsh state should stop installation"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
-  [[ "$(sed -n '1p' "$state_file")" == 1 ]] || fail "Legacy state was changed"
-}
-
 test_malformed_managed_file_state_variants_are_rejected_without_changes() {
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
@@ -876,23 +844,6 @@ test_malformed_state_reported_by_status() {
   ((status != 0)) || fail "status should fail when a resource state is malformed"
   [[ "$output" == *'[MALFORMED]'*'vimrc.state'* ]] ||
     fail "status did not report the malformed resource state: $output"
-}
-
-test_legacy_zshrc_can_be_uninstalled_for_manual_transition() {
-  local backup="$HOME/.zshrc.backup.legacy"
-  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-
-  mkdir -p "$(dirname "$state_file")" "$XDG_CONFIG_HOME/selfishell/zsh"
-  printf 'restored user zshrc\n' >"$backup"
-  printf 'legacy managed zshrc\n' >"$XDG_CONFIG_HOME/selfishell/zsh/zshrc"
-  ln -s "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$HOME/.zshrc"
-  printf '1\nlink\nactive\n%s\n%s\n%s\n-\n' \
-    "$HOME/.zshrc" "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" "$backup" >"$state_file"
-
-  run_selfishell uninstall --restore --yes >/dev/null
-
-  assert_file_content 'restored user zshrc' "$HOME/.zshrc"
-  [[ ! -e "$state_file" ]] || fail "Legacy Zsh link state was not removed"
 }
 
 test_untracked_and_duplicate_loaders_are_rejected() {

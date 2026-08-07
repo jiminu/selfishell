@@ -14,8 +14,7 @@ usage() {
 Usage: scripts/benchmark.sh [--mode base|full]
 
   base  Selfishell's own startup cost, independent of external integrations
-        (mise/starship/zinit/fzf/zoxide are excluded).
-        This is the default and what CI runs on every push/PR.
+        (mise/starship/zinit/fzf/zoxide are excluded). This is the default.
 
   full  Installs the pinned mise, starship, and zinit (with its pinned
         plugins) into an isolated HOME before measuring, so the

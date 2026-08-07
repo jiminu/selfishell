@@ -10,9 +10,8 @@ By default, update the Selfishell CLI release first, then synchronize all
 profile packages, approved tools, and managed configuration. Use --cli-only or
 --tools-only to limit the scope.
 --version selects an exact CLI release and cannot be used with --tools-only.
---skip-packages (also implied by SELFISHELL_OFFLINE=1) synchronizes managed
-configuration and pinned direct/mise tools without touching apt/Homebrew or
-the network for package operations.
+--skip-packages (also implied by SELFISHELL_OFFLINE=1) skips package and tool
+installation and applies managed configuration only.
 
 Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned
@@ -51,7 +50,7 @@ update_tools_and_configuration() {
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
-  profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
+  profile_load "$profile"
 
   if [[ "$skip_packages" == "1" ]]; then
     printf 'Skipping package installation.\n'

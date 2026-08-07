@@ -8,7 +8,7 @@ selfishell_scan_profile_packages() {
   local profile_platform="$5"
   local index package manager requirement key=""
 
-  profile_load "$profile" "${SELFISHELL_LOCAL_PROFILE:-}"
+  profile_load "$profile"
 
   for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
     [[ "${PROFILE_PLATFORMS[$index]}" == all || "${PROFILE_PLATFORMS[$index]}" == "$profile_platform" ]] || continue
