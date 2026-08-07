@@ -440,66 +440,6 @@ test_doctor_reports_dirty_zinit_plugin_checkout() {
   teardown_test_home
 }
 
-test_doctor_reports_insecure_completion_directory() {
-  local output completion_dir
-
-  setup_test_home
-  completion_dir="$HOME/.cache/selfishell/completions"
-  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
-  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
-  chmod +x "$TEST_ROOT/bin/apt"
-  chmod 0777 "$completion_dir"
-
-  set +e
-  output="$(
-    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
-      SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
-  )"
-  set -e
-
-  [[ "$output" == *'insecure permissions'* ]] ||
-    fail "Doctor did not report the insecure completion directory: $output"
-  [[ "$output" == *"$completion_dir"* ]] ||
-    fail "Doctor did not name the insecure completion directory: $output"
-  teardown_test_home
-}
-
-test_doctor_reports_secure_completion_directory() {
-  local output completion_dir
-
-  setup_test_home
-  completion_dir="$HOME/.cache/selfishell/completions"
-  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
-  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
-  chmod +x "$TEST_ROOT/bin/apt"
-  chmod 0755 "$completion_dir"
-
-  set +e
-  output="$(
-    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
-      SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
-  )"
-  set -e
-
-  [[ "$output" == *'Zsh completion directory: secure'* ]] ||
-    fail "Doctor did not report the completion directory as secure: $output"
-  teardown_test_home
-}
-
 # SELFISHELL_ROOT is resolved with parameter expansion rather than `dirname`,
 # and `${path%/*}` leaves a bare filename unchanged. Every invocation form has
 # to keep finding the repository root, including through chained symlinks.

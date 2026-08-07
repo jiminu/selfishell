@@ -20,17 +20,6 @@ zstyle ':completion:*' matcher-list \
 
 autoload -Uz compinit compaudit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
-SELFISHELL_COMPLETION_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
-[[ -d "$SELFISHELL_COMPLETION_DIR" ]] && fpath=("$SELFISHELL_COMPLETION_DIR" $fpath)
-SELFISHELL_COMPLETION_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
-SELFISHELL_COMPLETION_CACHE_READY=0
-
-selfishell_completion_prepare_cache() {
-  if [[ "$SELFISHELL_COMPLETION_CACHE_READY" == 0 ]]; then
-    command mkdir -p "$SELFISHELL_COMPLETION_CACHE_DIR" 2>/dev/null
-    SELFISHELL_COMPLETION_CACHE_READY=1
-  fi
-}
 
 # The (#q) glob qualifier is only recognized when EXTENDED_GLOB is set, and it
 # is off by default. Without it this test never globs, reports every dump as
@@ -52,7 +41,7 @@ elif _selfishell_zcompdump_is_stale "$ZCOMPDUMP"; then
   # default behavior block startup on a `read -q` prompt, or -u's blanket
   # "treat everything as secure" skip the scan entirely.
   if [[ -n "$(compaudit 2>/dev/null)" ]]; then
-    print -u2 "selfishell: insecure completion directories detected; run 'selfishell doctor' for details."
+    print -u2 "selfishell: insecure completion directories detected; run 'compaudit' for details."
     compinit -i -d "$ZCOMPDUMP"
   else
     compinit -d "$ZCOMPDUMP"
@@ -71,26 +60,21 @@ if (( $+functions[zinit] )); then
 fi
 
 if _selfishell_command_path kubectl >/dev/null; then
-  if [[ -r "$SELFISHELL_COMPLETION_DIR/_kubectl" ]]; then
-    autoload -Uz _kubectl
-    compdef _kubectl kubectl k
-  else
-    _selfishell_kubectl_completion() {
-      local completion_source
+  _selfishell_kubectl_completion() {
+    local completion_source
 
-      if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
-         [[ -n "$completion_source" ]]; then
-        if eval "$completion_source" && (( $+functions[_kubectl] )); then
-          unfunction _selfishell_kubectl_completion
-          compdef _kubectl kubectl k
-          _kubectl "$@"
-          return
-        fi
+    if completion_source="$(kubectl completion zsh 2>/dev/null)" &&
+       [[ -n "$completion_source" ]]; then
+      if eval "$completion_source" && (( $+functions[_kubectl] )); then
+        unfunction _selfishell_kubectl_completion
+        compdef _kubectl kubectl k
+        _kubectl "$@"
+        return
       fi
-      return 1
-    }
-    compdef _selfishell_kubectl_completion kubectl k
-  fi
+    fi
+    return 1
+  }
+  compdef _selfishell_kubectl_completion kubectl k
 fi
 
 if _selfishell_command_path aws >/dev/null && _selfishell_command_path aws_completer >/dev/null; then
@@ -103,7 +87,3 @@ if (( $+functions[zinit] )); then
   autoload -Uz _zinit
   compdef _zinit zinit
 fi
-
-unset SELFISHELL_COMPLETION_CACHE_READY
-unset SELFISHELL_COMPLETION_CACHE_DIR
-unset SELFISHELL_COMPLETION_DIR

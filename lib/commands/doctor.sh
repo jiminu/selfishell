@@ -85,46 +85,6 @@ doctor_report_zinit_plugins() {
   ((${#dirty[@]} > 0 || ${#drifted[@]} > 0)) || doctor_ok "Zsh plugins: provisioned"
 }
 
-# common/completion.zsh only re-runs the real compaudit scan once a day
-# (see SELFISHELL_COMPLETION_CACHE_DIR); this gives an on-demand answer for
-# the one completion directory Selfishell itself manages and adds to fpath,
-# without depending on that cache or on sourcing the user's full shell
-# startup (which would pull in whatever customizations they've added outside
-# the managed block).
-doctor_report_completion_security() {
-  local completion_dir="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell/completions"
-  local insecure
-
-  have_command zsh || return 0
-  # compaudit exits non-zero when it finds an insecure directory, and this
-  # runs under `set -e`, so the substitution's own failure must be caught
-  # here rather than left to abort the rest of doctor.
-  # compaudit reports every insecure entry across the whole fpath it is
-  # given, so fpath is replaced (not prepended) with just our own directory
-  # right before calling it -- otherwise this would also surface, and
-  # misattribute to $completion_dir, any insecure *system* completion
-  # directory this check has no business reporting on. `+X` force-loads
-  # compaudit's own definition first, while fpath still has zsh's real
-  # default (compaudit is itself autoloaded from there); without it,
-  # restricting fpath beforehand would leave compaudit unable to find its
-  # own function body.
-  insecure="$(
-    zsh -f -c '
-      [[ -d "$1" ]] || exit 0
-      autoload -Uz +X compaudit
-      fpath=("$1")
-      compaudit
-    ' _ "$completion_dir" 2>/dev/null
-  )" || true
-  if [[ -n "$insecure" ]]; then
-    doctor_error "Zsh completion directory has insecure permissions: $completion_dir"
-    printf "        Fix with: chmod g-w,o-w %s\n" "$completion_dir"
-    DOCTOR_RESULT="$SELFISHELL_EXIT_ERROR"
-    return
-  fi
-  doctor_ok "Zsh completion directory: secure"
-}
-
 command_doctor() {
   require_no_arguments doctor "$@" || return
 
@@ -215,7 +175,6 @@ command_doctor() {
     DOCTOR_RESULT="$result"
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" doctor_report_package "$profile_platform"
     doctor_report_zinit_plugins
-    doctor_report_completion_security
     result="$DOCTOR_RESULT"
   fi
 
