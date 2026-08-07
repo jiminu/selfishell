@@ -1,8 +1,9 @@
 # Shell Performance
 
-Selfishell measures shell startup and small CLI commands on every Ubuntu and
-macOS CI run. The benchmark uses an isolated temporary `HOME`; it never reads or
-changes the developer's shell configuration.
+Selfishell can measure shell startup and small CLI commands with
+`scripts/benchmark.sh`, run manually when needed. The benchmark uses an
+isolated temporary `HOME`; it never reads or changes the developer's shell
+configuration.
 
 Run it locally with:
 
@@ -23,7 +24,7 @@ interactive Zsh through the platform `.zshrc`.
 
 ### Base mode
 
-Base mode is the default, and what CI runs on every push/PR. It measures
+Base mode is the default. It measures
 Selfishell's own startup cost independent of external integrations: Starship,
 fzf, zoxide, and Zinit are excluded even if they are installed on the caller's
 `PATH`. The fixed benchmark path makes results independent of tools installed
@@ -52,10 +53,8 @@ the runner's `PATH`. It:
   packages is out of scope for this script, so provision them via the
   platform package manager first;
 - needs network access to provision those tools, so it is not part of the
-  regular (network-free) unit test suite;
-- runs in CI as its own `shell-full-profile-benchmark` job (Ubuntu only,
-  after installing fzf/zoxide via `apt`), separate from the base benchmark
-  that runs on every push/PR.
+  regular (network-free) unit test suite, or run in CI -- run it locally
+  when needed.
 
 `common-first` is the once-per-day completion cache generation cost.
 `common-cached` and `interactive-cached` represent ordinary warm startup. The
@@ -77,31 +76,13 @@ only for this additional diagnostic startup, after every reported metric and
 budget check has completed. It adds no code or dependency to ordinary shell
 startup and does not enforce a performance threshold.
 
-## CI budgets
+## Budgets
 
-CI currently records budget overruns as warnings rather than failures:
-`SELFISHELL_BENCHMARK_ENFORCE` defaults to `0`, so a miss is reported as an
-observation, never a failing check. The base benchmark is the only one with
-budget thresholds currently configured; shared GitHub runners vary in speed,
-so those initial budgets are deliberately broad:
-
-| Metric p95 | Ubuntu | macOS |
-| --- | ---: | ---: |
-| Common configuration | 50 ms | 50 ms |
-| Interactive startup | 150 ms | 200 ms |
-| CLI version/help | 50 ms | 50 ms |
-
-The full-profile benchmark runs under the same warn-only policy
-(`SELFISHELL_BENCHMARK_ENFORCE=0`) but does not currently set any
-`*_P95_MAX_MS` variable, so it reports metrics for comparison without
-budget-overrun warnings.
-
-Each base run uploads a TSV artifact named `shell-performance-<platform>` (one
-per OS in the CI matrix). The Ubuntu `shell-performance-full-profile` artifact
-contains both `selfishell-benchmark-full.tsv` and the diagnostic
-`selfishell-startup.zprof`. These results establish platform-specific baselines
-before budgets become blocking. Set `SELFISHELL_BENCHMARK_ENFORCE=1` to make an
-overrun fail locally or in CI.
+Budgets are opt-in and unset by default. `SELFISHELL_BENCHMARK_ENFORCE`
+defaults to `0`, so a budget miss is reported as an observation rather than a
+failing check; set it to `1` to make an overrun fail. Set any of the
+`*_P95_MAX_MS` variables below to check a metric against a threshold you
+choose.
 
 The budget variables are:
 

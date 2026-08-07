@@ -130,14 +130,9 @@ preflight_mise_global_config() {
   preflight_atomic_user_file_once "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml" "user mise config"
 }
 
-preflight_nvim_user_extension() {
-  preflight_atomic_user_file_once "$SELFISHELL_CONFIG_DIR/nvim.user.lua" "user Neovim LSP extension"
-}
-
 # Atomically creates $target_file with the content read from stdin, but
 # only if it doesn't already exist -- Selfishell never edits or removes it
-# afterward. Shared by every "create once on install, then it's entirely the
-# user's" file: install_mise_global_config and install_nvim_user_extension.
+# afterward. Used by install_mise_global_config.
 install_atomic_user_file_once() {
   local dry_run="$1"
   local target_file="$2"
@@ -192,24 +187,6 @@ install_atomic_user_file_once() {
 install_mise_global_config() {
   install_atomic_user_file_once "$1" "${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml" "user mise config" \
     </dev/null
-}
-
-install_nvim_user_extension() {
-  install_atomic_user_file_once "$1" "$SELFISHELL_CONFIG_DIR/nvim.user.lua" "user Neovim LSP extension" <<'EOF'
--- Optional Neovim LSP servers, on top of Selfishell's defaults (lua_ls,
--- pyright, bashls, ts_ls). Selfishell never edits or removes this file.
---
--- Uncomment an entry to enable a server. Names must match what
--- mason-lspconfig / nvim-lspconfig expect (clangd, jdtls, gopls, ...).
--- Selfishell looks up the server's filetypes in nvim-lspconfig automatically;
--- add `filetypes = { ... }` yourself only to override that.
-
-return {
-  -- servers = {
-  --   clangd = {},
-  -- },
-}
-EOF
 }
 
 command_install() {
@@ -268,7 +245,6 @@ command_install() {
   profile_load "$profile" "$local_profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return
-    preflight_nvim_user_extension || return
   fi
 
   if [[ "$platform" == "macos" ]]; then
@@ -305,7 +281,6 @@ command_install() {
   install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
   if [[ "$profile" == "developer" ]]; then
     install_mise_global_config "$dry_run" || return
-    install_nvim_user_extension "$dry_run" || return
   fi
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return

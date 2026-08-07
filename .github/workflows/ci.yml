@@ -63,11 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            interactive_p95_budget_ms: 150
-          - os: macos-latest
-            interactive_p95_budget_ms: 200
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Check out repository
@@ -87,62 +83,6 @@ jobs:
       - name: Run checks
         if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         run: bash scripts/check.sh
-
-      - name: Measure shell performance and warn on regressions
-        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
-        env:
-          # Budgets are advisory: hosted-runner noise makes them unreliable
-          # as a hard gate, so a budget miss is reported as a CI warning
-          # annotation rather than failing the job. Set to 1 to enforce.
-          SELFISHELL_BENCHMARK_ENFORCE: 0
-          SELFISHELL_BENCHMARK_COMMON_P95_MAX_MS: 50
-          SELFISHELL_BENCHMARK_HELP_P95_MAX_MS: 50
-          SELFISHELL_BENCHMARK_INTERACTIVE_P95_MAX_MS: ${{ matrix.interactive_p95_budget_ms }}
-          SELFISHELL_BENCHMARK_RESULTS_FILE: ${{ runner.temp }}/selfishell-benchmark.tsv
-          SELFISHELL_BENCHMARK_VERSION_P95_MAX_MS: 50
-        run: bash scripts/benchmark.sh
-
-      - name: Upload performance result
-        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: shell-performance-${{ runner.os }}
-          path: ${{ runner.temp }}/selfishell-benchmark.tsv
-
-  shell-full-profile-benchmark:
-    name: Measure full-profile shell performance (warn-only)
-    needs: changes
-    if: needs.changes.outputs.runtime == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install shell tooling and profile integrations
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh fzf zoxide
-
-      - name: Measure full-profile shell performance
-        env:
-          # Same advisory policy as the base benchmark above: this mode
-          # additionally provisions the pinned mise/starship/zinit (with
-          # its pinned plugins) so the numbers reflect a real developer
-          # startup, not just what happens to be on the runner's PATH.
-          SELFISHELL_BENCHMARK_ENFORCE: 0
-          SELFISHELL_BENCHMARK_RESULTS_FILE: ${{ runner.temp }}/selfishell-benchmark-full.tsv
-          SELFISHELL_BENCHMARK_ZPROF_FILE: ${{ runner.temp }}/selfishell-startup.zprof
-        run: bash scripts/benchmark.sh --mode full
-
-      - name: Upload full-profile performance result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: shell-performance-full-profile
-          path: |
-            ${{ runner.temp }}/selfishell-benchmark-full.tsv
-            ${{ runner.temp }}/selfishell-startup.zprof
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 container installation E2E

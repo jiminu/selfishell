@@ -73,8 +73,6 @@ Perform this section only in Publish mode after the complete gate passes.
 5. Do not separately push the tag first. If the atomic push fails, inspect and report local versus remote state before attempting anything else.
 6. Monitor the Release workflow through the available GitHub integration or `gh`. Report the run URL and the first failing job or step if it does not complete successfully.
 
-The automated dependency patch path is separate: a qualifying merge from `automation/dependency-updates` dispatches the release workflow itself. Do not add a redundant manual version commit or tag to that path.
-
 ## Verify the published release
 
 After a successful workflow, run:

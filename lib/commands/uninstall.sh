@@ -171,7 +171,7 @@ uninstall_purge() {
   rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
   printf '%s\n' \
     'Selfishell configuration, CLI, releases, cache, and state removed.' \
-    'User-owned files it created once and never manages, such as nvim.user.lua and the mise config.toml, are left in place.'
+    'User-owned files it created once and never manages, such as the mise config.toml, are left in place.'
 }
 
 command_uninstall() {

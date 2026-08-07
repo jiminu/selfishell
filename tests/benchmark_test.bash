@@ -6,10 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
 # These only exercise argument parsing and --mode base (no external
-# integrations, no network); --mode full is covered live by the
-# shell-full-profile-benchmark CI job, not here, since it provisions real
-# tools over the network and would make the regular test suite
-# network-dependent.
+# integrations, no network); --mode full provisions real tools over the
+# network, so it's exercised manually (bash scripts/benchmark.sh --mode full)
+# rather than here, which would make the regular test suite network-dependent.
 
 test_benchmark_rejects_unknown_mode() {
   local status=0

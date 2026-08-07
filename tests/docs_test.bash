@@ -113,27 +113,11 @@ test_profile_table_boundaries_match_profile_files() {
   return 0
 }
 
-# AGENTS.md's automatic dependency-release rule must match the actual gate
-# (scripts/verify-dependency-release-diff.sh), which allows dependencies.conf
-# plus the two Zsh pin files rather than requiring dependencies.conf alone.
-test_agents_dependency_release_rule_matches_current_gate() {
-  grep -Fq 'sole changed' "$ROOT_DIR/AGENTS.md" &&
-    fail "AGENTS.md still describes the old dependencies.conf-only release gate"
-  grep -Fq 'common/completion.zsh' "$ROOT_DIR/AGENTS.md" ||
-    fail "AGENTS.md does not mention the Zsh pin files the release gate now allows"
-  grep -Fq 'common/interactive.zsh' "$ROOT_DIR/AGENTS.md" ||
-    fail "AGENTS.md does not mention the Zsh pin files the release gate now allows"
-}
-
 test_performance_docs_document_full_benchmark_mode() {
   grep -Fq -- '--mode full' "$ROOT_DIR/docs/PERFORMANCE.md" ||
     fail "docs/PERFORMANCE.md does not document scripts/benchmark.sh --mode full"
   grep -Fq 'SELFISHELL_BENCHMARK_PROFILE' "$ROOT_DIR/docs/PERFORMANCE.md" ||
     fail "docs/PERFORMANCE.md does not document the SELFISHELL_BENCHMARK_PROFILE env var"
-  grep -Fq 'shell-full-profile-benchmark' "$ROOT_DIR/docs/PERFORMANCE.md" ||
-    fail "docs/PERFORMANCE.md does not name the full-profile benchmark's CI job"
-  grep -Fq 'shell-performance-full-profile' "$ROOT_DIR/docs/PERFORMANCE.md" ||
-    fail "docs/PERFORMANCE.md does not name the full-profile benchmark's artifact"
 }
 
 test_release_procedures_use_published_release_verifier() {
