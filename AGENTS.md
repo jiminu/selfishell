@@ -104,8 +104,7 @@ the explicit lightweight choice. Ghostty is a separate saved macOS installation
 choice.
 
 The developer profile's mise-managed tools are declared in `common/mise.toml`;
-treat that file as the source of truth. Do not delete legacy NVM or pyenv data
-during migration.
+treat that file as the source of truth.
 
 `--skip-packages` must skip package and tool installation and apply managed
 configuration only; only `update --tools-only --skip-packages` is also

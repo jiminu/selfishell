@@ -201,12 +201,6 @@ command_doctor() {
         fi
         result="$SELFISHELL_EXIT_ERROR"
       fi
-      if [[ -d "$HOME/.nvm" ]]; then
-        doctor_info "Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"
-      fi
-      if [[ -d "$HOME/.pyenv" ]]; then
-        doctor_info "Legacy runtime manager detected: $HOME/.pyenv (preserved; mise is active)"
-      fi
     fi
     case "$platform" in
       ubuntu | ubuntu-wsl)

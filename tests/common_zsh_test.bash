@@ -14,7 +14,6 @@ test_minimal_profile_initializes_git_completion_without_zinit() {
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         (( $+functions[_git] ))
         [[ -s "$HOME/.zcompdump" ]]
@@ -50,7 +49,6 @@ EOF
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -99,7 +97,6 @@ EOF
       ZDOTDIR="" \
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -142,7 +139,6 @@ EOF
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -169,7 +165,6 @@ test_completion_audits_the_dump_once_a_day() {
       ZDOTDIR="$HOME" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -i -c '
-        load_nvm() { :; }
         zmodload zsh/zprof
         source "$1"
         zprof
@@ -211,7 +206,6 @@ run_completion_startup_probe() {
     ZDOTDIR="$HOME" \
     PATH="/usr/bin:/bin" \
     /bin/zsh -f -i -c '
-      load_nvm() { :; }
       source "$1"
       print STARTUP_COMPLETE
     ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
@@ -320,7 +314,6 @@ test_non_wsl_command_lookup_uses_native_path_semantics() {
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         cd "$2"
         path=("" ../relative-bin "$3" /usr/bin /bin)
@@ -404,7 +397,6 @@ test_update_notice_reads_installed_version_file() {
     PATH="$fake_root/bin:/usr/bin:/bin" \
       ZDOTDIR="" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         _selfishell_current_version
       ' zsh "$ROOT_DIR/common/common.zsh"
@@ -440,7 +432,6 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
       ZDOTDIR="" \
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         ! _selfishell_version_is_newer 0.1.0-beta.9 0.1.0-beta.12
         _selfishell_version_is_newer 0.1.0-beta.13 0.1.0-beta.12

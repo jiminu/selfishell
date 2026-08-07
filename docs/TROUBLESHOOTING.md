@@ -23,12 +23,6 @@ reached, it reports `Available: unavailable` and continues with local checks.
 It returns nonzero when required tools are missing or managed configuration is
 missing or changed. It does not modify files.
 
-After changing an existing `developer` installation to mise, `doctor` may
-report preserved `~/.nvm` or `~/.pyenv` directories. This is informational:
-Selfishell no longer initializes those managers, but does not delete their
-installed runtimes, global packages, or virtual environments. Verify the mise
-replacement before removing legacy data manually.
-
 ## Restricted Network
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
