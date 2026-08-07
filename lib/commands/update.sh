@@ -40,9 +40,14 @@ update_tools_and_configuration() {
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
   confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return
+  platform="$(detect_platform)"
   managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
   managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
-  platform="$(detect_platform)"
+  case "$platform" in
+    ubuntu | ubuntu-wsl)
+      managed_preflight_block_target user-zshenv "$HOME/.zshenv" "$assume_yes" "$dry_run" || return
+      ;;
+  esac
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_preflight_block_target user-ghostty \

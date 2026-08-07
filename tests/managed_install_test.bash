@@ -75,13 +75,13 @@ test_install_copies_configuration_and_tracks_resources() {
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Zsh startup file is not user-owned"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Zsh loader start marker is missing"
   grep -Fqx 'original zshrc' "$HOME/.zshrc" || fail "Original Zsh configuration was not preserved"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" "$HOME/.zshenv"
+  [[ -f "$HOME/.zshenv" && ! -L "$HOME/.zshenv" ]] || fail "Zsh env file is not user-owned"
+  grep -Fqx '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Zshenv block start marker is missing"
+  grep -Fqx 'skip_global_compinit=1' "$HOME/.zshenv" || fail "Zshenv block body is missing"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
   cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
-  cmp -s "$ROOT_DIR/common/zshenv" "$XDG_CONFIG_HOME/selfishell/zsh/zshenv" ||
-    fail "zshenv was not copied"
   cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
     fail "Runtime Zsh module was not copied"
   cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
@@ -100,9 +100,9 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader was not recorded as a managed block"
 
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 15 zsh/starship/mise/vim resources + 5 user links/blocks
-  # = 20 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
-  [[ "$state_count" -eq 20 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
+  # 14 zsh/starship/mise/vim resources + 5 user links/blocks
+  # = 19 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
+  [[ "$state_count" -eq 19 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -753,6 +753,89 @@ test_unrelated_zprofile_symlink_is_rejected_without_changes() {
   assert_file_content 'dotfiles zprofile' "$TEST_ROOT/dotfiles-zprofile"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
   [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
+}
+
+test_install_preserves_existing_zshenv_content_on_ubuntu() {
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshenv.state"
+
+  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
+  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  [[ -f "$HOME/.zshenv" && ! -L "$HOME/.zshenv" ]] || fail "Zsh env file is not user-owned"
+  grep -Fqx '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Zshenv block start marker is missing"
+  grep -Fqx 'skip_global_compinit=1' "$HOME/.zshenv" || fail "Zshenv block body is missing"
+  # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
+  grep -Fqx '. "$HOME/.cargo/env"' "$HOME/.zshenv" || fail "Original .zshenv content was not preserved"
+  [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
+    fail "Zshenv block marker appears more than once"
+  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Zshenv resource was not recorded as a managed block"
+}
+
+test_reinstall_does_not_duplicate_zshenv_block() {
+  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
+  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell update --tools-only --skip-packages --yes >/dev/null
+
+  [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
+    fail "Reinstall/update duplicated the Zshenv block marker"
+  # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
+  grep -Fqx '. "$HOME/.cargo/env"' "$HOME/.zshenv" || fail "Original .zshenv content was lost across reinstall/update"
+}
+
+test_uninstall_preserves_zshenv_user_content() {
+  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
+  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell uninstall --yes >/dev/null
+
+  ! grep -Fq '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Uninstall did not remove the Zshenv block"
+  # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
+  assert_file_content '. "$HOME/.cargo/env"' "$HOME/.zshenv"
+}
+
+test_unrelated_zshenv_symlink_is_rejected_without_changes() {
+  local status
+
+  printf 'dotfiles zshenv\n' >"$TEST_ROOT/dotfiles-zshenv"
+  ln -s "$TEST_ROOT/dotfiles-zshenv" "$HOME/.zshenv"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Zshenv symlink should stop installation"
+  assert_symlink_to "$TEST_ROOT/dotfiles-zshenv" "$HOME/.zshenv"
+  assert_file_content 'dotfiles zshenv' "$TEST_ROOT/dotfiles-zshenv"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
+}
+
+test_macos_install_does_not_manage_zshenv() {
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell update --tools-only --skip-packages --yes >/dev/null
+
+  [[ ! -e "$HOME/.zshenv" ]] || fail "macOS install/update created ~/.zshenv"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/resources/user-zshenv.state" ]] ||
+    fail "macOS install/update created a user-zshenv managed state"
+
+  # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
+  printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
+  run_selfishell update --tools-only --skip-packages --yes >/dev/null
+  run_selfishell uninstall --yes >/dev/null
+
+  # shellcheck disable=SC2016 # Literal comparison against the unexpanded fixture line above.
+  assert_file_content '. "$HOME/.cargo/env"' "$HOME/.zshenv"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/resources/user-zshenv.state" ]] ||
+    fail "macOS update created a user-zshenv managed state for an existing file"
 }
 
 test_malformed_managed_file_state_variants_are_rejected_without_changes() {
@@ -1720,6 +1803,34 @@ test_update_ghostty_preflight_stops_before_other_resources_change() {
     fail "Ghostty preflight failure ran shell-tool cache cleanup"
   ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
     fail "Ghostty preflight failure printed a success message"
+}
+
+test_update_zshenv_preflight_stops_before_other_resources_change() {
+  local before_zshrc
+  local before_vimrc_state
+  local status
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  rm -f "$HOME/.zshenv"
+  ln -s "$TEST_ROOT/dotfiles-zshenv" "$HOME/.zshenv"
+  printf 'dotfiles zshenv\n' >"$TEST_ROOT/dotfiles-zshenv"
+  before_zshrc="$(<"$HOME/.zshrc")"
+  before_vimrc_state="$(<"$XDG_STATE_HOME/selfishell/resources/vimrc.state")"
+
+  set +e
+  run_selfishell update --tools-only --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Zshenv preflight should stop update"
+  assert_symlink_to "$TEST_ROOT/dotfiles-zshenv" "$HOME/.zshenv"
+  [[ "$(<"$HOME/.zshrc")" == "$before_zshrc" ]] ||
+    fail "Zshenv preflight failure changed the Zsh loader block"
+  [[ "$(<"$XDG_STATE_HOME/selfishell/resources/vimrc.state")" == "$before_vimrc_state" ]] ||
+    fail "Zshenv preflight failure changed an unrelated managed file's state"
+  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+    fail "Zshenv preflight failure printed a success message"
 }
 
 test_update_ghostty_preflight_rejects_directory_before_other_resources_change() {
