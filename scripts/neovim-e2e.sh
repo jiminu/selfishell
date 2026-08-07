@@ -159,8 +159,20 @@ fi
 # already on disk, so this exercises the ordinary FileType flow (no in-flight
 # install, no dropped-guarantee gap) and confirms rainbow-delimiters attaches
 # the way it does for every already-installed language in normal use.
+#
+# vim.treesitter.start() attaches a LanguageTree but -- like any fresh one --
+# doesn't parse it immediately; that happens lazily, normally the next time
+# Neovim redraws the screen. rainbow-delimiters' own FileType-time attach (see
+# rainbow-delimiters.nvim's plugin/rainbow-delimiters.lua) runs synchronously
+# right after and reads whatever tree state exists at that instant, so in a
+# real interactive session the redraw that follows startup is what makes the
+# first highlight appear; headless has no such redraw to fall back on. Calling
+# parser:parse() directly is what a real redraw would trigger internally
+# (vim.treesitter.highlighter's decoration-provider callbacks call it too) --
+# it fires the same on_changedtree callback rainbow-delimiters already
+# registered when it attached, which is what actually populates its marks.
 if ! rainbow_smoke_output="$(nvim --headless "$TEST_ROOT/main.py" \
-  '+lua local bufnr = vim.api.nvim_get_current_buf(); assert(vim.bo.filetype == "python", "unexpected filetype: " .. vim.bo.filetype); assert(pcall(vim.treesitter.get_parser, bufnr, "python"), "Python parser was not already installed for the second process"); local rainbow = require("rainbow-delimiters.lib"); local attached = vim.wait(5000, function() local settings = rainbow.buffers[bufnr]; if not settings then return false end; local marks = vim.api.nvim_buf_get_extmarks(bufnr, rainbow.nsids.python, 0, -1, { details = true }); for _, mark in ipairs(marks) do local hl = mark[4].hl_group; if type(hl) == "string" and hl:find("RainbowDelimiter", 1, true) == 1 then return true end end return false end); assert(attached, "rainbow-delimiters did not highlight a Python buffer with an already-installed parser"); print("Rainbow-delimiters smoke: OK")' \
+  '+lua local bufnr = vim.api.nvim_get_current_buf(); assert(vim.bo.filetype == "python", "unexpected filetype: " .. vim.bo.filetype); local parser_ok, parser = pcall(vim.treesitter.get_parser, bufnr, "python"); assert(parser_ok, "Python parser was not already installed for the second process"); parser:parse(); local rainbow = require("rainbow-delimiters.lib"); local attached = vim.wait(5000, function() local settings = rainbow.buffers[bufnr]; if not settings then return false end; local marks = vim.api.nvim_buf_get_extmarks(bufnr, rainbow.nsids.python, 0, -1, { details = true }); for _, mark in ipairs(marks) do local hl = mark[4].hl_group; if type(hl) == "string" and hl:find("RainbowDelimiter", 1, true) == 1 then return true end end return false end); assert(attached, "rainbow-delimiters did not highlight a Python buffer with an already-installed parser"); print("Rainbow-delimiters smoke: OK")' \
   +qa 2>&1)"; then
   printf '%s\n' "$rainbow_smoke_output" >&2
   fail "Rainbow-delimiters smoke failed"
