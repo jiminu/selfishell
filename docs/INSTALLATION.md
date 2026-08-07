@@ -74,16 +74,14 @@ release for offline rollback and removes older inactive releases.
 
 ### Install configuration without network access
 
-For offline configuration after the CLI is provisioned:
+For configuration-only installation after the CLI is provisioned:
 
 ```sh
-SELFISHELL_OFFLINE=1 selfishell install --profile developer --yes
-# or
 selfishell install --profile developer --skip-packages --yes
 ```
 
-`SELFISHELL_OFFLINE=1` and `--skip-packages` perform configuration-only
-installation without package or network commands.
+`--skip-packages` performs configuration-only installation without package or
+network commands.
 
 ## Zsh integration
 

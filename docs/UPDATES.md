@@ -6,7 +6,6 @@ same command so packages newly added to that release's profile are included.
 
 ```sh
 selfishell status
-selfishell status --check-package-updates
 selfishell update --yes
 selfishell update --cli-only --yes
 selfishell update --tools-only --yes
@@ -23,19 +22,16 @@ opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only installation skips this phase.
 
-`SELFISHELL_OFFLINE=1` and `--skip-packages` skip package and tool
-installation and apply managed configuration only, the same contract
-`selfishell install` follows.
+`--skip-packages` skips package and tool installation and applies managed
+configuration only, the same contract `selfishell install` follows.
 
-The normal `status` command checks the latest CLI release metadata and reports
-it as `Available`. If offline mode is enabled or the metadata lookup fails, it
-reports `Available: unavailable` and continues with local status checks.
+`status` reports local CLI, rollback, profile, and managed-resource state
+only; it never checks the network. Use `selfishell version --available` to
+check the latest published release, or rely on the automatic update notice.
 
-`status --check-package-updates` reads Homebrew's outdated inventory or Apt's
-local upgradable inventory and reports `Update: available` without installing
-anything or refreshing package indexes. The normal `status` command does not run
-these slower package-manager queries. Use `brew upgrade` or the operating
-system's Apt upgrade policy to apply system package updates explicitly.
+`status` does not check Apt or Homebrew for available package updates. Use
+`brew upgrade` or the operating system's Apt upgrade policy to apply system
+package updates explicitly.
 
 The CLI phase downloads a versioned platform archive, verifies its published
 SHA-256 checksum, retains the active release, and switches `current` only after

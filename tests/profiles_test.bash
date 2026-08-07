@@ -19,7 +19,7 @@ setup_profile_home() {
 }
 
 teardown_profile_home() {
-  unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
+  unset XDG_CONFIG_HOME XDG_STATE_HOME
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
   teardown_test_home
@@ -102,16 +102,6 @@ test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
     fail "Minimal macOS profile is missing fonts"
   [[ "$output" == *'optional Homebrew cask: ghostty'* ]] ||
     fail "Ghostty was not included in the macOS dry run"
-}
-
-test_offline_mode_skips_package_operations() {
-  local output
-  export SELFISHELL_OFFLINE=1
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
-
-  [[ "$output" == *'Skipping package installation.'* ]] || fail "Offline mode did not skip packages"
-  [[ "$output" != *'Would install required apt packages'* ]] ||
-    fail "Offline mode attempted package operations"
 }
 
 test_unknown_profile_returns_usage_error() {

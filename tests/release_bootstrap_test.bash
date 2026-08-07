@@ -67,7 +67,7 @@ setup_release_home() {
 teardown_release_home() {
   unset SELFISHELL_RELEASE_ROOT SELFISHELL_RELEASE_API_URL SELFISHELL_RELEASE_TAGS_API_URL
   unset SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
-  unset XDG_CONFIG_HOME XDG_STATE_HOME SELFISHELL_OFFLINE
+  unset XDG_CONFIG_HOME XDG_STATE_HOME
   unset SELFISHELL_CURL_CONNECT_TIMEOUT SELFISHELL_CURL_LOW_SPEED_LIMIT
   unset SELFISHELL_CURL_LOW_SPEED_TIME SELFISHELL_CURL_METADATA_MAX_TIME
   unset SELFISHELL_TEST_SYSTEM_NAME SELFISHELL_TEST_MACHINE_ARCH
@@ -212,66 +212,12 @@ test_update_falls_back_to_published_prerelease() {
   assert_symlink_to 'releases/0.3.0-beta.2' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 
-test_status_falls_back_to_published_prerelease() {
-  local output version
-  version="$(<"$ROOT_DIR/VERSION")"
-  run_bootstrap --version "$version" >/dev/null
-  SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
-    install --profile minimal --skip-packages --yes >/dev/null
-  rm "$TEST_ROOT/releases/latest/download/VERSION"
-  printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"
-  export SELFISHELL_RELEASE_TAGS_API_URL="file://$TEST_ROOT/tags-api.json"
-
-  output="$("$TEST_ROOT/prefix/bin/selfishell" status)" || true
-
-  [[ "$output" == *"[CLI] Current: $version | Rollback: none | Available: 0.3.0-beta.2"* ]] ||
-    fail "Status did not report the published prerelease"
-}
-
-test_status_checks_latest_release_by_default() {
-  local output version
-  version="$(<"$ROOT_DIR/VERSION")"
-  run_bootstrap --version "$version" >/dev/null
-  SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
-    install --profile minimal --skip-packages --yes >/dev/null
-
-  output="$("$TEST_ROOT/prefix/bin/selfishell" status)" || true
-
-  [[ "$output" == *"[CLI] Current: $version | Rollback: none | Available: 0.2.3"* ]] ||
-    fail "Status did not check the latest release by default"
-}
-
-test_status_release_lookup_failure_is_non_fatal() {
-  local available_output available_status unavailable_output unavailable_status version
-  version="$(<"$ROOT_DIR/VERSION")"
-  run_bootstrap --version "$version" >/dev/null
-  SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
-    install --profile minimal --skip-packages --yes >/dev/null
-
-  set +e
-  available_output="$("$TEST_ROOT/prefix/bin/selfishell" status 2>&1)"
-  available_status=$?
-  unavailable_output="$(SELFISHELL_RELEASE_ROOT='file:///unavailable' \
-    "$TEST_ROOT/prefix/bin/selfishell" status 2>&1)"
-  unavailable_status=$?
-  set -e
-
-  [[ "$available_output" == *"Available: 0.2.3"* ]] ||
-    fail "Status success fixture did not report the available release"
-  [[ "$unavailable_output" == *"Available: unavailable"* ]] ||
-    fail "Status did not report an unavailable release lookup"
-  [[ "$unavailable_output" != *"Unable to check"* ]] ||
-    fail "Status printed an error for a non-fatal release lookup failure"
-  [[ "$unavailable_status" -eq "$available_status" ]] ||
-    fail "Release lookup failure changed the local status result"
-}
-
-test_status_offline_skips_release_lookup() {
+test_status_does_not_use_network() {
   local fake_bin="$TEST_ROOT/fakebin"
   local output version
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
-  SELFISHELL_OFFLINE=1 "$TEST_ROOT/prefix/bin/selfishell" \
+  "$TEST_ROOT/prefix/bin/selfishell" \
     install --profile minimal --skip-packages --yes >/dev/null
   mkdir -p "$fake_bin"
   cat >"$fake_bin/curl" <<'EOF'
@@ -281,12 +227,12 @@ exit 1
 EOF
   chmod +x "$fake_bin/curl"
 
-  output="$(PATH="$fake_bin:$PATH" SELFISHELL_OFFLINE=1 \
-    "$TEST_ROOT/prefix/bin/selfishell" status)" || true
+  output="$(PATH="$fake_bin:$PATH" "$TEST_ROOT/prefix/bin/selfishell" status)" || true
 
-  [[ "$output" == *"Available: unavailable"* ]] ||
-    fail "Offline status did not report release availability as unavailable"
-  [[ ! -e "$HOME/curl-calls" ]] || fail "Offline status attempted a release lookup"
+  [[ ! -e "$HOME/curl-calls" ]] || fail "status invoked curl"
+  [[ "$output" == *"[CLI] Current: $version | Rollback: none"* ]] ||
+    fail "status did not report Current/Rollback: $output"
+  [[ "$output" != *'Available'* ]] || fail "status still reports an Available field: $output"
 }
 
 test_status_rejects_removed_check_updates_option() {
@@ -348,7 +294,7 @@ test_cli_update_and_offline_rollback() {
   [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
     fail "CLI update pruned the rollback release"
   output="$("$TEST_ROOT/prefix/bin/selfishell" status 2>&1)" || true
-  [[ "$output" == *"[CLI] Current: 0.2.3 | Rollback: $version | Available: 0.2.3"* ]] ||
+  [[ "$output" == *"[CLI] Current: 0.2.3 | Rollback: $version"* ]] ||
     fail "Status did not report the retained rollback release"
 
   SELFISHELL_RELEASE_ROOT='file:///unavailable' \
@@ -356,7 +302,7 @@ test_cli_update_and_offline_rollback() {
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
   assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/previous"
   output="$("$TEST_ROOT/prefix/bin/selfishell" status 2>&1)" || true
-  [[ "$output" == *"[CLI] Current: $version | Rollback: 0.2.3 | Available: 0.2.3"* ]] ||
+  [[ "$output" == *"[CLI] Current: $version | Rollback: 0.2.3"* ]] ||
     fail "Status did not update the rollback release after rollback"
 }
 
@@ -1062,9 +1008,8 @@ test_add_to_path_selects_zshrc() {
   grep -Fq "$TEST_ROOT/prefix/bin" "$HOME/.zshrc" || fail "Zsh PATH entry is missing"
 }
 
-test_setup_is_explicit_and_can_run_offline() {
-  export SELFISHELL_OFFLINE=1
-  run_bootstrap --setup --yes >/dev/null
+test_setup_is_explicit_and_can_skip_packages() {
+  run_bootstrap --setup --yes --skip-packages >/dev/null
 
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Setup did not create a user-owned .zshrc"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Setup did not add the Zsh loader"

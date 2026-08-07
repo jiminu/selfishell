@@ -1091,7 +1091,7 @@ test_pending_file_state_recovers_before_backup() {
   mkdir -p "$(dirname "$target_file")" "$state_dir"
   printf 'preexisting managed path' >"$target_file"
   {
-    printf '1\nfile\npending\n%s\n-\n%s\n%s\n' \
+    printf '2\nfile\npending\n%s\n-\n%s\n%s\n' \
       "$target_file" \
       "$backup_file" \
       "$(cksum <"$ROOT_DIR/common/common.zsh" | awk '{print $1 ":" $2}')"

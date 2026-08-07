@@ -88,8 +88,8 @@ Preserve these lifecycle invariants:
 - Never execute an unversioned remote release payload as the installer.
 - Avoid `sudo` for Selfishell files; use it only for system package operations
   that require it.
-- Respect `HOME`, XDG variables, proxy variables, offline mode, and
-  non-interactive execution.
+- Respect `HOME`, XDG variables, proxy variables, and non-interactive
+  execution.
 - Never store credentials, internal URLs, kubeconfigs, or user-specific secrets
   in the public repository.
 - Do not claim platform support without automated or documented verification.
@@ -104,12 +104,13 @@ the explicit lightweight choice. Ghostty is a separate saved macOS installation
 choice.
 
 The developer profile's mise-managed tools are declared in `common/mise.toml`;
-treat that file as the source of truth. Do not delete legacy NVM or pyenv data
-during migration.
+treat that file as the source of truth.
 
-`--skip-packages` and `SELFISHELL_OFFLINE=1` must perform configuration-only
-installation without package or network commands. `optional` packages are
-attempted automatically but remain non-fatal.
+`--skip-packages` must skip package and tool installation and apply managed
+configuration only; only `update --tools-only --skip-packages` is also
+network-free, since `update`'s CLI-release phase can otherwise still reach
+the network. `optional` packages are attempted automatically but remain
+non-fatal.
 
 Automated dependency discovery may open a review PR but must never auto-merge
 or auto-publish a release. A maintainer reviews and merges
@@ -148,8 +149,8 @@ The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, and the
 test suite. Tests must use a temporary `HOME` and must never install against or
 modify the developer's real home directory. Behavioral changes require tests,
 especially for empty/existing paths, repeated operations, interruptions,
-unsupported platforms, offline behavior, uninstall, restore, update, and
-rollback.
+unsupported platforms, --skip-packages behavior, uninstall, restore, update,
+and rollback.
 
 Keep verification proportional to the change. For incidental presentation
 changes such as spacing, prose, or glyph choices, do not add a regression test

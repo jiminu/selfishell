@@ -254,10 +254,6 @@ command_install() {
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
-  if [[ "${SELFISHELL_OFFLINE:-0}" == "1" ]]; then
-    skip_packages=1
-  fi
-
   if [[ "$skip_packages" == "1" ]]; then
     printf 'Skipping package installation.\n'
   else

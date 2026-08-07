@@ -41,7 +41,7 @@ managed_read_state() {
     return 1
   fi
 
-  case "$MANAGED_STATE_VERSION" in 1 | 2) ;; *) return 1 ;; esac
+  case "$MANAGED_STATE_VERSION" in 2) ;; *) return 1 ;; esac
   case "$MANAGED_STATE_TYPE" in file | link | block) ;; *) return 1 ;; esac
   case "$MANAGED_STATE_STATUS" in pending | active) ;; *) return 1 ;; esac
   [[ -n "$MANAGED_STATE_TARGET" ]] || return 1
@@ -398,7 +398,7 @@ managed_install_block() {
   reference="selfishell-${resource}-block-v1"
 
   if managed_read_state "$resource"; then
-    if [[ "$MANAGED_STATE_VERSION" != 2 || "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
+    if [[ "$MANAGED_STATE_TYPE" != block || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "Legacy Selfishell state was detected for: $resource"
       cli_error "Run 'selfishell uninstall --restore --yes', then reinstall."
       return "$SELFISHELL_EXIT_ERROR"

@@ -11,7 +11,6 @@ install_zinit_plugins() {
   local failure_message
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
-  [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]] || return 0
   manifest="$(dependencies_manifest_path)"
   [[ -r "$zinit_script" && -r "$manifest" ]] || return 1
 
@@ -245,7 +244,6 @@ install_neovim_plugins() {
 
   lazypath="${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/nvim/lazy/lazy.nvim"
 
-  [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || return 0
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould install declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     printf '%sWould install lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"

@@ -14,7 +14,6 @@ test_minimal_profile_initializes_git_completion_without_zinit() {
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         (( $+functions[_git] ))
         [[ -s "$HOME/.zcompdump" ]]
@@ -50,7 +49,6 @@ EOF
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -99,7 +97,6 @@ EOF
       ZDOTDIR="" \
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -142,7 +139,6 @@ EOF
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
       ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
   )"
@@ -169,7 +165,6 @@ test_completion_audits_the_dump_once_a_day() {
       ZDOTDIR="$HOME" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -i -c '
-        load_nvm() { :; }
         zmodload zsh/zprof
         source "$1"
         zprof
@@ -190,13 +185,15 @@ test_completion_audits_the_dump_once_a_day() {
 
 test_insecure_completion_directory_does_not_block_startup() {
   local output
+  local completion_dir
 
   setup_test_home
-  mkdir -p "$HOME/.cache/selfishell/completions" "$HOME/.local/share"
-  chmod 0777 "$HOME/.cache/selfishell/completions"
+  completion_dir="$TEST_ROOT/insecure-completions"
+  mkdir -p "$completion_dir" "$HOME/.local/share"
+  chmod 0777 "$completion_dir"
   touch -t 202001010000 "$HOME/.zcompdump"
 
-  output="$(run_completion_startup_probe)"
+  output="$(run_completion_startup_probe "$completion_dir")"
 
   [[ "$output" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete with an insecure completion directory present: $output"
@@ -205,26 +202,35 @@ test_insecure_completion_directory_does_not_block_startup() {
   teardown_test_home
 }
 
+# Selfishell no longer wires its own directory into fpath, so this injects a
+# generic one (via env var, read by the zsh -c script before it sources
+# common.zsh) to exercise the same real compaudit safety path -- run once a
+# day, warn on an insecure entry, never block startup -- fpath would
+# otherwise carry.
 run_completion_startup_probe() {
+  local completion_dir="${1:-}"
   XDG_CACHE_HOME="$HOME/.cache" \
     XDG_DATA_HOME="$HOME/.local/share" \
     ZDOTDIR="$HOME" \
     PATH="/usr/bin:/bin" \
+    SELFISHELL_TEST_COMPLETION_DIR="$completion_dir" \
     /bin/zsh -f -i -c '
-      load_nvm() { :; }
+      [[ -z "$SELFISHELL_TEST_COMPLETION_DIR" ]] || fpath=("$SELFISHELL_TEST_COMPLETION_DIR" $fpath)
       source "$1"
       print STARTUP_COMPLETE
     ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
 }
 
-test_secure_completion_directory_is_silent_and_used() {
+test_secure_completion_directory_does_not_add_warning() {
   local with_dir without_dir with_warned without_warned
+  local completion_dir
 
   setup_test_home
-  mkdir -p "$HOME/.cache/selfishell/completions" "$HOME/.local/share"
-  chmod 0755 "$HOME/.cache/selfishell/completions"
+  completion_dir="$TEST_ROOT/secure-completions"
+  mkdir -p "$completion_dir" "$HOME/.local/share"
+  chmod 0755 "$completion_dir"
   touch -t 202001010000 "$HOME/.zcompdump"
-  with_dir="$(run_completion_startup_probe)"
+  with_dir="$(run_completion_startup_probe "$completion_dir")"
   [[ "$with_dir" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete with a secure completion directory: $with_dir"
 
@@ -234,7 +240,6 @@ test_secure_completion_directory_is_silent_and_used() {
   # on a real Ubuntu CI runner, outside Selfishell's control) -- what matters
   # here is that adding our own secure directory doesn't itself introduce a
   # new warning, not that the whole host environment is spotless.
-  rm -rf "$HOME/.cache/selfishell/completions"
   touch -t 202001010000 "$HOME/.zcompdump"
   without_dir="$(run_completion_startup_probe)"
   [[ "$without_dir" == *STARTUP_COMPLETE* ]] ||
@@ -320,7 +325,6 @@ test_non_wsl_command_lookup_uses_native_path_semantics() {
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         cd "$2"
         path=("" ../relative-bin "$3" /usr/bin /bin)
@@ -404,7 +408,6 @@ test_update_notice_reads_installed_version_file() {
     PATH="$fake_root/bin:/usr/bin:/bin" \
       ZDOTDIR="" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         _selfishell_current_version
       ' zsh "$ROOT_DIR/common/common.zsh"
@@ -440,7 +443,6 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
       ZDOTDIR="" \
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
-        load_nvm() { :; }
         source "$1"
         ! _selfishell_version_is_newer 0.1.0-beta.9 0.1.0-beta.12
         _selfishell_version_is_newer 0.1.0-beta.13 0.1.0-beta.12

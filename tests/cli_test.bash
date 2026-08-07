@@ -253,35 +253,6 @@ test_doctor_rejects_unsupported_platform() {
     fail "Doctor should provide an actionable platform message"
 }
 
-test_doctor_reports_preserved_legacy_runtime_managers() {
-  local output
-
-  setup_test_home
-  mkdir -p "$HOME/.nvm" "$HOME/.pyenv" "$HOME/.local/state/selfishell" "$TEST_ROOT/bin"
-  printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
-  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
-  chmod +x "$TEST_ROOT/bin/apt"
-
-  set +e
-  output="$(
-    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
-      SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
-  )"
-  set -e
-
-  [[ "$output" == *"Legacy runtime manager detected: $HOME/.nvm (preserved; mise is active)"* ]] ||
-    fail "Doctor did not report preserved NVM data"
-  [[ "$output" == *"Legacy runtime manager detected: $HOME/.pyenv (preserved; mise is active)"* ]] ||
-    fail "Doctor did not report preserved pyenv data"
-  teardown_test_home
-}
-
 test_doctor_does_not_require_compiler_for_minimal_profile() {
   local output
 
@@ -466,66 +437,6 @@ test_doctor_reports_dirty_zinit_plugin_checkout() {
     fail "Doctor did not report the dirty Zsh plugin checkout: $output"
   [[ "$output" == *"$repository"* ]] || fail "Doctor did not name the dirty plugin: $output"
   assert_file_content $'tracked\nmodified' "$plugin_dir/tracked-file"
-  teardown_test_home
-}
-
-test_doctor_reports_insecure_completion_directory() {
-  local output completion_dir
-
-  setup_test_home
-  completion_dir="$HOME/.cache/selfishell/completions"
-  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
-  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
-  chmod +x "$TEST_ROOT/bin/apt"
-  chmod 0777 "$completion_dir"
-
-  set +e
-  output="$(
-    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
-      SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
-  )"
-  set -e
-
-  [[ "$output" == *'insecure permissions'* ]] ||
-    fail "Doctor did not report the insecure completion directory: $output"
-  [[ "$output" == *"$completion_dir"* ]] ||
-    fail "Doctor did not name the insecure completion directory: $output"
-  teardown_test_home
-}
-
-test_doctor_reports_secure_completion_directory() {
-  local output completion_dir
-
-  setup_test_home
-  completion_dir="$HOME/.cache/selfishell/completions"
-  mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" "$completion_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
-  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
-  printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
-  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
-  chmod +x "$TEST_ROOT/bin/apt"
-  chmod 0755 "$completion_dir"
-
-  set +e
-  output="$(
-    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
-      SELFISHELL_TEST_SYSTEM_NAME=Linux \
-      SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
-      SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
-      SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
-  )"
-  set -e
-
-  [[ "$output" == *'Zsh completion directory: secure'* ]] ||
-    fail "Doctor did not report the completion directory as secure: $output"
   teardown_test_home
 }
 

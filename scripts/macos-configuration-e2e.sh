@@ -5,10 +5,10 @@
 # HOME on a genuine macOS runner -- the only lifecycle E2E that previously
 # existed (scripts/ubuntu-container-e2e.sh) only ran on Ubuntu, leaving BSD
 # touch/stat/sed differences, macOS's Bash 3.2, and Ghostty's preflight path
-# unverified end-to-end. Uses --skip-packages/SELFISHELL_OFFLINE throughout
-# so this never installs Homebrew formulae/casks or needs network access,
-# except where a real CLI release install is the thing under test (which
-# uses file:// release fixtures built locally, never the network either).
+# unverified end-to-end. Uses --skip-packages throughout so this never
+# installs Homebrew formulae/casks or needs network access, except where a
+# real CLI release install is the thing under test (which uses file://
+# release fixtures built locally, never the network either).
 
 set -euo pipefail
 
@@ -148,14 +148,11 @@ run_primary_lifecycle() {
   assert_managed_resources_clean "$prefix" "on a clean install"
 
   # --- configuration update ---
-  # Minimal's own package list is small enough (git/starship/vim/zinit) that
-  # this is the one step in this script that may perform real, bounded
-  # package work if the runner doesn't already have all of them; there is
-  # no offline equivalent of --skip-packages for `update`. The CLI-release
-  # path is not part of --tools-only, confirmed by pointing it at an
-  # unreachable release root.
+  # --tools-only --skip-packages keeps this configuration-only, same as the
+  # install step above. The CLI-release path is not part of --tools-only,
+  # confirmed by pointing it at an unreachable release root.
   SELFISHELL_RELEASE_ROOT='file:///network-must-not-be-used' \
-    "$prefix/bin/selfishell" update --tools-only --yes >/dev/null
+    "$prefix/bin/selfishell" update --tools-only --skip-packages --yes >/dev/null
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
   [[ "$loader_count" == 1 ]] || fail "update duplicated the loader block (found $loader_count)"
   # The loader block is prepended, so the user's original content is a

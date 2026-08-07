@@ -60,19 +60,6 @@ test_tools_update_skip_packages_avoids_package_operations() {
     fail "--skip-packages still touched apt packages: $output"
 }
 
-test_tools_update_offline_avoids_package_operations() {
-  local output
-  export XDG_CONFIG_HOME="$HOME/.config"
-  mkdir -p "$XDG_STATE_HOME/selfishell"
-  printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
-
-  output="$(SELFISHELL_OFFLINE=1 bash "$ROOT_DIR/bin/selfishell" update --tools-only --dry-run)"
-  [[ "$output" == *'Skipping package installation.'* ]] ||
-    fail "SELFISHELL_OFFLINE=1 did not report skipping package installation: $output"
-  [[ "$output" != *'apt packages'* ]] ||
-    fail "SELFISHELL_OFFLINE=1 still touched apt packages: $output"
-}
-
 test_download_dependency_is_checksum_verified_and_recorded() {
   local payload checksum output
   payload="$TEST_ROOT/tool"
