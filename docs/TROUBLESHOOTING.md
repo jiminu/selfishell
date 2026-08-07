@@ -32,7 +32,7 @@ replacement before removing legacy data manually.
 ## Restricted Network
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
-Use `SELFISHELL_OFFLINE=1` or `--skip-packages` for configuration-only setup.
+Use `--skip-packages` for configuration-only setup.
 `SELFISHELL_OFFLINE=1 selfishell status` skips its release metadata lookup and
 reports availability as `unavailable`.
 

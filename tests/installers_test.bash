@@ -197,12 +197,6 @@ test_preserves_preexisting_zinit_plugin_path() {
   [[ "$(<"$plugin_dir/preserved")" == 'user data' ]] || fail "Installer changed a pre-existing Zinit plugin path"
 }
 
-test_offline_mode_skips_zinit_plugin_provisioning() {
-  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/missing-dependencies.conf"
-
-  SELFISHELL_OFFLINE=1 install_zinit_plugins
-}
-
 test_installs_declared_neovim_plugins() {
   NVIM_CALLS=()
   install_neovim_plugins 0
@@ -226,12 +220,6 @@ test_runs_neovim_inside_mise_environment() {
     fail "Neovim mise environment did not use the Selfishell config"
   [[ "${NVIM_CALLS[0]}" == '--headless +qa' ]] ||
     fail "mise exec did not invoke Neovim: ${NVIM_CALLS[*]}"
-}
-
-test_offline_mode_skips_neovim_plugins() {
-  NVIM_ARGUMENTS=""
-  SELFISHELL_OFFLINE=1 install_neovim_plugins 0
-  [[ -z "$NVIM_ARGUMENTS" ]] || fail "Offline mode invoked Neovim plugin installation"
 }
 
 test_neovim_plugin_dry_run_is_non_mutating() {

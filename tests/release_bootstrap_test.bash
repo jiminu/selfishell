@@ -1062,9 +1062,8 @@ test_add_to_path_selects_zshrc() {
   grep -Fq "$TEST_ROOT/prefix/bin" "$HOME/.zshrc" || fail "Zsh PATH entry is missing"
 }
 
-test_setup_is_explicit_and_can_run_offline() {
-  export SELFISHELL_OFFLINE=1
-  run_bootstrap --setup --yes >/dev/null
+test_setup_is_explicit_and_can_skip_packages() {
+  run_bootstrap --setup --yes --skip-packages >/dev/null
 
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Setup did not create a user-owned .zshrc"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Setup did not add the Zsh loader"

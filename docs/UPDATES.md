@@ -23,9 +23,8 @@ opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only installation skips this phase.
 
-`SELFISHELL_OFFLINE=1` and `--skip-packages` skip package and tool
-installation and apply managed configuration only, the same contract
-`selfishell install` follows.
+`--skip-packages` skips package and tool installation and applies managed
+configuration only, the same contract `selfishell install` follows.
 
 The normal `status` command checks the latest CLI release metadata and reports
 it as `Available`. If offline mode is enabled or the metadata lookup fails, it

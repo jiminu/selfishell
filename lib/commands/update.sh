@@ -10,8 +10,8 @@ By default, update the Selfishell CLI release first, then synchronize all
 profile packages, approved tools, and managed configuration. Use --cli-only or
 --tools-only to limit the scope.
 --version selects an exact CLI release and cannot be used with --tools-only.
---skip-packages (also implied by SELFISHELL_OFFLINE=1) skips package and tool
-installation and applies managed configuration only.
+--skip-packages skips package and tool installation and applies managed
+configuration only.
 
 Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned
@@ -27,7 +27,6 @@ update_tools_and_configuration() {
   local skip_packages="$4"
   local profile platform ghostty_enabled=0
 
-  [[ "${SELFISHELL_OFFLINE:-0}" != "1" ]] || skip_packages=1
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     if [[ "$require_configuration" == 1 ]]; then
