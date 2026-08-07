@@ -246,26 +246,6 @@ test_managed_download_broken_target_is_not_already_approved() {
   done
 }
 
-test_managed_download_directory_target_is_reinstalled_as_executable() {
-  local payload checksum output
-  payload="$TEST_ROOT/tool"
-  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
-  checksum="$(fixture_sha256 "$payload")"
-  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
-  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
-  mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
-  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
-  mkdir -p "$HOME/.local/bin/tool"
-  printf 'leftover\n' >"$HOME/.local/bin/tool/leftover"
-
-  output="$(run_dependency_install tool)"
-  [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
-    fail "A same-version managed target replaced by a directory was not reinstalled: $output"
-  [[ -f "$HOME/.local/bin/tool" && ! -L "$HOME/.local/bin/tool" ]] ||
-    fail "The recovered target is not a real regular file"
-  [[ -x "$HOME/.local/bin/tool" ]] || fail "The recovered target is not executable"
-}
-
 test_managed_symlink_target_recovery_preserves_symlink_destination() {
   local payload checksum output destination
   payload="$TEST_ROOT/tool"
@@ -425,16 +405,21 @@ test_download_dependency_replaces_directory_target_without_nesting() {
   printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 
   # Simulates a target that was replaced by a directory (tampering, or a
-  # stale leftover) while its recorded version is out of date: `mv` onto an
-  # existing directory renames *into* it instead of replacing it, so without
-  # the fix this would silently leave the approved binary unreachable at
-  # $HOME/.local/bin/tool/archive while still reporting success.
+  # stale leftover) while its recorded version already matches the current
+  # approved version: `mv` onto an existing directory renames *into* it
+  # instead of replacing it, so without the fix this would silently leave
+  # the approved binary unreachable at $HOME/.local/bin/tool/archive while
+  # still reporting success. The matching recorded version also means this
+  # covers dependency_managed_target_is_valid() correctly rejecting a
+  # directory-shaped target instead of taking the Already approved fast path.
   mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
-  printf '0.9\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
   mkdir -p "$HOME/.local/bin/tool"
   printf 'leftover\n' >"$HOME/.local/bin/tool/leftover"
 
   output="$(run_dependency_install tool)"
+  [[ "$output" != *'Already approved'* ]] ||
+    fail "A same-version managed target replaced by a directory was treated as Already approved"
   [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
     fail "Dependency install over a directory target was not reported"
   [[ -f "$HOME/.local/bin/tool" ]] ||

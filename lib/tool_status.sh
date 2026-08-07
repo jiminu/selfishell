@@ -136,7 +136,9 @@ tool_status_detect() {
       state="$(dependency_installed_version "$package")"
       if [[ -n "$state" ]]; then
         TOOL_STATUS_SOURCE="selfishell"
-        ! dependency_managed_target_is_valid || TOOL_STATUS_INSTALLED="$state"
+        if dependency_managed_target_is_valid; then
+          TOOL_STATUS_INSTALLED="$state"
+        fi
         return 0
       fi
       if dependency_external_target_is_usable; then
