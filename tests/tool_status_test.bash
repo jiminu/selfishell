@@ -96,7 +96,7 @@ EOF
 
 test_detects_selfishell_managed_direct_dependency() {
   printf 'git zinit v3.15.0 all all file:///unused - .local/share/zinit/zinit.git zinit.zsh\n' >"$SELFISHELL_DEPENDENCIES_FILE"
-  mkdir -p "$HOME/.local/share/zinit/zinit.git" "$SELFISHELL_STATE_DIR/dependencies"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git/.git" "$SELFISHELL_STATE_DIR/dependencies"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
   printf 'v3.15.0\n' >"$SELFISHELL_STATE_DIR/dependencies/zinit"
 
@@ -125,6 +125,16 @@ test_distinguishes_external_and_missing_direct_dependencies() {
   tool_status_detect direct zinit macos arm64
   [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none ]] ||
     fail "Missing direct dependency was not distinguished"
+}
+
+test_external_dangling_symlink_direct_dependency_is_not_detected() {
+  printf 'git zinit v3.15.0 all all file:///unused - .local/share/zinit/zinit.git zinit.zsh\n' >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/share/zinit"
+  ln -s "$TEST_ROOT/missing-zinit-checkout" "$HOME/.local/share/zinit/zinit.git"
+
+  tool_status_detect direct zinit macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none ]] ||
+    fail "A dangling-symlink external direct dependency was reported as detected"
 }
 
 test_maps_package_name_to_executable() {

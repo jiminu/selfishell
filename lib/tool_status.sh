@@ -90,7 +90,7 @@ tool_status_detect() {
   local package="$2"
   local dependency_platform="$3"
   local architecture="$4"
-  local output state marker_path
+  local output state
 
   TOOL_STATUS_INSTALLED="missing"
   TOOL_STATUS_SOURCE="none"
@@ -134,17 +134,14 @@ tool_status_detect() {
       dependency_load "$package" "$dependency_platform" "$architecture" || return
       TOOL_STATUS_APPROVED="$DEPENDENCY_VERSION"
       state="$(dependency_installed_version "$package")"
-      if [[ "$DEPENDENCY_TYPE" == git ]]; then
-        marker_path="$DEPENDENCY_TARGET/$DEPENDENCY_MARKER"
-      else
-        marker_path="$DEPENDENCY_TARGET"
-      fi
       if [[ -n "$state" ]]; then
         TOOL_STATUS_SOURCE="selfishell"
-        [[ -e "$marker_path" ]] && TOOL_STATUS_INSTALLED="$state"
+        if dependency_managed_target_is_valid; then
+          TOOL_STATUS_INSTALLED="$state"
+        fi
         return 0
       fi
-      if [[ -e "$marker_path" ]]; then
+      if dependency_external_target_is_usable; then
         TOOL_STATUS_INSTALLED="detected"
         TOOL_STATUS_SOURCE="external"
         return

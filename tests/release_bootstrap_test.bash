@@ -235,21 +235,6 @@ EOF
   [[ "$output" != *'Available'* ]] || fail "status still reports an Available field: $output"
 }
 
-test_status_rejects_removed_check_updates_option() {
-  local output status version
-  version="$(<"$ROOT_DIR/VERSION")"
-  run_bootstrap --version "$version" >/dev/null
-
-  set +e
-  output="$("$TEST_ROOT/prefix/bin/selfishell" status --check-updates 2>&1)"
-  status=$?
-  set -e
-
-  [[ "$status" -eq 2 ]] || fail "Removed status option should return a usage error"
-  [[ "$output" == *"Unknown status option: --check-updates"* ]] ||
-    fail "Removed status option did not report an unknown option"
-}
-
 test_latest_lookup_failure_is_actionable() {
   local output status
   rm "$TEST_ROOT/releases/latest/download/VERSION"

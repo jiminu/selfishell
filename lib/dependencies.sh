@@ -76,7 +76,7 @@ dependency_write_version() {
 
 dependency_install_download() {
   local temporary_dir archive extracted previous_target
-  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency.XXXXXX")"
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency.XXXXXX")" || return 1
   archive="$temporary_dir/archive"
   selfishell_curl transfer "$DEPENDENCY_SOURCE" -o "$archive" || {
     rm -rf "$temporary_dir"
@@ -116,7 +116,7 @@ dependency_install_download() {
   # still reporting success. Move it aside first, mirroring
   # dependency_install_git's existing-target handling, so mv only ever
   # renames onto an absent path and a failed activation can be restored.
-  if [[ -e "$DEPENDENCY_TARGET" ]]; then
+  if [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     previous_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.previous.$$")"
     mv "$DEPENDENCY_TARGET" "$previous_target" || {
       rm -rf "$temporary_dir"
@@ -128,7 +128,10 @@ dependency_install_download() {
   # unguarded mv failure here would fall through to `rm -rf`, silently
   # deleting the freshly extracted binary and reporting success.
   if ! mv "$extracted" "$DEPENDENCY_TARGET"; then
-    [[ -z "${previous_target:-}" || ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
+    # previous_target may itself be a dangling symlink (moved aside above),
+    # which -e alone would miss and skip restoring.
+    [[ -z "${previous_target:-}" || (! -e "$previous_target" && ! -L "$previous_target") ]] ||
+      mv "$previous_target" "$DEPENDENCY_TARGET"
     rm -rf "$temporary_dir"
     return 1
   fi
@@ -159,23 +162,64 @@ dependency_install_git() {
   # (it's called as `dependency_install_git || return`), so an unguarded mv
   # failure here would previously fall through and delete the working
   # previous install via the final `rm -rf`. Restore it instead of losing it.
-  if [[ -e "$DEPENDENCY_TARGET" ]]; then
+  if [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     mv "$DEPENDENCY_TARGET" "$previous_target" || {
       rm -rf "$temporary_target"
       return 1
     }
   fi
+  # previous_target may itself be a dangling symlink (moved aside above),
+  # which -e alone would miss and skip restoring.
   if ! mkdir -p "$(dirname "$DEPENDENCY_TARGET")"; then
-    [[ ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
+    [[ ! -e "$previous_target" && ! -L "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
     rm -rf "$temporary_target"
     return 1
   fi
   if ! mv "$temporary_target" "$DEPENDENCY_TARGET"; then
-    [[ ! -e "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
+    [[ ! -e "$previous_target" && ! -L "$previous_target" ]] || mv "$previous_target" "$DEPENDENCY_TARGET"
     rm -rf "$temporary_target"
     return 1
   fi
   rm -rf "$previous_target"
+}
+
+# Whether the currently loaded dependency's target is a valid Selfishell-
+# managed install (used only when Selfishell state for it exists). Strict on
+# purpose: Selfishell owns this path, so a directory, non-executable file, or
+# symlink here means a corrupted install that must be repaired, not a shape
+# to tolerate.
+dependency_managed_target_is_valid() {
+  case "$DEPENDENCY_TYPE" in
+    download)
+      [[ -f "$DEPENDENCY_TARGET" && ! -L "$DEPENDENCY_TARGET" && -x "$DEPENDENCY_TARGET" ]]
+      ;;
+    git)
+      [[ -d "$DEPENDENCY_TARGET" && ! -L "$DEPENDENCY_TARGET" &&
+        -e "$DEPENDENCY_TARGET/.git" && -e "$DEPENDENCY_TARGET/$DEPENDENCY_MARKER" ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Whether the currently loaded dependency's target, which Selfishell does not
+# own (no recorded state), is usable as that dependency. Deliberately looser
+# than dependency_managed_target_is_valid: an external install may
+# legitimately be a symlink, and a git-type external checkout need not carry
+# `.git` (it may be a release archive or package-managed copy).
+dependency_external_target_is_usable() {
+  case "$DEPENDENCY_TYPE" in
+    download)
+      [[ -f "$DEPENDENCY_TARGET" && -x "$DEPENDENCY_TARGET" ]]
+      ;;
+    git)
+      [[ -d "$DEPENDENCY_TARGET" && -e "$DEPENDENCY_TARGET/$DEPENDENCY_MARKER" ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 dependency_install() {
@@ -188,13 +232,19 @@ dependency_install() {
   dependency_load "$name" "$platform" "$architecture" || return
   selfishell_initialize_paths
   installed="$(dependency_installed_version "$name")"
-  if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" && -e "$DEPENDENCY_TARGET" ]]; then
-    printf '%sAlready approved:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
-    return
-  fi
-  if [[ -z "$installed" && -e "$DEPENDENCY_TARGET" ]]; then
-    printf '%sExternally installed; preserving:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$DEPENDENCY_TARGET"
-    return
+
+  if [[ -n "$installed" ]]; then
+    if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" ]] && dependency_managed_target_is_valid; then
+      printf '%sAlready approved:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+      return
+    fi
+  elif [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
+    if dependency_external_target_is_usable; then
+      printf '%sExternally installed; preserving:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$DEPENDENCY_TARGET"
+      return
+    fi
+    cli_error "An existing $DEPENDENCY_TARGET is not a usable $name installation; leaving it in place."
+    return 1
   fi
 
   case "$DEPENDENCY_TYPE" in
