@@ -221,7 +221,7 @@ run_completion_startup_probe() {
     ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
 }
 
-test_secure_completion_directory_is_silent_and_used() {
+test_secure_completion_directory_does_not_add_warning() {
   local with_dir without_dir with_warned without_warned
   local completion_dir
 

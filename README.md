@@ -26,8 +26,8 @@ selfishell status
 
 The bootstrap installs only the CLI. `selfishell install` selects the default
 `developer` profile. See the [installation guide](docs/INSTALLATION.md) for
-PATH setup, non-interactive and exact-version installation, offline setup,
-uninstallation, Ghostty, and platform notes.
+PATH setup, non-interactive and exact-version installation,
+configuration-only setup, uninstallation, Ghostty, and platform notes.
 
 The installer guides interactive setup, including the optional macOS Ghostty
 choice. Open a new terminal after installation whenever that is more convenient
@@ -107,11 +107,12 @@ toolchain ready for use.
 
 `sfs` is the optional short alias for `selfishell`.
 
-Run `status` after setup to see the active profile and check for a newer CLI
-release. If release metadata cannot be reached, it reports availability as
-`unavailable` and continues with local checks. Use `doctor` when the environment
-does not look right, and use the dry run before restoring configuration so you
-can review the proposed changes first.
+Run `status` after setup to see the active profile, managed resources, and CLI
+and rollback versions; it reports local state only and never checks the
+network. Use `selfishell version --available` to check the latest published
+release, or rely on the automatic update notice. Use `doctor` when the
+environment does not look right, and use the dry run before restoring
+configuration so you can review the proposed changes first.
 
 Updates keep the installed environment current; rollback uses the retained
 release when you need to return to the previous Selfishell version offline.
@@ -126,8 +127,8 @@ with checksums, and never installs updates automatically during shell startup.
 
 ### User guides
 
-- [Installation](docs/INSTALLATION.md) — setup, offline installation,
-  uninstallation, Ghostty, and platform notes.
+- [Installation](docs/INSTALLATION.md) — setup, configuration-only
+  installation, uninstallation, Ghostty, and platform notes.
 - [Profiles](docs/PROFILES.md) — package choices and the Neovim workflow.
 - [Python development](docs/PYTHON.md) — Python tooling and project setup.
 - [Updates and rollback](docs/UPDATES.md) — release updates and recovery.
