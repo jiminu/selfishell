@@ -16,9 +16,8 @@ selfishell install
 
 Automated verification currently exercises the Ubuntu 24.04 container
 installation lifecycle, the configuration lifecycle on a GitHub-hosted macOS
-runner, and the pinned Neovim developer lifecycle on Ubuntu. Shell checks and
-base performance measurements run on Ubuntu and macOS; the full developer
-profile performance measurement runs on Ubuntu.
+runner, and the pinned Neovim developer lifecycle on Ubuntu. Shell checks run
+on Ubuntu and macOS.
 
 The supported-platform list is broader than this runner matrix. WSL and every
 advertised architecture are not exercised as separate CI runners, although
