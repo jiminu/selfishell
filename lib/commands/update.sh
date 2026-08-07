@@ -15,8 +15,8 @@ configuration only.
 
 Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned
-versions); use 'selfishell status --check-package-updates' to see what apt or
-Homebrew consider outdated.
+versions). Selfishell update does not perform a general Apt/Homebrew
+upgrade.
 EOF
 }
 

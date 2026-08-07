@@ -151,34 +151,4 @@ EOF
   [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise selector was not reported"
 }
 
-test_reports_package_manager_updates_without_upgrading() {
-  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
-  cat >"$TEST_ROOT/bin/brew" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
-case "$*" in
-  'outdated --formula') printf 'starship\n' ;;
-  'outdated --cask') printf 'ghostty\n' ;;
-esac
-EOF
-  cat >"$TEST_ROOT/bin/apt" <<'EOF'
-#!/usr/bin/env bash
-[[ "$*" == 'list --upgradable' ]] || exit 1
-printf 'Listing...\ngit/noble-updates 2.44 amd64 [upgradable from: 2.43]\n'
-EOF
-  chmod +x "$TEST_ROOT/bin/brew" "$TEST_ROOT/bin/apt"
-
-  tool_status_package_update formula starship
-  [[ "$TOOL_STATUS_UPDATE" == available ]] || fail "Homebrew formula update was not detected"
-  tool_status_package_update formula fzf
-  [[ "$TOOL_STATUS_UPDATE" == current ]] || fail "Current Homebrew formula was not reported"
-  tool_status_package_update cask ghostty
-  [[ "$TOOL_STATUS_UPDATE" == available ]] || fail "Homebrew cask update was not detected"
-  tool_status_package_update apt git
-  [[ "$TOOL_STATUS_UPDATE" == available ]] || fail "Apt update was not detected"
-  [[ "$(grep -Fc 'outdated --formula' "$MOCK_BREW_LOG")" == 1 ]] || fail "Homebrew outdated inventory was not cached"
-
-  unset MOCK_BREW_LOG
-}
-
 run_discovered_tests setup_tool_status_home teardown_tool_status_home

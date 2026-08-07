@@ -78,14 +78,8 @@ status_report_package() {
   fi
 
   if [[ "$SELFISHELL_STATUS_VERBOSE" == 1 ]]; then
-    if [[ "$SELFISHELL_STATUS_CHECK_PACKAGE_UPDATES" == 1 ]]; then
-      tool_status_package_update "$manager" "$package"
-      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s | Update: %s\n' \
-        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED" "$TOOL_STATUS_UPDATE"
-    else
-      printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
-        "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
-    fi
+    printf '[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n' \
+      "$package" "$TOOL_STATUS_INSTALLED" "$TOOL_STATUS_SOURCE" "$TOOL_STATUS_APPROVED"
   fi
 }
 
@@ -117,7 +111,6 @@ status_rollback_version() {
 }
 
 command_status() {
-  local check_package_updates=0
   local verbose=0
   local current_version="unknown"
   local rollback_version="none"
@@ -128,10 +121,9 @@ command_status() {
 
   while (("$#" > 0)); do
     case "$1" in
-      --check-package-updates) check_package_updates=1 ;;
       --verbose) verbose=1 ;;
       help | --help | -h)
-        printf 'Usage: selfishell status [--check-package-updates] [--verbose]\n'
+        printf 'Usage: selfishell status [--verbose]\n'
         return
         ;;
       *)
@@ -157,7 +149,6 @@ command_status() {
   SELFISHELL_STATUS_PACKAGES_MISSING=0
   SELFISHELL_STATUS_RESULT="$SELFISHELL_EXIT_OK"
   SELFISHELL_STATUS_VERBOSE="$verbose"
-  SELFISHELL_STATUS_CHECK_PACKAGE_UPDATES="$check_package_updates"
   tool_status_reset_cache
 
   platform="$(detect_platform)"
