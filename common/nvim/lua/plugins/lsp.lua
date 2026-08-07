@@ -15,7 +15,10 @@ return {
   }),
 
   plugin("mason-org/mason-lspconfig.nvim", {
-    ft = languages.lsp_filetypes,
+    -- Not `ft`-gated: a user-installed server (`:LspInstall`) outside
+    -- Selfishell's default filetype list still needs this plugin's setup()
+    -- to run and auto-enable it on a fresh Neovim process.
+    event = { "BufReadPre", "BufNewFile" },
     cmd = {
       "LspInstall",
       "LspUninstall",
@@ -31,9 +34,9 @@ return {
         capabilities = require("cmp_nvim_lsp").default_capabilities(),
       })
 
-      -- mason-lspconfig installs and automatically enables these servers.
       require("mason-lspconfig").setup({
         ensure_installed = languages.lsp,
+        automatic_enable = true,
       })
     end,
   }),

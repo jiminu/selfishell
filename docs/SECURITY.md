@@ -12,15 +12,9 @@ release provenance and preservation of existing files are security boundaries.
 - Git dependencies use an approved tag or commit.
 - Existing configuration is backed up and tracked before managed replacement.
 - Interactive shell startup performs no network update.
-- The managed Neovim configuration reads and executes
-  `${XDG_CONFIG_HOME:-~/.config}/selfishell/nvim.user.lua` at every startup if
-  present. This file is entirely user-owned (Selfishell only creates a
-  starter copy once and never edits it afterward), so it carries the same
-  trust as any other file the user places in their own `$XDG_CONFIG_HOME`.
-  LSP servers it declares are not version-approved the way the default
-  servers are: they install from the Mason registry, unpinned, the first
-  time a matching buffer is opened, the same lazy-install path the default
-  servers already use.
+- LSP servers added with `:LspInstall` are not version-approved the way the
+  default servers (lua_ls, pyright, bashls, ts_ls) are: they install from the
+  Mason registry, unpinned, the standard mason-lspconfig way.
 - Selfishell files are installed without root privileges. Apt may request `sudo`
   for system packages, and Homebrew follows its own privilege model.
 
