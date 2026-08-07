@@ -195,6 +195,227 @@ EOF
   [[ "$output" != *'Installed approved dependency'* ]] || fail "A failed mktemp printed a success message"
 }
 
+test_managed_download_valid_target_is_already_approved() {
+  local payload checksum output
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin" "$XDG_STATE_HOME/selfishell/dependencies"
+  printf 'existing-install-marker\n' >"$HOME/.local/bin/tool"
+  chmod 0755 "$HOME/.local/bin/tool"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+
+  output="$(run_dependency_install tool)"
+  [[ "$output" == *'Already approved: tool 1.0'* ]] ||
+    fail "A valid managed target was not reported as already approved: $output"
+  assert_file_content 'existing-install-marker' "$HOME/.local/bin/tool"
+}
+
+test_managed_download_broken_target_is_not_already_approved() {
+  local payload checksum output shape
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+
+  for shape in non-executable valid-symlink; do
+    rm -rf "$HOME/.local/bin/tool"
+    mkdir -p "$HOME/.local/bin"
+    case "$shape" in
+      non-executable)
+        printf 'not executable\n' >"$HOME/.local/bin/tool"
+        chmod 0644 "$HOME/.local/bin/tool"
+        ;;
+      valid-symlink)
+        # A Selfishell-managed target must never be a symlink, even one that
+        # points at a perfectly usable executable.
+        ln -s "$payload" "$HOME/.local/bin/tool"
+        ;;
+    esac
+
+    output="$(run_dependency_install tool)"
+    [[ "$output" != *'Already approved'* ]] ||
+      fail "A same-version, broken ($shape) managed target was treated as Already approved"
+    [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
+      fail "A same-version, broken ($shape) managed target was not reinstalled: $output"
+  done
+}
+
+test_managed_download_directory_target_is_reinstalled_as_executable() {
+  local payload checksum output
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+  mkdir -p "$HOME/.local/bin/tool"
+  printf 'leftover\n' >"$HOME/.local/bin/tool/leftover"
+
+  output="$(run_dependency_install tool)"
+  [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
+    fail "A same-version managed target replaced by a directory was not reinstalled: $output"
+  [[ -f "$HOME/.local/bin/tool" && ! -L "$HOME/.local/bin/tool" ]] ||
+    fail "The recovered target is not a real regular file"
+  [[ -x "$HOME/.local/bin/tool" ]] || fail "The recovered target is not executable"
+}
+
+test_managed_symlink_target_recovery_preserves_symlink_destination() {
+  local payload checksum output destination
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+
+  # A Selfishell-managed target that has become a symlink to some unrelated
+  # user-owned path must be recovered by replacing the symlink itself; the
+  # path it points to must never be modified.
+  destination="$TEST_ROOT/some-user-file"
+  printf 'user owned content\n' >"$destination"
+  mkdir -p "$HOME/.local/bin"
+  ln -s "$destination" "$HOME/.local/bin/tool"
+
+  output="$(run_dependency_install tool)"
+  [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
+    fail "A managed symlink target was not recovered: $output"
+  [[ -f "$HOME/.local/bin/tool" && ! -L "$HOME/.local/bin/tool" ]] ||
+    fail "The recovered managed target is not a real executable file"
+  assert_file_content 'user owned content' "$destination"
+  [[ "$(find "$HOME/.local/bin" -maxdepth 1 -name 'tool.previous.*' | wc -l)" -eq 0 ]] ||
+    fail "A successful managed symlink recovery left a previous-symlink temporary path behind"
+}
+
+test_managed_git_valid_target_is_already_approved() {
+  local repo="$TEST_ROOT/repo"
+  local output
+  mkdir -p "$repo"
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name test
+  printf 'marker\n' >"$repo/marker"
+  git -C "$repo" add marker
+  git -C "$repo" commit --quiet -m initial
+  git -C "$repo" tag v1.0
+
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'git testgit v1.0 linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
+  run_dependency_install testgit >/dev/null
+
+  output="$(run_dependency_install testgit)"
+  [[ "$output" == *'Already approved: testgit v1.0'* ]] ||
+    fail "A valid managed git target was not reported as already approved: $output"
+}
+
+test_managed_git_broken_target_is_not_already_approved() {
+  local repo="$TEST_ROOT/repo"
+  local elsewhere="$TEST_ROOT/testgit-elsewhere"
+  local output
+  mkdir -p "$repo"
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name test
+  printf 'marker\n' >"$repo/marker"
+  git -C "$repo" add marker
+  git -C "$repo" commit --quiet -m initial
+  git -C "$repo" tag v1.0
+
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'git testgit v1.0 linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
+  printf 'v1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/testgit"
+
+  rm -rf "$HOME/.local/share/testgit"
+  mkdir -p "$HOME/.local/share/testgit/.git"
+  output="$(run_dependency_install testgit)"
+  [[ "$output" != *'Already approved'* ]] ||
+    fail "A managed git target missing its marker was treated as Already approved"
+  [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
+    fail "A managed git target missing its marker was not reinstalled: $output"
+
+  rm -rf "$HOME/.local/share/testgit"
+  mkdir -p "$HOME/.local/share/testgit"
+  printf 'marker\n' >"$HOME/.local/share/testgit/marker"
+  output="$(run_dependency_install testgit)"
+  [[ "$output" != *'Already approved'* ]] ||
+    fail "A managed git target missing .git was treated as Already approved"
+  [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
+    fail "A managed git target missing .git was not reinstalled: $output"
+
+  rm -rf "$HOME/.local/share/testgit"
+  mkdir -p "$elsewhere/.git"
+  printf 'marker\n' >"$elsewhere/marker"
+  ln -s "$elsewhere" "$HOME/.local/share/testgit"
+  output="$(run_dependency_install testgit)"
+  [[ "$output" != *'Already approved'* ]] ||
+    fail "A managed git target that is a symlink was treated as Already approved"
+  [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
+    fail "A managed git target that is a symlink was not reinstalled: $output"
+  assert_file_content 'marker' "$elsewhere/marker"
+}
+
+test_external_download_valid_symlink_to_executable_is_preserved() {
+  local output
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file:///unused %064d .local/bin/tool raw\n' 0 >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin"
+  printf '#!/bin/sh\nprintf tool-real\\n\n' >"$TEST_ROOT/real-tool"
+  chmod 0755 "$TEST_ROOT/real-tool"
+  ln -s "$TEST_ROOT/real-tool" "$HOME/.local/bin/tool"
+
+  output="$(run_dependency_install tool)"
+  [[ "$output" == *'Externally installed; preserving'* ]] ||
+    fail "A valid symlink to an executable external target was not preserved: $output"
+  [[ -L "$HOME/.local/bin/tool" ]] || fail "The external symlink was replaced instead of preserved"
+}
+
+test_external_download_dangling_symlink_install_fails_without_touching_it() {
+  local status output
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file:///unused %064d .local/bin/tool raw\n' 0 >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin"
+  ln -s "$TEST_ROOT/missing-target" "$HOME/.local/bin/tool"
+
+  set +e
+  output="$(run_dependency_install tool 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "An external dangling symlink target should not report success"
+  [[ -L "$HOME/.local/bin/tool" ]] || fail "The external dangling symlink was not preserved"
+  [[ "$(readlink "$HOME/.local/bin/tool")" == "$TEST_ROOT/missing-target" ]] ||
+    fail "The external dangling symlink target changed"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/dependencies/tool" ]] ||
+    fail "An external dangling symlink must not be recorded as a managed dependency"
+}
+
+test_external_download_directory_target_install_fails_without_touching_it() {
+  local status output
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file:///unused %064d .local/bin/tool raw\n' 0 >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin/tool"
+  printf 'user data\n' >"$HOME/.local/bin/tool/user-data"
+
+  set +e
+  output="$(run_dependency_install tool 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "An external directory target should not report success"
+  [[ -d "$HOME/.local/bin/tool" ]] || fail "The external directory target was not preserved"
+  assert_file_content 'user data' "$HOME/.local/bin/tool/user-data"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/dependencies/tool" ]] ||
+    fail "An external directory target must not be recorded as a managed dependency"
+}
+
 test_download_dependency_replaces_directory_target_without_nesting() {
   local payload checksum output
   payload="$TEST_ROOT/tool"
