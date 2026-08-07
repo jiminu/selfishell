@@ -17,18 +17,14 @@ selfishell status
 
 `status` reports tools from the active profile as Selfishell-managed, Homebrew,
 apt, external, or missing. Package-manager versions are reported without an
-exact approved version because those repositories control resolution. The
-command also checks the available CLI release. If release metadata cannot be
-reached, it reports `Available: unavailable` and continues with local checks.
-It returns nonzero when required tools are missing or managed configuration is
-missing or changed. It does not modify files.
+exact approved version because those repositories control resolution. It
+returns nonzero when required tools are missing or managed configuration is
+missing or changed. It does not modify files or check the network.
 
 ## Restricted Network
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
 Use `--skip-packages` for configuration-only setup.
-`SELFISHELL_OFFLINE=1 selfishell status` skips its release metadata lookup and
-reports availability as `unavailable`.
 
 Release and direct-tool downloads stop when they cannot connect or remain below
 the minimum transfer rate. Metadata checks also have a short total deadline.

@@ -25,9 +25,9 @@ upgrade. A CLI-only installation skips this phase.
 `--skip-packages` skips package and tool installation and applies managed
 configuration only, the same contract `selfishell install` follows.
 
-The normal `status` command checks the latest CLI release metadata and reports
-it as `Available`. If offline mode is enabled or the metadata lookup fails, it
-reports `Available: unavailable` and continues with local status checks.
+`status` reports local CLI, rollback, profile, and managed-resource state
+only; it never checks the network. Use `selfishell version --available` to
+check the latest published release, or rely on the automatic update notice.
 
 `status` does not check Apt or Homebrew for available package updates. Use
 `brew upgrade` or the operating system's Apt upgrade policy to apply system

@@ -114,7 +114,6 @@ command_status() {
   local verbose=0
   local current_version="unknown"
   local rollback_version="none"
-  local available_version="unavailable"
   local platform profile_platform dependency_platform architecture
   local profile=""
   local resource
@@ -137,11 +136,8 @@ command_status() {
 
   [[ -r "$SELFISHELL_ROOT/VERSION" ]] && current_version="$(<"$SELFISHELL_ROOT/VERSION")"
   rollback_version="$(status_rollback_version)"
-  if [[ "${SELFISHELL_OFFLINE:-0}" != 1 ]]; then
-    available_version="$(release_latest_version)" || available_version="unavailable"
-  fi
-  printf '[CLI] Current: %s | Rollback: %s | Available: %s\n' \
-    "$current_version" "$rollback_version" "$available_version"
+  printf '[CLI] Current: %s | Rollback: %s\n' \
+    "$current_version" "$rollback_version"
 
   SELFISHELL_STATUS_RESOURCE_COUNT=0
   SELFISHELL_STATUS_PACKAGES_TOTAL=0

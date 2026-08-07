@@ -99,7 +99,7 @@ toolchain ready for use.
 
 | Command | Use it to |
 | --- | --- |
-| `selfishell status` | Show the active profile, managed resources, and available CLI release. |
+| `selfishell status` | Show the active profile, managed resources, and CLI/rollback version. |
 | `selfishell doctor` | Diagnose the current installation. |
 | `selfishell update` | Update the CLI, profile tools, and configuration. Installs missing apt/Homebrew packages but does not upgrade already-installed ones; see [Updates and rollback](docs/UPDATES.md). |
 | `selfishell rollback` | Return to the previous retained release. |
