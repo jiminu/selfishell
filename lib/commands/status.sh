@@ -86,12 +86,12 @@ status_report_package() {
 status_rollback_version() {
   local releases_dir share_dir previous_link previous_target version release_dir
 
-  releases_dir="$(dirname "$SELFISHELL_ROOT")"
-  if [[ "$(basename "$releases_dir")" != releases ]]; then
+  releases_dir="${SELFISHELL_ROOT%/*}"
+  if [[ "${releases_dir##*/}" != releases ]]; then
     printf 'none\n'
     return
   fi
-  share_dir="$(dirname "$releases_dir")"
+  share_dir="${releases_dir%/*}"
   previous_link="$share_dir/previous"
   if [[ ! -L "$previous_link" ]]; then
     printf 'none\n'

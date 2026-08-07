@@ -37,15 +37,18 @@ release_latest_version() {
 }
 
 release_installation_paths() {
-  local releases_dir
+  local releases_dir share_dir
 
-  releases_dir="$(dirname "$SELFISHELL_ROOT")"
-  if [[ "$(basename "$releases_dir")" != releases || ! -L "$(dirname "$releases_dir")/current" ]]; then
+  releases_dir="${SELFISHELL_ROOT%/*}"
+  share_dir="${releases_dir%/*}"
+
+  if [[ "${releases_dir##*/}" != releases ||
+    ! -L "$share_dir/current" ]]; then
     cli_error "This command requires a versioned Selfishell installation."
     return 1
   fi
   SELFISHELL_RELEASES_DIR="$releases_dir"
-  SELFISHELL_SHARE_DIR="$(dirname "$releases_dir")"
+  SELFISHELL_SHARE_DIR="$share_dir"
 }
 
 # Confirms "$SELFISHELL_RELEASES_DIR/$version" both looks complete (an
