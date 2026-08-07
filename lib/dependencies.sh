@@ -76,7 +76,7 @@ dependency_write_version() {
 
 dependency_install_download() {
   local temporary_dir archive extracted previous_target
-  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency.XXXXXX")"
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency.XXXXXX")" || return 1
   archive="$temporary_dir/archive"
   selfishell_curl transfer "$DEPENDENCY_SOURCE" -o "$archive" || {
     rm -rf "$temporary_dir"

@@ -153,6 +153,48 @@ EOF
     fail "Retrying after removing the forced failure did not behave as expected: $output"
 }
 
+test_dependency_temporary_directory_creation_failure_does_not_report_success() {
+  local payload checksum output status
+  local fake_bin="$TEST_ROOT/fakebin"
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+
+  mkdir -p "$fake_bin"
+  # Only the dependency-install temporary directory pattern is forced to
+  # fail; every other mktemp invocation (dependency_write_version, etc.)
+  # must still reach the real mktemp.
+  cat >"$fake_bin/mktemp" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+  case "$argument" in
+    */selfishell-dependency.*) exit 1 ;;
+  esac
+done
+exec /usr/bin/mktemp "$@"
+EOF
+  chmod +x "$fake_bin/mktemp"
+  cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf 'called\n' >>"$HOME/curl-calls"
+exit 1
+EOF
+  chmod +x "$fake_bin/curl"
+
+  set +e
+  output="$(PATH="$fake_bin:$PATH" run_dependency_install tool 2>&1)"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "A failed dependency temporary-directory creation should propagate as an error"
+  [[ ! -e "$HOME/curl-calls" ]] || fail "A failed mktemp still attempted a download"
+  [[ ! -e "$HOME/.local/bin/tool" ]] || fail "A failed mktemp left a partial target"
+  [[ ! -e "$XDG_STATE_HOME/selfishell/dependencies/tool" ]] || fail "A failed mktemp recorded a dependency version"
+  [[ "$output" != *'Installed approved dependency'* ]] || fail "A failed mktemp printed a success message"
+}
+
 test_download_dependency_replaces_directory_target_without_nesting() {
   local payload checksum output
   payload="$TEST_ROOT/tool"
