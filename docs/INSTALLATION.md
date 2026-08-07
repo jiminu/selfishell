@@ -86,21 +86,11 @@ selfishell install --profile developer --skip-packages --yes
 `SELFISHELL_OFFLINE=1` and `--skip-packages` perform configuration-only
 installation without package or network commands.
 
-## Legacy Zsh transition
+## Zsh integration
 
-Selfishell no longer replaces `~/.zshrc` with a managed symbolic link or loads
-`~/.config/selfishell/local.zsh`. Existing installations using that legacy model
-are intentionally not migrated automatically. Before reinstalling the new
-configuration:
-
-```sh
-selfishell uninstall --restore --yes
-```
-
-Review the preserved `~/.config/selfishell/local.zsh`, copy any settings you
-still want directly into the restored `~/.zshrc`, then run `selfishell install`
-again. Selfishell will add one marked loader block and leave the rest of
-`.zshrc` user-owned. It does not delete `local.zsh`.
+`~/.zshrc` is user-owned. Selfishell manages one bounded loader block that
+sources the managed platform entrypoint; personal aliases, exports, PATH
+entries, and functions belong outside that block.
 
 Selfishell also adds a marked block to the user-owned `~/.zprofile`. The block
 runs `mise activate zsh --shims` when mise is available, allowing login

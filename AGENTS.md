@@ -75,10 +75,6 @@ Preserve these lifecycle invariants:
 - increment the fixed-line state format version before changing field order or
   meaning.
 
-The former managed `.zshrc` symlink and `local.zsh` extension are retired. Do
-not migrate or delete them automatically. Detect legacy state and stop with
-manual uninstall/reinstall instructions.
-
 ## Implementation Boundaries
 
 - Keep `install.sh`, the CLI entrypoint, and shared libraries compatible with
