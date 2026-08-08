@@ -47,11 +47,10 @@ doctor_report_zinit_plugins() {
   manifest="$(dependencies_manifest_path)"
   [[ -r "$manifest" ]] || return 0
 
-  # install_zinit_plugins only verifies HEAD against the manifest for a
-  # checkout it just cloned; a checkout that already existed on a later run
-  # is never re-verified (never auto-modified, per AGENTS.md's "never
-  # overwrite user data" policy for existing paths). This is doctor's only
-  # chance to surface a checkout that has since drifted or been modified.
+  # install_zinit_plugins reprovisions any checkout that doesn't match the
+  # manifest, but only when `selfishell install`/`update` actually runs;
+  # ordinary shell startup never does. This is doctor's way to surface drift
+  # between those runs without having to invoke install/update speculatively.
   while read -r record_type repository revision _; do
     [[ "$record_type" == zsh-plugin ]] || continue
     plugin_dir="$data_home/zinit/plugins/${repository//\//---}"
@@ -73,12 +72,13 @@ doctor_report_zinit_plugins() {
   fi
   if ((${#dirty[@]} > 0)); then
     doctor_error "Zsh plugins: ${#dirty[@]} modified locally (${dirty[*]})"
-    printf "        These checkouts have uncommitted changes; Selfishell will not overwrite them automatically.\n"
+    printf "        Run '%sselfishell update --tools-only%s' to reset it to the approved revision.\n" \
+      "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
     DOCTOR_RESULT="$SELFISHELL_EXIT_ERROR"
   fi
   if ((${#drifted[@]} > 0)); then
     doctor_error "Zsh plugins: ${#drifted[@]} at an unapproved revision (${drifted[*]})"
-    printf "        Remove the checkout and run '%sselfishell install%s' to reset it to the approved revision.\n" \
+    printf "        Run '%sselfishell update --tools-only%s' to reset it to the approved revision.\n" \
       "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
     DOCTOR_RESULT="$SELFISHELL_EXIT_ERROR"
   fi
