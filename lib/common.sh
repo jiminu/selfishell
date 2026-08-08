@@ -64,9 +64,8 @@ cli_error() {
   printf '%sselfishell:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
-# For a non-fatal condition a command reports and then continues past --
-# unlike cli_error, this never precedes a return/exit for the branch that
-# calls it.
+# Reports a non-fatal condition to stderr. Unlike cli_error, the caller
+# is free to continue execution or return success afterward.
 cli_warn() {
   printf '%sselfishell: warning:%s %s\n' "$SELFISHELL_COLOR_YELLOW_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }

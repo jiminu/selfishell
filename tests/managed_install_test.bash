@@ -1184,6 +1184,29 @@ test_active_file_state_with_changed_source_reports_updated() {
     fail "A resource whose source changed since an active install must not be reported as a fresh install"
 }
 
+test_active_file_state_with_missing_target_reports_installed() {
+  local target_file="$XDG_CONFIG_HOME/selfishell/zsh/common.zsh"
+  local state_dir="$XDG_STATE_HOME/selfishell/resources"
+  local stdout
+
+  mkdir -p "$(dirname "$target_file")" "$state_dir"
+  {
+    printf '2\nfile\nactive\n%s\n-\n-\n%s\n' \
+      "$target_file" \
+      "$(cksum <"$ROOT_DIR/common/common.zsh" | awk '{print $1 ":" $2}')"
+  } >"$state_dir/zsh-common.state"
+  rm -f "$target_file"
+
+  stdout="$(run_selfishell install --skip-packages --yes)"
+
+  cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
+    fail "An active file state with a missing target was not recreated"
+  grep -Fq "Installed managed file: $target_file" <<<"$stdout" ||
+    fail "An active state whose target is missing should be reported as a fresh install"
+  ! grep -Fq "Updated managed file: $target_file" <<<"$stdout" ||
+    fail "An active state whose target is missing must not be reported as an update"
+}
+
 test_install_does_not_depend_on_checkout() {
   local release_root="$TEST_ROOT/release"
 
