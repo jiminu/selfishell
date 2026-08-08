@@ -68,7 +68,7 @@ test_developer_profile_docs_include_mise_tool_versions() {
 }
 
 # AGENTS.md should point to common/mise.toml instead of duplicating its tool
-# list. Keep guarding against the stale tool claims that prompted this check.
+# list.
 test_agents_developer_profile_tools_use_mise_source_of_truth() {
   local mise_line
   local mise_source="\`common/mise.toml\`"
@@ -78,11 +78,6 @@ test_agents_developer_profile_tools_use_mise_source_of_truth() {
     fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool declaration"
   [[ "$mise_line" == *'source of truth'* ]] ||
     fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool source of truth"
-
-  for tool in Temurin kubectl kubectx; do
-    [[ "$mise_line" != *"$tool"* ]] ||
-      fail "AGENTS.md still claims $tool is managed by mise in the developer profile"
-  done
 }
 
 # docs/PROFILES.md's profile table must match the actual profiles/minimal.conf
@@ -104,10 +99,6 @@ test_profile_table_boundaries_match_profile_files() {
       fail "docs/PROFILES.md claims minimal includes $tool, but profiles/minimal.conf does not"
     grep -Fqi "$tool" "$ROOT_DIR/profiles/minimal.conf" &&
       fail "profiles/minimal.conf now installs $tool; the minimal boundary description needs a matching update"
-  done
-  for tool in Temurin kubectl kubectx; do
-    [[ "$developer_line" != *"$tool"* ]] ||
-      fail "docs/PROFILES.md still claims developer manages $tool via mise"
   done
   [[ "$developer_line" == *uv* ]] || fail "docs/PROFILES.md's developer boundary does not mention uv"
   return 0

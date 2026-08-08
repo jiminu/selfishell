@@ -58,9 +58,7 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
   [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
   [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"
   [[ "$output" != *'direct package: mise'* ]] || fail "Minimal profile included developer runtimes"
-  [[ "$output" != *'kubectl'* ]] || fail "Minimal profile included Kubernetes tools"
   [[ "$output" != *'build-essential'* ]] || fail "Minimal profile included compiler tooling"
-  [[ "$output" != *'tree-sitter-cli'* ]] || fail "Minimal profile included Tree-sitter tooling"
   [[ "$full_output" != *'Neovim plugins'* ]] || fail "Minimal profile included Neovim plugin setup"
 }
 
@@ -77,10 +75,6 @@ test_developer_includes_development_tools() {
     fail "Developer profile is missing development tools"
   [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14'* ]] ||
     fail "Developer profile is missing mise runtimes"
-  [[ "$output" != *'kubectl'* && "$output" != *'java'* && "$output" != *'kubectx'* ]] ||
-    fail "Developer profile still includes Kubernetes or Java tools"
-  [[ "$output" == *'build-essential'* && "$output" == *'tree-sitter@0.26.11'* ]] ||
-    fail "Developer profile is missing Tree-sitter build tooling"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
 

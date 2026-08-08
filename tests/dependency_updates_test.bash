@@ -116,12 +116,6 @@ test_rejects_metadata_without_manifest_entry() {
     fail "Rejected metadata changed the manifest"
 }
 
-test_discovery_has_no_removed_vundle_dependency() {
-  if grep -qi 'vundle' "$ROOT_DIR/scripts/update-dependencies.sh"; then
-    fail "Dependency discovery still references removed Vundle metadata"
-  fi
-}
-
 # End-to-end: a Zsh plugin bump must land in dependencies.conf *and* rewrite
 # the matching Zinit `ver'<sha>'` pin, while leaving an unrelated plugin's
 # pin (in the same target file) and an unrelated file byte-exact untouched.

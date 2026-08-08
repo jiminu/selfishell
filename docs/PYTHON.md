@@ -6,7 +6,7 @@ Selfishell manages Python runtimes and packages using a modern, fast toolchain p
 
 * **Runtime Manager (`mise`)**: Handles the installation of global and local Python versions.
 * **Package & Virtualenv Manager (`uv`)**: Handles dependencies, virtual environments, and project bootstrapping at near-instant speed.
-* **Auto-Activation**: When configured, entering a project directory with a `.venv` directory will automatically source and activate it.
+* **Auto-Activation**: When configured, entering a uv project directory (one with a `uv.lock` file) will automatically manage and activate its virtual environment.
 
 ---
 
@@ -29,14 +29,18 @@ uv venv --python 3.12
 
 ### 2. Auto-Activation
 
-To enable auto-activation, add `python.uv_venv_auto = "create|source"` to the `[settings]` section of your project's local `mise.toml` file:
+`python.uv_venv_auto` integrates mise with uv to manage a project's virtual environment, but it applies to uv projects that have a `uv.lock` file, not simply any directory containing a `.venv`. A `uv.lock` is normally created as part of a uv project workflow, for example by `uv lock` or `uv sync`.
+
+Add the setting to the `[settings]` section of your project's local `mise.toml` file:
 
 ```toml
 [settings]
 python.uv_venv_auto = "create|source"
 ```
 
-Once configured, simply entering the directory will activate it:
+`"source"` activates an existing virtual environment; `"create|source"` also creates one when necessary before activating it.
+
+Once configured, entering the uv project directory will activate it:
 
 ```bash
 cd /path/to/project
@@ -73,4 +77,4 @@ uv pip compile pyproject.toml -o requirements.txt
 Selfishell's built-in Neovim configuration integrates with Python LSP and tools. 
 
 To ensure Neovim can resolve your project dependencies, always run `neovim` from the project root after the virtual environment has been created and packages have been installed.
-Once auto-activation is configured, `mise` will automatically activate `.venv` when entering the directory, allowing Neovim to inherit the correct path to the local virtualenv Python interpreter.
+Once auto-activation is configured, `mise` will automatically activate the uv project's `.venv` when entering its directory, allowing Neovim to inherit the correct path to the local virtualenv Python interpreter.
