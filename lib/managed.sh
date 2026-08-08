@@ -554,6 +554,13 @@ managed_install_file() {
   local original_backup="-"
   local conflict_backup=""
   local answer=""
+  # Updated is only accurate when an active managed file actually existed on
+  # disk immediately before this run and got replaced -- an "active" prior
+  # state alone isn't enough: the target may have been deleted since (e.g. by
+  # the user), in which case this run recreates it and that's an Installed.
+  # A "pending" state (interrupted before or during a previous install) must
+  # likewise still be reported as a fresh Installed, not an Updated.
+  local previously_active_file=0
 
   source_checksum="$(managed_checksum "$source_file")"
   if managed_read_state "$resource"; then
@@ -564,6 +571,7 @@ managed_install_file() {
     original_backup="$MANAGED_STATE_BACKUP"
 
     if [[ -f "$target_file" ]]; then
+      [[ "$MANAGED_STATE_STATUS" != "active" ]] || previously_active_file=1
       current_checksum="$(managed_checksum "$target_file")"
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
         if [[ "$MANAGED_STATE_STATUS" == "active" || "$original_backup" == "-" || -e "$original_backup" || -L "$original_backup" ]]; then
@@ -593,7 +601,11 @@ managed_install_file() {
               printf '%sBacked up modified managed file:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
               managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
               managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
-              printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+              if [[ "$previously_active_file" == 1 ]]; then
+                printf '%sUpdated managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+              else
+                printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+              fi
               return 0
               ;;
             *)
@@ -625,7 +637,11 @@ managed_install_file() {
   fi
 
   if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould install managed file:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    if [[ "$previously_active_file" == 1 ]]; then
+      printf '%sWould update managed file:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    else
+      printf '%sWould install managed file:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file"
+    fi
     return
   fi
 
@@ -636,7 +652,11 @@ managed_install_file() {
   fi
   managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
   managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
-  printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+  if [[ "$previously_active_file" == 1 ]]; then
+    printf '%sUpdated managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+  else
+    printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+  fi
 }
 
 managed_install_link() {

@@ -228,6 +228,10 @@ dependency_install() {
   local architecture="$3"
   local force="${4:-0}"
   local installed
+  # Only a genuine version bump counts as an update; reinstalling a
+  # corrupted or force-refreshed same-version target is still a fresh
+  # Installed, since nothing was actually approved-and-working before.
+  local approved_version_changed=0
 
   dependency_load "$name" "$platform" "$architecture" || return
   selfishell_initialize_paths
@@ -235,9 +239,10 @@ dependency_install() {
 
   if [[ -n "$installed" ]]; then
     if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" ]] && dependency_managed_target_is_valid; then
-      printf '%sAlready approved:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+      printf '%sUp to date:%s %s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
       return
     fi
+    [[ "$installed" == "$DEPENDENCY_VERSION" ]] || approved_version_changed=1
   elif [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     if dependency_external_target_is_usable; then
       printf '%sExternally installed; preserving:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$DEPENDENCY_TARGET"
@@ -256,5 +261,9 @@ dependency_install() {
       ;;
   esac
   dependency_write_version "$name" "$DEPENDENCY_VERSION" || return 1
-  printf '%sInstalled approved dependency:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+  if [[ "$approved_version_changed" == 1 ]]; then
+    printf '%sUpdated approved dependency:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+  else
+    printf '%sInstalled approved dependency:%s %s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+  fi
 }

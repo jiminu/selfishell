@@ -52,14 +52,22 @@ fi
 # stdout-gated variables above.
 if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
   SELFISHELL_COLOR_RED_STDERR=$'\033[31m'
+  SELFISHELL_COLOR_YELLOW_STDERR=$'\033[33m'
   SELFISHELL_COLOR_RESET_STDERR=$'\033[0m'
 else
   SELFISHELL_COLOR_RED_STDERR=
+  SELFISHELL_COLOR_YELLOW_STDERR=
   SELFISHELL_COLOR_RESET_STDERR=
 fi
 
 cli_error() {
   printf '%sselfishell:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
+}
+
+# Reports a non-fatal condition to stderr. Unlike cli_error, the caller
+# is free to continue execution or return success afterward.
+cli_warn() {
+  printf '%sselfishell: warning:%s %s\n' "$SELFISHELL_COLOR_YELLOW_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
 have_command() {
@@ -175,7 +183,7 @@ confirm_action() {
   case "$answer" in
     y | Y | yes | YES) return 0 ;;
     *)
-      printf 'Cancelled.\n'
+      printf '%sCancelled.%s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
       return "$SELFISHELL_EXIT_ERROR"
       ;;
   esac

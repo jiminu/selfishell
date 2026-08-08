@@ -13,7 +13,7 @@ homebrew_ensure_installed() {
     return
   fi
 
-  printf 'Installing Homebrew\n'
+  printf '%sInstalling Homebrew%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   /bin/bash -c "$(selfishell_curl transfer https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   homebrew_activate
   have_command brew
@@ -66,11 +66,12 @@ homebrew_install_packages() {
   fi
 
   if ! have_command brew; then
-    cli_error "Homebrew is required to install packages."
     if [[ "$requirement" == "optional" ]]; then
+      cli_warn "Homebrew is required to install packages."
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
       return 0
     fi
+    cli_error "Homebrew is required to install packages."
     return 1
   fi
 
@@ -84,27 +85,29 @@ homebrew_install_packages() {
 
   if ((${#installed_packages[@]} > 0)); then
     printf '%sAlready installed Homebrew %s (%d):%s %s\n' \
-      "$SELFISHELL_COLOR_GREEN" "$manager" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
+      "$SELFISHELL_COLOR_CYAN" "$manager" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
   fi
 
   ((${#missing_packages[@]} > 0)) || return 0
 
   if [[ "$manager" == "cask" ]]; then
     if ! HOMEBREW_NO_ASK=1 brew install --cask "${missing_packages[@]}"; then
-      cli_error "Could not install $requirement Homebrew casks: ${missing_packages[*]}"
       if [[ "$requirement" == "optional" ]]; then
+        cli_warn "Could not install $requirement Homebrew casks: ${missing_packages[*]}"
         SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${missing_packages[@]}")
         return 0
       fi
+      cli_error "Could not install $requirement Homebrew casks: ${missing_packages[*]}"
       return 1
     fi
   else
     if ! HOMEBREW_NO_ASK=1 brew install "${missing_packages[@]}"; then
-      cli_error "Could not install $requirement Homebrew formulae: ${missing_packages[*]}"
       if [[ "$requirement" == "optional" ]]; then
+        cli_warn "Could not install $requirement Homebrew formulae: ${missing_packages[*]}"
         SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${missing_packages[@]}")
         return 0
       fi
+      cli_error "Could not install $requirement Homebrew formulae: ${missing_packages[*]}"
       return 1
     fi
   fi

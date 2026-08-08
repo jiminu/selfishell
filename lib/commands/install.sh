@@ -7,7 +7,7 @@ Usage:
 
 Options:
   --profile NAME  Select minimal or developer (default: developer)
-  --skip-packages Install configuration without package operations
+  --skip-packages Skip package and tool installation and apply managed configuration only
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -266,7 +266,7 @@ command_install() {
   fi
 
   if [[ "$skip_packages" == "1" ]]; then
-    printf 'Skipping package installation.\n'
+    printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
     packages_install_profile "$platform" "$dry_run"
     if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then

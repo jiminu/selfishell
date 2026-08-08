@@ -198,7 +198,7 @@ release_install() {
   # A failure here only loses the rollback link, not the update itself, so
   # warn and continue rather than aborting an otherwise-successful update.
   if ! release_atomic_link "$(readlink "$SELFISHELL_SHARE_DIR/current")" "$SELFISHELL_SHARE_DIR/previous"; then
-    cli_error "Failed to update the previous release link; continuing."
+    cli_warn "Failed to update the previous release link; continuing."
   fi
   release_atomic_link "releases/$version" "$SELFISHELL_SHARE_DIR/current" || {
     cli_error "Failed to activate Selfishell $version."

@@ -151,7 +151,7 @@ command_doctor() {
       elif have_command clang; then
         doctor_ok "C compiler: clang ($(clang --version | head -n 1))"
       else
-        doctor_error "C compiler: gcc or clang was not found (required for compiling Treesitter parsers)"
+        doctor_error "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)"
         if [[ "$platform" == "macos" ]]; then
           printf "        Install Xcode Command Line Tools by running: %sxcode-select --install%s\n" \
             "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"

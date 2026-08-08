@@ -72,6 +72,6 @@ packages_install_profile() {
   ((${#optional_mise[@]} == 0)) || install_mise_tools optional "$dry_run" "${optional_mise[@]}"
 
   if ((${#SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[@]} > 0)); then
-    cli_error "Skipped optional packages: ${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}"
+    cli_warn "Skipped optional packages: ${SELFISHELL_SKIPPED_OPTIONAL_PACKAGES[*]}"
   fi
 }

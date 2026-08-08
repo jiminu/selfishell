@@ -118,7 +118,7 @@ uninstall_remove_path_entry() {
   uninstall_validate_path_entry "$prefix" || return
   [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
   if [[ "$dry_run" == 1 ]]; then
-    printf 'Would remove Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
+    printf '%sWould remove Selfishell PATH entry from:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_PATH_STARTUP_FILE"
     return
   fi
 
@@ -145,7 +145,7 @@ uninstall_remove_path_entry() {
     rm -f "$temporary"
     return 1
   }
-  printf 'Removed Selfishell PATH entry from: %s\n' "$SELFISHELL_PATH_STARTUP_FILE"
+  printf '%sRemoved Selfishell PATH entry from:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_PATH_STARTUP_FILE"
 }
 
 uninstall_purge() {
@@ -159,18 +159,18 @@ uninstall_purge() {
   uninstall_prepare_purge "$bin_dir/sfs" selfishell || return
 
   if [[ "$dry_run" == 1 ]]; then
-    printf 'Would remove Selfishell CLI link: %s\n' "$bin_dir/sfs"
-    printf 'Would remove Selfishell CLI link: %s\n' "$bin_dir/selfishell"
-    printf 'Would remove Selfishell releases: %s\n' "$SELFISHELL_SHARE_DIR"
-    printf 'Would remove Selfishell cache: %s\n' "$SELFISHELL_CACHE_DIR"
-    printf 'Would remove Selfishell state: %s\n' "$SELFISHELL_STATE_DIR"
+    printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$bin_dir/sfs"
+    printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$bin_dir/selfishell"
+    printf '%sWould remove Selfishell releases:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_SHARE_DIR"
+    printf '%sWould remove Selfishell cache:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_CACHE_DIR"
+    printf '%sWould remove Selfishell state:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_STATE_DIR"
     return
   fi
 
   rm -f "$bin_dir/sfs" "$bin_dir/selfishell" || return
   rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
+  printf '%sSelfishell configuration, CLI, releases, cache, and state removed.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
   printf '%s\n' \
-    'Selfishell configuration, CLI, releases, cache, and state removed.' \
     'User-owned files it created once and never manages, such as the mise config.toml, are left in place.'
 }
 
@@ -267,10 +267,10 @@ command_uninstall() {
 
   if [[ "$result" == "$SELFISHELL_EXIT_OK" ]]; then
     if [[ "$dry_run" == "1" ]]; then
-      printf 'Dry run complete; no files were changed.\n'
+      printf '%sDry run complete; no files were changed.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     elif [[ "$purge" == 0 ]]; then
+      printf '%sSelfishell configuration uninstalled.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
       printf '%s\n' \
-        'Selfishell configuration uninstalled.' \
         'The Selfishell CLI is still installed.' \
         "Run '${SELFISHELL_COLOR_BOLD}selfishell uninstall --purge${SELFISHELL_COLOR_RESET}' to also remove the CLI, releases, cache, and state."
     fi

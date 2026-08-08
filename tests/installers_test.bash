@@ -226,9 +226,9 @@ test_neovim_plugin_dry_run_is_non_mutating() {
   local output
   NVIM_ARGUMENTS=""
   output="$(install_neovim_plugins 1)"
-  [[ "$output" == *'Would install declared Neovim plugins.'* ]] ||
+  [[ "$output" == *'Would sync declared Neovim plugins.'* ]] ||
     fail "Neovim plugin dry run was not reported"
-  [[ "$output" == *'Would install lazy.nvim bootstrap repository.'* ]] ||
+  [[ "$output" == *'Would sync lazy.nvim bootstrap repository.'* ]] ||
     fail "lazy.nvim dry run was not reported"
   [[ -z "$NVIM_ARGUMENTS" ]] || fail "Neovim plugin dry run invoked Neovim"
 }
@@ -249,6 +249,22 @@ test_installs_lazy_nvim_before_syncing_plugins() {
   [[ "${GIT_CALLS[*]}" == *'checkout --quiet --detach 306a05526ada86a7b30af95c5cc81ffba93fef97'* ]] ||
     fail "lazy.nvim bootstrap did not check out the approved revision"
   [[ "${NVIM_CALLS[*]}" == *'Lazy! sync'* ]] || fail "Neovim plugin sync did not run"
+}
+
+test_lazy_nvim_revision_change_reports_updated() {
+  local lazy_path
+  local output
+
+  lazy_path="$HOME/.local/share/selfishell/nvim/lazy/lazy.nvim"
+  rm -rf "$HOME/.local/share/selfishell/nvim"
+  mkdir -p "$lazy_path/.git"
+  printf '0000000000000000000000000000000000000000\n' >"$lazy_path/.git/selfishell-approved-revision"
+  GIT_CALLS=()
+
+  output="$(install_lazy_nvim "$lazy_path")"
+
+  [[ "$output" == *'Updated approved lazy.nvim revision: 306a05526ada86a7b30af95c5cc81ffba93fef97'* ]] ||
+    fail "Changing an existing lazy.nvim checkout to a new revision was not reported as updated: $output"
 }
 
 test_lazy_nvim_recovers_from_stale_temporary_path() {

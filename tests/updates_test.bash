@@ -54,8 +54,8 @@ test_tools_update_skip_packages_avoids_package_operations() {
   printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
 
   output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --skip-packages --dry-run)"
-  [[ "$output" == *'Skipping package installation.'* ]] ||
-    fail "--skip-packages did not report skipping package installation: $output"
+  [[ "$output" == *'Skipping package and tool installation.'* ]] ||
+    fail "--skip-packages did not report skipping package and tool installation: $output"
   [[ "$output" != *'apt packages'* ]] ||
     fail "--skip-packages still touched apt packages: $output"
 }
@@ -208,9 +208,30 @@ test_managed_download_valid_target_is_already_approved() {
   printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
 
   output="$(run_dependency_install tool)"
-  [[ "$output" == *'Already approved: tool 1.0'* ]] ||
-    fail "A valid managed target was not reported as already approved: $output"
+  [[ "$output" == *'Up to date: tool 1.0'* ]] ||
+    fail "A valid managed target was not reported as up to date: $output"
   assert_file_content 'existing-install-marker' "$HOME/.local/bin/tool"
+}
+
+test_managed_download_version_bump_reports_updated() {
+  local payload checksum output
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-2.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 2.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin" "$XDG_STATE_HOME/selfishell/dependencies"
+  printf 'old-1.0-install\n' >"$HOME/.local/bin/tool"
+  chmod 0755 "$HOME/.local/bin/tool"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+
+  output="$(run_dependency_install tool)"
+  [[ "$output" == *'Updated approved dependency: tool 2.0'* ]] ||
+    fail "A version bump over an already-approved dependency was not reported as updated: $output"
+  [[ "$output" != *'Installed approved dependency'* ]] ||
+    fail "A version bump must be reported as updated, not a fresh install"
+  cmp -s "$payload" "$HOME/.local/bin/tool" || fail "The dependency target was not replaced with the new version"
+  assert_file_content '2.0' "$XDG_STATE_HOME/selfishell/dependencies/tool"
 }
 
 test_managed_download_broken_target_is_not_already_approved() {
@@ -239,8 +260,8 @@ test_managed_download_broken_target_is_not_already_approved() {
     esac
 
     output="$(run_dependency_install tool)"
-    [[ "$output" != *'Already approved'* ]] ||
-      fail "A same-version, broken ($shape) managed target was treated as Already approved"
+    [[ "$output" != *'Up to date'* ]] ||
+      fail "A same-version, broken ($shape) managed target was treated as up to date"
     [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
       fail "A same-version, broken ($shape) managed target was not reinstalled: $output"
   done
@@ -291,8 +312,8 @@ test_managed_git_valid_target_is_already_approved() {
   run_dependency_install testgit >/dev/null
 
   output="$(run_dependency_install testgit)"
-  [[ "$output" == *'Already approved: testgit v1.0'* ]] ||
-    fail "A valid managed git target was not reported as already approved: $output"
+  [[ "$output" == *'Up to date: testgit v1.0'* ]] ||
+    fail "A valid managed git target was not reported as up to date: $output"
 }
 
 test_managed_git_broken_target_is_not_already_approved() {
@@ -316,8 +337,8 @@ test_managed_git_broken_target_is_not_already_approved() {
   rm -rf "$HOME/.local/share/testgit"
   mkdir -p "$HOME/.local/share/testgit/.git"
   output="$(run_dependency_install testgit)"
-  [[ "$output" != *'Already approved'* ]] ||
-    fail "A managed git target missing its marker was treated as Already approved"
+  [[ "$output" != *'Up to date'* ]] ||
+    fail "A managed git target missing its marker was treated as up to date"
   [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
     fail "A managed git target missing its marker was not reinstalled: $output"
 
@@ -325,8 +346,8 @@ test_managed_git_broken_target_is_not_already_approved() {
   mkdir -p "$HOME/.local/share/testgit"
   printf 'marker\n' >"$HOME/.local/share/testgit/marker"
   output="$(run_dependency_install testgit)"
-  [[ "$output" != *'Already approved'* ]] ||
-    fail "A managed git target missing .git was treated as Already approved"
+  [[ "$output" != *'Up to date'* ]] ||
+    fail "A managed git target missing .git was treated as up to date"
   [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
     fail "A managed git target missing .git was not reinstalled: $output"
 
@@ -335,8 +356,8 @@ test_managed_git_broken_target_is_not_already_approved() {
   printf 'marker\n' >"$elsewhere/marker"
   ln -s "$elsewhere" "$HOME/.local/share/testgit"
   output="$(run_dependency_install testgit)"
-  [[ "$output" != *'Already approved'* ]] ||
-    fail "A managed git target that is a symlink was treated as Already approved"
+  [[ "$output" != *'Up to date'* ]] ||
+    fail "A managed git target that is a symlink was treated as up to date"
   [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
     fail "A managed git target that is a symlink was not reinstalled: $output"
   assert_file_content 'marker' "$elsewhere/marker"
@@ -411,15 +432,15 @@ test_download_dependency_replaces_directory_target_without_nesting() {
   # the approved binary unreachable at $HOME/.local/bin/tool/archive while
   # still reporting success. The matching recorded version also means this
   # covers dependency_managed_target_is_valid() correctly rejecting a
-  # directory-shaped target instead of taking the Already approved fast path.
+  # directory-shaped target instead of taking the Up to date fast path.
   mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
   printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
   mkdir -p "$HOME/.local/bin/tool"
   printf 'leftover\n' >"$HOME/.local/bin/tool/leftover"
 
   output="$(run_dependency_install tool)"
-  [[ "$output" != *'Already approved'* ]] ||
-    fail "A same-version managed target replaced by a directory was treated as Already approved"
+  [[ "$output" != *'Up to date'* ]] ||
+    fail "A same-version managed target replaced by a directory was treated as up to date"
   [[ "$output" == *'Installed approved dependency: tool 1.0'* ]] ||
     fail "Dependency install over a directory target was not reported"
   [[ -f "$HOME/.local/bin/tool" ]] ||

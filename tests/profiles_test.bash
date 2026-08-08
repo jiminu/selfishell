@@ -28,7 +28,7 @@ teardown_profile_home() {
 run_profile_dry_run() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --profile "$1" --dry-run)"
-  printf '%s\n' "$output" | awk '/^Would install .* (apt packages|Homebrew|direct package|mise tools)/'
+  printf '%s\n' "$output" | awk '/^Would (install .* (apt packages|Homebrew)|sync .* (direct package|mise tools))/'
 }
 
 test_default_profile_is_developer() {
