@@ -7,6 +7,7 @@ local M = {
     "jsonls@4.10.0",
     "yamlls@1.24.0",
     "tombi@v1.2.7",
+    "marksman@2026-02-08",
   },
 }
 

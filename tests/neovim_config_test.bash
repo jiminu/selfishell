@@ -216,12 +216,14 @@ test_mason_lsp_servers_are_versioned() {
     grep -oE '"[^"]+"' | tr -d '"')"
   [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
 
-  # A leading "v" is optional: most Mason packages track bare semver, but a
-  # package whose version follows its upstream release tag verbatim (e.g.
-  # tombi's v1.2.7 GitHub releases) needs it to resolve at all.
+  # Most Mason packages track bare semver, optionally "v"-prefixed when a
+  # package's version follows its upstream release tag verbatim (e.g. tombi's
+  # v1.2.7 GitHub releases). marksman instead cuts dated releases
+  # (YYYY-MM-DD), so that exact-date form is accepted too -- any of these
+  # still pins to one specific, resolvable Mason version.
   while IFS= read -r server; do
-    [[ "$server" =~ ^[A-Za-z0-9_-]+@v?[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-      fail "Default LSP server is not pinned as 'name@x.y.z': $server"
+    [[ "$server" =~ ^[A-Za-z0-9_-]+@(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] ||
+      fail "Default LSP server is not pinned to a resolvable Mason version: $server"
   done <<<"$declared_servers"
 }
 
