@@ -223,7 +223,7 @@ test_mason_lsp_servers_are_versioned() {
   # still pins to one specific, resolvable Mason version.
   while IFS= read -r server; do
     [[ "$server" =~ ^[A-Za-z0-9_-]+@(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] ||
-      fail "Default LSP server is not pinned to a resolvable Mason version: $server"
+      fail "Default LSP server is not pinned to a supported version format: $server"
   done <<<"$declared_servers"
 }
 
