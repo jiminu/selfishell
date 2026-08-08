@@ -59,9 +59,9 @@ shows actions available in the current context; continue typing to narrow the
 list. Every Selfishell mapping has a description, so which-key remains aligned
 with the installed configuration without a separate shortcut list.
 
-Lua, Python, Bash, sh, JavaScript, TypeScript, JSON, YAML, TOML, and
-Markdown LSP support appears when a configured server attaches. Neovim's
-standard LSP mappings remain available as well.
+Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
+when a configured server attaches. Neovim's standard LSP mappings remain
+available as well.
 
 Additional LSP servers are installed with `:LspInstall <server>`, the standard
 mason-lspconfig command; installed servers auto-enable on the next matching
