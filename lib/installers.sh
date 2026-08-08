@@ -44,7 +44,7 @@ install_zinit_plugins() {
     if [[ -e "$plugin_dir" || -L "$plugin_dir" ]]; then
       plugin_previous="$(selfishell_unique_path "${plugin_dir}.previous.$$")"
       if ! mv -- "$plugin_dir" "$plugin_previous"; then
-        cli_error "Could not move aside outdated Zinit plugin checkout: $repository"
+        cli_error "Could not move aside Zinit plugin checkout: $repository"
         return 1
       fi
     fi
