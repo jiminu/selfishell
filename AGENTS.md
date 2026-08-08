@@ -55,6 +55,10 @@ The installed product must work after the source checkout is removed.
 Treat every existing path as user data. Back it up safely, never overwrite a
 backup, and never restore over an occupied target.
 
+Selfishell-declared dependency installation paths (e.g. a Zinit-managed Zsh
+plugin checkout declared in `dependencies.conf`) are managed product state,
+not user data, and may be replaced to restore their approved pinned version.
+
 Managed defaults are copied under `~/.config/selfishell`. User-facing
 integration uses either managed links or bounded blocks in user-owned
 configuration files.

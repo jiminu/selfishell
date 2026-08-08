@@ -7,7 +7,7 @@ install_zinit_plugins() {
   local revisions=()
   local index
   local manifest
-  local plugin_dir plugin_was_missing current_revision
+  local plugin_dir plugin_previous current_revision
   local failure_message
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
@@ -24,9 +24,29 @@ install_zinit_plugins() {
     repository="${repositories[$index]}"
     revision="${revisions[$index]}"
     plugin_dir="$data_home/zinit/plugins/${repository//\//---}"
-    plugin_was_missing=0
-    [[ -e "$plugin_dir" || -L "$plugin_dir" ]] || plugin_was_missing=1
+    plugin_previous=""
     failure_message=""
+
+    # Declared zsh-plugin checkouts are Selfishell-managed dependencies, not
+    # user data (see AGENTS.md): any state other than an exact match with the
+    # approved revision -- missing, a different revision, a dirty working
+    # tree, a non-Git path, or a partial checkout -- is uniformly
+    # reprovisioned from scratch rather than classified and recovered case by
+    # case.
+    if [[ -d "$plugin_dir/.git" ]] &&
+      current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" &&
+      [[ "$current_revision" == "$revision" ]]; then
+      continue
+    fi
+
+    if [[ -e "$plugin_dir" || -L "$plugin_dir" ]]; then
+      plugin_previous="$(selfishell_unique_path "${plugin_dir}.previous.$$")"
+      if ! mv -- "$plugin_dir" "$plugin_previous"; then
+        cli_error "Could not move aside outdated Zinit plugin checkout: $repository"
+        return 1
+      fi
+    fi
+
     if ! (
       command zsh -f -c '
         source "$1" || exit 1
@@ -35,22 +55,29 @@ install_zinit_plugins() {
       ' zsh "$zinit_script" "$repository" "$revision" </dev/null
     ); then
       failure_message="Could not provision Zinit plugin: $repository"
-    elif [[ "$plugin_was_missing" == 1 ]]; then
-      if [[ ! -d "$plugin_dir/.git" ]]; then
-        failure_message="Zinit plugin checkout is missing after provisioning: $repository"
-      elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)"; then
-        failure_message="Could not inspect Zinit plugin after provisioning: $repository"
-      elif [[ "$current_revision" != "$revision" ]]; then
-        failure_message="Zinit plugin revision does not match after provisioning: $repository"
-      fi
+    elif [[ ! -d "$plugin_dir/.git" ]]; then
+      failure_message="Zinit plugin checkout is missing after provisioning: $repository"
+    elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)"; then
+      failure_message="Could not inspect Zinit plugin after provisioning: $repository"
+    elif [[ "$current_revision" != "$revision" ]]; then
+      failure_message="Zinit plugin revision does not match after provisioning: $repository"
     fi
+
     if [[ -n "$failure_message" ]]; then
-      if [[ "$plugin_was_missing" == 1 && (-e "$plugin_dir" || -L "$plugin_dir") ]] &&
-        ! (command rm -rf -- "$plugin_dir"); then
+      if [[ -e "$plugin_dir" || -L "$plugin_dir" ]] && ! (command rm -rf -- "$plugin_dir"); then
         cli_error "Could not clean failed Zinit plugin checkout: $repository"
+      fi
+      if [[ -n "$plugin_previous" && ! -e "$plugin_dir" && ! -L "$plugin_dir" ]] &&
+        ! (mv -- "$plugin_previous" "$plugin_dir"); then
+        cli_error "Could not restore previous Zinit plugin checkout: $repository"
       fi
       cli_error "$failure_message"
       return 1
+    fi
+
+    if [[ -n "$plugin_previous" ]]; then
+      rm -rf -- "$plugin_previous"
+      printf '%sUpdated Zsh plugin:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$repository"
     fi
   done
 }

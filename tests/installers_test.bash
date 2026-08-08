@@ -178,23 +178,100 @@ EOF
   [[ -d "$plugin_dir/.git" ]] || fail "Installer could not retry Zinit provisioning after cleanup"
 }
 
-test_preserves_preexisting_zinit_plugin_path() {
+test_zinit_plugin_at_approved_revision_is_a_noop() {
   local manifest
   local plugin_dir
   local zinit_script
+  local repository revision
 
   manifest="$TEST_ROOT/dependencies.conf"
   zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
-  plugin_dir="$HOME/.local/share/zinit/plugins/zsh-users---zsh-completions"
-  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir"
-  printf '%s\n' 'user data' >"$plugin_dir/preserved"
   grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
-  printf '%s\n' 'zinit() { :; }' >"$zinit_script"
+  read -r _ repository revision _ <"$manifest"
+  plugin_dir="$HOME/.local/share/zinit/plugins/${repository//\//---}"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir/.git"
+  printf '%s\n' "$revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  # shellcheck disable=SC2016 # Literal for zsh to expand when invoked, not now.
+  printf '%s\n' 'zinit() { print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"; }' >"$zinit_script"
   export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_ZINIT_LOG="$TEST_ROOT/zinit-calls"
 
   install_zinit_plugins
 
-  [[ "$(<"$plugin_dir/preserved")" == 'user data' ]] || fail "Installer changed a pre-existing Zinit plugin path"
+  [[ ! -e "$SELFISHELL_TEST_ZINIT_LOG" ]] ||
+    fail "A plugin already at its approved revision should not invoke Zinit at all"
+}
+
+# Declared zsh-plugin checkouts are Selfishell-managed dependencies (see
+# AGENTS.md): a checkout at the wrong revision, dirty, or otherwise not an
+# exact match is reprovisioned via the same fresh-provisioning path used for
+# a missing plugin, rather than preserved as user data.
+test_outdated_zinit_plugin_checkout_is_reprovisioned() {
+  local manifest
+  local plugin_dir
+  local zinit_script
+  local repository revision
+  local output
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  read -r _ repository revision _ <"$manifest"
+  plugin_dir="$HOME/.local/share/zinit/plugins/${repository//\//---}"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir/.git"
+  printf '%s\n' 'old data' >"$plugin_dir/marker"
+  printf '%s\n' 'stale-revision-marker' >"$plugin_dir/.git/selfishell-approved-revision"
+  cat >"$zinit_script" <<'EOF'
+typeset -g approved_revision
+zinit() {
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  output="$(install_zinit_plugins)"
+
+  [[ "$(<"$plugin_dir/.git/selfishell-approved-revision")" == "$revision" ]] ||
+    fail "Outdated Zinit plugin checkout was not reprovisioned to the approved revision"
+  [[ ! -e "$plugin_dir/marker" ]] || fail "Reprovisioning did not replace the outdated checkout"
+  [[ -z "$(find "$HOME/.local/share/zinit/plugins" -maxdepth 1 -name '*.previous.*')" ]] ||
+    fail "A successful reprovision left a previous checkout behind"
+  [[ "$output" == *"Updated Zsh plugin: $repository"* ]] ||
+    fail "Reprovisioning an outdated plugin was not reported: $output"
+}
+
+test_failed_reprovision_restores_previous_zinit_checkout() {
+  local manifest
+  local plugin_dir
+  local zinit_script
+  local repository revision
+  local status=0
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  read -r _ repository revision _ <"$manifest"
+  plugin_dir="$HOME/.local/share/zinit/plugins/${repository//\//---}"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir/.git"
+  printf '%s\n' 'old data' >"$plugin_dir/marker"
+  printf '%s\n' 'stale-revision-marker' >"$plugin_dir/.git/selfishell-approved-revision"
+  printf '%s\n' 'exit 1' >"$zinit_script"
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+
+  install_zinit_plugins || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "A failed reprovision should propagate an error"
+  [[ -d "$plugin_dir" ]] || fail "The previous checkout was not restored after a failed reprovision"
+  [[ "$(<"$plugin_dir/marker")" == 'old data' ]] ||
+    fail "The restored checkout does not match the original content"
+  [[ -z "$(find "$HOME/.local/share/zinit/plugins" -maxdepth 1 -name '*.previous.*')" ]] ||
+    fail "A restored checkout left a leftover previous path behind"
 }
 
 test_installs_declared_neovim_plugins() {
