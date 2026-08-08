@@ -216,8 +216,11 @@ test_mason_lsp_servers_are_versioned() {
     grep -oE '"[^"]+"' | tr -d '"')"
   [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
 
+  # A leading "v" is optional: most Mason packages track bare semver, but a
+  # package whose version follows its upstream release tag verbatim (e.g.
+  # tombi's v1.2.7 GitHub releases) needs it to resolve at all.
   while IFS= read -r server; do
-    [[ "$server" =~ ^[A-Za-z0-9_-]+@[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    [[ "$server" =~ ^[A-Za-z0-9_-]+@v?[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
       fail "Default LSP server is not pinned as 'name@x.y.z': $server"
   done <<<"$declared_servers"
 }
