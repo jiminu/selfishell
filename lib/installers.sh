@@ -7,7 +7,7 @@ install_zinit_plugins() {
   local revisions=()
   local index
   local manifest
-  local plugin_dir plugin_previous current_revision
+  local plugin_dir plugin_previous current_revision current_status
   local failure_message
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
@@ -35,7 +35,9 @@ install_zinit_plugins() {
     # case.
     if [[ -d "$plugin_dir/.git" ]] &&
       current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" &&
-      [[ "$current_revision" == "$revision" ]]; then
+      [[ "$current_revision" == "$revision" ]] &&
+      current_status="$(git -C "$plugin_dir" status --porcelain 2>/dev/null)" &&
+      [[ -z "$current_status" ]]; then
       continue
     fi
 

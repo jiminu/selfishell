@@ -39,6 +39,8 @@ git() {
   if [[ "$1" == "-C" && "$3" == "rev-parse" && "$4" == "HEAD" ]]; then
     [[ -r "$2/.git/selfishell-approved-revision" ]] || return 1
     command cat "$2/.git/selfishell-approved-revision"
+  elif [[ "$1" == "-C" && "$3" == "status" && "$4" == "--porcelain" ]]; then
+    printf '%s' "${SELFISHELL_TEST_GIT_STATUS:-}"
   elif [[ "$1" == "clone" ]]; then
     mkdir -p "${@: -1}"
   fi
@@ -244,6 +246,48 @@ EOF
     fail "A successful reprovision left a previous checkout behind"
   [[ "$output" == *"Updated Zsh plugin: $repository"* ]] ||
     fail "Reprovisioning an outdated plugin was not reported: $output"
+}
+
+# A checkout at the approved revision but with local modifications must still
+# be reprovisioned, not treated as a no-op purely because HEAD matches.
+test_dirty_zinit_plugin_at_approved_revision_is_reprovisioned() {
+  local manifest
+  local plugin_dir
+  local zinit_script
+  local repository revision
+  local output
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  zinit_script="$HOME/.local/share/zinit/zinit.git/zinit.zsh"
+  grep '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" | head -n 1 >"$manifest"
+  read -r _ repository revision _ <"$manifest"
+  plugin_dir="$HOME/.local/share/zinit/plugins/${repository//\//---}"
+  mkdir -p "$(dirname "$zinit_script")" "$plugin_dir/.git"
+  printf '%s\n' 'locally modified' >"$plugin_dir/marker"
+  printf '%s\n' "$revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  cat >"$zinit_script" <<'EOF'
+typeset -g approved_revision
+zinit() {
+  if [[ "$1" == ice ]]; then
+    approved_revision="${3#ver}"
+  elif [[ "$1" == light ]]; then
+    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    command mkdir -p "$plugin_dir/.git"
+    print -r -- "$approved_revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  fi
+}
+EOF
+  export SELFISHELL_DEPENDENCIES_FILE="$manifest"
+  export SELFISHELL_TEST_GIT_STATUS=' M marker'
+
+  output="$(install_zinit_plugins)"
+
+  [[ ! -e "$plugin_dir/marker" ]] ||
+    fail "A dirty checkout already at the approved revision was not reprovisioned"
+  [[ "$(<"$plugin_dir/.git/selfishell-approved-revision")" == "$revision" ]] ||
+    fail "Reprovisioning a dirty approved-revision checkout did not converge on the approved revision"
+  [[ "$output" == *"Updated Zsh plugin: $repository"* ]] ||
+    fail "Reprovisioning a dirty approved-revision checkout was not reported: $output"
 }
 
 test_failed_reprovision_restores_previous_zinit_checkout() {
