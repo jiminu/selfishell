@@ -61,7 +61,7 @@ install_direct_package() {
   local dry_run="$3"
 
   if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould install %s direct package:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$package"
+    printf '%sWould sync %s direct package:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$package"
     return
   fi
 
@@ -78,11 +78,12 @@ install_direct_package() {
       install_zinit_plugins
       ;;
     *)
-      cli_error "Unknown direct package: $package"
       if [[ "$requirement" == "optional" ]]; then
+        cli_warn "Unknown direct package: $package"
         SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$package")
         return 0
       fi
+      cli_error "Unknown direct package: $package"
       return 1
       ;;
   esac
@@ -95,26 +96,28 @@ install_mise_tools() {
   shift 2
 
   if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould install %s mise tools:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$*"
+    printf '%sWould sync %s mise tools:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$*"
     return
   fi
   if ! mise_command="$(selfishell_mise_command)"; then
-    cli_error "mise is required to install mise-managed tools."
     if [[ "$requirement" == "optional" ]]; then
+      cli_warn "mise is required to install mise-managed tools."
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
       return 0
     fi
+    cli_error "mise is required to install mise-managed tools."
     return 1
   fi
 
   selfishell_mise_trust
 
   if ! MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" "$mise_command" install "$@"; then
-    cli_error "Could not install $requirement mise tools: $*"
     if [[ "$requirement" == "optional" ]]; then
+      cli_warn "Could not install $requirement mise tools: $*"
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
       return 0
     fi
+    cli_error "Could not install $requirement mise tools: $*"
     return 1
   fi
 }
@@ -153,6 +156,7 @@ selfishell_nvim_plugin_record() {
 install_lazy_nvim() {
   local lazypath="$1"
   local record revision source current_revision temporary previous
+  local previously_installed=0
 
   record="$(selfishell_nvim_plugin_record folke/lazy.nvim)" || {
     cli_error "No approved lazy.nvim revision is declared."
@@ -172,6 +176,7 @@ install_lazy_nvim() {
     fi
     current_revision="$(git -C "$lazypath" rev-parse HEAD)"
     [[ "$current_revision" != "$revision" ]] || return 0
+    previously_installed=1
   elif [[ -e "$lazypath" || -L "$lazypath" ]]; then
     cli_error "lazy.nvim path is not an approved Git checkout; preserving it: $lazypath"
     return 1
@@ -193,7 +198,11 @@ install_lazy_nvim() {
     return 1
   fi
   rm -rf "$previous"
-  printf '%sInstalled approved lazy.nvim revision:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$revision"
+  if [[ "$previously_installed" == 1 ]]; then
+    printf '%sUpdated approved lazy.nvim revision:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$revision"
+  else
+    printf '%sInstalled approved lazy.nvim revision:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$revision"
+  fi
 }
 
 verify_neovim_plugins() {
@@ -245,8 +254,8 @@ install_neovim_plugins() {
   lazypath="${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/nvim/lazy/lazy.nvim"
 
   if [[ "$dry_run" == "1" ]]; then
-    printf '%sWould install declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
-    printf '%sWould install lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    printf '%sWould sync declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    printf '%sWould sync lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
 

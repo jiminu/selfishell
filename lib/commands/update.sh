@@ -57,7 +57,7 @@ update_tools_and_configuration() {
   profile_load "$profile"
 
   if [[ "$skip_packages" == "1" ]]; then
-    printf 'Skipping package installation.\n'
+    printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
     packages_install_profile "$platform" "$dry_run"
     if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
@@ -91,7 +91,7 @@ update_cli_release() {
     return "$SELFISHELL_EXIT_USAGE"
   }
   if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then
-    printf '%sSelfishell CLI is already at %s; skipping CLI update.%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"
+    printf '%sSelfishell CLI is already at %s; skipping CLI update.%s\n' "$SELFISHELL_COLOR_CYAN" "$version" "$SELFISHELL_COLOR_RESET"
     return
   fi
   if [[ "$dry_run" == 1 ]]; then

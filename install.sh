@@ -381,13 +381,13 @@ bootstrap_add_to_path() {
       bootstrap_error "Failed to record Selfishell PATH state."
       return 1
     }
-    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$startup_file"
+    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$startup_file"
     return
   fi
 
   if [[ "$state_file_existed" == 0 && "$bin_state_file_existed" == 0 && -f "$startup_file" ]] &&
     grep -Fqx "$path_entry" "$startup_file" && ! grep -Fqx "$marker" "$startup_file"; then
-    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$startup_file"
+    printf '%sPATH already configured in%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$startup_file"
     return
   fi
 
@@ -571,7 +571,7 @@ main() {
       bootstrap_error "Existing release is incomplete: $release_dir"
       return 1
     fi
-    printf '%sRelease already installed:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_dir"
+    printf '%sRelease already installed:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$release_dir"
   else
     staging_dir="$(mktemp -d "$releases_dir/.${version}.tmp.XXXXXX")"
     SELFISHELL_STAGING_DIR="$staging_dir"

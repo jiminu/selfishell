@@ -1161,6 +1161,29 @@ test_pending_file_state_recovers_before_backup() {
     fail "Pending file state was not completed"
 }
 
+test_active_file_state_with_changed_source_reports_updated() {
+  local target_file="$XDG_CONFIG_HOME/selfishell/zsh/common.zsh"
+  local state_dir="$XDG_STATE_HOME/selfishell/resources"
+  local stdout
+
+  mkdir -p "$(dirname "$target_file")" "$state_dir"
+  printf 'previously installed content' >"$target_file"
+  {
+    printf '2\nfile\nactive\n%s\n-\n-\n%s\n' \
+      "$target_file" \
+      "$(cksum <"$target_file" | awk '{print $1 ":" $2}')"
+  } >"$state_dir/zsh-common.state"
+
+  stdout="$(run_selfishell install --skip-packages --yes)"
+
+  cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
+    fail "An active file state with a changed source was not resynced"
+  grep -Fq "Updated managed file: $target_file" <<<"$stdout" ||
+    fail "A resource whose source changed since an active install should be reported as updated"
+  ! grep -Fq "Installed managed file: $target_file" <<<"$stdout" ||
+    fail "A resource whose source changed since an active install must not be reported as a fresh install"
+}
+
 test_install_does_not_depend_on_checkout() {
   local release_root="$TEST_ROOT/release"
 
@@ -1414,7 +1437,8 @@ test_managed_file_interactive_overwrite_yes() {
   # confirmation (read from FD 0, before the resource loop remaps it);
   # the second "y" answers the managed-file conflict prompt (read from FD 3,
   # a copy of the original stdin taken before that remap).
-  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+  local stdout
+  stdout="$(printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages)"
 
   cmp -s "$ROOT_DIR/common/vimrc" "$target_file" ||
     fail "Modified managed file was not overwritten with the default"
@@ -1423,6 +1447,11 @@ test_managed_file_interactive_overwrite_yes() {
   conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
   [[ -n "$conflict_backup" ]] || fail "No conflict backup was created for the overwritten file"
   assert_file_content 'user_modified_data' "$conflict_backup"
+
+  grep -Fq "Updated managed file: $target_file" <<<"$stdout" ||
+    fail "Overwriting a previously active managed file should report it as updated, not installed"
+  ! grep -Fq "Installed managed file: $target_file" <<<"$stdout" ||
+    fail "Overwriting a previously active managed file must not be reported as a fresh install"
 }
 
 test_managed_file_interactive_skip_preserves_state_and_continues() {

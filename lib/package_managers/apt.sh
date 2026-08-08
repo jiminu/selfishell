@@ -32,11 +32,12 @@ apt_install_managed_packages() {
   fi
 
   if ! have_command apt-get; then
-    cli_error "apt-get is required to install packages."
     if [[ "$requirement" == "optional" ]]; then
+      cli_warn "apt-get is required to install packages."
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
       return 0
     fi
+    cli_error "apt-get is required to install packages."
     return 1
   fi
 
@@ -53,7 +54,7 @@ apt_install_managed_packages() {
   done
 
   if ((${#installed_packages[@]} > 0)); then
-    printf '%sAlready installed apt packages (%d):%s %s\n' "$SELFISHELL_COLOR_GREEN" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
+    printf '%sAlready installed apt packages (%d):%s %s\n' "$SELFISHELL_COLOR_CYAN" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
   fi
 
   ((${#missing_packages[@]} > 0)) || return 0
@@ -72,21 +73,23 @@ apt_install_managed_packages() {
   done
 
   if ((${#unavailable_packages[@]} > 0)); then
-    cli_error "Unavailable $requirement apt packages: ${unavailable_packages[*]}"
     if [[ "$requirement" == "required" ]]; then
+      cli_error "Unavailable $requirement apt packages: ${unavailable_packages[*]}"
       return 1
     fi
+    cli_warn "Unavailable $requirement apt packages: ${unavailable_packages[*]}"
     SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${unavailable_packages[@]}")
   fi
 
   ((${#available_packages[@]} > 0)) || return 0
 
   if ! apt_run_privileged install -y "${available_packages[@]}"; then
-    cli_error "Could not install $requirement apt packages: ${available_packages[*]}"
     if [[ "$requirement" == "optional" ]]; then
+      cli_warn "Could not install $requirement apt packages: ${available_packages[*]}"
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("${available_packages[@]}")
       return 0
     fi
+    cli_error "Could not install $requirement apt packages: ${available_packages[*]}"
     return 1
   fi
 }

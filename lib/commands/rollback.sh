@@ -58,7 +58,7 @@ command_rollback() {
     fi
   fi
   [[ "$target" != "$current_target" ]] || {
-    printf '%sRelease is already active:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "${target##*/}"
+    printf '%sRelease is already active:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "${target##*/}"
     return 0
   }
   confirm_action "Roll back Selfishell CLI to ${target##*/}?" "$assume_yes" 0 || return
@@ -71,7 +71,7 @@ command_rollback() {
   # A failure here only loses the rollback link, not the rollback itself, so
   # warn and continue rather than aborting an otherwise-successful rollback.
   if ! release_atomic_link "$previous_target" "$SELFISHELL_SHARE_DIR/previous"; then
-    cli_error "Failed to update the previous release link; continuing."
+    cli_warn "Failed to update the previous release link; continuing."
   fi
   printf '%sSelfishell CLI rolled back to %s.%s\n' "$SELFISHELL_COLOR_GREEN" "${target##*/}" "$SELFISHELL_COLOR_RESET"
 }
