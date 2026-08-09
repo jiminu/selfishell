@@ -13,15 +13,24 @@ for _, module in ipairs(modules) do
   assert(type(specs[module]) == "table", "Invalid plugin spec: " .. module)
 end
 
-local indent_blankline = vim.tbl_filter(function(spec)
-  return spec[1] == "lukas-reineke/indent-blankline.nvim"
+local snacks = vim.tbl_filter(function(spec)
+  return spec[1] == "folke/snacks.nvim"
 end, specs["plugins.ui"])[1]
 
-assert(indent_blankline.opts.indent.char == " ", "Indent guides must reserve space for the scope marker")
-assert(indent_blankline.opts.scope.char == "│", "Scope marker must use a thin solid line")
-assert(indent_blankline.opts.scope.show_start == false, "Scope start underline must stay disabled")
-assert(indent_blankline.opts.scope.show_end == false, "Scope end underline must stay disabled")
-assert(vim.deep_equal(indent_blankline.opts.scope.highlight, {
+assert(snacks, "folke/snacks.nvim spec was not found")
+assert(snacks.lazy == false, "Snacks must load eagerly so it can attach to the first buffer's BufReadPost")
+
+local indent = snacks.opts.indent
+assert(indent.enabled == true, "Snacks indent module must be enabled")
+assert(indent.indent.enabled == false, "Normal indent rendering must stay disabled")
+assert(indent.indent.only_scope == true, "Indent rendering must be limited to the current scope")
+assert(indent.animate.enabled == false, "Scope animation must stay disabled")
+assert(indent.chunk.enabled == false, "Chunk rendering must stay disabled")
+
+assert(indent.scope.enabled == true, "Scope rendering must be enabled")
+assert(indent.scope.char == "│", "Scope marker must use a thin solid line")
+assert(indent.scope.underline == false, "Scope start underline must stay disabled")
+assert(vim.deep_equal(indent.scope.hl, {
   "RainbowDelimiterRed",
   "RainbowDelimiterYellow",
   "RainbowDelimiterBlue",
@@ -31,25 +40,21 @@ assert(vim.deep_equal(indent_blankline.opts.scope.highlight, {
   "RainbowDelimiterCyan",
 }), "Scope must use the rainbow delimiter palette")
 
-local hook_registration
-package.preload["ibl"] = function()
-  return {
-    setup = function() end,
-  }
-end
-package.preload["ibl.hooks"] = function()
-  return {
-    type = { SCOPE_HIGHLIGHT = "scope-highlight" },
-    builtin = { scope_highlight_from_extmark = "rainbow-extmark" },
-    register = function(kind, callback)
-      hook_registration = { kind, callback }
-    end,
-  }
-end
+assert(indent.scope.treesitter.enabled == true, "Scope detection must prefer Tree-sitter")
+assert(type(indent.scope.treesitter.blocks) == "table" and indent.scope.treesitter.blocks.enabled == false,
+  "Scope detection must not be limited to a Tree-sitter node-type whitelist")
 
-assert(type(indent_blankline.config) == "function", "Scope color sync must register a hook")
-indent_blankline.config(nil, indent_blankline.opts)
-assert(vim.deep_equal(hook_registration, { "scope-highlight", "rainbow-extmark" }),
-  "Scope must follow the rainbow delimiter extmark color")
+assert(type(indent.filter) == "function", "Indent rendering must filter excluded buffers")
+assert(type(indent.scope.filter) == "function", "Scope detection must filter excluded buffers")
+
+local excluded = { NvimTree = true, help = true, markdown = true }
+for filetype in pairs(excluded) do
+  vim.bo.filetype = filetype
+  assert(indent.filter(0) == false, "Indent rendering did not exclude filetype: " .. filetype)
+  assert(indent.scope.filter(0) == false, "Scope detection did not exclude filetype: " .. filetype)
+end
+vim.bo.filetype = "lua"
+assert(indent.filter(0) == true, "Indent rendering incorrectly excluded an ordinary buffer")
+assert(indent.scope.filter(0) == true, "Scope detection incorrectly excluded an ordinary buffer")
 
 print("pinned plugin specs: OK")
