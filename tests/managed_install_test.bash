@@ -1271,7 +1271,10 @@ test_mise_config_global_preserves_existing_types() {
 
 test_mise_config_global_idempotency_and_status() {
   local tool
-  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise neovim tree-sitter node python uv; do
+  # nvim, not neovim: tool_status_executable() maps the mise package name
+  # "neovim" to its real executable "nvim" (same as "ripgrep" -> "rg"
+  # below), so status's fallback have_command check looks for that binary.
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise nvim tree-sitter node python uv; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
   done
