@@ -54,37 +54,33 @@ local function has_dependency(spec, repository)
   return false
 end
 
-local telescope_mappings = {
-  ["<leader>fd"] = "<cmd>Telescope diagnostics<CR>",
-  ["<leader>fs"] = "<cmd>Telescope lsp_document_symbols<CR>",
-  ["<leader>fS"] = "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>",
-  ["<leader>fr"] = "<cmd>Telescope resume<CR>",
+local snacks_picker_keys = {
+  "<leader>ff",
+  "<leader>fF",
+  "<leader>fg",
+  "<leader>fG",
+  "<leader>fb",
+  "<leader>fh",
+  "<leader>fd",
+  "<leader>fs",
+  "<leader>fS",
+  "<leader>fr",
 }
-for lhs, rhs in pairs(telescope_mappings) do
+for _, lhs in ipairs(snacks_picker_keys) do
   assert(
-    plugin_key("plugins.telescope", "nvim-telescope/telescope.nvim", lhs) == rhs,
-    "missing Telescope mapping: " .. lhs
+    type(plugin_key("plugins.ui", "folke/snacks.nvim", lhs)) == "function",
+    "missing Snacks picker mapping: " .. lhs
   )
 end
 
-local telescope = assert(
-  plugin_spec("plugins.telescope", "nvim-telescope/telescope.nvim"),
-  "Telescope spec is missing"
-)
-assert(
-  telescope.opts
-    and telescope.opts.pickers.find_files.disable_devicons
-    and telescope.opts.pickers.live_grep.disable_devicons,
-  "Telescope file and grep pickers should hide devicons"
-)
-assert(
-  not telescope.opts.defaults or not telescope.opts.defaults.disable_devicons,
-  "Telescope devicons should not be disabled globally"
-)
-assert(
-  not telescope.opts.pickers.buffers or not telescope.opts.pickers.buffers.disable_devicons,
-  "Telescope buffer icons should remain enabled"
-)
+local snacks = assert(plugin_spec("plugins.ui", "folke/snacks.nvim"), "Snacks spec is missing")
+local picker = assert(snacks.opts.picker, "Snacks picker must be configured")
+assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
+assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
+assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
+assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
+assert(picker.sources.buffers == nil, "Buffer icons should remain enabled")
+assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 local tree = assert(plugin_spec("plugins.ui", "nvim-tree/nvim-tree.lua"), "nvim-tree spec is missing")
 assert(has_dependency(tree, "nvim-tree/nvim-web-devicons"), "nvim-web-devicons dependency is missing")
