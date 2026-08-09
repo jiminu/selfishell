@@ -1,5 +1,20 @@
 local plugin = require("config.plugin_versions").spec
 
+local excluded_scope_filetypes = {
+  NvimTree = true,
+  TelescopePrompt = true,
+  help = true,
+  lazy = true,
+  log = true,
+  markdown = true,
+  mason = true,
+  text = true,
+}
+
+local function scope_buffer_enabled(buf)
+  return vim.bo[buf].buftype == "" and not excluded_scope_filetypes[vim.bo[buf].filetype]
+end
+
 local function lualine_mode_color()
   local dark = vim.o.background == "dark"
   local colors = dark and {
@@ -324,46 +339,61 @@ return {
     },
   }),
 
-  -- Tree-sitter-aware scope markers use the matching rainbow delimiter color.
-  plugin("lukas-reineke/indent-blankline.nvim", {
-    main = "ibl",
-    event = { "BufReadPost", "BufNewFile" },
+  -- Tree-sitter-aware scope markers use the matching rainbow delimiter
+  -- color. Snacks derives scope from the current node's ancestry instead of
+  -- a per-language node-type whitelist, so it covers control-flow blocks and
+  -- generic multiline containers (lists, dicts, call arguments, ...) alike;
+  -- falls back to indentation when Tree-sitter is unavailable or finds
+  -- nothing. Loaded eagerly (not event-lazy) because Snacks itself defers
+  -- enabling indent to BufReadPost, which would otherwise miss the first
+  -- buffer if the plugin loaded any later than that -- and BufReadPost never
+  -- fires at all for a path that doesn't exist yet (BufNewFile) or the
+  -- initial unnamed buffer, so indent.enable() is also called directly
+  -- right after setup. It's idempotent (a no-op once already enabled), so
+  -- Snacks' own BufReadPost handler calling it again later is harmless.
+  plugin("folke/snacks.nvim", {
+    lazy = false,
+    priority = 1000,
     opts = {
       indent = {
-        char = " ",
-      },
-      scope = {
         enabled = true,
-        char = "│",
-        show_start = false,
-        show_end = false,
-        highlight = {
-          "RainbowDelimiterRed",
-          "RainbowDelimiterYellow",
-          "RainbowDelimiterBlue",
-          "RainbowDelimiterOrange",
-          "RainbowDelimiterGreen",
-          "RainbowDelimiterViolet",
-          "RainbowDelimiterCyan",
+        indent = {
+          enabled = false,
+          only_scope = true,
         },
-      },
-      exclude = {
-        filetypes = {
-          "NvimTree",
-          "TelescopePrompt",
-          "help",
-          "lazy",
-          "log",
-          "markdown",
-          "mason",
-          "text",
+        animate = {
+          enabled = false,
         },
+        scope = {
+          enabled = true,
+          char = "│",
+          underline = false,
+          hl = {
+            "RainbowDelimiterRed",
+            "RainbowDelimiterYellow",
+            "RainbowDelimiterBlue",
+            "RainbowDelimiterOrange",
+            "RainbowDelimiterGreen",
+            "RainbowDelimiterViolet",
+            "RainbowDelimiterCyan",
+          },
+          treesitter = {
+            enabled = true,
+            -- Disables Snacks' built-in block-node whitelist so scope isn't
+            -- limited to a fixed set of Tree-sitter node types per language.
+            blocks = { enabled = false },
+          },
+          filter = scope_buffer_enabled,
+        },
+        chunk = {
+          enabled = false,
+        },
+        filter = scope_buffer_enabled,
       },
     },
     config = function(_, opts)
-      require("ibl").setup(opts)
-      local hooks = require("ibl.hooks")
-      hooks.register(hooks.type.SCOPE_HIGHLIGHT, hooks.builtin.scope_highlight_from_extmark)
+      require("snacks").setup(opts)
+      Snacks.indent.enable()
     end,
   }),
 
