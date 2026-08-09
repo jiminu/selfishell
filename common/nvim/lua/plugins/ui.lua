@@ -79,9 +79,6 @@ return {
         desc = "Reveal current file",
       },
     },
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
     opts = {
       on_attach = function(bufnr)
         require("nvim-tree.api").config.mappings.default_on_attach(bufnr)
@@ -144,12 +141,12 @@ return {
         desc = "Next buffer",
       },
     },
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
     opts = {
       options = {
         always_show_bufferline = false,
+        -- Disabling this avoids ever touching nvim-web-devicons: it's
+        -- checked before the (also pcall-guarded) require.
+        show_buffer_icons = false,
         close_command = function(bufnr)
           Snacks.bufdelete(bufnr)
         end,
@@ -272,9 +269,6 @@ return {
   -- Statusline: not required for the critical startup path.
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
     opts = {
       options = {
         theme = "vscode",
@@ -428,8 +422,8 @@ return {
     opts = {
       -- Backend pinned to ripgrep: the developer profile guarantees it, but
       -- not fd, so the picker shouldn't vary by what's personally installed.
-      -- File/grep results hide the leading file icon (unlike buffers, which
-      -- keep it) to match the previous Telescope setup.
+      -- No source shows a leading file icon: without nvim-web-devicons
+      -- there's no icon set to draw from.
       picker = {
         ui_select = false,
         sources = {
@@ -438,6 +432,9 @@ return {
             icons = { files = { enabled = false } },
           },
           grep = {
+            icons = { files = { enabled = false } },
+          },
+          buffers = {
             icons = { files = { enabled = false } },
           },
           -- Telescope's diagnostics picker showed the whole workspace, not
@@ -592,24 +589,13 @@ return {
         "mason",
         "help",
       },
-      marks = {
-        -- Bar-shaped cursor marker, reusing CursorLineNr so it stays
-        -- consistent with the colorscheme in both light and dark background.
-        -- Priority is left at the default (0, highest): when the cursor
-        -- shares a scrollbar row with a diagnostic, showing position wins.
-        -- The diagnostic on that exact line is already visible via the sign
-        -- column, so losing it from the scrollbar for one row costs little,
-        -- while losing the cursor mark would defeat the point of it.
-        Cursor = {
-          text = "─",
-          highlight = "CursorLineNr",
-        },
-      },
       -- gitsigns is deliberately left off: the sign column already shows the
       -- same hunks per-line, and mirroring them here doubled the redraw
       -- triggers (gitsigns update + diagnostic update) for marginal benefit.
+      -- cursor tracking is also off: it isn't needed and drops the
+      -- CursorMoved/CursorMovedI-driven redraw on every cursor move.
       handlers = {
-        cursor = true,
+        cursor = false,
         diagnostic = true,
         handle = true,
         search = false,
