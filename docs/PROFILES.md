@@ -74,9 +74,9 @@ LSP client merges in (see `:help lsp-config`).
 New splits open to the right and below, four lines of context remain above and
 below the cursor when possible, commands that would discard unsaved changes ask
 for confirmation, and `:substitute` results preview in a split before they are
-applied. Bufferline shows open buffers across the top; use `[b` and `]b` to move
-between them, and `Space b d` to close the current buffer without closing its
-editor window.
+applied. Use `[b` and `]b` to move between open buffers, `Space f b` to see the
+full buffer list, and `Space b d` to close the current buffer without closing
+its editor window.
 
 In the `developer` profile, `vim` resolves to Neovim while `vi` remains the
 system editor.

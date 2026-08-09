@@ -79,9 +79,6 @@ return {
         desc = "Reveal current file",
       },
     },
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
     opts = {
       on_attach = function(bufnr)
         require("nvim-tree.api").config.mappings.default_on_attach(bufnr)
@@ -128,153 +125,9 @@ return {
     },
   }),
 
-  -- Buffer tabs: keep the critical startup path clear and hide the bar when a
-  -- single buffer is open.
-  plugin("akinsho/bufferline.nvim", {
-    event = "VeryLazy",
-    keys = {
-      {
-        "[b",
-        "<cmd>BufferLineCyclePrev<CR>",
-        desc = "Previous buffer",
-      },
-      {
-        "]b",
-        "<cmd>BufferLineCycleNext<CR>",
-        desc = "Next buffer",
-      },
-    },
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
-    opts = {
-      options = {
-        always_show_bufferline = false,
-        close_command = function(bufnr)
-          Snacks.bufdelete(bufnr)
-        end,
-        right_mouse_command = function(bufnr)
-          Snacks.bufdelete(bufnr)
-        end,
-        indicator = {
-          style = "underline",
-        },
-        show_close_icon = false,
-        hover = {
-          enabled = true,
-          delay = 150,
-          reveal = { "close" },
-        },
-        max_name_length = 24,
-        tab_size = 16,
-        offsets = {
-          {
-            filetype = "NvimTree",
-            text = "EXPLORER",
-            text_align = "left",
-            highlight = "TabLineFill",
-            separator = true,
-          },
-        },
-      },
-      highlights = {
-        fill = {
-          fg = { attribute = "fg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLineFill" },
-        },
-        background = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = false,
-        },
-        buffer_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = false,
-        },
-        buffer_selected = {
-          fg = "#FFFFFF",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          bold = true,
-          italic = false,
-          underline = true,
-          sp = "#007ACC",
-        },
-        close_button = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        close_button_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        close_button_selected = {
-          fg = "#D4D4D4",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        duplicate = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = true,
-        },
-        duplicate_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = true,
-        },
-        duplicate_selected = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          italic = true,
-          underline = true,
-          sp = "#007ACC",
-        },
-        modified = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        modified_visible = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        modified_selected = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        separator = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        separator_visible = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        separator_selected = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        indicator_selected = {
-          fg = "#007ACC",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-      },
-    },
-  }),
-
   -- Statusline: not required for the critical startup path.
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
-    dependencies = {
-      plugin("nvim-tree/nvim-web-devicons"),
-    },
     opts = {
       options = {
         theme = "vscode",
@@ -428,8 +281,8 @@ return {
     opts = {
       -- Backend pinned to ripgrep: the developer profile guarantees it, but
       -- not fd, so the picker shouldn't vary by what's personally installed.
-      -- File/grep results hide the leading file icon (unlike buffers, which
-      -- keep it) to match the previous Telescope setup.
+      -- No source shows a leading file icon: without nvim-web-devicons
+      -- there's no icon set to draw from.
       picker = {
         ui_select = false,
         sources = {
@@ -438,6 +291,9 @@ return {
             icons = { files = { enabled = false } },
           },
           grep = {
+            icons = { files = { enabled = false } },
+          },
+          buffers = {
             icons = { files = { enabled = false } },
           },
           -- Telescope's diagnostics picker showed the whole workspace, not
@@ -584,32 +440,19 @@ return {
         color = "#797979",
       },
       excluded_filetypes = {
-        "cmp_docs",
-        "cmp_menu",
         "prompt",
         "NvimTree",
         "lazy",
         "mason",
         "help",
       },
-      marks = {
-        -- Bar-shaped cursor marker, reusing CursorLineNr so it stays
-        -- consistent with the colorscheme in both light and dark background.
-        -- Priority is left at the default (0, highest): when the cursor
-        -- shares a scrollbar row with a diagnostic, showing position wins.
-        -- The diagnostic on that exact line is already visible via the sign
-        -- column, so losing it from the scrollbar for one row costs little,
-        -- while losing the cursor mark would defeat the point of it.
-        Cursor = {
-          text = "─",
-          highlight = "CursorLineNr",
-        },
-      },
       -- gitsigns is deliberately left off: the sign column already shows the
       -- same hunks per-line, and mirroring them here doubled the redraw
       -- triggers (gitsigns update + diagnostic update) for marginal benefit.
+      -- cursor tracking is also off: it isn't needed and drops the
+      -- CursorMoved/CursorMovedI-driven redraw on every cursor move.
       handlers = {
-        cursor = true,
+        cursor = false,
         diagnostic = true,
         handle = true,
         search = false,

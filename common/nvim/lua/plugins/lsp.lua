@@ -26,14 +26,8 @@ return {
     dependencies = {
       plugin("mason-org/mason.nvim"),
       plugin("neovim/nvim-lspconfig"),
-      plugin("hrsh7th/cmp-nvim-lsp"),
     },
     config = function()
-      -- Apply completion capabilities to every LSP config.
-      vim.lsp.config("*", {
-        capabilities = require("cmp_nvim_lsp").default_capabilities(),
-      })
-
       require("mason-lspconfig").setup({
         ensure_installed = languages.lsp,
         automatic_enable = true,

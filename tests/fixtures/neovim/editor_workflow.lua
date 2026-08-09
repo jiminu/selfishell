@@ -79,11 +79,11 @@ assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
 assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
 assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
 assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
-assert(picker.sources.buffers == nil, "Buffer icons should remain enabled")
+assert(picker.sources.buffers.icons.files.enabled == false, "The buffers picker should hide the leading file icon")
 assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 local tree = assert(plugin_spec("plugins.ui", "nvim-tree/nvim-tree.lua"), "nvim-tree spec is missing")
-assert(has_dependency(tree, "nvim-tree/nvim-web-devicons"), "nvim-web-devicons dependency is missing")
+assert(not has_dependency(tree, "nvim-tree/nvim-web-devicons"), "nvim-web-devicons dependency should be removed")
 assert(type(tree.opts.view.width) == "function", "NvimTree width is not a function")
 local original_columns = vim.o.columns
 vim.o.columns = 60
@@ -121,21 +121,51 @@ assert(
   "lualine filetype icon should be hidden"
 )
 
-local bufferline = assert(
-  plugin_spec("plugins.ui", "akinsho/bufferline.nvim"),
-  "bufferline spec is missing"
-)
-assert(bufferline.event == "VeryLazy", "bufferline is not deferred")
-assert(bufferline.opts.options.always_show_bufferline == false, "bufferline should hide for one buffer")
-assert(bufferline.opts.options.offsets[1].filetype == "NvimTree", "bufferline is not aligned with NvimTree")
-assert(
-  plugin_key("plugins.ui", "akinsho/bufferline.nvim", "[b") == "<cmd>BufferLineCyclePrev<CR>",
-  "missing previous-buffer mapping"
+assert_map("n", "[b", "<cmd>bprevious<CR>")
+assert_map("n", "]b", "<cmd>bnext<CR>")
+
+assert(not pcall(require, "plugins.completion"), "plugins.completion should no longer exist")
+
+local mason_lspconfig = assert(
+  plugin_spec("plugins.lsp", "mason-org/mason-lspconfig.nvim"),
+  "mason-lspconfig spec is missing"
 )
 assert(
-  plugin_key("plugins.ui", "akinsho/bufferline.nvim", "]b") == "<cmd>BufferLineCycleNext<CR>",
-  "missing next-buffer mapping"
+  not has_dependency(mason_lspconfig, "hrsh7th/cmp-nvim-lsp"),
+  "cmp-nvim-lsp dependency should be removed"
 )
+
+assert(
+  vim.tbl_contains(vim.opt.completeopt:get(), "popup"),
+  "completeopt should show per-item documentation"
+)
+
+local completion_autocmds = vim.api.nvim_get_autocmds({ event = "InsertCharPre", group = "UserLspKeymaps" })
+assert(#completion_autocmds > 0, "generic identifier completion trigger is missing")
+
+local cspace_map = vim.fn.maparg("<C-Space>", "i", false, true)
+assert(type(cspace_map.callback) == "function", "manual completion mapping is missing")
+
+local tab_map = vim.fn.maparg("<Tab>", "i", false, true)
+assert(type(tab_map.callback) == "function" and tab_map.expr == 1, "Tab completion/snippet mapping is missing")
+
+local stab_map = vim.fn.maparg("<S-Tab>", "i", false, true)
+assert(
+  type(stab_map.callback) == "function" and stab_map.expr == 1,
+  "Shift-Tab completion/snippet mapping is missing"
+)
+
+local cr_map = vim.fn.maparg("<CR>", "i", false, true)
+assert(type(cr_map.callback) == "function" and cr_map.expr == 1, "Enter completion-confirm mapping is missing")
+
+local scrollbar = assert(
+  plugin_spec("plugins.ui", "petertriho/nvim-scrollbar"),
+  "nvim-scrollbar spec is missing"
+)
+assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking should stay disabled")
+assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
+assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
+assert(scrollbar.opts.marks == nil, "scrollbar should not carry dead cursor-mark configuration")
 
 local rainbow = assert(
   plugin_spec("plugins.editor", "HiPhish/rainbow-delimiters.nvim"),

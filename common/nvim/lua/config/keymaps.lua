@@ -36,6 +36,8 @@ end, {
   silent = true,
   desc = "Delete buffer",
 })
+map("n", "[b", "<cmd>bprevious<CR>", { silent = true, desc = "Previous buffer" })
+map("n", "]b", "<cmd>bnext<CR>", { silent = true, desc = "Next buffer" })
 
 -- Keep the selection active while adjusting indentation.
 map("x", "<", "<gv", {
@@ -73,7 +75,63 @@ vim.api.nvim_create_autocmd("LspAttach", {
     lsp_map("<leader>rn", vim.lsp.buf.rename, "Rename symbol")
     lsp_map("<leader>ca", vim.lsp.buf.code_action, "Code action")
     lsp_map("<leader>d", vim.diagnostic.open_float, "Show line diagnostics")
+
+    -- autotrigger only fires on the server's own triggerCharacters (mostly
+    -- punctuation, e.g. "."), not on ordinary identifier characters -- that
+    -- gap is covered separately below, once, for every buffer.
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if client and client:supports_method("textDocument/completion") then
+      vim.lsp.completion.enable(true, client.id, args.buf, {
+        autotrigger = true,
+      })
+    end
   end,
 })
+
+-- Completes on ordinary identifier characters, since autotrigger above only
+-- covers the server's triggerCharacters. Word characters are never among a
+-- server's triggerCharacters in practice (those are punctuation), so this
+-- never fires alongside autotrigger for the same keystroke. get() already
+-- no-ops when there's no attached client or the popup is already showing a
+-- complete list, so no separate buffer/visibility guard is needed here.
+vim.api.nvim_create_autocmd("InsertCharPre", {
+  group = group,
+  callback = function()
+    if vim.v.char:match("[%w_]") and #vim.lsp.get_clients({ bufnr = 0, method = "textDocument/completion" }) > 0 then
+      vim.lsp.completion.get()
+    end
+  end,
+})
+
+map("i", "<C-Space>", function()
+  vim.lsp.completion.get()
+end, { desc = "Trigger completion" })
+
+map({ "i", "s" }, "<Tab>", function()
+  if vim.fn.pumvisible() == 1 then
+    return "<C-n>"
+  elseif vim.snippet.active({ direction = 1 }) then
+    return "<Cmd>lua vim.snippet.jump(1)<CR>"
+  end
+  return "<Tab>"
+end, { expr = true, silent = true, desc = "Next completion item or snippet tabstop" })
+
+map({ "i", "s" }, "<S-Tab>", function()
+  if vim.fn.pumvisible() == 1 then
+    return "<C-p>"
+  elseif vim.snippet.active({ direction = -1 }) then
+    return "<Cmd>lua vim.snippet.jump(-1)<CR>"
+  end
+  return "<S-Tab>"
+end, { expr = true, silent = true, desc = "Previous completion item or snippet tabstop" })
+
+-- Preserves the previous completion setup's behavior: Enter accepts the
+-- first item even when it has not been explicitly selected.
+map("i", "<CR>", function()
+  if vim.fn.pumvisible() == 1 then
+    return vim.fn.complete_info({ "selected" }).selected == -1 and "<C-n><C-y>" or "<C-y>"
+  end
+  return "<CR>"
+end, { expr = true, silent = true, desc = "Confirm completion or insert newline" })
 
 return M

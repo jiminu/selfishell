@@ -1,5 +1,4 @@
 local modules = {
-  "plugins.completion",
   "plugins.editor",
   "plugins.lsp",
   "plugins.ui",
@@ -64,6 +63,7 @@ assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
 assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
 assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
 assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
+assert(picker.sources.buffers.icons.files.enabled == false, "The buffers picker should hide the leading file icon")
 assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 print("pinned plugin specs: OK")

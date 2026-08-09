@@ -34,8 +34,10 @@ opt.mouse = "a"
 opt.clipboard = "unnamedplus"
 opt.fileencodings = { "utf-8", "euc-kr" }
 
--- Completion menu behavior
-opt.completeopt = { "menu", "menuone", "noselect" }
+-- Completion menu behavior. "popup" shows the selected item's documentation
+-- in a floating window, replacing the previous completion setup's <C-b>/<C-f>
+-- doc-scrolling mappings (which have no simple native equivalent).
+opt.completeopt = { "menu", "menuone", "noselect", "popup" }
 
 -- Diagnostic display
 vim.diagnostic.config({

@@ -18,14 +18,6 @@ assert(
   "mason-lspconfig must load on BufReadPre/BufNewFile"
 )
 
-package.preload["cmp_nvim_lsp"] = function()
-  return {
-    default_capabilities = function()
-      return {}
-    end,
-  }
-end
-
 local setup_opts
 package.preload["mason-lspconfig"] = function()
   return {
@@ -37,7 +29,6 @@ end
 
 target.config()
 
-package.preload["cmp_nvim_lsp"] = nil
 package.preload["mason-lspconfig"] = nil
 
 assert(setup_opts, "mason-lspconfig.setup() was not called")
