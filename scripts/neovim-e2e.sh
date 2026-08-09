@@ -182,4 +182,21 @@ fi
   fail "Rainbow-delimiters smoke did not complete"
 }
 
+# Snacks only binds its own enable() call to BufReadPost, which never fires
+# for a path that doesn't exist on disk yet -- so a brand-new file opened as
+# the first buffer (a real BufNewFile, not BufReadPost) is the case that
+# regresses if indent.enable() isn't also called directly after setup. This
+# only checks that the module is enabled, not scope detection itself, which
+# is covered elsewhere.
+if ! bufnewfile_smoke_output="$(nvim --headless "$TEST_ROOT/brand-new.py" \
+  '+lua assert(vim.fn.filereadable(vim.fn.expand("%:p")) == 0, "the target file must not already exist for this to be a real BufNewFile check"); assert(require("snacks.indent").enabled == true, "Snacks indent was not enabled for a brand-new file"); print("BufNewFile indent smoke: OK")' \
+  +qa 2>&1)"; then
+  printf '%s\n' "$bufnewfile_smoke_output" >&2
+  fail "BufNewFile indent smoke failed"
+fi
+[[ "$bufnewfile_smoke_output" == *'BufNewFile indent smoke: OK'* ]] || {
+  printf '%s\n' "$bufnewfile_smoke_output" >&2
+  fail "BufNewFile indent smoke did not complete"
+}
+
 printf 'PASS: pinned Neovim developer installation\n'

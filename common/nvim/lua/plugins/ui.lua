@@ -346,7 +346,11 @@ return {
   -- falls back to indentation when Tree-sitter is unavailable or finds
   -- nothing. Loaded eagerly (not event-lazy) because Snacks itself defers
   -- enabling indent to BufReadPost, which would otherwise miss the first
-  -- buffer if the plugin loaded any later than that.
+  -- buffer if the plugin loaded any later than that -- and BufReadPost never
+  -- fires at all for a path that doesn't exist yet (BufNewFile) or the
+  -- initial unnamed buffer, so indent.enable() is also called directly
+  -- right after setup. It's idempotent (a no-op once already enabled), so
+  -- Snacks' own BufReadPost handler calling it again later is harmless.
   plugin("folke/snacks.nvim", {
     lazy = false,
     priority = 1000,
@@ -387,6 +391,10 @@ return {
         filter = scope_buffer_enabled,
       },
     },
+    config = function(_, opts)
+      require("snacks").setup(opts)
+      Snacks.indent.enable()
+    end,
   }),
 
   -- Git changes, hunk actions, and blame information.

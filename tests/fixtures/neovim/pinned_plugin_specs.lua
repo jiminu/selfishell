@@ -19,6 +19,8 @@ end, specs["plugins.ui"])[1]
 
 assert(snacks, "folke/snacks.nvim spec was not found")
 assert(snacks.lazy == false, "Snacks must load eagerly so it can attach to the first buffer's BufReadPost")
+assert(type(snacks.config) == "function",
+  "Snacks must explicitly enable indent after setup, since Snacks never binds it to BufNewFile")
 
 local indent = snacks.opts.indent
 assert(indent.enabled == true, "Snacks indent module must be enabled")
