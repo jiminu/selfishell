@@ -50,14 +50,17 @@ release_installation_paths() {
   SELFISHELL_SHARE_DIR="$share_dir"
 }
 
-# Confirms "$SELFISHELL_RELEASES_DIR/$version" both looks complete (an
-# executable CLI is present) and actually contains the version it claims to,
-# so a corrupted, incomplete, or mislabeled release directory is never
+# Confirms "$SELFISHELL_RELEASES_DIR/$version" is a real directory (not a
+# symlink -- which -x/-r would otherwise follow, accepting some other path's
+# contents as this version's release) and both looks complete (an executable
+# CLI is present) and actually contains the version it claims to, so a
+# corrupted, incomplete, mislabeled, or symlinked release directory is never
 # activated or rolled back to.
 release_directory_is_valid() {
   local version="$1"
   local dir="$SELFISHELL_RELEASES_DIR/$version"
 
+  [[ -d "$dir" && ! -L "$dir" ]] || return 1
   [[ -x "$dir/bin/selfishell" && -r "$dir/VERSION" && "$(<"$dir/VERSION")" == "$version" ]]
 }
 
@@ -86,6 +89,8 @@ release_atomic_link() {
   local target="$1"
   local path="$2"
   local temporary
+
+  [[ ! -e "$path" || -L "$path" ]] || return 1
 
   temporary="$(selfishell_unique_path "${path}.tmp.$$")"
   ln -s "$target" "$temporary" || return 1
@@ -163,7 +168,7 @@ release_install() {
     return 1
   fi
 
-  if [[ -d "$SELFISHELL_RELEASES_DIR/$version" ]]; then
+  if [[ -e "$SELFISHELL_RELEASES_DIR/$version" || -L "$SELFISHELL_RELEASES_DIR/$version" ]]; then
     release_directory_is_valid "$version" || {
       cli_error "Existing release is incomplete: $SELFISHELL_RELEASES_DIR/$version"
       rm -rf "$temporary_dir"

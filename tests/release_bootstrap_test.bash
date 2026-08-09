@@ -123,6 +123,33 @@ test_installs_exact_version_and_cli_links() {
     fail "Installed CLI reports the wrong version"
 }
 
+# A directory-symlinked release path must be rejected the same way on first
+# install as it is on update: -d alone would follow the symlink and accept
+# whatever it points to as this version's release.
+test_bootstrap_rejects_symlinked_release_directory() {
+  local version status
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  mkdir -p "$TEST_ROOT/elsewhere/bin" "$TEST_ROOT/prefix/share/selfishell/releases"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/elsewhere/bin/selfishell"
+  chmod +x "$TEST_ROOT/elsewhere/bin/selfishell"
+  printf '%s\n' "$version" >"$TEST_ROOT/elsewhere/VERSION"
+  ln -s "$TEST_ROOT/elsewhere" "$TEST_ROOT/prefix/share/selfishell/releases/$version"
+
+  set +e
+  run_bootstrap --version "$version" >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "bootstrap activated a symlinked release directory"
+  grep -Fq 'Release path is not a directory' "$TEST_ROOT/stderr" ||
+    fail "bootstrap did not reject the symlinked release directory"
+  [[ ! -L "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+    fail "bootstrap activated current despite a symlinked release directory"
+  [[ -L "$TEST_ROOT/prefix/share/selfishell/releases/$version" ]] ||
+    fail "The symlinked release path was replaced instead of rejected"
+}
+
 test_latest_uses_published_version_file() {
   run_bootstrap >/dev/null
   [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current/VERSION")" == 0.2.3 ]] ||
@@ -393,6 +420,91 @@ test_update_rejects_preexisting_incomplete_release_directory() {
   grep -Fq 'Existing release is incomplete' "$TEST_ROOT/stderr" ||
     fail "update did not report the incomplete release directory"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+# A directory-symlinked release path must never be accepted as valid: -x/-r
+# would otherwise follow it and treat some other path's contents as this
+# version's release.
+test_update_rejects_symlinked_release_directory() {
+  local version status
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  mkdir -p "$TEST_ROOT/elsewhere/bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/elsewhere/bin/selfishell"
+  chmod +x "$TEST_ROOT/elsewhere/bin/selfishell"
+  printf '0.2.3\n' >"$TEST_ROOT/elsewhere/VERSION"
+  ln -s "$TEST_ROOT/elsewhere" "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3"
+
+  set +e
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] ||
+    fail "update activated a symlinked release directory"
+  grep -Fq 'Existing release is incomplete' "$TEST_ROOT/stderr" ||
+    fail "update did not reject the symlinked release directory"
+  assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
+  [[ -L "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3" ]] ||
+    fail "The symlinked release path was replaced instead of rejected"
+  [[ "$(<"$TEST_ROOT/elsewhere/VERSION")" == '0.2.3' ]] ||
+    fail "The symlink target was modified"
+}
+
+# A non-symlink previous path is preserved and only warned about, matching
+# release_atomic_link's existing non-fatal contract for the previous link;
+# the update as a whole must still succeed.
+test_update_preserves_non_link_previous_path_with_a_warning() {
+  local version output
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  printf 'user data\n' >"$TEST_ROOT/prefix/share/selfishell/previous"
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes 2>&1)"
+
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/previous")" == 'user data' ]] ||
+    fail "The non-symlink previous path was overwritten instead of preserved"
+  [[ "$output" == *'Failed to update the previous release link'* ]] ||
+    fail "A preserved non-symlink previous path did not warn: $output"
+}
+
+# release_installation_paths already refuses to treat a non-symlink current
+# path as a versioned installation at all, so a corrupted current can never
+# reach release_atomic_link to be silently replaced.
+#
+# This must invoke the retained release's own binary directly rather than
+# "$TEST_ROOT/prefix/bin/selfishell": that entrypoint's target string embeds
+# "current" as a path component, so once current is a regular file, the shell
+# fails resolving the path itself (ENOTDIR) before release_installation_paths
+# ever runs -- which would make this test pass even if that guard were
+# deleted entirely.
+test_update_rejects_non_link_current_path() {
+  local version status retained_cli
+
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  retained_cli="$TEST_ROOT/prefix/share/selfishell/releases/$version/bin/selfishell"
+  rm -f "$TEST_ROOT/prefix/share/selfishell/current"
+  printf 'user data\n' >"$TEST_ROOT/prefix/share/selfishell/current"
+
+  set +e
+  "$retained_cli" update --cli-only --version 0.2.3 --yes \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "update replaced a non-symlink current path"
+  [[ ! -L "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+    fail "current was replaced with a symlink despite being a regular file"
+  [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current")" == 'user data' ]] ||
+    fail "The non-symlink current path was overwritten instead of preserved"
+  [[ "$(<"$TEST_ROOT/stderr")" == *'requires a versioned Selfishell installation'* ]] ||
+    fail "update did not fail via the versioned-installation guard: $(<"$TEST_ROOT/stderr")"
 }
 
 test_update_tolerates_duplicate_identical_checksum_entry() {

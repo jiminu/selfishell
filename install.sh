@@ -561,12 +561,11 @@ main() {
   bootstrap_validate_link_path "$bin_dir/sfs"
   mkdir -p "$releases_dir" "$bin_dir"
 
-  if [[ -e "$release_dir" && ! -d "$release_dir" ]]; then
-    bootstrap_error "Release path is not a directory: $release_dir"
-    return 1
-  fi
-
-  if [[ -d "$release_dir" ]]; then
+  if [[ -e "$release_dir" || -L "$release_dir" ]]; then
+    if [[ ! -d "$release_dir" || -L "$release_dir" ]]; then
+      bootstrap_error "Release path is not a directory: $release_dir"
+      return 1
+    fi
     if [[ ! -r "$release_dir/VERSION" || "$(<"$release_dir/VERSION")" != "$version" || ! -x "$release_dir/bin/selfishell" ]]; then
       bootstrap_error "Existing release is incomplete: $release_dir"
       return 1

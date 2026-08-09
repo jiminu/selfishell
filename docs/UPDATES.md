@@ -55,16 +55,17 @@ That manifest is also the source of truth for exact Neovim plugin commits, so a
 repository `lazy-lock.json` is intentionally unnecessary. lazy.nvim may write a
 runtime lock under the Selfishell state directory, but updates cannot move a
 plugin beyond the commit approved in the release manifest.
-The exact mise-managed defaults in `profiles/developer.conf` and
-`common/mise.toml` are updated together through the same review-and-release
-boundary. Individual project `mise.toml` files remain outside Selfishell's
-update lifecycle.
+`profiles/developer.conf` declares mise-managed developer tool membership;
+exact default versions are pinned only in `common/mise.toml`, updated through
+the same review-and-release boundary. Individual project `mise.toml` files
+remain outside Selfishell's update lifecycle.
 
 Maintainers can run `scripts/update-dependencies.sh` to discover current
-upstream releases, download platform artifacts, and calculate Starship and mise
-checksums. The weekly `Dependency updates` workflow
-uses the same script and opens or refreshes a review PR only when the manifest
-changes. It never merges the PR or publishes a Selfishell release. Review
+upstream releases, download platform artifacts, calculate Starship and mise
+checksums, and bump mise-managed tool versions. The weekly `Dependency
+updates` workflow uses the same script and opens or refreshes a review PR
+only when a tracked file changes. It never merges the PR or publishes a
+Selfishell release. Review
 upstream release notes and the generated checksums before merging, then publish
 a normal Selfishell patch release so users receive the approved versions through
 `selfishell update`.
