@@ -113,8 +113,9 @@ interactive tools, jq, build tools, and language/editor tooling. `minimal` is
 the explicit lightweight choice. Ghostty is a separate saved macOS installation
 choice.
 
-The developer profile's mise-managed tools are declared in `common/mise.toml`;
-treat that file as the source of truth.
+The developer profile's mise-managed tool membership is declared in
+`profiles/developer.conf`; exact versions for those tools are pinned in
+`common/mise.toml`, the source of truth for mise-managed tool versions.
 
 `--skip-packages` must skip package and tool installation and apply managed
 configuration only; only `update --tools-only --skip-packages` is also

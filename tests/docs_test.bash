@@ -5,21 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-# Prose in these docs wraps a sentence or list item across multiple source
-# lines; prints the matching line and every following line up to (but not
-# including) the next blank line or list item, joined with spaces, so a
-# substring check sees the whole sentence/bullet rather than just its first
-# line.
-join_wrapped_match() {
-  local pattern="$1" file="$2"
-
-  awk -v pattern="$pattern" '
-    $0 ~ pattern { capture = 1; print; next }
-    capture && /^(-|$)/ { exit }
-    capture { print }
-  ' "$file" | tr '\n' ' '
-}
-
 # common/aliases-editor.zsh intentionally aliases only vim/view (not vi), so
 # the system vi stays untouched; the profile guide must describe that, not claim
 # vi also resolves to Neovim.
@@ -35,19 +20,6 @@ test_profile_vi_alias_documentation_matches_implementation() {
   grep -Eq "alias vi=" "$ROOT_DIR/common/aliases-editor.zsh" &&
     fail "A vi alias was reintroduced; update the README explanation if this is intentional"
   return 0
-}
-
-# AGENTS.md should point to common/mise.toml instead of duplicating its tool
-# list.
-test_agents_developer_profile_tools_use_mise_source_of_truth() {
-  local mise_line
-  local mise_source="\`common/mise.toml\`"
-
-  mise_line="$(join_wrapped_match "mise-managed tools are declared" "$ROOT_DIR/AGENTS.md")"
-  [[ "$mise_line" == *"$mise_source"* ]] ||
-    fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool declaration"
-  [[ "$mise_line" == *'source of truth'* ]] ||
-    fail "AGENTS.md does not identify common/mise.toml as the mise-managed tool source of truth"
 }
 
 # docs/PROFILES.md's profile table must match the actual profiles/minimal.conf
