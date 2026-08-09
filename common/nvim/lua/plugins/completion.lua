@@ -7,17 +7,16 @@ return {
       plugin("hrsh7th/cmp-nvim-lsp"),
       plugin("hrsh7th/cmp-buffer"),
       plugin("hrsh7th/cmp-path"),
-      plugin("L3MON4D3/LuaSnip"),
-      plugin("saadparwaiz1/cmp_luasnip"),
     },
     config = function()
       local cmp = require("cmp")
-      local luasnip = require("luasnip")
 
       cmp.setup({
+        -- Neovim 0.12's native snippet engine replaces LuaSnip; it expands
+        -- the same LSP snippet syntax cmp already hands it.
         snippet = {
           expand = function(args)
-            luasnip.lsp_expand(args.body)
+            vim.snippet.expand(args.body)
           end,
         },
 
@@ -34,8 +33,8 @@ return {
           ["<Tab>"] = cmp.mapping(function(fallback)
             if cmp.visible() then
               cmp.select_next_item()
-            elseif luasnip.expand_or_jumpable() then
-              luasnip.expand_or_jump()
+            elseif vim.snippet.active({ direction = 1 }) then
+              vim.snippet.jump(1)
             else
               fallback()
             end
@@ -44,8 +43,8 @@ return {
           ["<S-Tab>"] = cmp.mapping(function(fallback)
             if cmp.visible() then
               cmp.select_prev_item()
-            elseif luasnip.jumpable(-1) then
-              luasnip.jump(-1)
+            elseif vim.snippet.active({ direction = -1 }) then
+              vim.snippet.jump(-1)
             else
               fallback()
             end
@@ -54,7 +53,6 @@ return {
 
         sources = cmp.config.sources({
           { name = "nvim_lsp" },
-          { name = "luasnip" },
         }, {
           { name = "buffer" },
           { name = "path" },
