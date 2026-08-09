@@ -64,8 +64,15 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
 
 test_developer_includes_development_tools() {
   local output full_output
+  local expected_mise_tools
+
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
+  # Read the expected tool@version list from profiles/developer.conf itself
+  # rather than hardcoding it, so a mise-managed version bump doesn't require
+  # updating this literal by hand.
+  expected_mise_tools="$(awk '$1 == "package" && $4 == "mise" { printf "%s ", $5 }' "$ROOT_DIR/profiles/developer.conf")"
+  expected_mise_tools="${expected_mise_tools% }"
 
   [[ "$output" == *'required apt packages: zsh git curl ca-certificates vim fzf zoxide ripgrep jq build-essential'* ]] ||
     fail "Developer profile required apt packages are incomplete"
@@ -73,7 +80,7 @@ test_developer_includes_development_tools() {
     fail "Developer profile optional apt packages are incomplete"
   [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *'required mise tools: neovim@0.12.4 tree-sitter@0.26.11 node@24.18.0 python@3.13.14'* ]] ||
+  [[ "$output" == *"required mise tools: $expected_mise_tools"* ]] ||
     fail "Developer profile is missing mise runtimes"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
