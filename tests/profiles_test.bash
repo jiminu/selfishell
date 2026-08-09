@@ -64,15 +64,24 @@ test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
 
 test_developer_includes_development_tools() {
   local output full_output
-  local expected_mise_tools
+  local expected_mise_tools actual_mise_tools
 
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
-  # Read the expected tool@version list from profiles/developer.conf itself
-  # rather than hardcoding it, so a mise-managed version bump doesn't require
-  # updating this literal by hand.
-  expected_mise_tools="$(awk '$1 == "package" && $4 == "mise" { printf "%s ", $5 }' "$ROOT_DIR/profiles/developer.conf")"
-  expected_mise_tools="${expected_mise_tools% }"
+  # common/mise.toml is the source of truth for mise-managed developer tool
+  # versions (not profiles/developer.conf, which would make this a
+  # self-referential check against the very file that also produces
+  # $output). Compared as a sorted set rather than the literal dry-run
+  # line, since profiles/developer.conf's package order doesn't match
+  # mise.toml's [tools] order -- this still catches a tool missing from
+  # either file, an extra tool only profiles/developer.conf declares, or a
+  # version mismatch between the two.
+  expected_mise_tools="$(awk '
+    /^\[/ { in_tools = ($0 == "[tools]"); next }
+    in_tools && NF >= 3 { gsub(/"/, "", $3); print $1 "@" $3 }
+  ' "$ROOT_DIR/common/mise.toml" | sort)"
+  actual_mise_tools="$(printf '%s\n' "$output" |
+    sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
 
   [[ "$output" == *'required apt packages: zsh git curl ca-certificates vim fzf zoxide ripgrep jq build-essential'* ]] ||
     fail "Developer profile required apt packages are incomplete"
@@ -80,8 +89,9 @@ test_developer_includes_development_tools() {
     fail "Developer profile optional apt packages are incomplete"
   [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
-  [[ "$output" == *"required mise tools: $expected_mise_tools"* ]] ||
-    fail "Developer profile is missing mise runtimes"
+  [[ -n "$actual_mise_tools" ]] || fail "Developer profile did not report required mise tools"
+  [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
+    fail "Developer profile mise tools do not match common/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
 
