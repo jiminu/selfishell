@@ -82,7 +82,7 @@ choose `minimal` explicitly when you want the lightweight shell experience.
 | Profile | Includes |
 | --- | --- |
 | `minimal` | Zsh, Git, Curl, Vim, Starship, Zinit, and macOS terminal fonts |
-| `developer` | Everything in `minimal`, plus Neovim 0.12.4, Tree-sitter CLI 0.26.11, mise, Node.js 24.18.0, Python 3.13.14, uv 0.5.21, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
+| `developer` | Everything in `minimal`, plus Neovim, Tree-sitter CLI, mise, Node.js, Python, uv, FZF, Zoxide, Ripgrep, Eza, Bat, jq, and compiler tools |
 
 Read [Profiles](docs/PROFILES.md) for the complete package list, profile
 behavior, and Neovim workflow.

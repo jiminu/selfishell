@@ -127,17 +127,6 @@ mise_tool_repository() {
   esac
 }
 
-# The human-readable name used for this tool in README.md's and
-# docs/PROFILES.md's profile tables (e.g. "Neovim 0.12.4").
-mise_tool_friendly_name() {
-  case "$1" in
-    neovim) printf 'Neovim\n' ;;
-    tree-sitter) printf 'Tree-sitter CLI\n' ;;
-    uv) printf 'uv\n' ;;
-    *) return 1 ;;
-  esac
-}
-
 mise_tool_version_is_valid() {
   [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]
 }
@@ -194,45 +183,20 @@ stage_exact_replacement() {
   mv "$staged_file.next" "$staged_file"
 }
 
-# Copies $target_file into $staged_dir on first use (chaining onto an
-# earlier edit within the same run, like stage_zsh_plugin_pin), then applies
-# an exact "$old" -> "$new" replacement to the staged copy.
-stage_file_replacement() {
-  local staged_dir="$1" target_file="$2" old="$3" new="$4"
-  local staged_file="$staged_dir/$target_file"
-
-  if [[ ! -f "$staged_file" ]]; then
-    [[ -r "$zsh_root/$target_file" ]] || {
-      printf 'File not found: %s\n' "$target_file" >&2
-      return 1
-    }
-    mkdir -p "$(dirname "$staged_file")"
-    cp "$zsh_root/$target_file" "$staged_file"
-  fi
-  stage_exact_replacement "$staged_file" "$old" "$new"
-}
-
 # Stages every "mise-tool" bump in $metadata against common/mise.toml's
-# current pin. A candidate that isn't a strictly newer, validly-formed
-# version is silently skipped -- no downgrade, no no-op edit -- so a
-# repeated run with the same candidate produces no further diff. A bump
-# also updates profiles/developer.conf's matching package selector and the
-# tool's version mention in README.md and docs/PROFILES.md, since existing
-# tests already require all four to agree.
+# current pin -- the sole source of truth for these versions. A candidate
+# that isn't a strictly newer, validly-formed version is silently skipped
+# -- no downgrade, no no-op edit -- so a repeated run with the same
+# candidate produces no further diff.
 stage_mise_tool_updates() {
   local staged_dir="$1"
   local mise_toml_target="common/mise.toml"
-  local developer_profile_target="profiles/developer.conf"
-  local type tool candidate current friendly_name staged_mise_toml doc_target
+  local type tool candidate current staged_mise_toml
 
   while read -r type tool candidate _; do
     [[ "$type" == mise-tool ]] || continue
     mise_tool_version_is_valid "$candidate" || {
       printf 'Invalid candidate version for mise tool %s: %s\n' "$tool" "$candidate" >&2
-      return 1
-    }
-    friendly_name="$(mise_tool_friendly_name "$tool")" || {
-      printf 'No name mapping for mise tool: %s\n' "$tool" >&2
       return 1
     }
 
@@ -258,12 +222,6 @@ stage_mise_tool_updates() {
     mise_tool_version_is_newer "$candidate" "$current" || continue
 
     stage_exact_replacement "$staged_mise_toml" "$tool = \"$current\"" "$tool = \"$candidate\"" || return 1
-    stage_file_replacement "$staged_dir" "$developer_profile_target" \
-      "mise $tool@$current" "mise $tool@$candidate" || return 1
-    for doc_target in README.md docs/PROFILES.md; do
-      stage_file_replacement "$staged_dir" "$doc_target" \
-        "$friendly_name $current" "$friendly_name $candidate" || return 1
-    done
   done <"$metadata"
 }
 
@@ -488,7 +446,7 @@ stage_mise_tool_updates "$staged_dir"
 # Nothing above touched a real file; only now, with the manifest and every
 # staged rewrite validated, are they committed together.
 mv "$manifest_output" "$manifest"
-for target_file in common/completion.zsh common/interactive.zsh common/mise.toml profiles/developer.conf README.md docs/PROFILES.md; do
+for target_file in common/completion.zsh common/interactive.zsh common/mise.toml; do
   staged_file="$staged_dir/$target_file"
   [[ -f "$staged_file" ]] || continue
   mv "$staged_file" "$zsh_root/$target_file"

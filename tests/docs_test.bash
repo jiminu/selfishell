@@ -37,36 +37,6 @@ test_profile_vi_alias_documentation_matches_implementation() {
   return 0
 }
 
-# Cross-checks every mise-managed developer-profile tool's pinned version
-# (common/mise.toml's [tools] table) against the user-facing profile
-# descriptions, so a version bump doesn't silently leave the docs stale.
-test_developer_profile_docs_include_mise_tool_versions() {
-  local tool version friendly_name
-
-  while IFS='=' read -r tool version; do
-    tool="$(printf '%s' "$tool" | tr -d '[:space:]')"
-    version="$(printf '%s' "$version" | tr -d '[:space:]"')"
-    [[ -n "$tool" && -n "$version" ]] || continue
-
-    case "$tool" in
-      node) friendly_name="Node.js" ;;
-      python) friendly_name="Python" ;;
-      neovim) friendly_name="Neovim" ;;
-      tree-sitter) friendly_name="Tree-sitter CLI" ;;
-      uv) friendly_name="uv" ;;
-      *) fail "Unrecognized mise tool in common/mise.toml: $tool (add it to this test's name mapping)" ;;
-    esac
-
-    grep -Fq "$friendly_name $version" "$ROOT_DIR/README.md" ||
-      fail "README.md does not document $friendly_name $version"
-    grep -Fq "$friendly_name $version" "$ROOT_DIR/docs/PROFILES.md" ||
-      fail "docs/PROFILES.md does not document $friendly_name $version"
-  done < <(awk '
-    /^\[/ { in_tools = ($0 == "[tools]"); next }
-    in_tools && /=/ { print }
-  ' "$ROOT_DIR/common/mise.toml")
-}
-
 # AGENTS.md should point to common/mise.toml instead of duplicating its tool
 # list.
 test_agents_developer_profile_tools_use_mise_source_of_truth() {

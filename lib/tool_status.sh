@@ -85,6 +85,19 @@ tool_status_executable() {
   esac
 }
 
+tool_status_mise_toml_version() {
+  local mise_toml="$1" tool="$2"
+
+  awk -v tool="$tool" '
+    /^\[/ { in_tools = ($0 == "[tools]"); next }
+    in_tools && $1 == tool {
+      gsub(/[[:space:]"]/, "", $3)
+      print $3
+      exit
+    }
+  ' "$mise_toml" 2>/dev/null
+}
+
 tool_status_detect() {
   local manager="$1"
   local package="$2"
@@ -148,10 +161,12 @@ tool_status_detect() {
       fi
       ;;
     mise)
-      local mise_tool="${package%%@*}"
-      local mise_version="${package#*@}"
+      local mise_tool="$package"
       local mise_command=""
-      TOOL_STATUS_APPROVED="$mise_version"
+      # common/mise.toml is the sole source of truth for a mise-managed
+      # tool's approved version; profiles/*.conf only declares the tool
+      # name, so the approved version can't be parsed out of $package.
+      TOOL_STATUS_APPROVED="$(tool_status_mise_toml_version "$SELFISHELL_ROOT/common/mise.toml" "$mise_tool")"
       if have_command mise; then
         mise_command="$(command -v mise)"
       elif [[ -x "$HOME/.local/bin/mise" ]]; then

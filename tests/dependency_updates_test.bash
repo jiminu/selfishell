@@ -38,7 +38,7 @@ EOF
 write_mise_toml_fixtures() {
   local zsh_root="$1"
 
-  mkdir -p "$zsh_root/common" "$zsh_root/profiles" "$zsh_root/docs"
+  mkdir -p "$zsh_root/common"
   cat >"$zsh_root/common/mise.toml" <<'EOF'
 [tools]
 node = "24.18.0"
@@ -49,20 +49,6 @@ uv = "0.5.21"
 
 [settings]
 not_found_auto_install = false
-EOF
-  cat >"$zsh_root/profiles/developer.conf" <<'EOF'
-package all required direct mise
-package all required mise neovim@0.12.4
-package all required mise tree-sitter@0.26.11
-package all required mise node@24.18.0
-package all required mise python@3.13.14
-package all required mise uv@0.5.21
-EOF
-  cat >"$zsh_root/README.md" <<'EOF'
-| `developer` | Neovim 0.12.4, Tree-sitter CLI 0.26.11, Node.js 24.18.0, Python 3.13.14, uv 0.5.21 |
-EOF
-  cat >"$zsh_root/docs/PROFILES.md" <<'EOF'
-| `developer` | Neovim 0.12.4, Tree-sitter CLI 0.26.11, Node.js 24.18.0, Python 3.13.14, uv 0.5.21 |
 EOF
 }
 
@@ -314,11 +300,11 @@ EOF
     fail "An individually-valid pin was committed even though the batch failed"
 }
 
-# A newer stable candidate must land in common/mise.toml, the matching
-# profiles/developer.conf selector, and both documentation mentions, while
-# every other mise-managed pin (including node/python, which this updater
-# never queries) stays byte-for-byte unchanged.
-test_mise_tool_update_bumps_pin_profile_and_documentation() {
+# A newer stable candidate must land in common/mise.toml -- the sole source
+# of truth for these versions -- while every other mise-managed pin
+# (including node/python, which this updater never queries) stays
+# byte-for-byte unchanged.
+test_mise_tool_update_bumps_pin_in_mise_toml_only() {
   local manifest metadata zsh_root
 
   manifest="$TEST_ROOT/dependencies.conf"
@@ -332,12 +318,6 @@ test_mise_tool_update_bumps_pin_profile_and_documentation() {
 
   grep -Fqx 'neovim = "0.12.5"' "$zsh_root/common/mise.toml" ||
     fail "common/mise.toml neovim pin was not bumped"
-  grep -Fq 'package all required mise neovim@0.12.5' "$zsh_root/profiles/developer.conf" ||
-    fail "profiles/developer.conf neovim selector was not bumped"
-  grep -Fq 'Neovim 0.12.5' "$zsh_root/README.md" ||
-    fail "README.md Neovim version was not bumped"
-  grep -Fq 'Neovim 0.12.5' "$zsh_root/docs/PROFILES.md" ||
-    fail "docs/PROFILES.md Neovim version was not bumped"
   grep -Fqx 'tree-sitter = "0.26.11"' "$zsh_root/common/mise.toml" ||
     fail "An untouched mise tool pin was modified"
   grep -Fqx 'node = "24.18.0"' "$zsh_root/common/mise.toml" ||
@@ -366,7 +346,7 @@ test_mise_tool_update_compares_versions_numerically() {
 }
 
 test_mise_tool_update_skips_same_or_older_candidate() {
-  local manifest metadata zsh_root mise_toml_before readme_before
+  local manifest metadata zsh_root mise_toml_before
 
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
@@ -375,14 +355,11 @@ test_mise_tool_update_skips_same_or_older_candidate() {
   : >"$manifest"
   printf 'mise-tool neovim 0.12.4\nmise-tool uv 0.5.20\n' >"$metadata"
   mise_toml_before="$(<"$zsh_root/common/mise.toml")"
-  readme_before="$(<"$zsh_root/README.md")"
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
   [[ "$(<"$zsh_root/common/mise.toml")" == "$mise_toml_before" ]] ||
     fail "mise.toml changed for a same-or-older candidate"
-  [[ "$(<"$zsh_root/README.md")" == "$readme_before" ]] ||
-    fail "README.md changed for a same-or-older candidate"
 }
 
 test_mise_tool_update_rejects_non_stable_candidate_format() {

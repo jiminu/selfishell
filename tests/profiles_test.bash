@@ -68,17 +68,20 @@ test_developer_includes_development_tools() {
 
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
-  # common/mise.toml is the source of truth for mise-managed developer tool
-  # versions (not profiles/developer.conf, which would make this a
-  # self-referential check against the very file that also produces
-  # $output). Compared as a sorted set rather than the literal dry-run
-  # line, since profiles/developer.conf's package order doesn't match
-  # mise.toml's [tools] order -- this still catches a tool missing from
-  # either file, an extra tool only profiles/developer.conf declares, or a
-  # version mismatch between the two.
+  # profiles/developer.conf declares developer-profile membership, while
+  # common/mise.toml is the sole source of truth for exact versions; the
+  # tool name appearing in both is intentional (different
+  # responsibilities), not duplication to collapse into one file. Expected
+  # tools come from mise.toml rather than profiles/developer.conf itself,
+  # since the latter would make this a self-referential check against the
+  # very file that also produces $output. Compared as a sorted set rather
+  # than the literal dry-run line, since profiles/developer.conf's package
+  # order doesn't match mise.toml's [tools] order -- this still catches a
+  # tool missing from either file or an extra tool only
+  # profiles/developer.conf declares.
   expected_mise_tools="$(awk '
     /^\[/ { in_tools = ($0 == "[tools]"); next }
-    in_tools && NF >= 3 { gsub(/"/, "", $3); print $1 "@" $3 }
+    in_tools && NF >= 3 { print $1 }
   ' "$ROOT_DIR/common/mise.toml" | sort)"
   actual_mise_tools="$(printf '%s\n' "$output" |
     sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
@@ -93,15 +96,6 @@ test_developer_includes_development_tools() {
   [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
     fail "Developer profile mise tools do not match common/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
-}
-
-test_developer_mise_profile_matches_managed_config() {
-  local name version
-
-  while read -r name version; do
-    grep -Fqx "$name = \"$version\"" "$ROOT_DIR/common/mise.toml" ||
-      fail "mise config does not match developer selector: $name@$version"
-  done < <(awk '$1 == "package" && $4 == "mise" { split($5, fields, "@"); print fields[1], substr($5, length(fields[1]) + 2) }' "$ROOT_DIR/profiles/developer.conf")
 }
 
 test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
