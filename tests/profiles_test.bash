@@ -68,12 +68,14 @@ test_developer_includes_development_tools() {
 
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
-  # common/mise.toml is the source of truth for which tools are
-  # mise-managed (not profiles/developer.conf, which would make this a
-  # self-referential check against the very file that also produces
-  # $output); exact versions live only in mise.toml and are resolved by
-  # mise itself, not compared here. Compared as a sorted set rather than
-  # the literal dry-run line, since profiles/developer.conf's package
+  # profiles/developer.conf declares developer-profile membership, while
+  # common/mise.toml is the sole source of truth for exact versions; the
+  # tool name appearing in both is intentional (different
+  # responsibilities), not duplication to collapse into one file. Expected
+  # tools come from mise.toml rather than profiles/developer.conf itself,
+  # since the latter would make this a self-referential check against the
+  # very file that also produces $output. Compared as a sorted set rather
+  # than the literal dry-run line, since profiles/developer.conf's package
   # order doesn't match mise.toml's [tools] order -- this still catches a
   # tool missing from either file or an extra tool only
   # profiles/developer.conf declares.
@@ -94,20 +96,6 @@ test_developer_includes_development_tools() {
   [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
     fail "Developer profile mise tools do not match common/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
-}
-
-# profiles/developer.conf only declares mise tool names now (no version);
-# common/mise.toml is the sole place that pins an exact version, so this
-# only checks that every tool the profile selects is actually declared
-# there. The reverse direction (a mise.toml tool missing from the profile)
-# is covered by test_developer_includes_development_tools.
-test_developer_mise_profile_matches_managed_config() {
-  local name
-
-  while read -r name; do
-    grep -Eq "^${name}[[:space:]]*=" "$ROOT_DIR/common/mise.toml" ||
-      fail "common/mise.toml does not declare a version for developer profile tool: $name"
-  done < <(awk '$1 == "package" && $4 == "mise" { print $5 }' "$ROOT_DIR/profiles/developer.conf")
 }
 
 test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
