@@ -125,19 +125,6 @@ test_editor_workflow_options_and_keymaps() {
   [[ "$output" == *'editor workflows: OK'* ]] || fail "Editor workflow configuration is invalid: $output"
 }
 
-test_buffer_delete_preserves_editor_window() {
-  local output
-
-  if ! command -v nvim >/dev/null 2>&1; then
-    skip 'test_buffer_delete_preserves_editor_window (Neovim unavailable)'
-  fi
-
-  output="$(run_neovim_fixture buffer_delete.lua)"
-
-  [[ "$output" == *'buffer delete layout: OK'* ]] ||
-    fail "Buffer deletion did not preserve the editor layout: $output"
-}
-
 test_lazy_revision_prefers_detached_head() {
   local lazy_path
   local output

@@ -2,7 +2,6 @@ local plugin = require("config.plugin_versions").spec
 
 local excluded_scope_filetypes = {
   NvimTree = true,
-  TelescopePrompt = true,
   help = true,
   lazy = true,
   log = true,
@@ -152,10 +151,10 @@ return {
       options = {
         always_show_bufferline = false,
         close_command = function(bufnr)
-          require("config.keymaps").delete_buffer(bufnr)
+          Snacks.bufdelete(bufnr)
         end,
         right_mouse_command = function(bufnr)
-          require("config.keymaps").delete_buffer(bufnr)
+          Snacks.bufdelete(bufnr)
         end,
         indicator = {
           style = "underline",
@@ -354,7 +353,100 @@ return {
   plugin("folke/snacks.nvim", {
     lazy = false,
     priority = 1000,
+    keys = {
+      {
+        "<leader>ff",
+        function()
+          Snacks.picker.files()
+        end,
+        desc = "Find files",
+      },
+      {
+        "<leader>fF",
+        function()
+          Snacks.picker.files({ hidden = true })
+        end,
+        desc = "Find all files",
+      },
+      {
+        "<leader>fg",
+        function()
+          Snacks.picker.grep()
+        end,
+        desc = "Live grep",
+      },
+      {
+        "<leader>fG",
+        function()
+          Snacks.picker.grep({ hidden = true })
+        end,
+        desc = "Live grep all files",
+      },
+      {
+        "<leader>fb",
+        function()
+          Snacks.picker.buffers()
+        end,
+        desc = "Buffers",
+      },
+      {
+        "<leader>fh",
+        function()
+          Snacks.picker.help()
+        end,
+        desc = "Help tags",
+      },
+      {
+        "<leader>fd",
+        function()
+          Snacks.picker.diagnostics()
+        end,
+        desc = "Diagnostics",
+      },
+      {
+        "<leader>fs",
+        function()
+          Snacks.picker.lsp_symbols()
+        end,
+        desc = "Document symbols",
+      },
+      {
+        "<leader>fS",
+        function()
+          Snacks.picker.lsp_workspace_symbols()
+        end,
+        desc = "Workspace symbols",
+      },
+      {
+        "<leader>fr",
+        function()
+          Snacks.picker.resume()
+        end,
+        desc = "Resume picker",
+      },
+    },
     opts = {
+      -- Backend pinned to ripgrep: the developer profile guarantees it, but
+      -- not fd, so the picker shouldn't vary by what's personally installed.
+      -- File/grep results hide the leading file icon (unlike buffers, which
+      -- keep it) to match the previous Telescope setup.
+      picker = {
+        ui_select = false,
+        sources = {
+          files = {
+            cmd = "rg",
+            icons = { files = { enabled = false } },
+          },
+          grep = {
+            icons = { files = { enabled = false } },
+          },
+          -- Telescope's diagnostics picker showed the whole workspace, not
+          -- just the cwd; Snacks defaults to cwd-only.
+          diagnostics = {
+            filter = { cwd = false },
+          },
+        },
+      },
       indent = {
         enabled = true,
         indent = {
@@ -495,7 +587,6 @@ return {
         "cmp_docs",
         "cmp_menu",
         "prompt",
-        "TelescopePrompt",
         "NvimTree",
         "lazy",
         "mason",

@@ -2,7 +2,6 @@ local modules = {
   "plugins.completion",
   "plugins.editor",
   "plugins.lsp",
-  "plugins.telescope",
   "plugins.ui",
 }
 
@@ -58,5 +57,13 @@ end
 vim.bo.filetype = "lua"
 assert(indent.filter(0) == true, "Indent rendering incorrectly excluded an ordinary buffer")
 assert(indent.scope.filter(0) == true, "Scope detection incorrectly excluded an ordinary buffer")
+
+local picker = snacks.opts.picker
+assert(picker, "Snacks picker must be configured")
+assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
+assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
+assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
+assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
+assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 print("pinned plugin specs: OK")

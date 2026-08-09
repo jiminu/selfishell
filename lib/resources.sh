@@ -30,7 +30,6 @@ file	nvim-lua-plugins-ui	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/ui.lua	$SELFISH
 file	nvim-lua-plugins-editor	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/editor.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/editor.lua
 file	nvim-lua-plugins-lsp	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/lsp.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/lsp.lua
 file	nvim-lua-plugins-completion	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/completion.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/completion.lua
-file	nvim-lua-plugins-telescope	$SELFISHELL_CONFIG_DIR/nvim/lua/plugins/telescope.lua	$SELFISHELL_ROOT/common/nvim/lua/plugins/telescope.lua
 file	nvim-after-lsp-lua_ls	$SELFISHELL_CONFIG_DIR/nvim/after/lsp/lua_ls.lua	$SELFISHELL_ROOT/common/nvim/after/lsp/lua_ls.lua
 block	user-zshrc	$HOME/.zshrc	-
 block	user-zprofile	$HOME/.zprofile	-
