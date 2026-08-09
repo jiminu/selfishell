@@ -476,16 +476,24 @@ test_update_preserves_non_link_previous_path_with_a_warning() {
 # release_installation_paths already refuses to treat a non-symlink current
 # path as a versioned installation at all, so a corrupted current can never
 # reach release_atomic_link to be silently replaced.
+#
+# This must invoke the retained release's own binary directly rather than
+# "$TEST_ROOT/prefix/bin/selfishell": that entrypoint's target string embeds
+# "current" as a path component, so once current is a regular file, the shell
+# fails resolving the path itself (ENOTDIR) before release_installation_paths
+# ever runs -- which would make this test pass even if that guard were
+# deleted entirely.
 test_update_rejects_non_link_current_path() {
-  local version status
+  local version status retained_cli
 
   version="$(<"$ROOT_DIR/VERSION")"
   run_bootstrap --version "$version" >/dev/null
+  retained_cli="$TEST_ROOT/prefix/share/selfishell/releases/$version/bin/selfishell"
   rm -f "$TEST_ROOT/prefix/share/selfishell/current"
   printf 'user data\n' >"$TEST_ROOT/prefix/share/selfishell/current"
 
   set +e
-  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes \
+  "$retained_cli" update --cli-only --version 0.2.3 --yes \
     >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
@@ -495,6 +503,8 @@ test_update_rejects_non_link_current_path() {
     fail "current was replaced with a symlink despite being a regular file"
   [[ "$(<"$TEST_ROOT/prefix/share/selfishell/current")" == 'user data' ]] ||
     fail "The non-symlink current path was overwritten instead of preserved"
+  [[ "$(<"$TEST_ROOT/stderr")" == *'requires a versioned Selfishell installation'* ]] ||
+    fail "update did not fail via the versioned-installation guard: $(<"$TEST_ROOT/stderr")"
 }
 
 test_update_tolerates_duplicate_identical_checksum_entry() {
