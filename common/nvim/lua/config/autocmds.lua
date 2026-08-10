@@ -4,6 +4,16 @@ local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true 
 -- nvim-treesitter plugin no longer enables it through setup()/opts.
 vim.treesitter.language.register("terraform", "tf")
 
+-- The Zsh parser currently ships without highlight queries. Keep Tree-sitter
+-- available for structural features and use Neovim's built-in syntax colors.
+vim.api.nvim_create_autocmd("FileType", {
+  group = group,
+  pattern = "zsh",
+  callback = function()
+    vim.cmd("runtime! syntax/zsh.vim")
+  end,
+})
+
 -- nvim-treesitter 1.0+ also dropped ensure_installed/auto_install from
 -- setup(), so install a missing parser the first time its filetype is
 -- opened rather than maintaining a separate static list to bulk-install

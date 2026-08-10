@@ -27,6 +27,7 @@ return {
     },
     init = function()
       vim.g.rainbow_delimiters = {
+        blacklist = { "zsh" },
         strategy = {
           [""] = "rainbow-delimiters.strategy.global",
         },

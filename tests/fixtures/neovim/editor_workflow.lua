@@ -147,9 +147,11 @@ local scrollbar = assert(
   plugin_spec("plugins.ui", "petertriho/nvim-scrollbar"),
   "nvim-scrollbar spec is missing"
 )
+assert(has_dependency(scrollbar, "kevinhwang91/nvim-hlslens"), "scrollbar search dependency is missing")
 assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking should stay disabled")
 assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
 assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
+assert(scrollbar.opts.handlers.search == true, "scrollbar search marks should be enabled")
 assert(scrollbar.opts.marks == nil, "scrollbar should not carry dead cursor-mark configuration")
 
 local cmp = assert(plugin_spec("plugins.completion", "hrsh7th/nvim-cmp"), "nvim-cmp spec is missing")
@@ -165,5 +167,7 @@ assert(
   vim.deep_equal(rainbow.event, { "BufReadPre", "BufNewFile" }),
   "rainbow-delimiters loads after the initial FileType event"
 )
+rainbow.init()
+assert(vim.list_contains(vim.g.rainbow_delimiters.blacklist, "zsh"), "Zsh rainbow delimiters should be disabled")
 
 print("editor workflows: OK")

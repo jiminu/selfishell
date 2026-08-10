@@ -457,15 +457,7 @@ return {
           enabled = true,
           char = "│",
           underline = false,
-          hl = {
-            "RainbowDelimiterRed",
-            "RainbowDelimiterYellow",
-            "RainbowDelimiterBlue",
-            "RainbowDelimiterOrange",
-            "RainbowDelimiterGreen",
-            "RainbowDelimiterViolet",
-            "RainbowDelimiterCyan",
-          },
+          hl = "SnacksIndentScope",
           treesitter = {
             enabled = true,
             -- Disables Snacks' built-in block-node whitelist so scope isn't
@@ -570,6 +562,9 @@ return {
   plugin("petertriho/nvim-scrollbar", {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
+    dependencies = {
+      plugin("kevinhwang91/nvim-hlslens"),
+    },
     opts = {
       show_in_active_only = true,
       hide_if_all_visible = true,
@@ -598,7 +593,7 @@ return {
         cursor = false,
         diagnostic = true,
         handle = true,
-        search = false,
+        search = true,
         ale = false,
       },
     },

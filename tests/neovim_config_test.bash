@@ -43,6 +43,19 @@ test_treesitter_autocmd_uses_detected_filetypes() {
     fail "Tree-sitter autocmd did not use FileType values and Terraform mapping: $output"
 }
 
+test_zsh_uses_builtin_syntax_fallback() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_zsh_uses_builtin_syntax_fallback (Neovim unavailable)'
+  fi
+
+  output="$(run_neovim_fixture zsh_syntax.lua)"
+
+  [[ "$output" == *'Zsh syntax fallback: OK'* ]] ||
+    fail "Zsh built-in syntax fallback is broken: $output"
+}
+
 test_treesitter_auto_installs_missing_parsers_on_filetype() {
   local output
 
