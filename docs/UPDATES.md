@@ -29,8 +29,9 @@ that finds the target release already installed;
 `selfishell update --tools-only --skip-packages` reapplies just the managed
 configuration for the current release.
 
-`--skip-packages` skips package and tool installation and applies managed
-configuration only, the same contract `selfishell install` follows.
+`--skip-packages` applies only when the tools/configuration phase runs: it
+skips package and tool installation and applies managed configuration only,
+the same contract `selfishell install` follows.
 
 `status` reports local CLI, rollback, profile, and managed-resource state
 only; it never checks the network. Use `selfishell version --available` to

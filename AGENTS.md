@@ -117,11 +117,13 @@ The developer profile's mise-managed tool membership is declared in
 `profiles/developer.conf`; exact versions for those tools are pinned in
 `common/mise.toml`, the source of truth for mise-managed tool versions.
 
-`--skip-packages` must skip package and tool installation and apply managed
-configuration only; only `update --tools-only --skip-packages` is also
-network-free, since `update`'s CLI-release phase can otherwise still reach
-the network. `optional` packages are attempted automatically but remain
-non-fatal.
+When the tools/configuration phase runs, `--skip-packages` must skip package
+and tool installation and apply managed configuration only. A default update
+whose target release is already active exits before that phase; use
+`update --tools-only --skip-packages` to reapply the current release's managed
+configuration. Only that form is also network-free, since `update`'s
+CLI-release phase can otherwise still reach the network. `optional` packages
+are attempted automatically but remain non-fatal.
 
 Automated dependency discovery may open a review PR but must never auto-merge
 or auto-publish a release. A maintainer reviews and merges

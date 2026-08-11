@@ -12,8 +12,10 @@ target release is already installed, no changes are made. Use --tools-only to
 explicitly resynchronize the current release's tools and configuration, or
 --cli-only to limit the scope to the CLI release itself.
 --version selects an exact CLI release and cannot be used with --tools-only.
---skip-packages skips package and tool installation and applies managed
-configuration only.
+When the tools/configuration phase runs, --skip-packages skips package and
+tool installation and applies managed configuration only. A default update
+whose target release is already installed exits before that phase; use
+--tools-only --skip-packages to reapply the current release's configuration.
 
 Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned

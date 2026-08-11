@@ -321,7 +321,8 @@ test_non_wsl_command_lookup_uses_native_path_semantics() {
   chmod +x "$work_dir/cwd-probe" "$path_dir/path-probe" "$relative_dir/relative-probe"
 
   output="$(
-    XDG_CACHE_HOME="$HOME/.cache" \
+    WSL_DISTRO_NAME="" \
+      XDG_CACHE_HOME="$HOME/.cache" \
       ZDOTDIR="" \
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
