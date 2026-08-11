@@ -65,6 +65,7 @@ local snacks_picker_keys = {
   "<leader>fs",
   "<leader>fS",
   "<leader>fr",
+  "<leader>/",
 }
 for _, lhs in ipairs(snacks_picker_keys) do
   assert(

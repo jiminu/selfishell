@@ -31,15 +31,7 @@ assert(indent.chunk.enabled == false, "Chunk rendering must stay disabled")
 assert(indent.scope.enabled == true, "Scope rendering must be enabled")
 assert(indent.scope.char == "│", "Scope marker must use a thin solid line")
 assert(indent.scope.underline == false, "Scope start underline must stay disabled")
-assert(vim.deep_equal(indent.scope.hl, {
-  "RainbowDelimiterRed",
-  "RainbowDelimiterYellow",
-  "RainbowDelimiterBlue",
-  "RainbowDelimiterOrange",
-  "RainbowDelimiterGreen",
-  "RainbowDelimiterViolet",
-  "RainbowDelimiterCyan",
-}), "Scope must use the rainbow delimiter palette")
+assert(indent.scope.hl == "SnacksIndentScope", "Scope must use the default Snacks scope highlight")
 
 assert(indent.scope.treesitter.enabled == true, "Scope detection must prefer Tree-sitter")
 assert(type(indent.scope.treesitter.blocks) == "table" and indent.scope.treesitter.blocks.enabled == false,

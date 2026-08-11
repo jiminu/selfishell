@@ -418,6 +418,13 @@ return {
         end,
         desc = "Resume picker",
       },
+      {
+        "<leader>/",
+        function()
+          Snacks.picker.lines()
+        end,
+        desc = "Fuzzy search in buffer",
+      },
     },
     opts = {
       -- Backend pinned to ripgrep: the developer profile guarantees it, but
@@ -457,15 +464,7 @@ return {
           enabled = true,
           char = "│",
           underline = false,
-          hl = {
-            "RainbowDelimiterRed",
-            "RainbowDelimiterYellow",
-            "RainbowDelimiterBlue",
-            "RainbowDelimiterOrange",
-            "RainbowDelimiterGreen",
-            "RainbowDelimiterViolet",
-            "RainbowDelimiterCyan",
-          },
+          hl = "SnacksIndentScope",
           treesitter = {
             enabled = true,
             -- Disables Snacks' built-in block-node whitelist so scope isn't
