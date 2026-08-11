@@ -563,10 +563,16 @@ return {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
     dependencies = {
-      -- opts (even empty) is required so lazy.nvim calls hlslens's setup():
-      -- without it, hlslens never enables itself, so it never builds the
-      -- search position list scrollbar's search handler renders marks from.
-      plugin("kevinhwang91/nvim-hlslens", { opts = {} }),
+      -- opts is required so lazy.nvim calls hlslens's setup(): without it,
+      -- hlslens never enables itself, so it never builds the search position
+      -- list scrollbar's search handler renders marks from. override_lens is
+      -- a no-op so hlslens only feeds scrollbar marks and doesn't also draw
+      -- its own floating "[n/N x/y]" match-count text next to the cursor.
+      plugin("kevinhwang91/nvim-hlslens", {
+        opts = {
+          override_lens = function() end,
+        },
+      }),
     },
     opts = {
       show_in_active_only = true,

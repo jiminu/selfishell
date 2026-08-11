@@ -163,6 +163,10 @@ local hlslens = assert(
 -- `opts` (or `config`) table; without it hlslens never enables itself, so it
 -- never builds the position list scrollbar's search handler renders from.
 assert(type(hlslens.opts) == "table", "hlslens must have opts so lazy.nvim calls its setup()")
+assert(
+  type(hlslens.opts.override_lens) == "function",
+  "hlslens should not draw its own floating match-count text; scrollbar marks are enough"
+)
 assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking should stay disabled")
 assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
 assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
