@@ -190,13 +190,16 @@ it; the gate remains required for the change categories listed above.
 2. Check the worktree before editing and preserve unrelated user changes.
 3. Keep changes to one reviewable feature, fix, or documentation slice.
 4. Add or update tests for behavioral changes.
-5. Record durable architecture decisions in this file or a focused document
+5. When changing a shared shell function's signature, search the entire
+   repository for every call site, including scripts and tests, before
+   finishing the change.
+6. Record durable architecture decisions in this file or a focused document
    under `docs/`; keep transient status and dated run logs out of agent rules.
-6. Keep planning artifacts out of the repository. Implementation plans, design
+7. Keep planning artifacts out of the repository. Implementation plans, design
    drafts, task checklists, and roadmaps are working notes for one change: they
    go stale the moment the change merges, and the merged diff plus its tests are
    the durable record. Write them outside the checkout.
-7. Report only checks actually run. Separate local results, GitHub Actions
+8. Report only checks actually run. Separate local results, GitHub Actions
    results, and checks that were unavailable; never imply an unrun check passed.
-8. After merging a branch into `main`, delete the remote branch (e.g.
+9. After merging a branch into `main`, delete the remote branch (e.g.
    `gh pr merge --delete-branch`); don't leave merged branches behind.
