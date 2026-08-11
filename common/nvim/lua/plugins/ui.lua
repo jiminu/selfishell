@@ -418,6 +418,13 @@ return {
         end,
         desc = "Resume picker",
       },
+      {
+        "<leader>/",
+        function()
+          Snacks.picker.lines()
+        end,
+        desc = "Fuzzy search in buffer",
+      },
     },
     opts = {
       -- Backend pinned to ripgrep: the developer profile guarantees it, but
