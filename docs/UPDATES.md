@@ -24,7 +24,7 @@ managed configuration, and synchronizes Neovim plugins for the developer
 profile; Tree-sitter parsers install lazily the first time their filetype is
 opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
-upgrade. A CLI-only installation skips this phase, as does a default update
+upgrade. A CLI-only update skips this phase, as does a default update
 that finds the target release already installed;
 `selfishell update --tools-only --skip-packages` reapplies just the managed
 configuration for the current release.

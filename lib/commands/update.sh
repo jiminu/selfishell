@@ -181,9 +181,8 @@ command_update() {
     update_cli_release "$version" "$assume_yes" "$dry_run"
     if [[ "$SELFISHELL_CLI_UP_TO_DATE" == 1 ]]; then
       if [[ "$mode" == all ]]; then
-        # Nothing to switch and no new release to pull tools/configuration
-        # changes from, so the tools/configuration phase below would be a
-        # no-op too; skip it instead of running it just to confirm that.
+        # The target release is already active. Default update does not
+        # resynchronize the current release; use --tools-only for that.
         printf '%sSelfishell is up to date (%s).%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_CLI_TARGET_VERSION" "$SELFISHELL_COLOR_RESET"
         return
       fi
