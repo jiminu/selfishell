@@ -126,8 +126,16 @@ if [[ "$PROFILE_MODE" == full ]]; then
 fi
 
 case "$PROFILE_MODE" in
-  base) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:/usr/bin:/bin" ;;
-  full) INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:$PATH" ;;
+  base)
+    # compdump atomically replaces its cache through the external mv command.
+    ln -s /bin/mv "$TEST_HOME/.local/bin/mv"
+    COMMON_PATH="$TEST_HOME/.local/bin"
+    INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin"
+    ;;
+  full)
+    COMMON_PATH="$TEST_HOME/.local/bin:/usr/bin:/bin"
+    INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin:$PATH"
+    ;;
 esac
 
 validate_iterations() {
@@ -200,7 +208,7 @@ run_common_zsh() {
   cd "$TEST_HOME"
   HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
     MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
-    PATH="$TEST_HOME/.local/bin:/usr/bin:/bin" TERM=xterm-256color \
+    PATH="$COMMON_PATH" TERM=xterm-256color \
     /bin/zsh -f -c 'source "$1"' \
     zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
 }
@@ -264,7 +272,7 @@ record_result "$baseline_result"
 # The first run creates the completion dump. Following measurements represent
 # the cached common configuration used during ordinary startup.
 export -f run_common_zsh run_interactive_zsh
-export ROOT_DIR TEST_HOME TEST_DATA_HOME INTERACTIVE_PATH
+export ROOT_DIR TEST_HOME TEST_DATA_HOME COMMON_PATH INTERACTIVE_PATH
 record_result "$(benchmark common-first 1 bash -c 'run_common_zsh')"
 common_result="$(benchmark common-cached "$ITERATIONS" bash -c 'run_common_zsh')"
 record_result "$common_result"
