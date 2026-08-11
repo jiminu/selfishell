@@ -27,10 +27,6 @@ return {
     },
     init = function()
       vim.g.rainbow_delimiters = {
-        -- rainbow-delimiters ships no Zsh bracket-matching query upstream
-        -- (only bash/); leaving Zsh enabled just means the query lookup
-        -- silently finds nothing to rainbow-color.
-        blacklist = { "zsh" },
         strategy = {
           [""] = "rainbow-delimiters.strategy.global",
         },

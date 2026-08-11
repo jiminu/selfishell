@@ -166,7 +166,5 @@ assert(
   vim.deep_equal(rainbow.event, { "BufReadPre", "BufNewFile" }),
   "rainbow-delimiters loads after the initial FileType event"
 )
-rainbow.init()
-assert(vim.list_contains(vim.g.rainbow_delimiters.blacklist, "zsh"), "Zsh rainbow delimiters should be disabled")
 
 print("editor workflows: OK")
