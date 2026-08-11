@@ -332,12 +332,12 @@ return {
     },
   }),
 
-  -- Tree-sitter-aware scope markers use the matching rainbow delimiter
-  -- color. Snacks derives scope from the current node's ancestry instead of
-  -- a per-language node-type whitelist, so it covers control-flow blocks and
-  -- generic multiline containers (lists, dicts, call arguments, ...) alike;
-  -- falls back to indentation when Tree-sitter is unavailable or finds
-  -- nothing. Loaded eagerly (not event-lazy) because Snacks itself defers
+  -- Tree-sitter-aware scope markers highlight the current scope with
+  -- SnacksIndentScope. Snacks derives scope from the current node's ancestry
+  -- instead of a per-language node-type whitelist, so it covers control-flow
+  -- blocks and generic multiline containers (lists, dicts, call arguments,
+  -- ...) alike; falls back to indentation when Tree-sitter is unavailable or
+  -- finds nothing. Loaded eagerly (not event-lazy) because Snacks itself defers
   -- enabling indent to BufReadPost, which would otherwise miss the first
   -- buffer if the plugin loaded any later than that -- and BufReadPost never
   -- fires at all for a path that doesn't exist yet (BufNewFile) or the
