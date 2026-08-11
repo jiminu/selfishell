@@ -111,7 +111,7 @@ install_full_profile_integrations() {
         source "$1/lib/platform.sh"
         source "$1/lib/dependencies.sh"
         source "$1/lib/installers.sh"
-        install_direct_package required "$2" 0
+        install_direct_package required "$2" 0 "$(detect_platform)" "$(detect_architecture)"
       ' _ "$ROOT_DIR" "$name" || status=1
   done
 

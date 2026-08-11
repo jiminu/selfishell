@@ -45,7 +45,7 @@ EOF
 }
 
 test_direct_installer_preserves_proxy_environment() {
-  install_direct_package required mise 0 "$(detect_platform)"
+  install_direct_package required mise 0 "$(detect_platform)" "$(detect_architecture)"
 
   assert_file_content "$HTTPS_PROXY" "$HOME/proxy-observed"
   grep -Fxq -- '--connect-timeout' "$HOME/curl-arguments" ||
