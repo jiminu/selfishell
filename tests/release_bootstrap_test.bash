@@ -677,6 +677,52 @@ test_cli_update_to_current_version_preserves_rollback() {
     fail "Same-version CLI update pruned the rollback release"
 }
 
+test_default_update_reports_up_to_date_without_synchronizing() {
+  local output version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --yes)"
+
+  [[ "$output" == *'Selfishell is up to date (0.2.3).'* ]] ||
+    fail "Default update at the latest release did not report up to date: $output"
+  [[ "$output" != *'already at'* ]] ||
+    fail "Default update printed the CLI-only wording as well as the up-to-date message: $output"
+  # No profile is installed in this fixture, so update_tools_and_configuration
+  # would have printed this exact message had it run at all -- its absence is
+  # proof the tools/configuration phase was skipped, not just that its final
+  # summary line was suppressed.
+  [[ "$output" != *'skipping tools and configuration'* ]] ||
+    fail "Default update ran the tools/configuration phase despite already being at the latest release: $output"
+}
+
+test_update_version_matching_current_is_a_noop() {
+  local output version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --version "$version" --yes)"
+
+  [[ "$output" == *"Selfishell is up to date ($version)."* ]] ||
+    fail "Default update targeting the already-installed version did not report up to date: $output"
+  [[ "$output" != *'skipping tools and configuration'* ]] ||
+    fail "Default update ran the tools/configuration phase for an explicit current-version target: $output"
+}
+
+test_default_update_skip_packages_is_a_noop_when_current() {
+  local output version
+  version="$(<"$ROOT_DIR/VERSION")"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --skip-packages --version "$version" --yes)"
+
+  [[ "$output" == *"Selfishell is up to date ($version)."* ]] ||
+    fail "--skip-packages did not preserve the default update's up-to-date no-op: $output"
+  [[ "$output" != *'Skipping package and tool installation.'* ]] ||
+    fail "--skip-packages triggered the tools/configuration phase for an already-current release: $output"
+}
+
 test_update_release_move_failure_does_not_corrupt_symlinks() {
   local version
   local fake_bin="$TEST_ROOT/fakebin"

@@ -1,8 +1,12 @@
 # Updates and Rollback
 
-`selfishell update` updates the managed environment and CLI release by default.
-The CLI release is switched first. If it changed, the new CLI continues the
-same command so packages newly added to that release's profile are included.
+By default, `selfishell update` updates to the latest release and then
+synchronizes that release's managed environment. The CLI release is switched
+first; if it changed, the new CLI continues the same command so packages newly
+added to that release's profile are included. If the target release is
+already installed, the command reports that and exits without changing
+anything. Use `--tools-only` to explicitly resynchronize the current release's
+tools and configuration regardless of whether a new release is available.
 
 ```sh
 selfishell status
@@ -20,7 +24,10 @@ managed configuration, and synchronizes Neovim plugins for the developer
 profile; Tree-sitter parsers install lazily the first time their filetype is
 opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
-upgrade. A CLI-only installation skips this phase.
+upgrade. A CLI-only installation skips this phase, as does a default update
+that finds the target release already installed;
+`selfishell update --tools-only --skip-packages` reapplies just the managed
+configuration for the current release.
 
 `--skip-packages` skips package and tool installation and applies managed
 configuration only, the same contract `selfishell install` follows.

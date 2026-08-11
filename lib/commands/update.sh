@@ -6,9 +6,11 @@ Usage:
   selfishell update [--cli-only | --tools-only] [--version VERSION]
                      [--skip-packages] [--dry-run] [--yes]
 
-By default, update the Selfishell CLI release first, then synchronize all
-profile packages, approved tools, and managed configuration. Use --cli-only or
---tools-only to limit the scope.
+By default, update to the latest Selfishell release and synchronize that
+release's profile packages, approved tools, and managed configuration. If the
+target release is already installed, no changes are made. Use --tools-only to
+explicitly resynchronize the current release's tools and configuration, or
+--cli-only to limit the scope to the CLI release itself.
 --version selects an exact CLI release and cannot be used with --tools-only.
 --skip-packages skips package and tool installation and applies managed
 configuration only.
@@ -91,7 +93,8 @@ update_cli_release() {
     return "$SELFISHELL_EXIT_USAGE"
   }
   if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then
-    printf '%sSelfishell CLI is already at %s; skipping CLI update.%s\n' "$SELFISHELL_COLOR_CYAN" "$version" "$SELFISHELL_COLOR_RESET"
+    SELFISHELL_CLI_UP_TO_DATE=1
+    SELFISHELL_CLI_TARGET_VERSION="$version"
     return
   fi
   if [[ "$dry_run" == 1 ]]; then
@@ -122,6 +125,7 @@ command_update() {
   local skip_packages=0
 
   SELFISHELL_CLI_UPDATED=0
+  SELFISHELL_CLI_UP_TO_DATE=0
 
   while (("$#" > 0)); do
     case "$1" in
@@ -175,6 +179,16 @@ command_update() {
     # Keep update operations out of conditional command contexts. Bash disables
     # errexit inside functions used by `if`, `!`, `&&`, or `||`.
     update_cli_release "$version" "$assume_yes" "$dry_run"
+    if [[ "$SELFISHELL_CLI_UP_TO_DATE" == 1 ]]; then
+      if [[ "$mode" == all ]]; then
+        # Nothing to switch and no new release to pull tools/configuration
+        # changes from, so the tools/configuration phase below would be a
+        # no-op too; skip it instead of running it just to confirm that.
+        printf '%sSelfishell is up to date (%s).%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_CLI_TARGET_VERSION" "$SELFISHELL_COLOR_RESET"
+        return
+      fi
+      printf '%sSelfishell CLI is already at %s; skipping CLI update.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_CLI_TARGET_VERSION" "$SELFISHELL_COLOR_RESET"
+    fi
     if [[ "$mode" == all && "$dry_run" == 0 && "$SELFISHELL_CLI_UPDATED" == 1 ]]; then
       continue_update_with_new_cli "$assume_yes" "$skip_packages"
     fi
