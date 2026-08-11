@@ -563,7 +563,10 @@ return {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
     dependencies = {
-      plugin("kevinhwang91/nvim-hlslens"),
+      -- opts (even empty) is required so lazy.nvim calls hlslens's setup():
+      -- without it, hlslens never enables itself, so it never builds the
+      -- search position list scrollbar's search handler renders marks from.
+      plugin("kevinhwang91/nvim-hlslens", { opts = {} }),
     },
     opts = {
       show_in_active_only = true,

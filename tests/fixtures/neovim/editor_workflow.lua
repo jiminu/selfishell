@@ -54,6 +54,14 @@ local function has_dependency(spec, repository)
   return false
 end
 
+local function dependency_spec(spec, repository)
+  for _, dependency in ipairs(spec.dependencies or {}) do
+    if dependency[1] == repository then
+      return dependency
+    end
+  end
+end
+
 local snacks_picker_keys = {
   "<leader>ff",
   "<leader>fF",
@@ -147,7 +155,14 @@ local scrollbar = assert(
   plugin_spec("plugins.ui", "petertriho/nvim-scrollbar"),
   "nvim-scrollbar spec is missing"
 )
-assert(has_dependency(scrollbar, "kevinhwang91/nvim-hlslens"), "scrollbar search dependency is missing")
+local hlslens = assert(
+  dependency_spec(scrollbar, "kevinhwang91/nvim-hlslens"),
+  "scrollbar search dependency is missing"
+)
+-- lazy.nvim only calls a dependency's setup() when its spec carries an
+-- `opts` (or `config`) table; without it hlslens never enables itself, so it
+-- never builds the position list scrollbar's search handler renders from.
+assert(type(hlslens.opts) == "table", "hlslens must have opts so lazy.nvim calls its setup()")
 assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking should stay disabled")
 assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
 assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
