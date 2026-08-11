@@ -17,7 +17,6 @@ zstyle ':completion:*' matcher-list \
   '' \
   'm:{a-zA-Z}={A-Za-z}' \
   'l:|=* r:|=*'
-zstyle ':completion:*' list-dirs-first true
 
 autoload -Uz compinit compaudit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"

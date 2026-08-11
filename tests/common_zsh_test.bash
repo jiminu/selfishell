@@ -5,26 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-test_completion_lists_directories_first() {
-  local output
-
-  setup_test_home
-  output="$(
-    XDG_CACHE_HOME="$HOME/.cache" \
-      XDG_DATA_HOME="$HOME/.local/share" \
-      ZDOTDIR="$HOME" \
-      PATH="/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        zstyle -s ":completion:*" list-dirs-first value
-        print -r -- "$value"
-      ' zsh "$ROOT_DIR/common/common.zsh"
-  )"
-
-  [[ "$output" == true ]] || fail "Completion does not list directories first: $output"
-  teardown_test_home
-}
-
 test_minimal_profile_initializes_git_completion_without_zinit() {
   setup_test_home
   local output
