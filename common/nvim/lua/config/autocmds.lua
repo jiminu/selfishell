@@ -99,17 +99,6 @@ vim.api.nvim_create_autocmd("FileType", {
   group = group,
   pattern = "*",
   callback = function(args)
-    -- The Zsh parser currently ships without highlight queries, so attaching
-    -- it here would still leave the buffer uncolored -- but attaching still
-    -- has a side effect: the highlighter constructor resets 'syntax' to "" on
-    -- every buffer it attaches to, which blocks Neovim's own built-in
-    -- synload autocmd from loading syntax/zsh.vim's colors on this and any
-    -- later FileType event. Skipping the attach for zsh avoids that, and
-    -- lets Neovim's built-in mechanism color it normally.
-    if vim.bo[args.buf].filetype == "zsh" then
-      return
-    end
-
     pcall(vim.treesitter.start, args.buf)
 
     local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)

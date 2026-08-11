@@ -562,18 +562,6 @@ return {
   plugin("petertriho/nvim-scrollbar", {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
-    dependencies = {
-      -- opts is required so lazy.nvim calls hlslens's setup(): without it,
-      -- hlslens never enables itself, so it never builds the search position
-      -- list scrollbar's search handler renders marks from. override_lens is
-      -- a no-op so hlslens only feeds scrollbar marks and doesn't also draw
-      -- its own floating "[n/N x/y]" match-count text next to the cursor.
-      plugin("kevinhwang91/nvim-hlslens", {
-        opts = {
-          override_lens = function() end,
-        },
-      }),
-    },
     opts = {
       show_in_active_only = true,
       hide_if_all_visible = true,
@@ -583,17 +571,6 @@ return {
       handle = {
         blend = 60,
         color = "#797979",
-      },
-      -- Same problem as the handle above: nvim-scrollbar derives the search
-      -- mark's color from the "Search" highlight group's foreground, but
-      -- vscode.nvim only sets its background (for highlighting matched
-      -- text), so the derived foreground falls back to scrollbar's own
-      -- default of black -- invisible against this dark background. Use VS
-      -- Code's own overview-ruler find-match color instead.
-      marks = {
-        Search = {
-          color = "#d18616",
-        },
       },
       excluded_filetypes = {
         "cmp_docs",
@@ -613,7 +590,7 @@ return {
         cursor = false,
         diagnostic = true,
         handle = true,
-        search = true,
+        search = false,
         ale = false,
       },
     },
