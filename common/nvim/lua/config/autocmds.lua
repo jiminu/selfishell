@@ -6,11 +6,23 @@ vim.treesitter.language.register("terraform", "tf")
 
 -- The Zsh parser currently ships without highlight queries. Keep Tree-sitter
 -- available for structural features and use Neovim's built-in syntax colors.
+--
+-- Deferred with vim.schedule: the generic FileType autocmd below calls
+-- vim.treesitter.start(), whose highlighter attach always resets 'syntax' to
+-- "" as a side effect -- and the first such attach in the whole session also
+-- lazily creates Neovim's own built-in "syntaxset" FileType autocmd, which is
+-- registered after both of ours and reloads from 'syntax' on every following
+-- FileType event. Running synchronously here, this autocmd's own
+-- runtime! call is what "syntaxset" reloads from moments later, sees the
+-- just-cleared empty value, and clears right back out -- leaving the buffer
+-- unhighlighted. Deferring past the current event lets this run last.
 vim.api.nvim_create_autocmd("FileType", {
   group = group,
   pattern = "zsh",
   callback = function()
-    vim.cmd("runtime! syntax/zsh.vim")
+    vim.schedule(function()
+      vim.cmd("runtime! syntax/zsh.vim")
+    end)
   end,
 })
 
