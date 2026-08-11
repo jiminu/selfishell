@@ -95,11 +95,7 @@ install_default_shell() {
   elif [[ -t 0 ]]; then
     printf 'Set login shell to Zsh? [Y/n] '
     IFS= read -r answer
-    case "$answer" in
-      n | N | no | NO)
-        return 0
-        ;;
-    esac
+    selfishell_answer_is_no "$answer" && return 0
   else
     return 0
   fi
@@ -256,7 +252,7 @@ command_install() {
     elif [[ -t 0 ]]; then
       printf 'Install Ghostty terminal and managed configuration? [y/N] '
       IFS= read -r ghostty_answer
-      case "$ghostty_answer" in y | Y | yes | YES) ghostty_enabled=1 ;; esac
+      selfishell_answer_is_yes "$ghostty_answer" && ghostty_enabled=1
     fi
   fi
 

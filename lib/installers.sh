@@ -88,21 +88,21 @@ install_direct_package() {
   local requirement="$1"
   local package="$2"
   local dry_run="$3"
+  local platform="$4"
+  local dependency_platform
 
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould sync %s direct package:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$requirement" "$SELFISHELL_COLOR_RESET" "$package"
     return
   fi
 
+  dependency_platform="$(platform_dependency_platform "$platform")"
+
   case "$package" in
     starship | mise)
-      local dependency_platform
-      case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
       ;;
     zinit)
-      local dependency_platform
-      case "$(detect_platform)" in ubuntu | ubuntu-wsl) dependency_platform=linux ;; *) dependency_platform="$(detect_platform)" ;; esac
       dependency_install "$package" "$dependency_platform" "$(detect_architecture)" || return
       install_zinit_plugins
       ;;

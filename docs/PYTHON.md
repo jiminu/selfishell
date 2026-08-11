@@ -76,5 +76,5 @@ uv pip compile pyproject.toml -o requirements.txt
 
 Selfishell's built-in Neovim configuration integrates with Python LSP and tools. 
 
-To ensure Neovim can resolve your project dependencies, always run `neovim` from the project root after the virtual environment has been created and packages have been installed.
+To ensure Neovim can resolve your project dependencies, always run `nvim` from the project root after the virtual environment has been created and packages have been installed.
 Once auto-activation is configured, `mise` will automatically activate the uv project's `.venv` when entering its directory, allowing Neovim to inherit the correct path to the local virtualenv Python interpreter.

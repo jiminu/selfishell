@@ -166,14 +166,11 @@ managed_select_block_conflict_action() {
     cli_error "Managed block was modified; preserving it: $target_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
-  case "$answer" in
-    y | Y | yes | YES)
-      MANAGED_BLOCK_OVERWRITE_RESOURCES="$MANAGED_BLOCK_OVERWRITE_RESOURCES $resource"
-      ;;
-    *)
-      MANAGED_BLOCK_SKIP_RESOURCES="$MANAGED_BLOCK_SKIP_RESOURCES $resource"
-      ;;
-  esac
+  if selfishell_answer_is_yes "$answer"; then
+    MANAGED_BLOCK_OVERWRITE_RESOURCES="$MANAGED_BLOCK_OVERWRITE_RESOURCES $resource"
+  else
+    MANAGED_BLOCK_SKIP_RESOURCES="$MANAGED_BLOCK_SKIP_RESOURCES $resource"
+  fi
 }
 
 managed_block_definition() {
@@ -342,9 +339,15 @@ managed_preflight_zsh_loader() {
   managed_preflight_block_target user-zshrc "$target_file" "$assume_yes" "$dry_run"
 }
 
-managed_replace_block() {
-  local resource="$1"
-  local target_file="$2"
+# Rewrites target_file with the managed block region (MANAGED_BLOCK_START,
+# MANAGED_BLOCK_LENGTH, set by the caller's prior managed_inspect_block call)
+# replaced by content_resource's managed block content, or removed entirely
+# if content_resource is omitted. Shared splice mechanics for
+# managed_replace_block and managed_remove_block, which otherwise differ only
+# in whether replacement content is inserted.
+managed_splice_block() {
+  local target_file="$1"
+  local content_resource="${2:-}"
   local temporary_file file_size suffix_start
 
   temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
@@ -362,10 +365,12 @@ managed_replace_block() {
       return "$SELFISHELL_EXIT_ERROR"
     }
   fi
-  managed_block_content "$resource" >>"$temporary_file" || {
-    rm -f "$temporary_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  }
+  if [[ -n "$content_resource" ]]; then
+    managed_block_content "$content_resource" >>"$temporary_file" || {
+      rm -f "$temporary_file"
+      return "$SELFISHELL_EXIT_ERROR"
+    }
+  fi
   file_size="$(LC_ALL=C wc -c <"$target_file")"
   suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
   if ((suffix_start < file_size)); then
@@ -378,6 +383,13 @@ managed_replace_block() {
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   }
+}
+
+managed_replace_block() {
+  local resource="$1"
+  local target_file="$2"
+
+  managed_splice_block "$target_file" "$resource"
 }
 
 managed_install_block() {
@@ -506,7 +518,6 @@ managed_install_block() {
 managed_remove_block() {
   local resource="$1"
   local target_file="$2"
-  local temporary_file file_size suffix_start
 
   managed_inspect_block "$resource" "$target_file" || return
   if [[ "$MANAGED_BLOCK_STATUS" != intact || "$MANAGED_BLOCK_CHECKSUM" != "$MANAGED_STATE_CHECKSUM" ]]; then
@@ -514,33 +525,7 @@ managed_remove_block() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  temporary_file="$(mktemp "${target_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
-  cp -p "$target_file" "$temporary_file" || {
-    rm -f "$temporary_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  }
-  : >"$temporary_file" || {
-    rm -f "$temporary_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  }
-  if ((MANAGED_BLOCK_START > 0)); then
-    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || {
-      rm -f "$temporary_file"
-      return "$SELFISHELL_EXIT_ERROR"
-    }
-  fi
-  file_size="$(LC_ALL=C wc -c <"$target_file")"
-  suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
-  if ((suffix_start < file_size)); then
-    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || {
-      rm -f "$temporary_file"
-      return "$SELFISHELL_EXIT_ERROR"
-    }
-  fi
-  mv "$temporary_file" "$target_file" || {
-    rm -f "$temporary_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  }
+  managed_splice_block "$target_file"
 }
 
 managed_install_file() {
@@ -593,26 +578,22 @@ managed_install_file() {
             return "$SELFISHELL_EXIT_ERROR"
           fi
 
-          case "$answer" in
-            y | Y | yes | YES)
-              conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
-              mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
-              cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
-              printf '%sBacked up modified managed file:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
-              managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
-              managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
-              if [[ "$previously_active_file" == 1 ]]; then
-                printf '%sUpdated managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
-              else
-                printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
-              fi
-              return 0
-              ;;
-            *)
-              printf '%sSkipped modified managed file:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
-              return 0
-              ;;
-          esac
+          if selfishell_answer_is_yes "$answer"; then
+            conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
+            mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
+            cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
+            printf '%sBacked up modified managed file:%s %s -> %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file" "$conflict_backup"
+            managed_atomic_copy "$source_file" "$target_file" || return "$SELFISHELL_EXIT_ERROR"
+            managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
+            if [[ "$previously_active_file" == 1 ]]; then
+              printf '%sUpdated managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+            else
+              printf '%sInstalled managed file:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$target_file"
+            fi
+            return 0
+          fi
+          printf '%sSkipped modified managed file:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+          return 0
         else
           current_checksum=""
         fi
