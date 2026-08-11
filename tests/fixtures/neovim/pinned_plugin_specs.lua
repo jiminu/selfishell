@@ -24,7 +24,7 @@ assert(type(snacks.config) == "function",
 local indent = snacks.opts.indent
 assert(indent.enabled == true, "Snacks indent module must be enabled")
 assert(indent.indent.enabled == false, "Normal indent rendering must stay disabled")
-assert(indent.indent.only_scope == true, "Indent rendering must be limited to the current scope")
+assert(indent.indent.only_scope == nil, "Disabled normal indent rendering must not carry redundant scope options")
 assert(indent.animate.enabled == false, "Scope animation must stay disabled")
 assert(indent.chunk.enabled == false, "Chunk rendering must stay disabled")
 

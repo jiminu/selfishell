@@ -98,6 +98,10 @@ assert(type(tree.opts.on_attach) == "function", "NvimTree does not preserve wind
 assert(tree.opts.renderer.group_empty, "NvimTree should compact single-child directory chains")
 assert(tree.opts.renderer.indent_markers.enable, "NvimTree indent markers should be enabled")
 assert(tree.opts.renderer.indent_markers.inline_arrows, "NvimTree arrows should align with indent markers")
+assert(
+  tree.opts.renderer.indent_markers.icons and tree.opts.renderer.indent_markers.icons.edge == " ",
+  "NvimTree ancestor indent guides should stay sparse"
+)
 assert(tree.opts.renderer.icons.glyphs.folder.arrow_closed == ">", "NvimTree closed folder arrow must be portable")
 assert(tree.opts.renderer.icons.glyphs.folder.arrow_open == "v", "NvimTree open folder arrow must be portable")
 assert(not tree.opts.renderer.icons.padding, "NvimTree folder arrows should use the default padding")
