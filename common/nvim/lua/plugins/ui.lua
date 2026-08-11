@@ -584,6 +584,17 @@ return {
         blend = 60,
         color = "#797979",
       },
+      -- Same problem as the handle above: nvim-scrollbar derives the search
+      -- mark's color from the "Search" highlight group's foreground, but
+      -- vscode.nvim only sets its background (for highlighting matched
+      -- text), so the derived foreground falls back to scrollbar's own
+      -- default of black -- invisible against this dark background. Use VS
+      -- Code's own overview-ruler find-match color instead.
+      marks = {
+        Search = {
+          color = "#d18616",
+        },
+      },
       excluded_filetypes = {
         "cmp_docs",
         "cmp_menu",

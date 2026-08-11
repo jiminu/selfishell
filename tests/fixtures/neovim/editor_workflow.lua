@@ -171,7 +171,12 @@ assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking shoul
 assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
 assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
 assert(scrollbar.opts.handlers.search == true, "scrollbar search marks should be enabled")
-assert(scrollbar.opts.marks == nil, "scrollbar should not carry dead cursor-mark configuration")
+assert(scrollbar.opts.marks.Cursor == nil, "scrollbar should not carry dead cursor-mark configuration")
+assert(
+  type(scrollbar.opts.marks.Search.color) == "string",
+  "scrollbar search marks need an explicit color: the default derives from Search's foreground, "
+    .. "which vscode.nvim leaves unset and renders as invisible black"
+)
 
 local cmp = assert(plugin_spec("plugins.completion", "hrsh7th/nvim-cmp"), "nvim-cmp spec is missing")
 assert(cmp.event == "InsertEnter", "nvim-cmp is not deferred")
