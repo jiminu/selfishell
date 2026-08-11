@@ -1,5 +1,5 @@
 # kubectl aliases compatible with the Oh My Zsh kubectl plugin. Completion is
-# configured separately in common.zsh so these aliases have zero startup cost.
+# configured separately in completion.zsh so these aliases have zero startup cost.
 
 if _selfishell_command_path kubectl >/dev/null; then
   alias k='kubectl'

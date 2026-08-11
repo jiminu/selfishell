@@ -1,4 +1,3 @@
-set nocompatible
 filetype plugin indent on
 
 if has("syntax")
@@ -33,14 +32,6 @@ endif
 if has("clipboard")
 	set clipboard=unnamedplus
 endif
-
-" inoremap " ""<left>
-" inoremap ' ''<left>
-" inoremap ( ()<left>
-" inoremap [ []<left>
-" inoremap { {}<left>
-" inoremap {<CR> {<CR>}<ESC>O
-" inoremap {;<CR> {<CR>};<ESC>O
 
 au BufReadPost *
 \ if line("'\"") > 0 && line("'\"") <= line("$") |

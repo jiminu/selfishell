@@ -163,6 +163,24 @@ selfishell_is_interactive() {
   [[ -t 3 || -n "${SELFISHELL_TEST_TTY:-}" ]]
 }
 
+# Matches an affirmative prompt answer (y/Y/yes/YES). Pair with
+# selfishell_answer_is_no for the opposite polarity -- an empty answer is
+# neither, so callers decide what a bare Enter means for their own prompt.
+selfishell_answer_is_yes() {
+  case "$1" in
+    y | Y | yes | YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Matches a negative prompt answer (n/N/no/NO). See selfishell_answer_is_yes.
+selfishell_answer_is_no() {
+  case "$1" in
+    n | N | no | NO) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 confirm_action() {
   local prompt="$1"
   local assume_yes="$2"
@@ -180,11 +198,9 @@ confirm_action() {
 
   printf '%s [y/N] ' "$prompt"
   IFS= read -r answer <&3
-  case "$answer" in
-    y | Y | yes | YES) return 0 ;;
-    *)
-      printf '%sCancelled.%s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
-  esac
+  if selfishell_answer_is_yes "$answer"; then
+    return 0
+  fi
+  printf '%sCancelled.%s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
+  return "$SELFISHELL_EXIT_ERROR"
 }

@@ -29,7 +29,7 @@ packages_install_profile() {
   # shellcheck disable=SC2034
   SELFISHELL_BREW_CASKS_READY=0
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
-  [[ "$platform" == "ubuntu-wsl" ]] && profile_platform=ubuntu || profile_platform="$platform"
+  profile_platform="$(platform_profile_platform "$platform")"
 
   for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
     if [[ "${PROFILE_PLATFORMS[$index]}" != "all" && "${PROFILE_PLATFORMS[$index]}" != "$profile_platform" ]]; then
@@ -59,12 +59,12 @@ packages_install_profile() {
 
   if ((${#required_direct[@]} > 0)); then
     for index in "${required_direct[@]}"; do
-      install_direct_package required "$index" "$dry_run"
+      install_direct_package required "$index" "$dry_run" "$platform"
     done
   fi
   if ((${#optional_direct[@]} > 0)); then
     for index in "${optional_direct[@]}"; do
-      install_direct_package optional "$index" "$dry_run"
+      install_direct_package optional "$index" "$dry_run" "$platform"
     done
   fi
 

@@ -162,16 +162,8 @@ command_doctor() {
         result="$SELFISHELL_EXIT_ERROR"
       fi
     fi
-    case "$platform" in
-      ubuntu | ubuntu-wsl)
-        dependency_platform=linux
-        profile_platform=ubuntu
-        ;;
-      *)
-        dependency_platform="$platform"
-        profile_platform="$platform"
-        ;;
-    esac
+    dependency_platform="$(platform_dependency_platform "$platform")"
+    profile_platform="$(platform_profile_platform "$platform")"
     DOCTOR_RESULT="$result"
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" doctor_report_package "$profile_platform"
     doctor_report_zinit_plugins

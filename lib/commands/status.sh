@@ -148,16 +148,8 @@ command_status() {
   tool_status_reset_cache
 
   platform="$(detect_platform)"
-  case "$platform" in
-    ubuntu | ubuntu-wsl)
-      dependency_platform=linux
-      profile_platform=ubuntu
-      ;;
-    *)
-      dependency_platform="$platform"
-      profile_platform="$platform"
-      ;;
-  esac
+  dependency_platform="$(platform_dependency_platform "$platform")"
+  profile_platform="$(platform_profile_platform "$platform")"
   architecture="$(detect_architecture)"
 
   if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
