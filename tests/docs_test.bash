@@ -11,8 +11,8 @@ source "$ROOT_DIR/tests/test_helper.bash"
 test_profile_vi_alias_documentation_matches_implementation() {
   grep -Eq "\`vi\`[^.]*resolve" "$ROOT_DIR/docs/PROFILES.md" &&
     fail "docs/PROFILES.md claims vi resolves to Neovim, but no such alias exists"
-  grep -Fq "\`vim\` resolves to Neovim" "$ROOT_DIR/docs/PROFILES.md" ||
-    fail "docs/PROFILES.md does not document that vim resolves to Neovim in the developer profile"
+  grep -Eq "\`vim\`[^.]*Neovim" "$ROOT_DIR/docs/PROFILES.md" ||
+    fail "docs/PROFILES.md does not document that vim relates to Neovim in the developer profile"
   grep -Fq "alias vim='nvim'" "$ROOT_DIR/common/aliases-editor.zsh" ||
     fail "vim alias implementation not found where expected"
   grep -Fq "alias view='nvim -R'" "$ROOT_DIR/common/aliases-editor.zsh" ||

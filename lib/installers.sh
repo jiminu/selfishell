@@ -89,6 +89,7 @@ install_direct_package() {
   local package="$2"
   local dry_run="$3"
   local platform="$4"
+  local architecture="$5"
   local dependency_platform
 
   if [[ "$dry_run" == "1" ]]; then
@@ -100,10 +101,10 @@ install_direct_package() {
 
   case "$package" in
     starship | mise)
-      dependency_install "$package" "$dependency_platform" "$(detect_architecture)"
+      dependency_install "$package" "$dependency_platform" "$architecture"
       ;;
     zinit)
-      dependency_install "$package" "$dependency_platform" "$(detect_architecture)" || return
+      dependency_install "$package" "$dependency_platform" "$architecture" || return
       install_zinit_plugins
       ;;
     *)

@@ -5,6 +5,7 @@ packages_install_profile() {
   local dry_run="$2"
   local index
   local profile_platform
+  local architecture=""
   local required_apt=()
   local optional_apt=()
   local required_formula=()
@@ -57,14 +58,18 @@ packages_install_profile() {
   ((${#required_cask[@]} == 0)) || homebrew_install_packages required cask "$dry_run" "${required_cask[@]}"
   ((${#optional_cask[@]} == 0)) || homebrew_install_packages optional cask "$dry_run" "${optional_cask[@]}"
 
+  if [[ "$dry_run" == "0" ]] && ((${#required_direct[@]} > 0 || ${#optional_direct[@]} > 0)); then
+    architecture="$(detect_architecture)"
+  fi
+
   if ((${#required_direct[@]} > 0)); then
     for index in "${required_direct[@]}"; do
-      install_direct_package required "$index" "$dry_run" "$platform"
+      install_direct_package required "$index" "$dry_run" "$platform" "$architecture"
     done
   fi
   if ((${#optional_direct[@]} > 0)); then
     for index in "${optional_direct[@]}"; do
-      install_direct_package optional "$index" "$dry_run" "$platform"
+      install_direct_package optional "$index" "$dry_run" "$platform" "$architecture"
     done
   fi
 
