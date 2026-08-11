@@ -106,6 +106,9 @@ return {
         indent_markers = {
           enable = true,
           inline_arrows = true,
+          icons = {
+            edge = " ",
+          },
         },
         icons = {
           glyphs = {
@@ -455,7 +458,6 @@ return {
         enabled = true,
         indent = {
           enabled = false,
-          only_scope = true,
         },
         animate = {
           enabled = false,
