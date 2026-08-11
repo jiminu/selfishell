@@ -100,7 +100,7 @@ else
 fi
 
 installer="$temporary_root/install.sh"
-curl -fsSL "$raw_root/$tag/install.sh" -o "$installer"
+selfishell_curl transfer "$raw_root/$tag/install.sh" -o "$installer"
 test_home="$temporary_root/home"
 prefix="$temporary_root/prefix"
 mkdir -p "$test_home"
@@ -117,13 +117,13 @@ reported_version="$("$prefix/bin/selfishell" version)"
 }
 
 if [[ "$expected_prerelease" == false ]]; then
-  latest_version="$(curl -fsSL "$release_root/latest/download/VERSION")"
+  latest_version="$(selfishell_curl metadata "$release_root/latest/download/VERSION")"
   latest_version="${latest_version//$'\n'/}"
   [[ "$latest_version" == "$version" ]] || {
     printf 'Latest stable version mismatch: expected %s, got %s\n' "$version" "$latest_version" >&2
     exit 1
   }
-elif latest_version="$(curl -fsSL "$release_root/latest/download/VERSION" 2>/dev/null)"; then
+elif latest_version="$(selfishell_curl metadata "$release_root/latest/download/VERSION" 2>/dev/null)"; then
   latest_version="${latest_version//$'\n'/}"
   [[ "$latest_version" != "$version" ]] || {
     printf 'Pre-release unexpectedly replaced the latest stable version: %s\n' "$version" >&2

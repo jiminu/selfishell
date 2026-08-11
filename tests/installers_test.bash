@@ -409,6 +409,31 @@ test_lazy_nvim_recovers_from_stale_temporary_path() {
     fail "A stale temporary path leaked into the activated lazy.nvim checkout"
 }
 
+test_lazy_nvim_reports_a_clear_error_when_its_directory_cannot_be_created() {
+  local lazy_path
+  local parent
+  local output
+  local status=0
+
+  lazy_path="$HOME/.local/share/selfishell/nvim/lazy/lazy.nvim"
+  parent="$(dirname "$lazy_path")"
+  rm -rf "$HOME/.local/share/selfishell/nvim"
+  mkdir -p "$(dirname "$parent")"
+  # A regular file occupying lazy.nvim's parent path makes mkdir -p fail,
+  # simulating a permission error or similar without needing real root-only
+  # setup.
+  : >"$parent"
+  GIT_CALLS=()
+
+  output="$(install_lazy_nvim "$lazy_path" 2>&1)" && status=0 || status=$?
+
+  [[ "$status" != 0 ]] || fail "install_lazy_nvim succeeded despite its directory being uncreatable"
+  [[ "$output" == *"Could not create Neovim plugin directory"* ]] ||
+    fail "install_lazy_nvim did not report a clear directory-creation error: $output"
+  [[ "${#GIT_CALLS[@]}" == 0 ]] ||
+    fail "install_lazy_nvim attempted git clone despite the directory-creation failure"
+}
+
 test_installs_neovim_plugins_via_mise_resolution() {
   local fake_bin
   local original_path

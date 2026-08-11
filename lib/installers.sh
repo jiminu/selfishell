@@ -213,7 +213,10 @@ install_lazy_nvim() {
 
   temporary="$(selfishell_unique_path "${lazypath}.tmp.$$")"
   previous="$(selfishell_unique_path "${lazypath}.previous.$$")"
-  mkdir -p "$(dirname "$lazypath")"
+  mkdir -p "$(dirname "$lazypath")" || {
+    cli_error "Could not create Neovim plugin directory: $(dirname "$lazypath")"
+    return 1
+  }
   git clone --quiet --filter=blob:none "$source" "$temporary" || return
   git -C "$temporary" checkout --quiet --detach "$revision" || {
     rm -rf "$temporary"
