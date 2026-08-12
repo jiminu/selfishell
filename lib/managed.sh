@@ -422,7 +422,7 @@ managed_install_block() {
       if [[ "$dry_run" == 0 ]]; then
         managed_write_state "$resource" block active "$target_file" - - "$expected_checksum" || return "$SELFISHELL_EXIT_ERROR"
       fi
-      SELFISHELL_UNCHANGED_COUNT=$((SELFISHELL_UNCHANGED_COUNT + 1))
+      SELFISHELL_UNCHANGED_COUNT=$((${SELFISHELL_UNCHANGED_COUNT:-0} + 1))
       return 0
     fi
     if [[ "$MANAGED_BLOCK_STATUS" == intact && "$MANAGED_BLOCK_CHECKSUM" == "$MANAGED_STATE_CHECKSUM" ]]; then
@@ -613,7 +613,7 @@ managed_install_file() {
     if [[ "$dry_run" == "0" ]]; then
       managed_write_state "$resource" file active "$target_file" - "$original_backup" "$source_checksum" || return "$SELFISHELL_EXIT_ERROR"
     fi
-    SELFISHELL_UNCHANGED_COUNT=$((SELFISHELL_UNCHANGED_COUNT + 1))
+    SELFISHELL_UNCHANGED_COUNT=$((${SELFISHELL_UNCHANGED_COUNT:-0} + 1))
     return
   fi
 
@@ -659,7 +659,7 @@ managed_install_link() {
       if [[ "$dry_run" == "0" ]]; then
         managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
       fi
-      SELFISHELL_UNCHANGED_COUNT=$((SELFISHELL_UNCHANGED_COUNT + 1))
+      SELFISHELL_UNCHANGED_COUNT=$((${SELFISHELL_UNCHANGED_COUNT:-0} + 1))
       return
     fi
 
