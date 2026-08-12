@@ -623,6 +623,22 @@ test_install_is_idempotent() {
     fail "A second installation duplicated the Zsh loader"
 }
 
+test_reinstall_reports_unchanged_summary_without_per_resource_noise() {
+  local output
+
+  printf 'original zshrc' >"$HOME/.zshrc"
+  run_selfishell install --skip-packages --yes >/dev/null
+
+  output="$(run_selfishell install --skip-packages --yes)"
+
+  [[ "$output" != *'Unchanged:'* ]] ||
+    fail "Reinstalling an unmodified setup printed a per-resource Unchanged line: $output"
+  [[ "$output" != *'Unchanged Selfishell block:'* ]] ||
+    fail "Reinstalling an unmodified setup printed a per-resource Unchanged block line: $output"
+  [[ "$output" == *'items unchanged.'* ]] ||
+    fail "Reinstalling an unmodified setup did not report an unchanged summary: $output"
+}
+
 test_mise_shims_zprofile_survives_full_lifecycle() {
   local output
 
@@ -1675,8 +1691,6 @@ EOF
   set -e
 
   ((status != 0)) || fail "A forced state-refresh failure for an unchanged block should propagate"
-  ! grep -Fq 'Unchanged Selfishell block' "$TEST_ROOT/stdout" ||
-    fail "A failed state-refresh must not report the block as successfully unchanged"
 }
 
 test_managed_file_overwrite_conflict_atomic_copy_failure_preserves_backup_and_state() {

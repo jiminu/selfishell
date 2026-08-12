@@ -239,7 +239,7 @@ dependency_install() {
 
   if [[ -n "$installed" ]]; then
     if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" ]] && dependency_managed_target_is_valid; then
-      printf '%sUp to date:%s %s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$name" "$DEPENDENCY_VERSION"
+      SELFISHELL_UNCHANGED_COUNT=$((SELFISHELL_UNCHANGED_COUNT + 1))
       return
     fi
     [[ "$installed" == "$DEPENDENCY_VERSION" ]] || approved_version_changed=1

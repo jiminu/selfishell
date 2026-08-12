@@ -198,6 +198,8 @@ command_install() {
   local ghostty_enabled=0
   local ghostty_answer
 
+  SELFISHELL_UNCHANGED_COUNT=0
+
   while (("$#" > 0)); do
     case "$1" in
       --dry-run) dry_run=1 ;;
@@ -309,6 +311,8 @@ command_install() {
     }
   fi
 
+  ((SELFISHELL_UNCHANGED_COUNT == 0)) ||
+    printf '%s%d items unchanged.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_UNCHANGED_COUNT" "$SELFISHELL_COLOR_RESET"
   if [[ "$dry_run" == "1" ]]; then
     printf '%sDry run complete; no files were changed.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
