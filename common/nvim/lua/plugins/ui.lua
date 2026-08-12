@@ -558,8 +558,8 @@ return {
         end, "Diff against previous commit")
 
         -- Optional visual features.
-        map("n", "<leader>tb", gitsigns.toggle_current_line_blame, "Toggle Git blame")
-        map("n", "<leader>tw", gitsigns.toggle_word_diff, "Toggle Git word diff")
+        map("n", "<leader>ub", gitsigns.toggle_current_line_blame, "Toggle Git blame")
+        map("n", "<leader>uw", gitsigns.toggle_word_diff, "Toggle Git word diff")
 
         -- Git hunk text object.
         map({ "o", "x" }, "ih", gitsigns.select_hunk, "Select Git hunk")
