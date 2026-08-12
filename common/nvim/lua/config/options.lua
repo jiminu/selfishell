@@ -1,5 +1,8 @@
 local opt = vim.opt
 
+-- Floating windows (diagnostics, hover, signature help, ...)
+vim.o.winborder = "rounded"
+
 -- UI
 opt.number = true
 opt.relativenumber = true
