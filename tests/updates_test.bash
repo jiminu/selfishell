@@ -4,6 +4,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
+source "$ROOT_DIR/lib/common.sh"
+source "$ROOT_DIR/lib/paths.sh"
+source "$ROOT_DIR/lib/dependencies.sh"
 
 setup_update_home() {
   setup_test_home
@@ -226,6 +229,24 @@ test_managed_download_valid_target_is_already_approved() {
   [[ -z "$output" ]] ||
     fail "An already-approved dependency printed unexpected output: $output"
   assert_file_content 'existing-install-marker' "$HOME/.local/bin/tool"
+}
+
+test_dependency_install_already_approved_increments_unchanged_count() {
+  local payload checksum
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
+  mkdir -p "$HOME/.local/bin" "$XDG_STATE_HOME/selfishell/dependencies"
+  printf 'existing-install-marker\n' >"$HOME/.local/bin/tool"
+  chmod 0755 "$HOME/.local/bin/tool"
+  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
+
+  unset SELFISHELL_UNCHANGED_COUNT
+  dependency_install tool linux amd64
+  [[ "${SELFISHELL_UNCHANGED_COUNT:-}" == 1 ]] ||
+    fail "An already-approved dependency did not increment SELFISHELL_UNCHANGED_COUNT: ${SELFISHELL_UNCHANGED_COUNT:-<unset>}"
 }
 
 test_managed_download_version_bump_reports_updated() {

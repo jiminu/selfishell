@@ -239,7 +239,7 @@ dependency_install() {
 
   if [[ -n "$installed" ]]; then
     if [[ "$force" == 0 && "$installed" == "$DEPENDENCY_VERSION" ]] && dependency_managed_target_is_valid; then
-      SELFISHELL_UNCHANGED_COUNT=$((SELFISHELL_UNCHANGED_COUNT + 1))
+      SELFISHELL_UNCHANGED_COUNT=$((${SELFISHELL_UNCHANGED_COUNT:-0} + 1))
       return
     fi
     [[ "$installed" == "$DEPENDENCY_VERSION" ]] || approved_version_changed=1
