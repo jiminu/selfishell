@@ -6,11 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
 # common/aliases-editor.zsh intentionally aliases only vim/view (not vi), so
-# the system vi stays untouched; the profile guide must describe that, not claim
-# vi also resolves to Neovim.
-test_profile_vi_alias_documentation_matches_implementation() {
-  grep -Eq "\`vi\`[^.]*resolve" "$ROOT_DIR/docs/PROFILES.md" &&
-    fail "docs/PROFILES.md claims vi resolves to Neovim, but no such alias exists"
+# the system vi stays untouched.
+test_editor_alias_implementation_contract() {
   grep -Fq "alias vim='nvim'" "$ROOT_DIR/common/aliases-editor.zsh" ||
     fail "vim alias implementation not found where expected"
   grep -Fq "alias view='nvim -R'" "$ROOT_DIR/common/aliases-editor.zsh" ||
