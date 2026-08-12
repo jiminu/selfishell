@@ -31,6 +31,8 @@ update_tools_and_configuration() {
   local skip_packages="$4"
   local profile platform ghostty_enabled=0
 
+  SELFISHELL_UNCHANGED_COUNT=0
+
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
     if [[ "$require_configuration" == 1 ]]; then
@@ -72,6 +74,8 @@ update_tools_and_configuration() {
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
+  ((SELFISHELL_UNCHANGED_COUNT == 0)) ||
+    printf '%s%d items unchanged.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_UNCHANGED_COUNT" "$SELFISHELL_COLOR_RESET"
   if [[ "$dry_run" == 1 ]]; then
     printf '%sTool/configuration dry run complete.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
