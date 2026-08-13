@@ -604,4 +604,29 @@ return {
       },
     },
   }),
+
+  -- Inline Markdown rendering: headings/tables/code blocks render in place
+  -- while in normal mode, and revert to raw text automatically on entering
+  -- insert mode (markview's default `modes` excludes insert already).
+  plugin("OXY2DEV/markview.nvim", {
+    ft = "markdown",
+    dependencies = {
+      plugin("nvim-treesitter/nvim-treesitter"),
+    },
+    keys = {
+      {
+        "<leader>um",
+        "<cmd>Markview toggle<CR>",
+        desc = "Toggle Markdown preview",
+      },
+    },
+    opts = {
+      preview = {
+        -- Explicit even though it's already the default: keeps this plugin
+        -- from ever depending on nvim-web-devicons, which the rest of this
+        -- config deliberately avoids (see bufferline's show_buffer_icons).
+        icon_provider = "internal",
+      },
+    },
+  }),
 }
