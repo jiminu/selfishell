@@ -22,9 +22,6 @@ return {
   plugin("HiPhish/rainbow-delimiters.nvim", {
     -- Load before the initial buffer's FileType event so the plugin can attach.
     event = { "BufReadPre", "BufNewFile" },
-    dependencies = {
-      plugin("nvim-treesitter/nvim-treesitter"),
-    },
     init = function()
       vim.g.rainbow_delimiters = {
         strategy = {
