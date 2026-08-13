@@ -604,4 +604,22 @@ return {
       },
     },
   }),
+
+  -- Inline document preview.
+  plugin("OXY2DEV/markview.nvim", {
+    ft = { "markdown", "quarto", "rmd", "typst", "asciidoc" },
+    keys = {
+      {
+        "<leader>um",
+        "<cmd>Markview toggle<CR>",
+        desc = "Toggle document preview",
+      },
+    },
+    opts = {
+      preview = {
+        -- Avoid nvim-web-devicons, as elsewhere in this file.
+        icon_provider = "internal",
+      },
+    },
+  }),
 }
