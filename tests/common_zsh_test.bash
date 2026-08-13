@@ -25,6 +25,190 @@ test_minimal_profile_initializes_git_completion_without_zinit() {
   teardown_test_home
 }
 
+test_selfishell_completion_registers_public_commands_for_both_cli_names() {
+  setup_test_home
+  local output
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1/common/common.zsh"
+        _describe() {
+          local values_name="$2"
+          print -rl -- "${(@P)values_name}"
+        }
+        words=(selfishell "")
+        CURRENT=2
+        _selfishell
+        print -r -- "registered=${_comps[selfishell]}:${_comps[sfs]}"
+      ' zsh "$ROOT_DIR" 2>&1
+  )"
+
+  for command in install status uninstall update rollback doctor version help; do
+    [[ "$output" == *"$command:"* ]] || fail "Selfishell completion omitted command $command: $output"
+  done
+  for shortcut in -h --help -v --version; do
+    [[ "$output" == *"$shortcut:"* ]] || fail "Selfishell completion omitted top-level shortcut $shortcut: $output"
+  done
+  [[ "$output" == *'registered=_selfishell:_selfishell'* ]] ||
+    fail "Selfishell completion was not registered for both CLI names: $output"
+  teardown_test_home
+}
+
+test_selfishell_completion_exposes_command_options_and_profile_values() {
+  setup_test_home
+  local output
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1/common/common.zsh"
+        _arguments() { print -rl -- "$@"; }
+        for command in install status uninstall update rollback version; do
+          print -r -- "command=$command"
+          words=(selfishell "$command" "")
+          CURRENT=3
+          _selfishell
+        done
+      ' zsh "$ROOT_DIR" 2>&1
+  )"
+
+  for option in --profile --skip-packages --dry-run --yes --verbose --restore --purge \
+    --cli-only --tools-only --version --available --help; do
+    [[ "$output" == *"$option"* ]] || fail "Selfishell completion omitted option $option: $output"
+  done
+  [[ "$output" == *'(minimal developer)'* ]] || fail "Profile values were not completed: $output"
+  [[ "$output" == *'1:version:'* ]] || fail "Rollback version argument was not completed: $output"
+  teardown_test_home
+}
+
+test_generated_tool_completions_are_cached_compiled_and_reused() {
+  setup_test_home
+  local cache_dir fake_bin generation_log output
+
+  cache_dir="$HOME/.cache/selfishell/completions"
+  fake_bin="$TEST_ROOT/bin"
+  generation_log="$TEST_ROOT/completion-generations"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/mise" <<'EOF'
+#!/usr/bin/env sh
+if [ "$1 $2" = "completion zsh" ]; then
+  printf 'mise\n' >>"$SELFISHELL_TEST_GENERATION_LOG"
+  printf '#compdef mise\n_mise() { :; }\n'
+fi
+EOF
+  cat >"$fake_bin/uv" <<'EOF'
+#!/usr/bin/env sh
+if [ "$1 $2" = "generate-shell-completion zsh" ]; then
+  printf 'uv\n' >>"$SELFISHELL_TEST_GENERATION_LOG"
+  printf '#compdef uv\n_uv() { :; }\n'
+fi
+EOF
+  chmod +x "$fake_bin/mise" "$fake_bin/uv"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      XDG_DATA_HOME="$HOME/.local/share" \
+      SELFISHELL_TEST_GENERATION_LOG="$generation_log" \
+      ZDOTDIR="$HOME" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1/common/common.zsh"
+        print -r -- "registered=${_comps[mise]}:${_comps[uv]}"
+        source "$1/common/common.zsh"
+      ' zsh "$ROOT_DIR" 2>&1
+  )"
+
+  [[ "$output" == *'registered=_mise:_uv'* ]] || fail "Generated tool completions were not registered: $output"
+  for cache in _mise _mise.zwc _uv _uv.zwc; do
+    [[ -s "$cache_dir/$cache" ]] || fail "Generated completion cache is missing: $cache"
+  done
+  [[ "$(grep -c '^mise$' "$generation_log")" -eq 1 ]] || fail "Warm cache regenerated mise completion"
+  [[ "$(grep -c '^uv$' "$generation_log")" -eq 1 ]] || fail "Warm cache regenerated uv completion"
+  teardown_test_home
+}
+
+test_interactive_module_stays_quiet_without_completion_loader() {
+  setup_test_home
+  local output
+
+  output="$(
+    SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+      ' zsh "$ROOT_DIR/common/interactive.zsh" 2>&1
+  )"
+
+  [[ -z "$output" ]] || fail "Standalone interactive module emitted startup noise: $output"
+  teardown_test_home
+}
+
+test_missing_generated_completion_tools_do_not_scan_path() {
+  setup_test_home
+  local output
+
+  output="$(
+    SELFISHELL_CACHE_DIR="$HOME/.cache/selfishell" \
+      SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      SELFISHELL_TEST_PATH_LOG="$TEST_ROOT/generated-completion-path-probes" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { return 1; }
+        _selfishell_zinit_plugin_ready() { return 1; }
+        source "$1"
+        _selfishell_command_path() {
+          print -r -- "$1" >>"$SELFISHELL_TEST_PATH_LOG"
+          return 1
+        }
+        _selfishell_generate_zsh_cache() { return 1; }
+        _selfishell_load_generated_completions
+        [[ ! -r "$SELFISHELL_TEST_PATH_LOG" ]] || cat "$SELFISHELL_TEST_PATH_LOG"
+      ' zsh "$ROOT_DIR/common/completion.zsh" 2>&1
+  )"
+
+  [[ -z "$output" ]] || fail "Missing completion tools triggered PATH scans: $output"
+  teardown_test_home
+}
+
+test_generated_completion_recompiles_stale_compiled_cache() {
+  setup_test_home
+  local cache_dir output
+
+  cache_dir="$HOME/.cache/selfishell/completions"
+  mkdir -p "$cache_dir"
+  printf '#compdef uv\n_uv() { :; }\n' >"$cache_dir/_uv"
+  printf 'stale compiled cache\n' >"$cache_dir/_uv.zwc"
+  touch -t 202001010000 "$cache_dir/_uv.zwc"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      SELFISHELL_TEST_COMPLETION_DIR="$cache_dir" \
+      ZDOTDIR="$HOME" \
+      PATH="/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1/common/common.zsh"
+        autoload +X _uv
+        print -r -- "registered=${_comps[uv]}"
+        command find "$SELFISHELL_TEST_COMPLETION_DIR" -maxdepth 1 -name "*.tmp.*" -print
+      ' zsh "$ROOT_DIR" 2>&1
+  )"
+
+  [[ "$output" == *'registered=_uv'* ]] || fail "Recompiled uv completion was not registered: $output"
+  ! grep -Fqx 'stale compiled cache' "$cache_dir/_uv.zwc" ||
+    fail "Stale compiled completion cache was not replaced"
+  [[ "$output" != *'.tmp.'* ]] || fail "Completion compilation left a temporary file: $output"
+  teardown_test_home
+}
+
 test_shell_startup_does_not_ask_zinit_to_fetch_missing_plugins() {
   local output
   local zinit_home

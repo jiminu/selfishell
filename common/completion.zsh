@@ -59,6 +59,106 @@ if (( $+functions[zinit] )); then
   zinit cdreplay -q
 fi
 
+_selfishell_load_generated_completions() {
+  local completion_dir="$SELFISHELL_CACHE_DIR/completions"
+  local mise_cache="$completion_dir/_mise"
+  local uv_cache="$completion_dir/_uv"
+
+  if [[ ! -s "$mise_cache" ]] && (( $+commands[mise] )); then
+    _selfishell_generate_zsh_cache "$mise_cache" "${commands[mise]}" completion zsh
+  fi
+  if [[ ! -s "$uv_cache" ]] && (( $+commands[uv] )); then
+    _selfishell_generate_zsh_cache "$uv_cache" "${commands[uv]}" generate-shell-completion zsh
+  fi
+
+  if [[ -s "$mise_cache" || -s "$uv_cache" ]]; then
+    fpath=("$completion_dir" $fpath)
+  fi
+  if [[ -s "$mise_cache" ]]; then
+    if [[ ! -s "$mise_cache.zwc" || "$mise_cache" -nt "$mise_cache.zwc" ]]; then
+      _selfishell_compile_zsh_cache "$mise_cache"
+    fi
+    autoload -Uz _mise
+    compdef _mise mise
+  fi
+  if [[ -s "$uv_cache" ]]; then
+    if [[ ! -s "$uv_cache.zwc" || "$uv_cache" -nt "$uv_cache.zwc" ]]; then
+      _selfishell_compile_zsh_cache "$uv_cache"
+    fi
+    autoload -Uz _uv
+    compdef _uv uv
+  fi
+}
+
+_selfishell() {
+  local -a commands
+  commands=(
+    'install:Install managed shell configuration'
+    'status:Show managed configuration status'
+    'uninstall:Remove managed configuration'
+    'update:Update the CLI, approved tools, and managed configuration'
+    'rollback:Switch back to a retained CLI release'
+    'doctor:Diagnose platform and required dependencies'
+    'version:Print the Selfishell version'
+    'help:Show help'
+    '-h:Show help'
+    '--help:Show help'
+    '-v:Print the Selfishell version'
+    '--version:Print the Selfishell version'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'command' commands
+    return
+  fi
+
+  case "${words[2]}" in
+    install)
+      _arguments \
+        '--profile[select minimal or developer]:profile:(minimal developer)' \
+        '--skip-packages[apply managed configuration without installing packages or tools]' \
+        '--dry-run[show changes without modifying files]' \
+        '--yes[skip interactive confirmation]' \
+        '(-h --help)'{-h,--help}'[show help]'
+      ;;
+    status)
+      _arguments \
+        '--verbose[show every managed resource]' \
+        '(-h --help)'{-h,--help}'[show help]'
+      ;;
+    uninstall)
+      _arguments \
+        '--restore[restore configuration files backed up during installation]' \
+        '--purge[also remove the CLI, releases, cache, and state]' \
+        '--dry-run[show changes without modifying files]' \
+        '--yes[skip interactive confirmation]' \
+        '(-h --help)'{-h,--help}'[show help]'
+      ;;
+    update)
+      _arguments \
+        '(-h --help)'{-h,--help}'[show help]' \
+        '(--tools-only)--cli-only[update only the CLI release]' \
+        '(--cli-only --version)--tools-only[update tools and managed configuration]' \
+        '(--tools-only)--version[select an exact CLI release]:version:' \
+        '--skip-packages[apply managed configuration without installing packages or tools]' \
+        '--dry-run[show changes without modifying files]' \
+        '--yes[skip interactive confirmation]'
+      ;;
+    rollback)
+      _arguments \
+        '--yes[skip interactive confirmation]' \
+        '(-h --help)'{-h,--help}'[show help]' \
+        '1:version:'
+      ;;
+    version)
+      _arguments \
+        '--available[print the latest available version]' \
+        '(-h --help)'{-h,--help}'[show help]'
+      ;;
+  esac
+}
+compdef _selfishell selfishell sfs
+
 if _selfishell_command_path kubectl >/dev/null; then
   _selfishell_kubectl_completion() {
     local completion_source

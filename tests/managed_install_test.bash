@@ -105,6 +105,36 @@ test_install_copies_configuration_and_tracks_resources() {
   [[ "$state_count" -eq 19 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
+test_install_clears_generated_shell_caches() {
+  local cache
+  local completion_dir="$XDG_CACHE_HOME/selfishell/completions"
+
+  mkdir -p "$completion_dir"
+  for cache in \
+    "$XDG_CACHE_HOME/selfishell/zoxide-init.zsh" \
+    "$XDG_CACHE_HOME/selfishell/fzf-init.zsh" \
+    "$XDG_CACHE_HOME/selfishell/starship-init.zsh" \
+    "$completion_dir/_mise" \
+    "$completion_dir/_mise.zwc" \
+    "$completion_dir/_uv" \
+    "$completion_dir/_uv.zwc"; do
+    printf 'stale cache\n' >"$cache"
+  done
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  for cache in \
+    "$XDG_CACHE_HOME/selfishell/zoxide-init.zsh" \
+    "$XDG_CACHE_HOME/selfishell/fzf-init.zsh" \
+    "$XDG_CACHE_HOME/selfishell/starship-init.zsh" \
+    "$completion_dir/_mise" \
+    "$completion_dir/_mise.zwc" \
+    "$completion_dir/_uv" \
+    "$completion_dir/_uv.zwc"; do
+    [[ ! -e "$cache" ]] || fail "Managed configuration left a stale shell cache: $cache"
+  done
+}
+
 test_install_switches_login_shell_to_zsh() {
   local fake_bin
   local chsh_arguments

@@ -41,6 +41,26 @@ _selfishell_generate_zsh_cache() {
   }
 }
 
+_selfishell_compile_zsh_cache() {
+  local source="$1"
+  local target="$source.zwc"
+  local temporary="${target}.tmp.$$.$RANDOM.zwc"
+
+  zcompile "$temporary" "$source" 2>/dev/null || {
+    command rm -f "$temporary"
+    return 1
+  }
+  command mv -f "$temporary" "$target" || {
+    command rm -f "$temporary"
+    return 1
+  }
+}
+
+if (( $+functions[_selfishell_load_generated_completions] )); then
+  _selfishell_load_generated_completions
+  unfunction _selfishell_load_generated_completions
+fi
+
 _selfishell_generate_fzf_cache() {
   local target="$1"
   local temporary="${target}.tmp.$$.$RANDOM"
