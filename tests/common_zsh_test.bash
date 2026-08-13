@@ -1321,6 +1321,23 @@ test_default_tool_aliases_keep_common_commands_and_drop_risky_shortcuts() {
   done
 }
 
+test_dedicated_tool_aliases_load_before_tools_are_available() {
+  local output
+
+  output="$(
+    ZDOTDIR="" /bin/zsh -f -c '
+      _selfishell_command_path() { return 1; }
+      source "$1/common/aliases-git.zsh"
+      source "$1/common/aliases-kubectl.zsh"
+      source "$1/common/aliases-terraform.zsh"
+      alias g k tf
+    ' zsh "$ROOT_DIR"
+  )"
+
+  [[ "$output" == *$'g=git\nk=kubectl\ntf=terraform'* ]] ||
+    fail "Dedicated tool aliases depend on startup-time command availability: $output"
+}
+
 test_editor_aliases_stay_with_neovim() {
   local fake_bin output
 
