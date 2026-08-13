@@ -51,10 +51,10 @@ test_check_script_discovers_all_shell_files() {
   )
 
   for file in lib/resources.sh lib/profile_scan.sh; do
-    printf '%s\n' "${bash_files[@]}" | grep -Fqx "$file" ||
+    printf '%s\n' "${bash_files[@]}" | grep -Fx "$file" >/dev/null ||
       fail "check.sh discovery did not include: $file"
   done
-  printf '%s\n' "${zsh_files[@]}" | grep -Fqx common/aliases-editor.zsh ||
+  printf '%s\n' "${zsh_files[@]}" | grep -Fx common/aliases-editor.zsh >/dev/null ||
     fail "check.sh discovery did not include: common/aliases-editor.zsh"
 
   local fixture_path="$ROOT_DIR/$fixture"
@@ -72,7 +72,7 @@ test_check_script_discovers_all_shell_files() {
       find lib scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
     } | sort -u
   )
-  printf '%s\n' "${bash_files[@]}" | grep -Fqx "$fixture" ||
+  printf '%s\n' "${bash_files[@]}" | grep -Fx "$fixture" >/dev/null ||
     fail "check.sh discovery did not pick up a newly added lib/*.sh file"
 
   rm -f "$fixture_path"
