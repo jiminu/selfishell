@@ -80,7 +80,7 @@ Preserve these lifecycle invariants:
 - preflight the full uninstall resource set before removing any resource;
 - run required user-owned loader and block-target preflights before package or
   configuration changes during install and update;
-- remove only an intact installer-managed loader or PATH block;
+- remove only an intact installer-managed loader;
 - make dry-run create no directories, state, backups, links, or files;
 - increment the fixed-line state format version before changing field order or
   meaning.
