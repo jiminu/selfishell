@@ -1289,7 +1289,10 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
 }
 
 test_interactive_shell_omits_cloud_aliases_and_keeps_git_alias() {
-  ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="/usr/bin:/bin" \
+  setup_test_home
+
+  XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" \
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="/usr/bin:/bin" \
     /bin/zsh -f -c '
       _selfishell_command_path() { return 1; }
       source "$1"
@@ -1300,6 +1303,34 @@ test_interactive_shell_omits_cloud_aliases_and_keeps_git_alias() {
       [[ "${aliases[g]}" == git ]] || exit 1
     ' zsh "$ROOT_DIR/common/interactive.zsh" ||
     fail "Interactive shell still defines a cloud alias or no longer defines g=git"
+}
+
+test_kubectl_completion_registers_only_canonical_command() {
+  local fake_bin
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/kubectl" <<'EOF'
+#!/usr/bin/env sh
+
+[ "$1" = completion ] && [ "$2" = zsh ] || exit 1
+printf '%s\n' '_kubectl() { return 0; }'
+EOF
+  chmod +x "$fake_bin/kubectl"
+
+  XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" \
+    ZDOTDIR="$HOME" PATH="$fake_bin:/usr/bin:/bin" \
+    /bin/zsh -f -c '
+      _selfishell_command_path() { command -v "$1"; }
+      source "$1"
+      [[ "${_comps[kubectl]}" == _selfishell_kubectl_completion ]] || exit 1
+      (( ! ${+_comps[k]} )) || exit 1
+      _selfishell_kubectl_completion || exit 1
+      [[ "${_comps[kubectl]}" == _kubectl ]] || exit 1
+      (( ! ${+_comps[k]} )) || exit 1
+    ' zsh "$ROOT_DIR/common/completion.zsh" ||
+    fail "Kubectl completion did not keep k unmapped"
 }
 
 test_editor_aliases_stay_with_neovim() {
