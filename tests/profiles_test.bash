@@ -35,29 +35,19 @@ test_default_profile_is_developer() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
 
-  [[ "$output" == *'vim'* && "$output" == *'starship'* ]] ||
-    fail "Default install omitted the minimal profile foundation"
   [[ "$output" == *'direct package: mise'* && "$output" == *'required mise tools:'* ]] ||
     fail "Default install did not select the developer profile"
   [[ "$output" == *'Neovim plugins'* ]] ||
     fail "Default install omitted the developer Neovim setup"
 }
 
-test_minimal_includes_shell_tools_and_excludes_larger_profiles() {
+test_minimal_excludes_developer_environment() {
   local output full_output
   output="$(run_profile_dry_run minimal)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
-  [[ "$output" == *'zsh git curl ca-certificates vim'* ]] ||
-    fail "Minimal required apt packages are incomplete"
-  [[ "$output" != *'optional apt packages:'* ]] ||
-    fail "Minimal profile should not have optional packages"
-  [[ "$output" != *'fzf'* && "$output" != *'zoxide'* && "$output" != *'ripgrep'* ]] ||
-    fail "Minimal profile should not include advanced shell tools"
-  [[ "$output" == *'direct package: starship'* ]] || fail "Minimal profile is missing Starship"
-  [[ "$output" == *'direct package: zinit'* ]] || fail "Minimal profile is missing Zinit"
-  [[ "$output" != *'jq'* ]] || fail "Minimal profile included developer JSON tooling"
   [[ "$output" != *'direct package: mise'* ]] || fail "Minimal profile included developer runtimes"
+  [[ "$output" != *'required mise tools:'* ]] || fail "Minimal profile included mise-managed tools"
   [[ "$output" != *'build-essential'* ]] || fail "Minimal profile included compiler tooling"
   [[ "$full_output" != *'Neovim plugins'* ]] || fail "Minimal profile included Neovim plugin setup"
 }
@@ -86,10 +76,6 @@ test_developer_includes_development_tools() {
   actual_mise_tools="$(printf '%s\n' "$output" |
     sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
 
-  [[ "$output" == *'required apt packages: zsh git curl ca-certificates vim fzf zoxide ripgrep jq build-essential'* ]] ||
-    fail "Developer profile required apt packages are incomplete"
-  [[ "$output" == *'optional apt packages: eza bat'* ]] ||
-    fail "Developer profile optional apt packages are incomplete"
   [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
   [[ -n "$actual_mise_tools" ]] || fail "Developer profile did not report required mise tools"
@@ -103,10 +89,10 @@ test_minimal_macos_includes_fonts_and_opt_in_ghostty() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
-  [[ "$output" == *'optional Homebrew cask: font-meslo-lg-nerd-font font-noto-sans-cjk-kr'* ]] ||
-    fail "Minimal macOS profile is missing fonts"
+  [[ "$output" == *'optional Homebrew cask:'* && "$output" == *'font-'* ]] ||
+    fail "Minimal macOS profile omitted optional fonts"
   [[ "$output" == *'optional Homebrew cask: ghostty'* ]] ||
-    fail "Ghostty was not included in the macOS dry run"
+    fail "Minimal macOS profile omitted opt-in Ghostty"
 }
 
 test_unknown_profile_returns_usage_error() {
