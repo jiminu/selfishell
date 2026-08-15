@@ -85,11 +85,14 @@ ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.
 ln -s "$ROOT_DIR/common/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
 ln -s "$ROOT_DIR/common/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
 ln -s "$ROOT_DIR/common/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
-ln -s "$ROOT_DIR/common/aliases-common.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-common.zsh"
-ln -s "$ROOT_DIR/common/aliases-git.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-git.zsh"
-ln -s "$ROOT_DIR/common/aliases-kubectl.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-kubectl.zsh"
+ln -s "$ROOT_DIR/common/aliases.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases.zsh"
 ln -s "$PLATFORM_CONFIG" "$TEST_HOME/.zshrc"
 date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
+
+[[ -r "$TEST_HOME/.config/selfishell/zsh/aliases.zsh" ]] || {
+  printf 'Missing benchmark Zsh module: aliases.zsh\n' >&2
+  exit 1
+}
 
 # Installs the pinned mise/starship/zinit into the isolated $TEST_HOME so
 # "full" mode measures a real developer-profile startup, not just whatever

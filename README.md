@@ -59,7 +59,7 @@ not claim support for other Linux distributions.
 ## What You Get
 
 - A readable Starship prompt with Git and runtime information.
-- Zsh aliases and interactive completions for common shell and Git workflows.
+- Zsh aliases for common shell workflows and interactive Git completion.
 - Editor configuration that starts with Vim and expands into Neovim for the
   `developer` profile.
 - Safe release updates, checksum verification, and retained releases for

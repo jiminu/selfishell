@@ -32,7 +32,7 @@ test_check_script_discovers_all_shell_files() {
   # Mirrors scripts/check.sh's own discovery snippet so this test fails if
   # that discovery mechanism regresses back to a hand-maintained list that
   # can silently omit files (as it once did for lib/resources.sh,
-  # lib/profile_scan.sh, and common/aliases-editor.zsh).
+  # lib/profile_scan.sh, and common/aliases.zsh).
   while IFS= read -r file; do
     bash_files+=("$file")
   done < <(
@@ -54,8 +54,8 @@ test_check_script_discovers_all_shell_files() {
     printf '%s\n' "${bash_files[@]}" | grep -Fx "$file" >/dev/null ||
       fail "check.sh discovery did not include: $file"
   done
-  printf '%s\n' "${zsh_files[@]}" | grep -Fx common/aliases-editor.zsh >/dev/null ||
-    fail "check.sh discovery did not include: common/aliases-editor.zsh"
+  printf '%s\n' "${zsh_files[@]}" | grep -Fx common/aliases.zsh >/dev/null ||
+    fail "check.sh discovery did not include: common/aliases.zsh"
 
   local fixture_path="$ROOT_DIR/$fixture"
   # shellcheck disable=SC2064 # intentionally expanded now, as a safety net
