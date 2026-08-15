@@ -4,52 +4,14 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Stable or pre-release version without the v prefix
-        required: true
-        type: string
-      ref:
-        description: Commit or ref to release
-        required: true
-        default: main
-        type: string
 
 concurrency:
-  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  # Resolves the requested ref to one immutable commit SHA before anything
-  # else runs, so verify and publish are guaranteed to check out the exact
-  # same commit. Without this, each job independently re-resolving
-  # `inputs.ref` (which defaults to the mutable branch "main") could let a
-  # push land between verify finishing and publish starting, so publish
-  # would release a commit that was never verified.
-  resolve:
-    name: Resolve release commit
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    outputs:
-      sha: ${{ steps.resolve.outputs.sha }}
-
-    steps:
-      - name: Check out requested ref
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event_name == 'push' && github.ref || inputs.ref }}
-          fetch-depth: 1
-
-      - name: Resolve to a single commit SHA
-        id: resolve
-        run: printf 'sha=%s\n' "$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
-
   verify:
     name: Verify release (${{ matrix.os }})
-    needs: resolve
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     permissions:
@@ -60,10 +22,10 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     steps:
-      - name: Check out resolved commit
+      - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ github.sha }}
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -79,7 +41,7 @@ jobs:
         run: bash scripts/check.sh
 
   publish:
-    needs: [resolve, verify]
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -89,25 +51,19 @@ jobs:
       artifact-metadata: write
 
     steps:
-      - name: Check out resolved commit
+      - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ github.sha }}
 
       - name: Validate release tag
         id: version
         env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-          PUSHED_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          PUSHED_TAG: ${{ github.ref_name }}
         run: |
-          if [[ -n "$PUSHED_TAG" ]]; then
-            TAG="$PUSHED_TAG"
-            version="${TAG#v}"
-          else
-            version="$REQUESTED_VERSION"
-            TAG="v$version"
-          fi
+          TAG="$PUSHED_TAG"
+          version="${TAG#v}"
           source lib/common.sh
           if ! selfishell_version_is_valid "$version"; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
@@ -115,7 +71,7 @@ jobs:
           fi
           local_version=$(tr -d '[:space:]' <VERSION)
           if [[ "$version" != "$local_version" ]]; then
-            printf 'Version mismatch: tag/input version is %s, but VERSION file has %s\n' "$version" "$local_version" >&2
+            printf 'Version mismatch: tag version is %s, but VERSION file has %s\n' "$version" "$local_version" >&2
             exit 1
           fi
           printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
@@ -142,20 +98,6 @@ jobs:
           prefix="$RUNNER_TEMP/selfishell-prefix"
           bash install.sh --version "$VERSION" --prefix "$prefix"
           test "$("$prefix/bin/selfishell" version)" = "selfishell $VERSION"
-
-      - name: Create immutable release tag
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          git rev-parse "refs/tags/$TAG" >/dev/null 2>&1 && {
-            printf 'Release tag already exists: %s\n' "$TAG" >&2
-            exit 1
-          }
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git tag -a "$TAG" -m "Selfishell ${TAG#v}"
-          git push origin "$TAG"
 
       - name: Publish immutable GitHub Release
         env:
