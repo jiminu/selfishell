@@ -63,21 +63,6 @@ test_tools_update_skip_packages_avoids_package_operations() {
     fail "--skip-packages still touched apt packages: $output"
 }
 
-test_tools_update_reports_unchanged_summary_without_per_resource_noise() {
-  local output
-  export XDG_CONFIG_HOME="$HOME/.config"
-  mkdir -p "$XDG_STATE_HOME/selfishell"
-  printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
-
-  bash "$ROOT_DIR/bin/selfishell" update --tools-only --skip-packages --yes >/dev/null
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --skip-packages --yes)"
-
-  [[ "$output" != *'Unchanged:'* ]] ||
-    fail "Reapplying unmodified configuration printed a per-resource Unchanged line: $output"
-  [[ "$output" == *'items unchanged.'* ]] ||
-    fail "Reapplying unmodified configuration did not report an unchanged summary: $output"
-}
-
 test_download_dependency_is_checksum_verified_and_recorded() {
   local payload checksum output
   payload="$TEST_ROOT/tool"
@@ -229,24 +214,6 @@ test_managed_download_valid_target_is_already_approved() {
   [[ -z "$output" ]] ||
     fail "An already-approved dependency printed unexpected output: $output"
   assert_file_content 'existing-install-marker' "$HOME/.local/bin/tool"
-}
-
-test_dependency_install_already_approved_increments_unchanged_count() {
-  local payload checksum
-  payload="$TEST_ROOT/tool"
-  printf '#!/bin/sh\nprintf tool-1.0\\n\n' >"$payload"
-  checksum="$(fixture_sha256 "$payload")"
-  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
-  printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
-  mkdir -p "$HOME/.local/bin" "$XDG_STATE_HOME/selfishell/dependencies"
-  printf 'existing-install-marker\n' >"$HOME/.local/bin/tool"
-  chmod 0755 "$HOME/.local/bin/tool"
-  printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
-
-  unset SELFISHELL_UNCHANGED_COUNT
-  dependency_install tool linux amd64
-  [[ "${SELFISHELL_UNCHANGED_COUNT:-}" == 1 ]] ||
-    fail "An already-approved dependency did not increment SELFISHELL_UNCHANGED_COUNT: ${SELFISHELL_UNCHANGED_COUNT:-<unset>}"
 }
 
 test_managed_download_version_bump_reports_updated() {

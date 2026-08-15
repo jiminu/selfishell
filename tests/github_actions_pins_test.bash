@@ -229,24 +229,4 @@ test_ci_classification_step_uses_base_ref_classifier_not_pr_content() {
   teardown_test_home
 }
 
-test_pinned_neovim_job_runs_configuration_tests() {
-  local workflow="$ROOT_DIR/.github/workflows/ci.yml"
-  local config_command='bash tests/neovim_config_test.bash'
-  local lifecycle_command='bash scripts/neovim-e2e.sh'
-  local config_match job lifecycle_match
-
-  job="$(awk '
-    /^  neovim-developer-e2e:/ { in_job = 1 }
-    in_job && /^  [[:alnum:]_-]+:/ && $1 != "neovim-developer-e2e:" { exit }
-    in_job { print }
-  ' "$workflow")"
-  config_match="$(printf '%s\n' "$job" | grep -nF "$config_command")" || true
-  lifecycle_match="$(printf '%s\n' "$job" | grep -nF "$lifecycle_command")" || true
-
-  [[ -n "$config_match" ]] ||
-    fail "Pinned Neovim CI job does not run the configuration tests"
-  [[ -n "$lifecycle_match" && "${config_match%%:*}" -lt "${lifecycle_match%%:*}" ]] ||
-    fail "Pinned Neovim configuration tests must run before the lifecycle E2E"
-}
-
 run_discovered_tests

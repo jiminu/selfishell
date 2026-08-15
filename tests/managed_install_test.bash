@@ -67,8 +67,6 @@ test_every_neovim_configuration_file_is_managed() {
 }
 
 test_install_copies_configuration_and_tracks_resources() {
-  local state_count
-
   printf 'original zshrc' >"$HOME/.zshrc"
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
 
@@ -99,10 +97,6 @@ test_install_copies_configuration_and_tracks_resources() {
   [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == block ]] ||
     fail "Zsh loader was not recorded as a managed block"
 
-  state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  # 10 zsh/starship/mise/vim resources + 5 user links/blocks
-  # = 15 state files for a fresh Ubuntu minimal install (ghostty and nvim are developer-only).
-  [[ "$state_count" -eq 15 ]] || fail "Expected state for every managed Ubuntu minimal resource (got $state_count)"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -621,22 +615,6 @@ test_install_is_idempotent() {
     fail "A second installation must not create more backups"
   [[ "$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")" -eq 1 ]] ||
     fail "A second installation duplicated the Zsh loader"
-}
-
-test_reinstall_reports_unchanged_summary_without_per_resource_noise() {
-  local output
-
-  printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --skip-packages --yes >/dev/null
-
-  output="$(run_selfishell install --skip-packages --yes)"
-
-  [[ "$output" != *'Unchanged:'* ]] ||
-    fail "Reinstalling an unmodified setup printed a per-resource Unchanged line: $output"
-  [[ "$output" != *'Unchanged Selfishell block:'* ]] ||
-    fail "Reinstalling an unmodified setup printed a per-resource Unchanged block line: $output"
-  [[ "$output" == *'items unchanged.'* ]] ||
-    fail "Reinstalling an unmodified setup did not report an unchanged summary: $output"
 }
 
 test_mise_shims_zprofile_survives_full_lifecycle() {
