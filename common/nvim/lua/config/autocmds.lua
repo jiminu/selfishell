@@ -24,11 +24,22 @@ local pending_installs = {}
 -- again even though this stays set.
 local notified_failures = {}
 
-vim.api.nvim_create_autocmd("FileType", {
+local document_filetypes = {
+  asciidoc = true,
+  gitcommit = true,
+  mail = true,
+  markdown = true,
+  rst = true,
+  text = true,
+}
+
+vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter" }, {
   group = group,
-  pattern = { "markdown", "text", "gitcommit", "mail", "rst", "asciidoc" },
-  callback = function()
-    vim.wo.wrap = true
+  pattern = "*",
+  callback = function(args)
+    if vim.bo[args.buf].buftype == "" then
+      vim.wo.wrap = document_filetypes[vim.bo[args.buf].filetype] == true
+    end
   end,
 })
 

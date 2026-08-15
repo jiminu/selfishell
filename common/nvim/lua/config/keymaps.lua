@@ -7,12 +7,6 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
   desc = "Clear search highlight",
 })
 
-map("n", "<leader>uw", function()
-  vim.wo.wrap = not vim.wo.wrap
-end, {
-  desc = "Toggle line wrap",
-})
-
 -- Window navigation. Plugins with buffer-local mappings can call this after
 -- their defaults to preserve the same navigation keys.
 function M.set_window_navigation(options)

@@ -31,29 +31,25 @@ assert(type(delete_map.callback) == "function", "buffer delete mapping is not ca
 assert_map("x", "<", "<gv")
 assert_map("x", ">", ">gv")
 
+local document_buffers = {}
 for _, filetype in ipairs({ "markdown", "text", "gitcommit", "mail", "rst", "asciidoc" }) do
   vim.wo.wrap = false
-  vim.bo.filetype = filetype
+  local buffer = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buffer)
+  vim.bo[buffer].filetype = filetype
   assert(vim.wo.wrap, "document wrapping is disabled for " .. filetype)
+  document_buffers[filetype] = buffer
 end
 
-vim.wo.wrap = false
-vim.bo.filetype = "lua"
+local lua_buffer = vim.api.nvim_create_buf(true, false)
+vim.api.nvim_set_current_buf(lua_buffer)
+vim.bo[lua_buffer].filetype = "lua"
 assert(not vim.wo.wrap, "code buffers are wrapped")
 
-local wrap_map = vim.fn.maparg("<leader>uw", "n", false, true)
-assert(type(wrap_map.callback) == "function", "line wrap mapping is not callback-based")
-local original_window = vim.api.nvim_get_current_win()
-vim.cmd("vsplit")
-local toggle_window = vim.api.nvim_get_current_win()
-vim.wo[toggle_window].wrap = false
-vim.wo[original_window].wrap = false
-wrap_map.callback()
-assert(vim.wo[toggle_window].wrap, "line wrap mapping did not enable wrapping")
-assert(not vim.wo[original_window].wrap, "line wrap mapping changed another window")
-wrap_map.callback()
-assert(not vim.wo[toggle_window].wrap, "line wrap mapping did not disable wrapping")
-vim.api.nvim_win_close(toggle_window, true)
+vim.api.nvim_set_current_buf(document_buffers.markdown)
+assert(vim.wo.wrap, "document wrapping was not restored after returning to Markdown")
+vim.api.nvim_set_current_buf(lua_buffer)
+assert(not vim.wo.wrap, "code wrapping was not restored after returning to Lua")
 
 local function plugin_spec(module, repository)
   for _, spec in ipairs(require(module)) do
