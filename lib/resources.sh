@@ -13,8 +13,6 @@ file	zsh-common	$SELFISHELL_CONFIG_DIR/zsh/common.zsh	$SELFISHELL_ROOT/common/co
 file	aliases-common	$SELFISHELL_CONFIG_DIR/zsh/aliases-common.zsh	$SELFISHELL_ROOT/common/aliases-common.zsh
 file	aliases-editor	$SELFISHELL_CONFIG_DIR/zsh/aliases-editor.zsh	$SELFISHELL_ROOT/common/aliases-editor.zsh
 file	aliases-git	$SELFISHELL_CONFIG_DIR/zsh/aliases-git.zsh	$SELFISHELL_ROOT/common/aliases-git.zsh
-file	aliases-kubectl	$SELFISHELL_CONFIG_DIR/zsh/aliases-kubectl.zsh	$SELFISHELL_ROOT/common/aliases-kubectl.zsh
-file	aliases-terraform	$SELFISHELL_CONFIG_DIR/zsh/aliases-terraform.zsh	$SELFISHELL_ROOT/common/aliases-terraform.zsh
 file	vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc	$SELFISHELL_ROOT/common/vimrc
 file	starship-config	$SELFISHELL_CONFIG_DIR/starship.toml	$SELFISHELL_ROOT/common/starship.toml
 file	ghostty-config	$SELFISHELL_CONFIG_DIR/ghostty/config.ghostty	$SELFISHELL_ROOT/mac/config.ghostty
