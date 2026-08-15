@@ -89,12 +89,10 @@ ln -s "$ROOT_DIR/common/aliases.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases.
 ln -s "$PLATFORM_CONFIG" "$TEST_HOME/.zshrc"
 date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 
-for module in aliases.zsh; do
-  [[ -r "$TEST_HOME/.config/selfishell/zsh/$module" ]] || {
-    printf 'Missing benchmark Zsh module: %s\n' "$module" >&2
-    exit 1
-  }
-done
+[[ -r "$TEST_HOME/.config/selfishell/zsh/aliases.zsh" ]] || {
+  printf 'Missing benchmark Zsh module: aliases.zsh\n' >&2
+  exit 1
+}
 
 # Installs the pinned mise/starship/zinit into the isolated $TEST_HOME so
 # "full" mode measures a real developer-profile startup, not just whatever
