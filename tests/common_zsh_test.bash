@@ -1288,7 +1288,7 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
     fail "Which-key was not deferred to VeryLazy"
 }
 
-test_interactive_shell_omits_cloud_aliases_and_keeps_git_alias() {
+test_interactive_shell_omits_cloud_and_git_aliases() {
   setup_test_home
 
   XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" \
@@ -1300,9 +1300,9 @@ test_interactive_shell_omits_cloud_aliases_and_keeps_git_alias() {
       (( ! ${+aliases[k]} )) || exit 1
       (( ! ${+aliases[kg]} )) || exit 1
       (( ! ${+aliases[kd]} )) || exit 1
-      [[ "${aliases[g]}" == git ]] || exit 1
+      (( ! ${+aliases[g]} )) || exit 1
     ' zsh "$ROOT_DIR/common/interactive.zsh" ||
-    fail "Interactive shell still defines a cloud alias or no longer defines g=git"
+    fail "Interactive shell still defines a cloud or Git alias"
 }
 
 test_kubectl_completion_registers_only_canonical_command() {
