@@ -1,10 +1,13 @@
 vim.g.mapleader = " "
 require("config.options")
 require("config.keymaps")
+require("config.autocmds")
 
 assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured")
 assert(vim.o.scrolloff == 4, "scrolloff is not configured")
 assert(not vim.o.wrap, "line wrapping is enabled")
+assert(vim.o.linebreak, "line wrapping can split words")
+assert(vim.o.breakindent, "wrapped lines do not preserve indentation")
 assert(vim.o.confirm, "confirmation is not enabled")
 assert(vim.o.inccommand == "split", "substitution preview is not configured")
 
@@ -27,6 +30,26 @@ local delete_map = vim.fn.maparg("<leader>bd", "n", false, true)
 assert(type(delete_map.callback) == "function", "buffer delete mapping is not callback-based")
 assert_map("x", "<", "<gv")
 assert_map("x", ">", ">gv")
+
+local document_buffers = {}
+for _, filetype in ipairs({ "markdown", "text", "gitcommit", "mail", "rst", "asciidoc" }) do
+  vim.wo.wrap = false
+  local buffer = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_set_current_buf(buffer)
+  vim.bo[buffer].filetype = filetype
+  assert(vim.wo.wrap, "document wrapping is disabled for " .. filetype)
+  document_buffers[filetype] = buffer
+end
+
+local lua_buffer = vim.api.nvim_create_buf(true, false)
+vim.api.nvim_set_current_buf(lua_buffer)
+vim.bo[lua_buffer].filetype = "lua"
+assert(not vim.wo.wrap, "code buffers are wrapped")
+
+vim.api.nvim_set_current_buf(document_buffers.markdown)
+assert(vim.wo.wrap, "document wrapping was not restored after returning to Markdown")
+vim.api.nvim_set_current_buf(lua_buffer)
+assert(not vim.wo.wrap, "code wrapping was not restored after returning to Lua")
 
 local function plugin_spec(module, repository)
   for _, spec in ipairs(require(module)) do
