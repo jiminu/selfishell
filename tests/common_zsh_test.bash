@@ -1288,54 +1288,18 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
     fail "Which-key was not deferred to VeryLazy"
 }
 
-test_default_tool_aliases_keep_common_commands_and_drop_risky_shortcuts() {
-  local output
-
-  output="$(
-    ZDOTDIR="" /bin/zsh -f -c '
-      _selfishell_command_path() { return 0; }
-      source "$1/common/aliases-git.zsh"
-      source "$1/common/aliases-kubectl.zsh"
-      source "$1/common/aliases-terraform.zsh"
-      alias g gst gpf gwt k kgp kcuc tf tfp tfw
-      alias "gpf!" grhh kgcj tfap tfda 2>/dev/null || true
-    ' zsh "$ROOT_DIR"
-  )"
-
-  for expected in \
-    'g=git' \
-    "gst='git status'" \
-    "gpf='git push --force-with-lease'" \
-    "gwt='git worktree'" \
-    'k=kubectl' \
-    "kgp='kubectl get pods'" \
-    "kcuc='kubectl config use-context'" \
-    'tf=terraform' \
-    "tfp='terraform plan'" \
-    "tfw='terraform workspace'"; do
-    [[ "$output" == *"$expected"* ]] || fail "Recommended alias is missing: $expected"
-  done
-
-  for removed in 'gpf!' grhh kgcj tfap tfda; do
-    [[ "$output" != *"$removed="* ]] || fail "Non-default alias is still defined: $removed"
-  done
-}
-
-test_dedicated_tool_aliases_load_before_tools_are_available() {
-  local output
-
-  output="$(
-    ZDOTDIR="" /bin/zsh -f -c '
+test_interactive_shell_omits_cloud_aliases_and_keeps_git_alias() {
+  ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="/usr/bin:/bin" \
+    /bin/zsh -f -c '
       _selfishell_command_path() { return 1; }
-      source "$1/common/aliases-git.zsh"
-      source "$1/common/aliases-kubectl.zsh"
-      source "$1/common/aliases-terraform.zsh"
-      alias g k tf
-    ' zsh "$ROOT_DIR"
-  )"
-
-  [[ "$output" == *$'g=git\nk=kubectl\ntf=terraform'* ]] ||
-    fail "Dedicated tool aliases depend on startup-time command availability: $output"
+      source "$1"
+      (( ! ${+aliases[tf]} )) || exit 1
+      (( ! ${+aliases[k]} )) || exit 1
+      (( ! ${+aliases[kg]} )) || exit 1
+      (( ! ${+aliases[kd]} )) || exit 1
+      [[ "${aliases[g]}" == git ]] || exit 1
+    ' zsh "$ROOT_DIR/common/interactive.zsh" ||
+    fail "Interactive shell still defines a cloud alias or no longer defines g=git"
 }
 
 test_editor_aliases_stay_with_neovim() {

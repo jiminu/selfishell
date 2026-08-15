@@ -67,14 +67,14 @@ if _selfishell_command_path kubectl >/dev/null; then
        [[ -n "$completion_source" ]]; then
       if eval "$completion_source" && (( $+functions[_kubectl] )); then
         unfunction _selfishell_kubectl_completion
-        compdef _kubectl kubectl k
+        compdef _kubectl kubectl
         _kubectl "$@"
         return
       fi
     fi
     return 1
   }
-  compdef _selfishell_kubectl_completion kubectl k
+  compdef _selfishell_kubectl_completion kubectl
 fi
 
 if _selfishell_command_path aws >/dev/null && _selfishell_command_path aws_completer >/dev/null; then
