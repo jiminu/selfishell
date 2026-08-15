@@ -85,12 +85,11 @@ ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.
 ln -s "$ROOT_DIR/common/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
 ln -s "$ROOT_DIR/common/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
 ln -s "$ROOT_DIR/common/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
-ln -s "$ROOT_DIR/common/aliases-common.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-common.zsh"
-ln -s "$ROOT_DIR/common/aliases-editor.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases-editor.zsh"
+ln -s "$ROOT_DIR/common/aliases.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases.zsh"
 ln -s "$PLATFORM_CONFIG" "$TEST_HOME/.zshrc"
 date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 
-for module in aliases-common.zsh aliases-editor.zsh; do
+for module in aliases.zsh; do
   [[ -r "$TEST_HOME/.config/selfishell/zsh/$module" ]] || {
     printf 'Missing benchmark Zsh module: %s\n' "$module" >&2
     exit 1

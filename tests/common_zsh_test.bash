@@ -1365,7 +1365,7 @@ EOF
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         alias vim
-      ' zsh "$ROOT_DIR/common/aliases-editor.zsh"
+      ' zsh "$ROOT_DIR/common/aliases.zsh"
   )"
 
   [[ "$output" == *'vim=nvim'* ]] || fail "vim was not redirected to Neovim"
@@ -1383,7 +1383,7 @@ test_minimal_profile_keeps_system_vim() {
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         alias vim 2>/dev/null || true
-      ' zsh "$ROOT_DIR/common/aliases-editor.zsh"
+      ' zsh "$ROOT_DIR/common/aliases.zsh"
   )"
 
   [[ "$output" != *'nvim'* ]] || fail "Vim alias should not be forced without Neovim"

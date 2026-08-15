@@ -67,13 +67,13 @@ test_benchmark_rejects_missing_retained_zsh_module() {
   setup_test_home
   checkout="$TEST_ROOT/checkout"
   cp -R "$ROOT_DIR" "$checkout"
-  mv "$checkout/common/aliases-editor.zsh" "$TEST_ROOT/aliases-editor.zsh"
+  mv "$checkout/common/aliases.zsh" "$TEST_ROOT/aliases.zsh"
 
   output="$(SELFISHELL_BENCHMARK_ITERATIONS=1 \
     bash "$checkout/scripts/benchmark.sh" --mode base 2>&1)" || status=$?
 
-  ((status != 0)) || fail "Benchmark accepted a fixture missing aliases-editor.zsh: $output"
-  [[ "$output" == *'Missing benchmark Zsh module: aliases-editor.zsh'* ]] ||
+  ((status != 0)) || fail "Benchmark accepted a fixture missing aliases.zsh: $output"
+  [[ "$output" == *'Missing benchmark Zsh module: aliases.zsh'* ]] ||
     fail "Benchmark did not identify the missing Zsh module: $output"
   teardown_test_home
 }

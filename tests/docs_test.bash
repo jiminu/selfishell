@@ -5,14 +5,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-# common/aliases-editor.zsh intentionally aliases only vim/view (not vi), so
+# common/aliases.zsh intentionally aliases only vim/view (not vi), so
 # the system vi stays untouched.
 test_editor_alias_implementation_contract() {
-  grep -Fq "alias vim='nvim'" "$ROOT_DIR/common/aliases-editor.zsh" ||
+  grep -Fq "alias vim='nvim'" "$ROOT_DIR/common/aliases.zsh" ||
     fail "vim alias implementation not found where expected"
-  grep -Fq "alias view='nvim -R'" "$ROOT_DIR/common/aliases-editor.zsh" ||
+  grep -Fq "alias view='nvim -R'" "$ROOT_DIR/common/aliases.zsh" ||
     fail "view (read-only) alias implementation not found where expected"
-  grep -Eq "alias vi=" "$ROOT_DIR/common/aliases-editor.zsh" &&
+  grep -Eq "alias vi=" "$ROOT_DIR/common/aliases.zsh" &&
     fail "A vi alias was reintroduced; update the README explanation if this is intentional"
   return 0
 }

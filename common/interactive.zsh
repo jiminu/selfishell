@@ -1,6 +1,5 @@
 # Aliases
-source "$SELFISHELL_COMMON_DIR/aliases-common.zsh"
-source "$SELFISHELL_COMMON_DIR/aliases-editor.zsh"
+source "$SELFISHELL_COMMON_DIR/aliases.zsh"
 
 # Shell tools configure key bindings before interactive plugins load.
 SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
