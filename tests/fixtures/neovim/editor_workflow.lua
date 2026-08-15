@@ -1,10 +1,13 @@
 vim.g.mapleader = " "
 require("config.options")
 require("config.keymaps")
+require("config.autocmds")
 
 assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured")
 assert(vim.o.scrolloff == 4, "scrolloff is not configured")
 assert(not vim.o.wrap, "line wrapping is enabled")
+assert(vim.o.linebreak, "line wrapping can split words")
+assert(vim.o.breakindent, "wrapped lines do not preserve indentation")
 assert(vim.o.confirm, "confirmation is not enabled")
 assert(vim.o.inccommand == "split", "substitution preview is not configured")
 
@@ -27,6 +30,30 @@ local delete_map = vim.fn.maparg("<leader>bd", "n", false, true)
 assert(type(delete_map.callback) == "function", "buffer delete mapping is not callback-based")
 assert_map("x", "<", "<gv")
 assert_map("x", ">", ">gv")
+
+for _, filetype in ipairs({ "markdown", "text", "gitcommit", "mail", "rst", "asciidoc" }) do
+  vim.wo.wrap = false
+  vim.bo.filetype = filetype
+  assert(vim.wo.wrap, "document wrapping is disabled for " .. filetype)
+end
+
+vim.wo.wrap = false
+vim.bo.filetype = "lua"
+assert(not vim.wo.wrap, "code buffers are wrapped")
+
+local wrap_map = vim.fn.maparg("<leader>uw", "n", false, true)
+assert(type(wrap_map.callback) == "function", "line wrap mapping is not callback-based")
+local original_window = vim.api.nvim_get_current_win()
+vim.cmd("vsplit")
+local toggle_window = vim.api.nvim_get_current_win()
+vim.wo[toggle_window].wrap = false
+vim.wo[original_window].wrap = false
+wrap_map.callback()
+assert(vim.wo[toggle_window].wrap, "line wrap mapping did not enable wrapping")
+assert(not vim.wo[original_window].wrap, "line wrap mapping changed another window")
+wrap_map.callback()
+assert(not vim.wo[toggle_window].wrap, "line wrap mapping did not disable wrapping")
+vim.api.nvim_win_close(toggle_window, true)
 
 local function plugin_spec(module, repository)
   for _, spec in ipairs(require(module)) do

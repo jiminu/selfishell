@@ -24,6 +24,14 @@ local pending_installs = {}
 -- again even though this stays set.
 local notified_failures = {}
 
+vim.api.nvim_create_autocmd("FileType", {
+  group = group,
+  pattern = { "markdown", "text", "gitcommit", "mail", "rst", "asciidoc" },
+  callback = function()
+    vim.wo.wrap = true
+  end,
+})
+
 local function ensure_parser_installed(buf, lang)
   local ok, treesitter = pcall(require, "nvim-treesitter")
   if not ok then
