@@ -37,11 +37,7 @@ publish_fixture "$INITIAL_VERSION"
 publish_fixture "$NEXT_VERSION"
 
 SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
-  bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$PREFIX" --add-to-path
-
-bash --noprofile --rcfile "$HOME/.bashrc" -ic \
-  'command -v selfishell >/dev/null && [[ "$(selfishell version)" == "selfishell 0.0.0-container.1" ]]' ||
-  fail "a new Bash shell did not load the installer-managed PATH"
+  bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$PREFIX"
 
 SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
   "$PREFIX/bin/selfishell" install --profile minimal --yes
@@ -59,6 +55,5 @@ SELFISHELL_RELEASE_ROOT='file:///network-must-not-be-used' \
 "$PREFIX/bin/selfishell" uninstall --restore --purge --yes
 [[ ! -e "$PREFIX/bin/selfishell" && ! -e "$PREFIX/bin/sfs" ]] || fail "purge retained CLI links"
 [[ ! -e "$PREFIX/share/selfishell" ]] || fail "purge retained release data"
-! grep -Fq '# Added by Selfishell installer' "$HOME/.bashrc" || fail "purge retained the PATH entry"
 
 printf 'PASS: Ubuntu 24.04 container installation lifecycle\n'

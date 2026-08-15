@@ -25,19 +25,16 @@ their detection and platform-specific behavior have isolated test coverage.
 
 ## Bootstrap options
 
-### Add the CLI directory to PATH
+### Configure the CLI directory in PATH
 
 The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
 installer prints commands for the current shell and an absolute command that
-works immediately. It does not modify shell startup files by default. Pass
-`--add-to-path` to add an idempotent, tracked entry only to the current shell's
-regular startup file, `~/.bashrc` or `~/.zshrc`, based on the current default
-shell. The selected path must be absent or a regular file; symbolic links and
-other path types are preserved and rejected:
+works immediately. The installer never modifies shell startup files. To make
+the CLI available in future sessions, add the following line to your shell
+startup file:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
-  bash -s -- --add-to-path
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 The bootstrap installs only the CLI unless `--setup` is explicitly supplied.
@@ -161,11 +158,9 @@ selfishell uninstall --restore --purge
 
 Personal content in `~/.zshrc` and `~/.zprofile`, and in `~/.zshenv` on
 Ubuntu/WSL, is preserved; uninstall removes only the intact marked Selfishell
-blocks.
-Packages installed through Apt, Homebrew, or direct tool installers are also
-preserved. If `--add-to-path` was used, purge removes the installer's unchanged
-PATH entry; a modified entry is preserved and stops the purge for review.
-Purge does not automatically remove Zinit or Neovim plugin checkouts.
+blocks. Packages installed through Apt, Homebrew, or direct tool installers are
+also preserved. Purge does not automatically remove Zinit or Neovim plugin
+checkouts.
 
 ## Platform notes
 

@@ -43,111 +43,6 @@ uninstall_prepare_purge() {
   fi
 }
 
-uninstall_path_entry_values() {
-  local prefix="$1"
-  local state_file="$SELFISHELL_SHARE_DIR/path-startup-file"
-  local bin_state_file="$SELFISHELL_SHARE_DIR/path-bin-dir"
-  local bin_dir="$prefix/bin"
-  local escaped_bin_dir
-
-  SELFISHELL_PATH_STARTUP_FILE=""
-  SELFISHELL_PATH_ENTRY=""
-  [[ -e "$state_file" || -L "$state_file" ]] || return 0
-  if [[ -L "$state_file" || ! -f "$state_file" || ! -r "$state_file" ]]; then
-    cli_error "Invalid Selfishell PATH state file: $state_file"
-    return "$SELFISHELL_EXIT_ERROR"
-  fi
-  SELFISHELL_PATH_STARTUP_FILE="$(<"$state_file")"
-  case "$SELFISHELL_PATH_STARTUP_FILE" in
-    "$HOME/.bashrc" | "$HOME/.zshrc") ;;
-    *)
-      cli_error "Invalid recorded PATH startup file: $SELFISHELL_PATH_STARTUP_FILE"
-      return "$SELFISHELL_EXIT_ERROR"
-      ;;
-  esac
-  if [[ -e "$bin_state_file" || -L "$bin_state_file" ]]; then
-    if [[ -L "$bin_state_file" || ! -f "$bin_state_file" || ! -r "$bin_state_file" ]]; then
-      cli_error "Invalid Selfishell PATH state file: $bin_state_file"
-      return "$SELFISHELL_EXIT_ERROR"
-    fi
-    bin_dir="$(<"$bin_state_file")"
-    if [[ "$(cd "$(dirname "$bin_dir")" && pwd -P)/$(basename "$bin_dir")" != "$(cd "$(dirname "$prefix/bin")" && pwd -P)/$(basename "$prefix/bin")" ]]; then
-      cli_error "Invalid recorded Selfishell PATH directory: $bin_dir"
-      return "$SELFISHELL_EXIT_ERROR"
-    fi
-  fi
-  printf -v escaped_bin_dir '%q' "$bin_dir"
-  SELFISHELL_PATH_ENTRY="export PATH=${escaped_bin_dir}:\"\$PATH\""
-}
-
-uninstall_validate_path_entry() {
-  local prefix="$1"
-  local marker='# Added by Selfishell installer'
-
-  uninstall_path_entry_values "$prefix" || return
-  [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
-  if [[ -L "$SELFISHELL_PATH_STARTUP_FILE" || ! -f "$SELFISHELL_PATH_STARTUP_FILE" ||
-    ! -r "$SELFISHELL_PATH_STARTUP_FILE" ]] || ! awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
-    {
-      if ($0 == marker) marker_count++
-      if ($0 == entry) {
-        entry_count++
-        if (previous == marker) intact_count++
-      }
-      previous = $0
-    }
-    END { exit(marker_count == 1 && entry_count == 1 && intact_count == 1 ? 0 : 1) }
-  ' "$SELFISHELL_PATH_STARTUP_FILE"; then
-    cli_error "Recorded Selfishell PATH entry was modified; preserving: $SELFISHELL_PATH_STARTUP_FILE"
-    return "$SELFISHELL_EXIT_ERROR"
-  fi
-}
-
-uninstall_remove_path_entry() {
-  local prefix="$1"
-  local dry_run="$2"
-  local marker='# Added by Selfishell installer'
-  local temporary
-
-  # Re-validates (not just re-reads) the recorded PATH entry immediately
-  # before mutating it, matching every other resource this command removes
-  # (managed_uninstall_resource, uninstall_prepare_purge): the early
-  # preflight in command_uninstall runs before confirm_action's interactive
-  # pause, so a startup file edited while the user sits at that prompt must
-  # not make this step blindly strip whatever it finds.
-  uninstall_validate_path_entry "$prefix" || return
-  [[ -n "$SELFISHELL_PATH_STARTUP_FILE" ]] || return 0
-  if [[ "$dry_run" == 1 ]]; then
-    printf '%sWould remove Selfishell PATH entry from:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_PATH_STARTUP_FILE"
-    return
-  fi
-
-  temporary="$(mktemp "${SELFISHELL_PATH_STARTUP_FILE}.tmp.XXXXXX")" || return
-  cp -p "$SELFISHELL_PATH_STARTUP_FILE" "$temporary" || {
-    rm -f "$temporary"
-    return 1
-  }
-  awk -v marker="$marker" -v entry="$SELFISHELL_PATH_ENTRY" '
-    $0 == marker {
-      if ((getline following) > 0) {
-        if (following == entry) next
-        print
-        print following
-        next
-      }
-    }
-    { print }
-  ' "$SELFISHELL_PATH_STARTUP_FILE" >"$temporary" || {
-    rm -f "$temporary"
-    return 1
-  }
-  mv "$temporary" "$SELFISHELL_PATH_STARTUP_FILE" || {
-    rm -f "$temporary"
-    return 1
-  }
-  printf '%sRemoved Selfishell PATH entry from:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_PATH_STARTUP_FILE"
-}
-
 uninstall_purge() {
   local dry_run="$1"
   local prefix bin_dir
@@ -209,7 +104,6 @@ command_uninstall() {
     prefix="$(dirname "$(dirname "$SELFISHELL_SHARE_DIR")")"
     uninstall_prepare_purge "$prefix/bin/selfishell" "$SELFISHELL_SHARE_DIR/current/bin/selfishell" || return
     uninstall_prepare_purge "$prefix/bin/sfs" selfishell || return
-    uninstall_validate_path_entry "$prefix" || return
   fi
   if [[ "$purge" == 1 ]]; then
     confirm_action "Uninstall and purge Selfishell?" "$assume_yes" "$dry_run" || return
@@ -224,10 +118,6 @@ command_uninstall() {
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall cancelled because managed resources were changed."
     return "$result"
-  fi
-
-  if [[ "$purge" == 1 ]]; then
-    uninstall_remove_path_entry "$prefix" "$dry_run" || return
   fi
 
   # Remove in reverse declaration order so user-facing entrypoints (links,
