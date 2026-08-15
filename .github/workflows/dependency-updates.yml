@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
 
 concurrency:
@@ -69,11 +68,3 @@ jobs:
           else
             printf 'A dependency update PR is already open on %s; nothing to create.\n' "$BRANCH"
           fi
-
-      - name: Create or resolve failure issue
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RESULT: ${{ job.status }}
-        run: bash scripts/workflow-failure-issue.sh '[automation] Dependency updates failed' "$RESULT" "$RUN_URL"

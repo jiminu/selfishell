@@ -112,24 +112,3 @@ jobs:
           }
           gh release create "$TAG" dist/* --verify-tag --generate-notes \
             --title "$TAG" "${release_args[@]}"
-
-  notify:
-    name: Report release automation result
-    if: always()
-    needs: [verify, publish]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Check out notification script
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-
-      - name: Create or resolve failure issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RESULT: ${{ needs.verify.result == 'success' && needs.publish.result == 'success' && 'success' || 'failure' }}
-        run: bash scripts/workflow-failure-issue.sh '[automation] Release failed' "$RESULT" "$RUN_URL"

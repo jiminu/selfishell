@@ -70,7 +70,7 @@ test_release_workflow_scopes_permissions_per_job() {
   grep -qE '^permissions:' "$workflow" &&
     fail "release.yml declares a shared top-level permissions block instead of per-job scoping"
 
-  for job in verify publish notify; do
+  for job in verify publish; do
     extract_workflow_job "$workflow" "$job" | grep -Fq 'permissions:' ||
       fail "release.yml job \"$job\" does not declare its own permissions"
   done

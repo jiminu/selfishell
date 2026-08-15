@@ -92,8 +92,3 @@ Attestations before publication. Verification requires GitHub CLI:
 ```bash
 gh attestation verify PATH_TO_ARCHIVE --repo jiminu/selfishell
 ```
-
-Release and dependency discovery failures create a deduplicated
-`automation-failure` issue. A later successful run closes the open issue.
-Maintainers receive email when GitHub issue or repository-watch email
-notifications are enabled in their account settings.
