@@ -1289,13 +1289,26 @@ test_neovim_plugin_specs_delay_noncritical_plugins() {
 }
 
 test_interactive_shell_omits_cloud_and_git_aliases() {
+  local command_name fake_bin
+
   setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  for command_name in eza nvim; do
+    cat >"$fake_bin/$command_name" <<'EOF'
+#!/usr/bin/env sh
+exit 0
+EOF
+    chmod +x "$fake_bin/$command_name"
+  done
 
   XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" \
-    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="/usr/bin:/bin" \
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$fake_bin:/usr/bin:/bin" \
     /bin/zsh -f -c '
-      _selfishell_command_path() { return 1; }
+      _selfishell_command_path() { command -v "$1"; }
       source "$1"
+      [[ "${aliases[ls]}" == "eza --group-directories-first" ]] || exit 1
+      [[ "${aliases[vim]}" == nvim ]] || exit 1
       (( ! ${+aliases[tf]} )) || exit 1
       (( ! ${+aliases[k]} )) || exit 1
       (( ! ${+aliases[kg]} )) || exit 1

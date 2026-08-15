@@ -61,6 +61,23 @@ test_benchmark_base_mode_runs_without_network() {
     fail "Base-mode benchmark did not report the expected metrics: $output"
 }
 
+test_benchmark_rejects_missing_retained_zsh_module() {
+  local checkout output status=0
+
+  setup_test_home
+  checkout="$TEST_ROOT/checkout"
+  cp -R "$ROOT_DIR" "$checkout"
+  mv "$checkout/common/aliases-editor.zsh" "$TEST_ROOT/aliases-editor.zsh"
+
+  output="$(SELFISHELL_BENCHMARK_ITERATIONS=1 \
+    bash "$checkout/scripts/benchmark.sh" --mode base 2>&1)" || status=$?
+
+  ((status != 0)) || fail "Benchmark accepted a fixture missing aliases-editor.zsh: $output"
+  [[ "$output" == *'Missing benchmark Zsh module: aliases-editor.zsh'* ]] ||
+    fail "Benchmark did not identify the missing Zsh module: $output"
+  teardown_test_home
+}
+
 test_benchmark_base_mode_ignores_ambient_integrations() {
   local fake_bin output profile_file real_home tool
 
