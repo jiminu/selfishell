@@ -31,6 +31,17 @@ run_profile_dry_run() {
   printf '%s\n' "$output" | awk '/^Would (install .* (apt packages|Homebrew)|sync .* (direct package|mise tools))/'
 }
 
+assert_minimal_foundation() {
+  local output="$1"
+
+  printf '%s\n' "$output" | grep -Eq '(^|[[:space:]])zsh([[:space:]]|$)' ||
+    fail "Profile omitted the core Zsh environment"
+  printf '%s\n' "$output" | grep -Eq '(^|[[:space:]])vim([[:space:]]|$)' ||
+    fail "Profile omitted Vim"
+  [[ "$output" == *'direct package: starship'* ]] || fail "Profile omitted Starship"
+  [[ "$output" == *'direct package: zinit'* ]] || fail "Profile omitted Zinit"
+}
+
 test_default_profile_is_developer() {
   local output
   output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
@@ -46,6 +57,7 @@ test_minimal_excludes_developer_environment() {
   output="$(run_profile_dry_run minimal)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile minimal --dry-run)"
 
+  assert_minimal_foundation "$output"
   [[ "$output" != *'direct package: mise'* ]] || fail "Minimal profile included developer runtimes"
   [[ "$output" != *'required mise tools:'* ]] || fail "Minimal profile included mise-managed tools"
   [[ "$output" != *'build-essential'* ]] || fail "Minimal profile included compiler tooling"
@@ -76,6 +88,7 @@ test_developer_includes_development_tools() {
   actual_mise_tools="$(printf '%s\n' "$output" |
     sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
 
+  assert_minimal_foundation "$output"
   [[ "$output" == *'direct package: mise'* ]] ||
     fail "Developer profile is missing development tools"
   [[ -n "$actual_mise_tools" ]] || fail "Developer profile did not report required mise tools"
