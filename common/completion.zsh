@@ -8,7 +8,7 @@ if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
   if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
     # Pinned to the commit recorded for zsh-users/zsh-completions in
     # dependencies.conf; keep the two in sync (see tests/common_zsh_test.bash).
-    zinit ice blockf atpull'zinit creinstall -q .' ver'e099c4a2287cd829f43d87fbedb1c5a74791a6e2'
+    zinit ice blockf atpull'zinit creinstall -q .' ver'9dc3bf5b3a00700d6af7b694e9831721dc0c714d'
     zinit light zsh-users/zsh-completions
   fi
 fi
