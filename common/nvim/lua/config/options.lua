@@ -13,6 +13,8 @@ opt.termguicolors = true
 opt.signcolumn = "yes"
 opt.cursorline = true
 opt.wrap = false
+opt.list = true
+opt.listchars = { extends = "▸", precedes = "◂" }
 opt.scrolloff = 4
 opt.splitbelow = true
 opt.splitright = true
