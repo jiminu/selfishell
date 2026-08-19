@@ -18,7 +18,7 @@ fi
 
 # Git is a required dependency in every profile, so these aliases need no
 # _selfishell_command_path guard.
-alias gst='git status'
+alias gst='git status -s'
 alias gf='git fetch'
 alias gl='git pull'
 alias glog='git log --oneline --graph --decorate'
