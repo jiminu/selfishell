@@ -15,3 +15,18 @@ if _selfishell_command_path nvim >/dev/null; then
   alias vim='nvim'
   alias view='nvim -R'
 fi
+
+# Git is a required dependency in every profile, so these aliases need no
+# _selfishell_command_path guard.
+alias gst='git status'
+alias gf='git fetch'
+alias gl='git pull'
+alias glog='git log --oneline --graph --decorate'
+alias gcmsg='git commit -m'
+alias gaa='git add -A'
+alias gp='git push'
+alias gco='git checkout'
+alias gcb='git checkout -b'
+alias gd='git diff'
+alias gsta='git stash push'
+alias gstp='git stash pop'
