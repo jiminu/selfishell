@@ -107,7 +107,7 @@ discover_metadata() {
   done
 
   local tool repository candidate_tag
-  for tool in neovim tree-sitter uv; do
+  for tool in neovim tree-sitter uv gh; do
     repository="$(mise_tool_repository "$tool")"
     candidate_tag="$(github_latest_tag "$repository")"
     printf 'mise-tool %s %s\n' "$tool" "${candidate_tag#v}" >>"$metadata"
@@ -123,6 +123,7 @@ mise_tool_repository() {
     neovim) printf 'neovim/neovim\n' ;;
     tree-sitter) printf 'tree-sitter/tree-sitter\n' ;;
     uv) printf 'astral-sh/uv\n' ;;
+    gh) printf 'cli/cli\n' ;;
     *) return 1 ;;
   esac
 }
