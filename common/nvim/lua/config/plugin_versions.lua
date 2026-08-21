@@ -27,6 +27,9 @@ function M.spec(repository, options)
   local spec = options or {}
   spec[1] = repository
   spec.commit = revision
+  if spec.submodules == nil then
+    spec.submodules = false
+  end
   return spec
 end
 
