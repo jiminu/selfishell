@@ -53,6 +53,9 @@ require("lazy").setup({
   spec = {
     { import = "plugins" },
   },
+  git = {
+    submodules = false,
+  },
   install = {
     colorscheme = { "vscode", "habamax" },
   },
