@@ -21,7 +21,8 @@ fi
 alias gst='git status -s'
 alias gf='git fetch'
 alias gl='git pull'
-alias glog='git log --oneline --graph --decorate'
+alias glog="git log --graph --decorate --pretty=format:'%C(auto)%h%d %s %C(dim white)<%an>%C(reset)'"
+alias glogd="git log --graph --decorate --pretty=format:'%C(auto)%h%d %s %C(dim white)<%an> (%cr)%C(reset)'"
 alias gcmsg='git commit -m'
 alias gaa='git add -A'
 alias gp='git push'
