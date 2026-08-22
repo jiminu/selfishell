@@ -3,7 +3,7 @@
 Selfishell is a managed Zsh development environment for macOS, Ubuntu, and
 Ubuntu on WSL.
 
-![Selfishell shell prompt showing the current directory, Git branch, command output, and time](img/selfishell.png)
+![Selfishell shell prompt showing the current directory, Git branch, and command output](img/selfishell.png)
 
 ## Quick Start
 
@@ -152,7 +152,7 @@ organization-specific deployment, and problem solving.
 
 - [Distribution channels](docs/DISTRIBUTION.md) — supported installation
   channels.
-- [Release process](docs/RELEASING.md) — preparing and publishing releases.
+- [Release process](docs/RELEASING.md) — tag-driven publishing and verification.
 - [Vulnerability reporting](SECURITY.md) — report a security issue privately.
 
 The contributor and maintainer guides are separate from the quick-start path so
