@@ -50,6 +50,7 @@ _selfishell_zinit_plugin_ready() {
 }
 
 source "$SELFISHELL_COMMON_DIR/runtime.zsh"
+source "$SELFISHELL_COMMON_DIR/history.zsh"
 source "$SELFISHELL_COMMON_DIR/completion.zsh"
 source "$SELFISHELL_COMMON_DIR/interactive.zsh"
 source "$SELFISHELL_COMMON_DIR/update-notice.zsh"
