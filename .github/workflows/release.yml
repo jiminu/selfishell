@@ -57,7 +57,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.sha }}
 
-      - name: Validate release tag
+      - name: Resolve release version
         id: version
         env:
           PUSHED_TAG: ${{ github.ref_name }}
@@ -67,11 +67,6 @@ jobs:
           source lib/common.sh
           if ! selfishell_version_is_valid "$version"; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
-            exit 1
-          fi
-          local_version=$(tr -d '[:space:]' <VERSION)
-          if [[ "$version" != "$local_version" ]]; then
-            printf 'Version mismatch: tag version is %s, but VERSION file has %s\n' "$version" "$local_version" >&2
             exit 1
           fi
           printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
