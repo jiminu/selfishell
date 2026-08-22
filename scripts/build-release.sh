@@ -5,44 +5,45 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/lib/common.sh"
 
-version="$(<"$ROOT_DIR/VERSION")"
+version=""
 output_dir="$ROOT_DIR/dist"
 
-update_source=1
+usage() {
+  printf 'Usage: scripts/build-release.sh --version VERSION [--output OUTPUT_DIR]\n' >&2
+}
 
 while (("$#" > 0)); do
   case "$1" in
     --version)
-      shift
-      version="${1:-}"
+      (($# >= 2)) || {
+        usage
+        exit 2
+      }
+      version="$2"
+      shift 2
       ;;
     --output)
-      shift
-      output_dir="${1:-}"
-      ;;
-    --no-update-source)
-      update_source=0
+      (($# >= 2)) || {
+        usage
+        exit 2
+      }
+      output_dir="$2"
+      shift 2
       ;;
     *)
       printf 'Unknown option: %s\n' "$1" >&2
+      usage
       exit 2
       ;;
   esac
-  shift
 done
 
 if ! selfishell_version_is_valid "$version"; then
   printf 'A valid semantic version is required.\n' >&2
+  usage
   exit 2
 fi
 [[ "$output_dir" == /* ]] || output_dir="$ROOT_DIR/$output_dir"
-
-if [[ -n "$version" && "$update_source" == "1" ]]; then
-  current_version=$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")
-  if [[ "$version" != "$current_version" ]]; then
-    printf '%s\n' "$version" >"$ROOT_DIR/VERSION"
-  fi
-fi
 
 staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release.XXXXXX")"
 trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
@@ -99,7 +100,6 @@ done
 )
 printf '%s\n' "$version" >"$output_dir/VERSION"
 
-# Verify built artifacts
 printf 'Verifying built release artifacts...\n'
 for platform in linux macos; do
   for architecture in amd64 arm64; do
