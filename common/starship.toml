@@ -7,7 +7,7 @@ add_newline = true
 format = '$directory$git_branch$git_state$git_status$character'
 
 # Right prompt
-right_format = '$status$cmd_duration$jobs$aws$kubernetes$python$nodejs$java$time'
+right_format = '$status$cmd_duration$jobs$aws$kubernetes$python$nodejs$java'
 
 
 # ─────────────────────────────
@@ -155,13 +155,3 @@ style = 'bold fg:#5faf5f'
 format = '[($version )]($style)'
 version_format = 'v${major}'
 style = 'bold fg:#ff875f'
-
-
-# ─────────────────────────────
-# Current time on the right
-# ─────────────────────────────
-[time]
-disabled = false
-format = '[$time]($style)'
-time_format = '%T'
-style = 'fg:#6f9393'
