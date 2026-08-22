@@ -10,7 +10,7 @@ Selfishell provides a consistent Zsh development environment for macOS, Ubuntu,
 and Ubuntu on WSL. Installation must be simple, maintenance predictable, and the
 user experience consistent across supported platforms.
 
-- `VERSION` is the product version.
+- The immutable `v<version>` Git tag is the release version source of truth.
 - `profiles/*.conf` defines built-in package profiles.
 - `dependencies.conf` pins direct downloads and Git dependencies.
 - `common/mise.toml` pins mise-managed developer tools.
@@ -137,16 +137,23 @@ described below.
 switches links. An explicit version must use only its own
 `releases/download/v<version>` path and never fall back to latest.
 
-Semantic version tags are immutable release sources. Never replace assets on an
-existing GitHub Release; publish a new patch version instead. Before tagging,
-update `VERSION` and run:
+Semantic version tags are immutable release sources. The source checkout does
+not track a release `VERSION` file: `scripts/build-release.sh` receives an
+explicit version and generates `VERSION` only inside the release payload and
+published asset set. A source checkout therefore reports `selfishell
+development`, while an installed release reads its generated `VERSION` file.
 
-```sh
-bash scripts/release-check.sh <version>
-```
+Publish from the documented release branch, currently `main`, only after its
+changes are already pushed and verified. Create an annotated `v<version>` tag
+on the intended commit and push that tag; the Release workflow validates the
+tag, reruns the release checks on Linux and macOS, builds the archives, smoke
+tests the exact install, generates attestations, and publishes the immutable
+GitHub Release. Do not create a release-only version commit or maintain a
+second version source.
 
-After publication, verify all four archives, `SHA256SUMS`, `VERSION`, the exact
-version URL, and `releases/latest/download/VERSION`. See
+Never replace assets on an existing GitHub Release; publish a new patch version
+instead. After publication, verify all four archives, `SHA256SUMS`, generated
+`VERSION`, the exact version URL, and `releases/latest/download/VERSION`. See
 `docs/RELEASING.md` for the complete procedure.
 
 ## Verification
