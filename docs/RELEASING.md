@@ -38,7 +38,8 @@ contract.
 Publish only a commit that is already merged and pushed to the documented
 release branch, currently `main`. The normal PR CI should be green before the
 release tag is created; the Release workflow reruns the repository checks on
-Linux and macOS before publication.
+Linux and macOS before publication and rejects a tag whose commit is not in
+`main` history.
 
 Choose the version explicitly. For a normal patch release, the helper can derive
 the next stable patch from existing tags:
