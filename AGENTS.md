@@ -16,10 +16,6 @@ user experience consistent across supported platforms.
 - `common/mise.toml` pins mise-managed developer tools.
 - `docs/RELEASING.md` is the release procedure.
 
-The public installer currently lives in this GitHub repository. The
-`selfishell.dev` domain is aspirational; do not add it to executable code until
-it has a real distribution endpoint.
-
 ## Product Contract
 
 The canonical command is `selfishell`; `sfs` is an optional convenience
