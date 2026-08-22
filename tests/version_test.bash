@@ -40,9 +40,8 @@ test_semantic_version_validation() {
 }
 
 test_release_scripts_share_version_validation() {
-  local before output status
+  local output status
   setup_test_home
-  before="$(<"$ROOT_DIR/VERSION")"
 
   output="$(bash "$ROOT_DIR/scripts/next-patch-version.sh" --current 1.2.3)"
   [[ "$output" == 1.2.4 ]] || fail "Stable patch version was not incremented"
@@ -54,34 +53,20 @@ test_release_scripts_share_version_validation() {
   [[ "$status" -ne 0 ]] || fail "Patch version helper accepted a leading zero"
 
   set +e
-  bash "$ROOT_DIR/scripts/release-check.sh" 1.2.3-alpha.01 >/dev/null 2>&1
-  status=$?
-  set -e
-  [[ "$status" -eq 2 ]] || fail "Release check accepted an invalid prerelease"
-
-  # A validly-formatted version that simply doesn't match the source
-  # VERSION file must fail before scripts/check.sh runs, and must never
-  # let build-release.sh rewrite VERSION to the mismatched request.
-  local mismatch_version
-  mismatch_version="$(bash "$ROOT_DIR/scripts/next-patch-version.sh" --current "$before")"
-  set +e
-  output="$(bash "$ROOT_DIR/scripts/release-check.sh" "$mismatch_version" "$TEST_ROOT/mismatch-dist" 2>&1)"
-  status=$?
-  set -e
-  [[ "$status" -ne 0 ]] || fail "Release check accepted a version that does not match VERSION"
-  [[ "$output" == *'VERSION mismatch'* ]] ||
-    fail "Release check did not explain the VERSION mismatch: $output"
-  [[ "$(<"$ROOT_DIR/VERSION")" == "$before" ]] || fail "A mismatched release check changed VERSION"
-  [[ ! -e "$TEST_ROOT/mismatch-dist" ]] || fail "A mismatched release check produced build output"
-
-  set +e
   bash "$ROOT_DIR/scripts/build-release.sh" --version 1.2.3-alpha..1 \
-    --output "$TEST_ROOT/dist" --no-update-source >/dev/null 2>&1
+    --output "$TEST_ROOT/invalid-dist" >/dev/null 2>&1
   status=$?
   set -e
   [[ "$status" -eq 2 ]] || fail "Release builder accepted an invalid prerelease"
-  [[ ! -e "$TEST_ROOT/dist" ]] || fail "Invalid release build created output"
-  [[ "$(<"$ROOT_DIR/VERSION")" == "$before" ]] || fail "Invalid release build changed VERSION"
+  [[ ! -e "$TEST_ROOT/invalid-dist" ]] || fail "Invalid release build created output"
+
+  set +e
+  bash "$ROOT_DIR/scripts/build-release.sh" --output "$TEST_ROOT/missing-version-dist" >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" -eq 2 ]] || fail "Release builder accepted a missing version"
+  [[ ! -e "$TEST_ROOT/missing-version-dist" ]] || fail "Missing-version release build created output"
+
   teardown_test_home
 }
 

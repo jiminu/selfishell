@@ -14,13 +14,11 @@ test_help_is_default_command() {
   [[ "$output" == *'selfishell <command>'* ]] || fail "Help should use the canonical command"
 }
 
-test_version_reads_version_file() {
-  local expected
+test_version_reports_development_from_source_checkout() {
   local output
 
-  expected="$(<"$ROOT_DIR/VERSION")"
   output="$(bash "$ROOT_DIR/bin/selfishell" version)"
-  [[ "$output" == "selfishell $expected" ]] || fail "Unexpected version output: $output"
+  [[ "$output" == 'selfishell development' ]] || fail "Unexpected source-checkout version output: $output"
 }
 
 test_help_and_local_version_skip_full_cli_loading() {
@@ -366,7 +364,7 @@ test_cli_resolves_root_from_every_invocation_form() {
   local expected link_dir
 
   setup_test_home
-  expected="selfishell $(<"$ROOT_DIR/VERSION")"
+  expected='selfishell development'
   link_dir="$TEST_ROOT/links"
   mkdir -p "$link_dir"
   ln -s "$ROOT_DIR/bin/selfishell" "$link_dir/direct"

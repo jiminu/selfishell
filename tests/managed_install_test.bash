@@ -1206,7 +1206,8 @@ test_install_does_not_depend_on_checkout() {
 
   mkdir -p "$release_root"
   cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
-  cp "$ROOT_DIR/VERSION" "$ROOT_DIR/dependencies.conf" "$release_root/"
+  printf '0.0.0-test.1\n' >"$release_root/VERSION"
+  cp "$ROOT_DIR/dependencies.conf" "$release_root/"
 
   bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
   rm -rf "$release_root"
@@ -1443,7 +1444,7 @@ build_release_copy() {
   mkdir -p "$release_root"
   cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" \
     "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
-  cp "$ROOT_DIR/VERSION" "$release_root/VERSION"
+  printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/dependencies.conf"
 }
 

@@ -56,7 +56,7 @@ publish_fixture() {
   local release_dir="$RELEASE_ROOT/download/v$version"
 
   mkdir -p "$artifacts" "$release_dir"
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$artifacts" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$artifacts" >/dev/null
   cp "$artifacts"/* "$release_dir/"
 }
 
