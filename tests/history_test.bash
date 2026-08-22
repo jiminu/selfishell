@@ -17,6 +17,7 @@ test_history_module_uses_persistent_extended_history() {
       [[ "$SAVEHIST" == 10000 ]]
       [[ -o EXTENDED_HISTORY ]]
       [[ -o INC_APPEND_HISTORY_TIME ]]
+      [[ -o HIST_IGNORE_SPACE ]]
       print HISTORY_CONFIG_OK
     ' zsh "$ROOT_DIR/common/history.zsh"
   )"
