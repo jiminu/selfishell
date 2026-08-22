@@ -17,7 +17,7 @@ setup_release_verification_fixture() {
     "$release_root/latest/download" "$raw_root/v$version" "$fake_bin"
 
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" \
-    --output "$artifacts" --no-update-source >/dev/null
+    --output "$artifacts" >/dev/null
   cp "$artifacts"/* "$release_root/download/v$version/"
   cp "$artifacts/VERSION" "$release_root/latest/download/VERSION"
   cp "$ROOT_DIR/install.sh" "$raw_root/v$version/install.sh"
