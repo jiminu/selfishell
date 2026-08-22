@@ -7,23 +7,24 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
 RELEASE_FIXTURE_ROOT=""
+RELEASE_FIXTURE_VERSION=0.2.2
 
 setup_release_fixture() {
   local version
   local next_version=0.2.3
   local prerelease_version=0.3.0-beta.2
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   RELEASE_FIXTURE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release-fixture.XXXXXX")"
   mkdir -p "$RELEASE_FIXTURE_ROOT/artifacts" \
     "$RELEASE_FIXTURE_ROOT/next-artifacts" \
     "$RELEASE_FIXTURE_ROOT/prerelease-artifacts"
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" \
-    --output "$RELEASE_FIXTURE_ROOT/artifacts" --no-update-source >/dev/null
+    --output "$RELEASE_FIXTURE_ROOT/artifacts" >/dev/null
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$next_version" \
-    --output "$RELEASE_FIXTURE_ROOT/next-artifacts" --no-update-source >/dev/null
+    --output "$RELEASE_FIXTURE_ROOT/next-artifacts" >/dev/null
   bash "$ROOT_DIR/scripts/build-release.sh" --version "$prerelease_version" \
-    --output "$RELEASE_FIXTURE_ROOT/prerelease-artifacts" --no-update-source >/dev/null
+    --output "$RELEASE_FIXTURE_ROOT/prerelease-artifacts" >/dev/null
 }
 
 teardown_release_fixture() {
@@ -38,7 +39,7 @@ setup_release_home() {
   local prerelease_version=0.3.0-beta.2
 
   setup_test_home
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   export SELFISHELL_RELEASE_ROOT="file://$TEST_ROOT/releases"
   export SELFISHELL_BOOTSTRAP_OS=Linux
   export SELFISHELL_BOOTSTRAP_ARCH=x86_64
@@ -81,7 +82,7 @@ run_bootstrap() {
 
 test_builds_all_platform_architecture_artifacts() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
 
   for artifact in \
     "selfishell-$version-linux-amd64.tar.gz" \
@@ -97,10 +98,10 @@ test_release_artifacts_are_reproducible() {
   local version artifact
   local second_output="$TEST_ROOT/reproducible-artifacts"
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   mkdir -p "$second_output"
   sleep 1
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" --no-update-source >/dev/null
+  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" >/dev/null
 
   for artifact in "$TEST_ROOT/artifacts"/*.tar.gz; do
     cmp -s "$artifact" "$second_output/$(basename "$artifact")" ||
@@ -112,7 +113,7 @@ test_release_artifacts_are_reproducible() {
 
 test_installs_exact_version_and_cli_links() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
 
   run_bootstrap --version "$version" >/dev/null
 
@@ -129,7 +130,7 @@ test_installs_exact_version_and_cli_links() {
 test_bootstrap_rejects_symlinked_release_directory() {
   local version status
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   mkdir -p "$TEST_ROOT/elsewhere/bin" "$TEST_ROOT/prefix/share/selfishell/releases"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/elsewhere/bin/selfishell"
   chmod +x "$TEST_ROOT/elsewhere/bin/selfishell"
@@ -184,7 +185,7 @@ EOF
 
 test_bootstrap_rejects_invalid_curl_policy() {
   local output status version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
 
   set +e
   output="$(SELFISHELL_CURL_LOW_SPEED_TIME=invalid \
@@ -228,7 +229,7 @@ test_latest_falls_back_to_published_prerelease() {
 
 test_update_falls_back_to_published_prerelease() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   rm "$TEST_ROOT/releases/latest/download/VERSION"
   printf '[{"name":"v0.3.0-beta.2"}]\n' >"$TEST_ROOT/tags-api.json"
@@ -242,7 +243,7 @@ test_update_falls_back_to_published_prerelease() {
 test_status_does_not_use_network() {
   local fake_bin="$TEST_ROOT/fakebin"
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" \
     install --profile minimal --skip-packages --yes >/dev/null
@@ -293,7 +294,7 @@ test_unpublished_tag_is_not_selected() {
 
 test_cli_update_and_offline_rollback() {
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin"
   printf '#!/usr/bin/env bash\n' >"$TEST_ROOT/prefix/share/selfishell/releases/0.0.1/bin/selfishell"
@@ -403,7 +404,7 @@ test_release_atomic_link_recovers_from_stale_temporary_path() {
 
 test_update_rejects_preexisting_incomplete_release_directory() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3/bin"
@@ -428,7 +429,7 @@ test_update_rejects_preexisting_incomplete_release_directory() {
 test_update_rejects_symlinked_release_directory() {
   local version status
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   mkdir -p "$TEST_ROOT/elsewhere/bin"
@@ -460,7 +461,7 @@ test_update_rejects_symlinked_release_directory() {
 test_update_preserves_non_link_previous_path_with_a_warning() {
   local version output
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   printf 'user data\n' >"$TEST_ROOT/prefix/share/selfishell/previous"
 
@@ -486,7 +487,7 @@ test_update_preserves_non_link_previous_path_with_a_warning() {
 test_update_rejects_non_link_current_path() {
   local version status retained_cli
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   retained_cli="$TEST_ROOT/prefix/share/selfishell/releases/$version/bin/selfishell"
   rm -f "$TEST_ROOT/prefix/share/selfishell/current"
@@ -509,7 +510,7 @@ test_update_rejects_non_link_current_path() {
 
 test_update_tolerates_duplicate_identical_checksum_entry() {
   local version archive_name checksum_file line
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   # release_install (used by `update`) resolves its platform from the real
@@ -526,7 +527,7 @@ test_update_tolerates_duplicate_identical_checksum_entry() {
 
 test_update_rejects_conflicting_duplicate_checksum_entry() {
   local version archive_name checksum_file status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   archive_name="selfishell-0.2.3-$([[ "$(uname -s)" == Darwin ]] && printf macos || printf linux)-amd64.tar.gz"
@@ -545,7 +546,7 @@ test_update_rejects_conflicting_duplicate_checksum_entry() {
 
 test_rollback_accepts_v_prefixed_version() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -555,7 +556,7 @@ test_rollback_accepts_v_prefixed_version() {
 
 test_rollback_to_currently_active_version_is_noop() {
   local version output
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" rollback "$version" --yes)"
@@ -566,7 +567,7 @@ test_rollback_to_currently_active_version_is_noop() {
 
 test_rollback_rejects_invalid_semver() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   for bad_version in 'not-a-version' '1.2'; do
@@ -586,7 +587,7 @@ test_rollback_rejects_invalid_semver() {
 
 test_rollback_rejects_path_traversal_version() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   for malicious in '../current' '../../tmp' '/absolute/path'; do
@@ -605,7 +606,7 @@ test_rollback_rejects_path_traversal_version() {
 
 test_rollback_rejects_release_directory_with_mismatched_version_file() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -624,7 +625,7 @@ test_rollback_rejects_release_directory_with_mismatched_version_file() {
 
 test_rollback_rejects_traversal_shaped_previous_link() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -643,7 +644,7 @@ test_rollback_rejects_traversal_shaped_previous_link() {
 
 test_rollback_rejects_previous_link_outside_releases() {
   local version status
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -662,7 +663,7 @@ test_rollback_rejects_previous_link_outside_releases() {
 
 test_cli_update_to_current_version_preserves_rollback() {
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -679,7 +680,7 @@ test_cli_update_to_current_version_preserves_rollback() {
 
 test_default_update_reports_up_to_date_without_synchronizing() {
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
 
@@ -699,7 +700,7 @@ test_default_update_reports_up_to_date_without_synchronizing() {
 
 test_update_version_matching_current_is_a_noop() {
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version "$version" --yes)"
@@ -712,7 +713,7 @@ test_update_version_matching_current_is_a_noop() {
 
 test_default_update_skip_packages_is_a_noop_when_current() {
   local output version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --skip-packages --version "$version" --yes)"
@@ -728,7 +729,7 @@ test_update_release_move_failure_does_not_corrupt_symlinks() {
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   mkdir -p "$fake_bin"
@@ -767,7 +768,7 @@ test_update_activation_link_failure_does_not_report_success() {
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   mkdir -p "$fake_bin"
@@ -804,7 +805,7 @@ test_default_update_skips_missing_configuration_and_updates_cli() {
   local cli_line skip_line
   local version
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.3 --yes)"
@@ -821,7 +822,7 @@ test_update_dry_run_preserves_active_release() {
   local output
   local version
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.3 --dry-run)"
@@ -838,7 +839,7 @@ test_checksum_mismatch_preserves_active_release() {
   local active_before
   local status
 
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   archive="$TEST_ROOT/releases/download/v$version/selfishell-$version-linux-amd64.tar.gz"
   run_bootstrap --version "$version" >/dev/null
   active_before="$(readlink "$TEST_ROOT/prefix/share/selfishell/current")"
@@ -878,7 +879,7 @@ test_bootstrap_installs_cli_only_by_default() {
 
 test_bootstrap_upgrade_retains_rollback_and_prunes_inactive_release() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   mkdir -p "$TEST_ROOT/prefix/share/selfishell/releases/0.0.1"
 
@@ -895,7 +896,7 @@ test_bootstrap_upgrade_retains_rollback_and_prunes_inactive_release() {
 
 test_bootstrap_same_version_preserves_rollback_release() {
   local version
-  version="$(<"$ROOT_DIR/VERSION")"
+  version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   run_bootstrap --version 0.2.3 >/dev/null
   rm "$TEST_ROOT/prefix/bin/sfs"
