@@ -27,11 +27,14 @@ command_version() {
       ;;
   esac
 
-  if [[ ! -r "$version_file" ]]; then
+  if [[ -r "$version_file" ]]; then
+    version="$(<"$version_file")"
+  elif [[ -e "$SELFISHELL_ROOT/.git" ]]; then
+    version=development
+  else
     cli_error "Version file not found: $version_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  version="$(<"$version_file")"
   printf 'selfishell %s\n' "$version"
 }
