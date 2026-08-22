@@ -143,6 +143,12 @@ explicit version and generates `VERSION` only inside the release payload and
 published asset set. A source checkout therefore reports `selfishell
 development`, while an installed release reads its generated `VERSION` file.
 
+Treat release readiness, audit, or preparation requests as non-publishing.
+Only an explicit request to release, publish, or tag authorizes creating and
+pushing a release tag. Before publishing, read `docs/RELEASING.md` and
+`.github/workflows/release.yml` for the current procedure and automation
+contract.
+
 Publish from the documented release branch, currently `main`, only after its
 changes are already pushed and verified. Create an annotated `v<version>` tag
 on the intended commit and push that tag; the Release workflow validates the

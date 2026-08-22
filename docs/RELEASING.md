@@ -41,6 +41,10 @@ release tag is created; the Release workflow reruns the repository checks on
 Linux and macOS before publication and rejects a tag whose commit is not in
 `main` history.
 
+Before tagging, require a clean worktree, confirm `HEAD` is the intended pushed
+`origin/main` commit, and verify that `v<version>` does not already exist locally
+or remotely. Existing release tags are immutable; never move or recreate them.
+
 Choose the version explicitly. For a normal patch release, the helper can derive
 the next stable patch from existing tags:
 
