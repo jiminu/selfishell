@@ -4,6 +4,7 @@ selfishell_managed_resources() {
   cat <<EOF
 file	zshrc-config	$SELFISHELL_CONFIG_DIR/zsh/zshrc	$SELFISHELL_ROOT/mac/.zshrc
 file	zsh-runtime	$SELFISHELL_CONFIG_DIR/zsh/runtime.zsh	$SELFISHELL_ROOT/common/runtime.zsh
+file	zsh-history	$SELFISHELL_CONFIG_DIR/zsh/history.zsh	$SELFISHELL_ROOT/common/history.zsh
 file	mise-config-file	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml	$SELFISHELL_ROOT/common/mise.toml
 link	mise-config-link	${XDG_CONFIG_HOME:-$HOME/.config}/mise/conf.d/selfishell.toml	$SELFISHELL_CONFIG_DIR/mise/selfishell.toml
 file	zsh-completion	$SELFISHELL_CONFIG_DIR/zsh/completion.zsh	$SELFISHELL_ROOT/common/completion.zsh
