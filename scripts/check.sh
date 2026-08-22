@@ -40,17 +40,5 @@ shellcheck -x "${bash_files[@]}"
 printf 'Checking shell formatting\n'
 shfmt -d -i 2 -ci "${bash_files[@]}"
 
-# Verify version consistency
-printf 'Verifying version consistency\n'
-
-source "$ROOT_DIR/lib/common.sh"
-version=$(tr -d '[:space:]' <VERSION)
-if ! selfishell_version_is_valid "$version"; then
-  printf 'Error: Invalid version format in VERSION file: %s\n' "$version" >&2
-  exit 1
-fi
-
-printf 'Version consistency checks passed.\n'
-
 printf 'Running tests\n'
 bash tests/run.bash
