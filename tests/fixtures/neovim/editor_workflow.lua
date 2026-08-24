@@ -108,8 +108,8 @@ assert(not tree.opts.renderer.icons.padding, "NvimTree folder arrows should use 
 assert(tree.opts.renderer.icons.show.file == false, "NvimTree file icons should remain hidden")
 assert(tree.opts.renderer.icons.show.folder == false, "NvimTree folder icons should remain hidden")
 assert(
-  plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile<CR>",
-  "missing current-file tree mapping"
+  plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile!<CR>",
+  "current-file tree mapping does not update the tree root"
 )
 
 local lualine = assert(

@@ -75,7 +75,7 @@ return {
       },
       {
         "<leader>E",
-        "<cmd>NvimTreeFindFile<CR>",
+        "<cmd>NvimTreeFindFile!<CR>",
         desc = "Reveal current file",
       },
     },
