@@ -63,7 +63,7 @@ test_every_neovim_configuration_file_is_managed() {
     if ! grep -Fqx "$source_file" <<<"$declared_sources"; then
       fail "Neovim configuration file is not a managed resource: $source_file"
     fi
-  done < <(find "$ROOT_DIR/common/nvim" -type f -print | sort)
+  done < <(find "$ROOT_DIR/config/shared/nvim" -type f -print | sort)
 }
 
 test_install_copies_configuration_and_tracks_resources() {
@@ -78,19 +78,19 @@ test_install_copies_configuration_and_tracks_resources() {
   grep -Fqx 'skip_global_compinit=1' "$HOME/.zshenv" || fail "Zshenv block body is missing"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
-  cmp -s "$ROOT_DIR/common/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
-  cmp -s "$ROOT_DIR/common/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
     fail "Runtime Zsh module was not copied"
-  cmp -s "$ROOT_DIR/common/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
+  cmp -s "$ROOT_DIR/config/shared/mise.toml" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
     fail "mise configuration was not copied"
-  cmp -s "$ROOT_DIR/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+  cmp -s "$ROOT_DIR/config/shared/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
     fail "Vim configuration was not copied"
-  cmp -s "$ROOT_DIR/common/completion.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/completion.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh" ||
     fail "Completion Zsh module was not copied"
-  cmp -s "$ROOT_DIR/common/interactive.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/interactive.zsh" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/interactive.zsh" ||
     fail "Interactive Zsh module was not copied"
-  cmp -s "$ROOT_DIR/common/update-notice.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/update-notice.zsh" ||
     fail "Update notice Zsh module was not copied"
   [[ "$(sed -n '1p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == 2 ]] ||
     fail "Zsh loader state version was not recorded"
@@ -127,11 +127,11 @@ test_developer_install_includes_neovim_configuration() {
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
-  cmp -s "$ROOT_DIR/common/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
+  cmp -s "$ROOT_DIR/config/shared/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
     fail "Neovim init.lua was not installed for the developer profile"
-  cmp -s "$ROOT_DIR/common/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
+  cmp -s "$ROOT_DIR/config/shared/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
     fail "Neovim options module was not installed for the developer profile"
-  cmp -s "$ROOT_DIR/common/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
+  cmp -s "$ROOT_DIR/config/shared/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
     fail "Neovim lsp plugin was not installed for the developer profile"
 }
 
@@ -152,7 +152,7 @@ test_macos_install_includes_ghostty_configuration() {
     fail "Ghostty optional override include line is missing"
   grep -Fqx 'font-size = 14' "$XDG_CONFIG_HOME/ghostty/config.ghostty" ||
     fail "Original Ghostty configuration was not preserved"
-  cmp -s "$ROOT_DIR/mac/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" ||
+  cmp -s "$ROOT_DIR/config/macos/ghostty/config.ghostty" "$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" ||
     fail "Ghostty configuration was not copied"
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/ghostty"
 }
@@ -1143,13 +1143,13 @@ test_pending_file_state_recovers_before_backup() {
     printf '2\nfile\npending\n%s\n-\n%s\n%s\n' \
       "$target_file" \
       "$backup_file" \
-      "$(cksum <"$ROOT_DIR/common/common.zsh" | awk '{print $1 ":" $2}')"
+      "$(cksum <"$ROOT_DIR/config/shared/zsh/common.zsh" | awk '{print $1 ":" $2}')"
   } >"$state_dir/zsh-common.state"
 
   run_selfishell install --skip-packages --yes >/dev/null
 
   assert_file_content 'preexisting managed path' "$backup_file"
-  cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$target_file" ||
     fail "Pending managed file installation did not resume"
   [[ "$(sed -n '3p' "$state_dir/zsh-common.state")" == "active" ]] ||
     fail "Pending file state was not completed"
@@ -1170,7 +1170,7 @@ test_active_file_state_with_changed_source_reports_updated() {
 
   stdout="$(run_selfishell install --skip-packages --yes)"
 
-  cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$target_file" ||
     fail "An active file state with a changed source was not resynced"
   grep -Fq "Updated managed file: $target_file" <<<"$stdout" ||
     fail "A resource whose source changed since an active install should be reported as updated"
@@ -1187,13 +1187,13 @@ test_active_file_state_with_missing_target_reports_installed() {
   {
     printf '2\nfile\nactive\n%s\n-\n-\n%s\n' \
       "$target_file" \
-      "$(cksum <"$ROOT_DIR/common/common.zsh" | awk '{print $1 ":" $2}')"
+      "$(cksum <"$ROOT_DIR/config/shared/zsh/common.zsh" | awk '{print $1 ":" $2}')"
   } >"$state_dir/zsh-common.state"
   rm -f "$target_file"
 
   stdout="$(run_selfishell install --skip-packages --yes)"
 
-  cmp -s "$ROOT_DIR/common/common.zsh" "$target_file" ||
+  cmp -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$target_file" ||
     fail "An active file state with a missing target was not recreated"
   grep -Fq "Installed managed file: $target_file" <<<"$stdout" ||
     fail "An active state whose target is missing should be reported as a fresh install"
@@ -1205,7 +1205,7 @@ test_install_does_not_depend_on_checkout() {
   local release_root="$TEST_ROOT/release"
 
   mkdir -p "$release_root"
-  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/config" "$release_root/"
   printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/"
 
@@ -1342,7 +1342,7 @@ EOF
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         print -r -- "${MISE_GLOBAL_CONFIG_FILE-}"
-      ' zsh "$ROOT_DIR/common/runtime.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
   )"
 
   [[ "$output" == "$HOME/personal-mise.toml" ]] ||
@@ -1356,7 +1356,7 @@ EOF
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         [[ -z "${MISE_GLOBAL_CONFIG_FILE+x}" ]]
-      ' zsh "$ROOT_DIR/common/runtime.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
   )" || fail "runtime created MISE_GLOBAL_CONFIG_FILE"
 }
 
@@ -1442,8 +1442,7 @@ build_release_copy() {
   local release_root="$1"
 
   mkdir -p "$release_root"
-  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/common" \
-    "$ROOT_DIR/mac" "$ROOT_DIR/ubuntu" "$release_root/"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/config" "$release_root/"
   printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/dependencies.conf"
 }
@@ -1461,7 +1460,7 @@ test_managed_file_interactive_overwrite_yes() {
   local stdout
   stdout="$(printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages)"
 
-  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" ||
+  cmp -s "$ROOT_DIR/config/shared/vimrc" "$target_file" ||
     fail "Modified managed file was not overwritten with the default"
 
   local conflict_backup
@@ -1491,7 +1490,7 @@ test_managed_file_interactive_skip_preserves_state_and_continues() {
   ((rc == 0)) || fail "Install failed after skipping a modified managed file (exit code $rc)"
   assert_file_content 'user_modified_completion' "$completion_target"
   cmp -s "$saved_state" "$completion_state" || fail "Skipping a conflict must not change its resource state"
-  cmp -s "$ROOT_DIR/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+  cmp -s "$ROOT_DIR/config/shared/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
     fail "Later managed resources were not installed after a skip"
   [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
     fail "Skipping a modified file must not create a conflict backup"
@@ -1717,7 +1716,7 @@ EOF
     fail "A failed overwrite must not report success"
 
   printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
-  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" ||
+  cmp -s "$ROOT_DIR/config/shared/vimrc" "$target_file" ||
     fail "Retrying after removing the forced failure did not recover"
 }
 
@@ -2106,7 +2105,7 @@ test_original_backup_survives_overwrite_and_uninstall_restore() {
 
   [[ "$(sed -n '6p' "$state_file")" == "$original_backup" ]] ||
     fail "Overwriting a conflict must keep the original installation backup"
-  cmp -s "$ROOT_DIR/common/vimrc" "$target_file" || fail "Overwrite did not install the default managed file"
+  cmp -s "$ROOT_DIR/config/shared/vimrc" "$target_file" || fail "Overwrite did not install the default managed file"
 
   local conflict_backup
   conflict_backup="$(find "$XDG_STATE_HOME/selfishell/backups" -name 'vimrc.backup.*' 2>/dev/null | head -1)"
@@ -2127,11 +2126,11 @@ test_update_tools_only_overwrites_modified_managed_file() {
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   printf 'user_modified_vimrc\n' >"$target_file"
-  printf '" a newer default vimrc\n' >>"$release_root/common/vimrc"
+  printf '" a newer default vimrc\n' >>"$release_root/config/shared/vimrc"
 
   printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 bash "$release_root/bin/selfishell" update --tools-only >/dev/null
 
-  cmp -s "$release_root/common/vimrc" "$target_file" ||
+  cmp -s "$release_root/config/shared/vimrc" "$target_file" ||
     fail "update --tools-only did not install the new managed file version"
 
   local conflict_backup
@@ -2140,7 +2139,7 @@ test_update_tools_only_overwrites_modified_managed_file() {
   assert_file_content 'user_modified_vimrc' "$conflict_backup"
 
   local expected_checksum recorded_checksum
-  expected_checksum="$(cksum <"$release_root/common/vimrc" | awk '{print $1 ":" $2}')"
+  expected_checksum="$(cksum <"$release_root/config/shared/vimrc" | awk '{print $1 ":" $2}')"
   recorded_checksum="$(sed -n '7p' "$XDG_STATE_HOME/selfishell/resources/vimrc.state")"
   [[ "$recorded_checksum" == "$expected_checksum" ]] ||
     fail "Resource state checksum was not updated to the new source checksum"
@@ -2160,7 +2159,7 @@ test_update_tools_only_skips_modified_managed_file_and_continues() {
 
   printf 'user_modified_completion\n' >"$completion_target"
   cp "$completion_state" "$saved_state"
-  printf '" a newer default vimrc\n' >>"$release_root/common/vimrc"
+  printf '" a newer default vimrc\n' >>"$release_root/config/shared/vimrc"
 
   local rc=0
   printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 bash "$release_root/bin/selfishell" update --tools-only >/dev/null || rc=$?
@@ -2168,7 +2167,7 @@ test_update_tools_only_skips_modified_managed_file_and_continues() {
   ((rc == 0)) || fail "update --tools-only failed after skipping a modified managed file (exit code $rc)"
   assert_file_content 'user_modified_completion' "$completion_target"
   cmp -s "$saved_state" "$completion_state" || fail "Skipping a conflict must not change its resource state"
-  cmp -s "$release_root/common/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
+  cmp -s "$release_root/config/shared/vimrc" "$XDG_CONFIG_HOME/selfishell/vim/vimrc" ||
     fail "update --tools-only did not continue updating later managed resources after a skip"
 }
 

@@ -141,7 +141,7 @@ install_mise_tools() {
 
   selfishell_mise_trust
 
-  if ! MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" "$mise_command" install "$@"; then
+  if ! MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" "$mise_command" install "$@"; then
     if [[ "$requirement" == "optional" ]]; then
       cli_warn "Could not install $requirement mise tools: $*"
       SELFISHELL_SKIPPED_OPTIONAL_PACKAGES+=("$@")
@@ -323,7 +323,7 @@ selfishell_nvim_command() {
   mise_command="$(selfishell_mise_command)" || mise_command=""
 
   if [[ -n "$mise_command" ]]; then
-    resolved="$(MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" \
+    resolved="$(MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
       "$mise_command" which nvim 2>/dev/null)" || true
     if [[ -n "$resolved" && -x "$resolved" ]]; then
       printf '%s\n' "$resolved"
@@ -351,7 +351,7 @@ selfishell_run_nvim() {
 
   mise_command="$(selfishell_mise_command)" || mise_command=""
   if [[ -n "$mise_command" ]]; then
-    MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/common/mise.toml" \
+    MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
       "$mise_command" exec -- "$nvim_command" "$@"
   else
     "$nvim_command" "$@"

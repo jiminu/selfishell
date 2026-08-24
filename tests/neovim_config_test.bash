@@ -22,7 +22,7 @@ run_neovim_fixture() {
     SELFISHELL_TEST_REVISION="${SELFISHELL_TEST_REVISION:-}" \
     TMPDIR="$TEST_ROOT/tmp" \
     nvim --headless -u NONE -i NONE \
-    --cmd "set runtimepath^=$ROOT_DIR/common/nvim" \
+    --cmd "set runtimepath^=$ROOT_DIR/config/shared/nvim" \
     '+lua dofile(vim.env.SELFISHELL_NVIM_TEST_FIXTURE)' \
     +qa 2>&1
 }
@@ -60,17 +60,17 @@ test_every_neovim_plugin_has_an_approved_revision() {
   local repository revision declared_plugins configured_plugins diff_output
 
   # lazy.nvim bootstraps itself (config/lazy.lua) rather than being declared
-  # via plugin(...) in common/nvim/lua/plugins/*.lua, so it's pinned in
+  # via plugin(...) in config/shared/nvim/lua/plugins/*.lua, so it's pinned in
   # dependencies.conf without a matching Lua declaration -- checked
   # separately below instead of folded into the set comparison.
-  declared_plugins="$(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/common/nvim/lua/plugins/*.lua | sort -u)"
+  declared_plugins="$(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/config/shared/nvim/lua/plugins/*.lua | sort -u)"
   configured_plugins="$(awk '$1 == "nvim-plugin" && $2 != "folke/lazy.nvim" { print $2 }' "$ROOT_DIR/dependencies.conf" | sort -u)"
 
-  [[ -n "$declared_plugins" ]] || fail "No Neovim plugins were discovered in common/nvim/lua/plugins/*.lua"
+  [[ -n "$declared_plugins" ]] || fail "No Neovim plugins were discovered in config/shared/nvim/lua/plugins/*.lua"
 
   diff_output="$(diff <(printf '%s\n' "$declared_plugins") <(printf '%s\n' "$configured_plugins") || true)"
   [[ -z "$diff_output" ]] ||
-    fail "Neovim plugins declared in common/nvim/lua/plugins/*.lua and nvim-plugin entries in dependencies.conf differ:
+    fail "Neovim plugins declared in config/shared/nvim/lua/plugins/*.lua and nvim-plugin entries in dependencies.conf differ:
 $diff_output"
 
   while IFS= read -r repository; do
@@ -199,7 +199,7 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
 test_mason_lsp_servers_are_versioned() {
   local declared_servers server
 
-  declared_servers="$(sed -n '/^  lsp = {/,/^  },/p' "$ROOT_DIR/common/nvim/lua/config/languages.lua" |
+  declared_servers="$(sed -n '/^  lsp = {/,/^  },/p' "$ROOT_DIR/config/shared/nvim/lua/config/languages.lua" |
     grep -oE '"[^"]+"' | tr -d '"')"
   [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
 

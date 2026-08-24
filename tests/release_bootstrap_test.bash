@@ -94,6 +94,23 @@ test_builds_all_platform_architecture_artifacts() {
   [[ -s "$TEST_ROOT/artifacts/SHA256SUMS" ]] || fail "Missing release checksums"
 }
 
+test_release_artifact_uses_config_payload_root() {
+  local archive_entries
+  local version
+
+  version="$RELEASE_FIXTURE_VERSION"
+  archive_entries="$(tar -tzf "$TEST_ROOT/artifacts/selfishell-$version-linux-amd64.tar.gz")"
+
+  grep -Fqx './config/shared/zsh/common.zsh' <<<"$archive_entries" ||
+    fail "Release artifact is missing the shared configuration payload"
+  grep -Fqx './config/macos/zshrc' <<<"$archive_entries" ||
+    fail "Release artifact is missing the macOS configuration payload"
+  grep -Fqx './config/ubuntu/zshrc' <<<"$archive_entries" ||
+    fail "Release artifact is missing the Ubuntu configuration payload"
+  ! grep -Eq '^\./(common|mac|ubuntu)/' <<<"$archive_entries" ||
+    fail "Release artifact still includes a legacy configuration payload root"
+}
+
 test_release_artifacts_are_reproducible() {
   local version artifact
   local second_output="$TEST_ROOT/reproducible-artifacts"

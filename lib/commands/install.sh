@@ -24,8 +24,8 @@ install_managed_configuration() {
   local resource_kind resource_name resource_target resource_source
 
   case "$platform" in
-    macos) zsh_source="$SELFISHELL_ROOT/mac/.zshrc" ;;
-    ubuntu | ubuntu-wsl) zsh_source="$SELFISHELL_ROOT/ubuntu/.zshrc" ;;
+    macos) zsh_source="$SELFISHELL_ROOT/config/macos/zshrc" ;;
+    ubuntu | ubuntu-wsl) zsh_source="$SELFISHELL_ROOT/config/ubuntu/zshrc" ;;
     *)
       cli_error "Managed installation is unavailable on $(platform_label "$platform")."
       return "$SELFISHELL_EXIT_ERROR"

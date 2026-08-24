@@ -17,7 +17,7 @@ interactive Zsh. Selfishell keeps its defaults in
 `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/selfishell.toml` (which is symlinked to `~/.config/mise/conf.d/selfishell.toml` so it is automatically loaded by `mise`); a project's
 `mise.toml` can select different tool versions.
 
-Built-in mise tools use exact reviewed versions pinned in `common/mise.toml`,
+Built-in mise tools use exact reviewed versions pinned in `config/shared/mise.toml`,
 the single source of truth for these versions. Projects remain free to
 override them in a local `mise.toml`. Updating these defaults requires a normal
 Selfishell release and never happens during shell startup.

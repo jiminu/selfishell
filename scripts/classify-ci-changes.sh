@@ -50,7 +50,7 @@ dependencies_changed=false
 while IFS= read -r changed_file; do
   case "$changed_file" in
     AGENTS.md | README.md | docs/*) ;;
-    common/nvim/*)
+    config/shared/nvim/*)
       runtime=true
       ;;
     dependencies.conf)

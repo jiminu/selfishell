@@ -13,7 +13,7 @@ user experience consistent across supported platforms.
 - The immutable `v<version>` Git tag is the release version source of truth.
 - `profiles/*.conf` defines built-in package profiles.
 - `dependencies.conf` pins direct downloads and Git dependencies.
-- `common/mise.toml` pins mise-managed developer tools.
+- `config/shared/mise.toml` pins mise-managed developer tools.
 - `docs/RELEASING.md` is the release procedure.
 
 ## Product Contract
@@ -111,7 +111,7 @@ choice.
 
 The developer profile's mise-managed tool membership is declared in
 `profiles/developer.conf`; exact versions for those tools are pinned in
-`common/mise.toml`, the source of truth for mise-managed tool versions.
+`config/shared/mise.toml`, the source of truth for mise-managed tool versions.
 
 When the tools/configuration phase runs, `--skip-packages` must skip package
 and tool installation and apply managed configuration only. A default update
@@ -188,7 +188,7 @@ it; the gate remains required for the change categories listed above.
 | Path | Responsibility |
 | --- | --- |
 | `bin/`, `lib/` | CLI commands, lifecycle, platform and package adapters |
-| `common/`, `mac/`, `ubuntu/` | Managed shell, editor, and platform configuration |
+| `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
 | `profiles/`, `dependencies.conf` | Declarative profiles and approved dependencies |
 | `tests/` | Isolated unit and lifecycle coverage |
 | `scripts/` | Validation, benchmarks, dependency discovery, release builds |

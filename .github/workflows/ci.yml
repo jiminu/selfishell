@@ -154,7 +154,7 @@ jobs:
                 print $3
                 exit
               }
-            ' common/mise.toml
+            ' config/shared/mise.toml
           }
 
           neovim_version="$(mise_version neovim)"

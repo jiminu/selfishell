@@ -163,10 +163,10 @@ tool_status_detect() {
     mise)
       local mise_tool="$package"
       local mise_command=""
-      # common/mise.toml is the sole source of truth for a mise-managed
+      # config/shared/mise.toml is the sole source of truth for a mise-managed
       # tool's approved version; profiles/*.conf only declares the tool
       # name, so the approved version can't be parsed out of $package.
-      TOOL_STATUS_APPROVED="$(tool_status_mise_toml_version "$SELFISHELL_ROOT/common/mise.toml" "$mise_tool")"
+      TOOL_STATUS_APPROVED="$(tool_status_mise_toml_version "$SELFISHELL_ROOT/config/shared/mise.toml" "$mise_tool")"
       if have_command mise; then
         mise_command="$(command -v mise)"
       elif [[ -x "$HOME/.local/bin/mise" ]]; then

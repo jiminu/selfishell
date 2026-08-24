@@ -71,8 +71,8 @@ mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/mise" \
 : >"$TEST_HOME/.config/mise/config.toml"
 
 case "$(uname -s)" in
-  Darwin) PLATFORM_CONFIG="$ROOT_DIR/mac/.zshrc" ;;
-  *) PLATFORM_CONFIG="$ROOT_DIR/ubuntu/.zshrc" ;;
+  Darwin) PLATFORM_CONFIG="$ROOT_DIR/config/macos/zshrc" ;;
+  *) PLATFORM_CONFIG="$ROOT_DIR/config/ubuntu/zshrc" ;;
 esac
 
 if [[ "$PROFILE_MODE" == base && "$(uname -s)" == Darwin ]]; then
@@ -80,12 +80,12 @@ if [[ "$PROFILE_MODE" == base && "$(uname -s)" == Darwin ]]; then
   chmod +x "$TEST_HOME/.local/bin/brew"
 fi
 
-ln -s "$ROOT_DIR/common/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
-ln -s "$ROOT_DIR/common/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
-ln -s "$ROOT_DIR/common/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
-ln -s "$ROOT_DIR/common/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
-ln -s "$ROOT_DIR/common/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
-ln -s "$ROOT_DIR/common/aliases.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/aliases.zsh" "$TEST_HOME/.config/selfishell/zsh/aliases.zsh"
 ln -s "$PLATFORM_CONFIG" "$TEST_HOME/.zshrc"
 date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 
@@ -213,7 +213,7 @@ run_common_zsh() {
     MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
     PATH="$COMMON_PATH" TERM=xterm-256color \
     /bin/zsh -f -c 'source "$1"' \
-    zsh "$ROOT_DIR/common/common.zsh" >/dev/null 2>&1
+    zsh "$ROOT_DIR/config/shared/zsh/common.zsh" >/dev/null 2>&1
 }
 
 run_interactive_zsh() {
