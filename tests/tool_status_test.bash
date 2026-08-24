@@ -157,7 +157,7 @@ EOF
   chmod +x "$TEST_ROOT/bin/mise"
   export SELFISHELL_CONFIG_DIR
   export SELFISHELL_ROOT="$TEST_ROOT/selfishell-root"
-  mkdir -p "$SELFISHELL_ROOT/config/shared/zsh"
+  mkdir -p "$SELFISHELL_ROOT/config/shared"
   printf '[tools]\nnode = "24.18.0"\n' >"$SELFISHELL_ROOT/config/shared/mise.toml"
 
   tool_status_detect mise node linux amd64

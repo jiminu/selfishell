@@ -38,7 +38,7 @@ EOF
 write_mise_toml_fixtures() {
   local zsh_root="$1"
 
-  mkdir -p "$zsh_root/config/shared/zsh"
+  mkdir -p "$zsh_root/config/shared"
   cat >"$zsh_root/config/shared/mise.toml" <<'EOF'
 [tools]
 node = "24.18.0"
