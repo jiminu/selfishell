@@ -184,14 +184,14 @@ stage_exact_replacement() {
   mv "$staged_file.next" "$staged_file"
 }
 
-# Stages every "mise-tool" bump in $metadata against common/mise.toml's
+# Stages every "mise-tool" bump in $metadata against config/shared/mise.toml's
 # current pin -- the sole source of truth for these versions. A candidate
 # that isn't a strictly newer, validly-formed version is silently skipped
 # -- no downgrade, no no-op edit -- so a repeated run with the same
 # candidate produces no further diff.
 stage_mise_tool_updates() {
   local staged_dir="$1"
-  local mise_toml_target="common/mise.toml"
+  local mise_toml_target="config/shared/mise.toml"
   local type tool candidate current staged_mise_toml
 
   while read -r type tool candidate _; do
@@ -252,7 +252,7 @@ build_manifest() {
         expected_download[key] = 1
       } else if ($1 == "mise-tool") {
         # Not a dependencies.conf record; stage_mise_tool_updates() applies
-        # these to common/mise.toml and its companions instead.
+        # these to config/shared/mise.toml and its companions instead.
       } else {
         print "Unknown dependency metadata record: " $0 > "/dev/stderr"
         invalid = 1
@@ -319,10 +319,10 @@ build_manifest() {
 # failure rather than a silent no-op.
 zsh_plugin_pin_file() {
   case "$1" in
-    zsh-users/zsh-completions) printf 'common/completion.zsh\n' ;;
-    Aloxaf/fzf-tab) printf 'common/interactive.zsh\n' ;;
-    zsh-users/zsh-autosuggestions) printf 'common/interactive.zsh\n' ;;
-    zdharma-continuum/fast-syntax-highlighting) printf 'common/interactive.zsh\n' ;;
+    zsh-users/zsh-completions) printf 'config/shared/zsh/completion.zsh\n' ;;
+    Aloxaf/fzf-tab) printf 'config/shared/zsh/interactive.zsh\n' ;;
+    zsh-users/zsh-autosuggestions) printf 'config/shared/zsh/interactive.zsh\n' ;;
+    zdharma-continuum/fast-syntax-highlighting) printf 'config/shared/zsh/interactive.zsh\n' ;;
     *) return 1 ;;
   esac
 }
@@ -447,7 +447,7 @@ stage_mise_tool_updates "$staged_dir"
 # Nothing above touched a real file; only now, with the manifest and every
 # staged rewrite validated, are they committed together.
 mv "$manifest_output" "$manifest"
-for target_file in common/completion.zsh common/interactive.zsh common/mise.toml; do
+for target_file in config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml; do
   staged_file="$staged_dir/$target_file"
   [[ -f "$staged_file" ]] || continue
   mv "$staged_file" "$zsh_root/$target_file"

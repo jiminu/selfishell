@@ -41,12 +41,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/dependency-updates
         run: |
-          tracked_files=(dependencies.conf common/completion.zsh common/interactive.zsh common/mise.toml)
+          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml)
           git diff --quiet -- "${tracked_files[@]}" && {
             printf 'All approved dependencies are current.\n'
             exit 0
           }
-          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!common/completion.zsh' ':!common/interactive.zsh' ':!common/mise.toml')"
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml')"
           [[ -z "$unexpected" ]] || {
             printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
             exit 1

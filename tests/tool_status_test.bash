@@ -145,7 +145,7 @@ test_maps_package_name_to_executable() {
 }
 
 # profiles/*.conf declares mise packages by bare tool name only (no
-# @version); the approved version must come from common/mise.toml, not be
+# @version); the approved version must come from config/shared/mise.toml, not be
 # parsed out of that bare name.
 test_detects_mise_tool_version() {
   cat >"$TEST_ROOT/bin/mise" <<'EOF'
@@ -157,14 +157,14 @@ EOF
   chmod +x "$TEST_ROOT/bin/mise"
   export SELFISHELL_CONFIG_DIR
   export SELFISHELL_ROOT="$TEST_ROOT/selfishell-root"
-  mkdir -p "$SELFISHELL_ROOT/common"
-  printf '[tools]\nnode = "24.18.0"\n' >"$SELFISHELL_ROOT/common/mise.toml"
+  mkdir -p "$SELFISHELL_ROOT/config/shared/zsh"
+  printf '[tools]\nnode = "24.18.0"\n' >"$SELFISHELL_ROOT/config/shared/mise.toml"
 
   tool_status_detect mise node linux amd64
 
   [[ "$TOOL_STATUS_INSTALLED" == 24.18.0 ]] || fail "mise tool version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == mise ]] || fail "mise tool source was not reported"
-  [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise approved version was not read from common/mise.toml"
+  [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise approved version was not read from config/shared/mise.toml"
 }
 
 run_discovered_tests setup_tool_status_home teardown_tool_status_home

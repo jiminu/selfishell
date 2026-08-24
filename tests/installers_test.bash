@@ -62,7 +62,7 @@ test_installs_declared_mise_tools_with_managed_config() {
 
   [[ "$MISE_ARGUMENTS" == 'install node@24.18.0 python@3.13.14' ]] ||
     fail "mise tools were not installed together"
-  [[ "$MISE_CONFIG" == "$ROOT_DIR/common/mise.toml" ]] ||
+  [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "mise install did not use the Selfishell config"
 }
 
@@ -337,7 +337,7 @@ test_runs_neovim_inside_mise_environment() {
 
   [[ "$MISE_ARGUMENTS" == 'exec -- nvim --headless +qa' ]] ||
     fail "Neovim did not run through mise exec: $MISE_ARGUMENTS"
-  [[ "$MISE_CONFIG" == "$ROOT_DIR/common/mise.toml" ]] ||
+  [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "Neovim mise environment did not use the Selfishell config"
   [[ "${NVIM_CALLS[0]}" == '--headless +qa' ]] ||
     fail "mise exec did not invoke Neovim: ${NVIM_CALLS[*]}"
@@ -499,7 +499,7 @@ test_resolves_neovim_with_managed_mise_outside_path() {
 
   [[ "$output" == "$managed_nvim" ]] ||
     fail "Managed mise outside PATH did not resolve Neovim: $output"
-  [[ "$(<"$config_file")" == "$ROOT_DIR/common/mise.toml" ]] ||
+  [[ "$(<"$config_file")" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "Neovim resolution did not use the Selfishell mise config"
 }
 

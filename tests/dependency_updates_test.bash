@@ -14,15 +14,15 @@ OLD_AUTOSUGGESTIONS=5555555555555555555555555555555555555555
 write_zsh_root_fixtures() {
   local zsh_root="$1"
 
-  mkdir -p "$zsh_root/common"
-  cat >"$zsh_root/common/completion.zsh" <<EOF
+  mkdir -p "$zsh_root/config/shared/zsh"
+  cat >"$zsh_root/config/shared/zsh/completion.zsh" <<EOF
 if [[ -s "\$ZINIT_HOME/zinit.zsh" ]]; then
   source "\$ZINIT_HOME/zinit.zsh"
   zinit ice blockf atpull'zinit creinstall -q .' ver'$OLD_COMPLETIONS'
   zinit light zsh-users/zsh-completions
 fi
 EOF
-  cat >"$zsh_root/common/interactive.zsh" <<EOF
+  cat >"$zsh_root/config/shared/zsh/interactive.zsh" <<EOF
 if ((\$+functions[zinit])); then
   if command -v fzf >/dev/null 2>&1; then
     zinit ice ver'$OLD_FZF_TAB'
@@ -32,14 +32,14 @@ if ((\$+functions[zinit])); then
   zinit light zsh-users/zsh-autosuggestions
 fi
 EOF
-  printf 'unrelated fixture content\n' >"$zsh_root/common/other.zsh"
+  printf 'unrelated fixture content\n' >"$zsh_root/config/shared/zsh/other.zsh"
 }
 
 write_mise_toml_fixtures() {
   local zsh_root="$1"
 
-  mkdir -p "$zsh_root/common"
-  cat >"$zsh_root/common/mise.toml" <<'EOF'
+  mkdir -p "$zsh_root/config/shared/zsh"
+  cat >"$zsh_root/config/shared/mise.toml" <<'EOF'
 [tools]
 node = "24.18.0"
 python = "3.13.14"
@@ -111,7 +111,7 @@ EOF
   assert_manifest_record "$manifest" "Zsh plugin metadata was not applied" \
     zsh-plugin zsh-users/zsh-completions "$NEW_COMPLETIONS" all all \
     https://github.com/zsh-users/zsh-completions.git - - -
-  grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/common/completion.zsh" ||
+  grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/config/shared/zsh/completion.zsh" ||
     fail "Zinit pin in completion.zsh was not updated to the new commit"
 }
 
@@ -143,7 +143,7 @@ test_zsh_plugin_update_rewrites_manifest_and_pin_file() {
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
   write_zsh_root_fixtures "$zsh_root"
-  other_before="$(<"$zsh_root/common/other.zsh")"
+  other_before="$(<"$zsh_root/config/shared/zsh/other.zsh")"
   cat >"$manifest" <<EOF
 zsh-plugin zsh-users/zsh-completions $OLD_COMPLETIONS all all https://github.com/zsh-users/zsh-completions.git - - -
 zsh-plugin Aloxaf/fzf-tab $OLD_FZF_TAB all all https://github.com/Aloxaf/fzf-tab.git - - -
@@ -156,11 +156,11 @@ EOF
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/common/completion.zsh" ||
+  grep -Fq "ver'$NEW_COMPLETIONS'" "$zsh_root/config/shared/zsh/completion.zsh" ||
     fail "completion.zsh pin was not bumped to the new zsh-completions commit"
-  grep -Fq "ver'$NEW_FZF_TAB'" "$zsh_root/common/interactive.zsh" ||
+  grep -Fq "ver'$NEW_FZF_TAB'" "$zsh_root/config/shared/zsh/interactive.zsh" ||
     fail "interactive.zsh pin was not bumped to the new fzf-tab commit"
-  grep -Fq "ver'$OLD_AUTOSUGGESTIONS'" "$zsh_root/common/interactive.zsh" ||
+  grep -Fq "ver'$OLD_AUTOSUGGESTIONS'" "$zsh_root/config/shared/zsh/interactive.zsh" ||
     fail "Unrelated zsh-autosuggestions pin was not preserved"
   assert_manifest_record "$manifest" "Manifest zsh-completions entry was not bumped" \
     zsh-plugin zsh-users/zsh-completions "$NEW_COMPLETIONS" all all \
@@ -172,7 +172,7 @@ EOF
     zsh-plugin zsh-users/zsh-autosuggestions "$OLD_AUTOSUGGESTIONS" all all \
     https://github.com/zsh-users/zsh-autosuggestions.git - - -
 
-  other_after="$(<"$zsh_root/common/other.zsh")"
+  other_after="$(<"$zsh_root/config/shared/zsh/other.zsh")"
   [[ "$other_before" == "$other_after" ]] || fail "An unrelated Zsh file was modified"
 }
 
@@ -189,7 +189,7 @@ zsh-plugin zsh-users/zsh-completions 9999999999999999999999999999999999999999 al
 EOF
   printf 'zsh-plugin zsh-users/zsh-completions %s\n' "$NEW_COMPLETIONS" >"$metadata"
   manifest_before="$(<"$manifest")"
-  completion_before="$(<"$zsh_root/common/completion.zsh")"
+  completion_before="$(<"$zsh_root/config/shared/zsh/completion.zsh")"
 
   set +e
   run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
@@ -198,7 +198,7 @@ EOF
 
   [[ "$status" -ne 0 ]] || fail "A missing target pin should fail the update"
   [[ "$(<"$manifest")" == "$manifest_before" ]] || fail "Manifest changed despite a missing target pin"
-  [[ "$(<"$zsh_root/common/completion.zsh")" == "$completion_before" ]] || fail "Pin file changed despite a missing target pin"
+  [[ "$(<"$zsh_root/config/shared/zsh/completion.zsh")" == "$completion_before" ]] || fail "Pin file changed despite a missing target pin"
 }
 
 test_zsh_plugin_update_fails_when_manifest_entry_missing() {
@@ -210,7 +210,7 @@ test_zsh_plugin_update_fails_when_manifest_entry_missing() {
   write_zsh_root_fixtures "$zsh_root"
   : >"$manifest"
   printf 'zsh-plugin zsh-users/zsh-completions %s\n' "$NEW_COMPLETIONS" >"$metadata"
-  completion_before="$(<"$zsh_root/common/completion.zsh")"
+  completion_before="$(<"$zsh_root/config/shared/zsh/completion.zsh")"
 
   set +e
   run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
@@ -219,7 +219,7 @@ test_zsh_plugin_update_fails_when_manifest_entry_missing() {
 
   [[ "$status" -ne 0 ]] || fail "A zsh-plugin bump without a manifest entry should fail"
   [[ ! -s "$manifest" ]] || fail "Manifest should remain untouched when its entry is missing"
-  [[ "$(<"$zsh_root/common/completion.zsh")" == "$completion_before" ]] || fail "Pin file changed despite a missing manifest entry"
+  [[ "$(<"$zsh_root/config/shared/zsh/completion.zsh")" == "$completion_before" ]] || fail "Pin file changed despite a missing manifest entry"
 }
 
 test_zsh_plugin_update_rejects_invalid_commit_format() {
@@ -250,8 +250,8 @@ test_zsh_plugin_update_rejects_duplicate_pin_matches() {
   manifest="$TEST_ROOT/dependencies.conf"
   metadata="$TEST_ROOT/metadata"
   zsh_root="$TEST_ROOT/zsh-root"
-  mkdir -p "$zsh_root/common"
-  cat >"$zsh_root/common/completion.zsh" <<EOF
+  mkdir -p "$zsh_root/config/shared/zsh"
+  cat >"$zsh_root/config/shared/zsh/completion.zsh" <<EOF
 zinit ice blockf ver'$OLD_COMPLETIONS'
 zinit light zsh-users/zsh-completions
 # Accidentally duplicated pin comment: ver'$OLD_COMPLETIONS'
@@ -287,7 +287,7 @@ zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS
 zsh-plugin Aloxaf/fzf-tab $NEW_FZF_TAB
 EOF
   manifest_before="$(<"$manifest")"
-  completion_before="$(<"$zsh_root/common/completion.zsh")"
+  completion_before="$(<"$zsh_root/config/shared/zsh/completion.zsh")"
 
   set +e
   run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
@@ -296,11 +296,11 @@ EOF
 
   [[ "$status" -ne 0 ]] || fail "A partially-invalid batch of pin bumps should fail entirely"
   [[ "$(<"$manifest")" == "$manifest_before" ]] || fail "Manifest was updated despite a failure elsewhere in the batch"
-  [[ "$(<"$zsh_root/common/completion.zsh")" == "$completion_before" ]] ||
+  [[ "$(<"$zsh_root/config/shared/zsh/completion.zsh")" == "$completion_before" ]] ||
     fail "An individually-valid pin was committed even though the batch failed"
 }
 
-# A newer stable candidate must land in common/mise.toml -- the sole source
+# A newer stable candidate must land in config/shared/mise.toml -- the sole source
 # of truth for these versions -- while every other mise-managed pin
 # (including node/python, which this updater never queries) stays
 # byte-for-byte unchanged.
@@ -316,13 +316,13 @@ test_mise_tool_update_bumps_pin_in_mise_toml_only() {
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  grep -Fqx 'neovim = "0.12.5"' "$zsh_root/common/mise.toml" ||
-    fail "common/mise.toml neovim pin was not bumped"
-  grep -Fqx 'tree-sitter = "0.26.11"' "$zsh_root/common/mise.toml" ||
+  grep -Fqx 'neovim = "0.12.5"' "$zsh_root/config/shared/mise.toml" ||
+    fail "config/shared/mise.toml neovim pin was not bumped"
+  grep -Fqx 'tree-sitter = "0.26.11"' "$zsh_root/config/shared/mise.toml" ||
     fail "An untouched mise tool pin was modified"
-  grep -Fqx 'node = "24.18.0"' "$zsh_root/common/mise.toml" ||
+  grep -Fqx 'node = "24.18.0"' "$zsh_root/config/shared/mise.toml" ||
     fail "node was modified; this updater must never touch it"
-  grep -Fqx 'python = "3.13.14"' "$zsh_root/common/mise.toml" ||
+  grep -Fqx 'python = "3.13.14"' "$zsh_root/config/shared/mise.toml" ||
     fail "python was modified; this updater must never touch it"
 }
 
@@ -341,7 +341,7 @@ test_mise_tool_update_compares_versions_numerically() {
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  grep -Fqx 'uv = "0.12.3"' "$zsh_root/common/mise.toml" ||
+  grep -Fqx 'uv = "0.12.3"' "$zsh_root/config/shared/mise.toml" ||
     fail "A numerically newer candidate with a smaller leading digit was not applied"
 }
 
@@ -354,11 +354,11 @@ test_mise_tool_update_skips_same_or_older_candidate() {
   write_mise_toml_fixtures "$zsh_root"
   : >"$manifest"
   printf 'mise-tool neovim 0.12.4\nmise-tool uv 0.5.20\n' >"$metadata"
-  mise_toml_before="$(<"$zsh_root/common/mise.toml")"
+  mise_toml_before="$(<"$zsh_root/config/shared/mise.toml")"
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  [[ "$(<"$zsh_root/common/mise.toml")" == "$mise_toml_before" ]] ||
+  [[ "$(<"$zsh_root/config/shared/mise.toml")" == "$mise_toml_before" ]] ||
     fail "mise.toml changed for a same-or-older candidate"
 }
 
@@ -371,7 +371,7 @@ test_mise_tool_update_rejects_non_stable_candidate_format() {
   write_mise_toml_fixtures "$zsh_root"
   : >"$manifest"
   printf 'mise-tool neovim nightly\n' >"$metadata"
-  mise_toml_before="$(<"$zsh_root/common/mise.toml")"
+  mise_toml_before="$(<"$zsh_root/config/shared/mise.toml")"
 
   set +e
   run_dependency_update "$manifest" "$metadata" "$zsh_root" >/dev/null 2>&1
@@ -379,7 +379,7 @@ test_mise_tool_update_rejects_non_stable_candidate_format() {
   set -e
 
   [[ "$status" -ne 0 ]] || fail "A non-semver mise-tool candidate should fail the update"
-  [[ "$(<"$zsh_root/common/mise.toml")" == "$mise_toml_before" ]] ||
+  [[ "$(<"$zsh_root/config/shared/mise.toml")" == "$mise_toml_before" ]] ||
     fail "mise.toml changed despite a malformed candidate version"
 }
 
@@ -394,11 +394,11 @@ test_mise_tool_update_is_idempotent_on_rerun() {
   printf 'mise-tool neovim 0.12.5\n' >"$metadata"
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
-  mise_toml_after_first="$(<"$zsh_root/common/mise.toml")"
+  mise_toml_after_first="$(<"$zsh_root/config/shared/mise.toml")"
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  [[ "$(<"$zsh_root/common/mise.toml")" == "$mise_toml_after_first" ]] ||
+  [[ "$(<"$zsh_root/config/shared/mise.toml")" == "$mise_toml_after_first" ]] ||
     fail "Re-running the updater with the same candidate produced additional changes"
 }
 

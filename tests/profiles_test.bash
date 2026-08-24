@@ -71,7 +71,7 @@ test_developer_includes_development_tools() {
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
   # profiles/developer.conf declares developer-profile membership, while
-  # common/mise.toml is the sole source of truth for exact versions; the
+  # config/shared/mise.toml is the sole source of truth for exact versions; the
   # tool name appearing in both is intentional (different
   # responsibilities), not duplication to collapse into one file. Expected
   # tools come from mise.toml rather than profiles/developer.conf itself,
@@ -84,7 +84,7 @@ test_developer_includes_development_tools() {
   expected_mise_tools="$(awk '
     /^\[/ { in_tools = ($0 == "[tools]"); next }
     in_tools && NF >= 3 { print $1 }
-  ' "$ROOT_DIR/common/mise.toml" | sort)"
+  ' "$ROOT_DIR/config/shared/mise.toml" | sort)"
   actual_mise_tools="$(printf '%s\n' "$output" |
     sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
 
@@ -93,7 +93,7 @@ test_developer_includes_development_tools() {
     fail "Developer profile is missing development tools"
   [[ -n "$actual_mise_tools" ]] || fail "Developer profile did not report required mise tools"
   [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
-    fail "Developer profile mise tools do not match common/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
+    fail "Developer profile mise tools do not match config/shared/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
 

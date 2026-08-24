@@ -55,9 +55,7 @@ cp -R \
   "$ROOT_DIR/bin" \
   "$ROOT_DIR/lib" \
   "$ROOT_DIR/profiles" \
-  "$ROOT_DIR/common" \
-  "$ROOT_DIR/mac" \
-  "$ROOT_DIR/ubuntu" \
+  "$ROOT_DIR/config" \
   "$payload_dir/"
 cp "$ROOT_DIR/dependencies.conf" "$payload_dir/"
 printf '%s\n' "$version" >"$payload_dir/VERSION"

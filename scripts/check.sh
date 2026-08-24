@@ -23,8 +23,8 @@ while IFS= read -r file; do
   zsh_files+=("$file")
 done < <(
   {
-    printf '%s\n' mac/.zshrc ubuntu/.zshrc
-    find common -type f -name '*.zsh'
+    printf '%s\n' config/macos/zshrc config/ubuntu/zshrc
+    find config -type f -name '*.zsh'
   } | sort -u
 )
 

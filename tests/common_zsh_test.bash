@@ -17,7 +17,7 @@ test_minimal_profile_initializes_git_completion_without_zinit() {
         source "$1"
         (( $+functions[_git] ))
         [[ -s "$HOME/.zcompdump" ]]
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
   )"
 
   [[ -z "$output" ]] || fail "Missing zinit should not emit stderr noise"
@@ -50,7 +50,7 @@ EOF
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
         source "$1"
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
   )"
 
   [[ -z "$output" ]] || fail "Missing plugins emitted startup noise: $output"
@@ -98,7 +98,7 @@ EOF
       PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
         source "$1"
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
   )"
 
   [[ -z "$output" ]] || fail "Provisioned plugins emitted startup noise: $output"
@@ -140,7 +140,7 @@ EOF
       PATH="/usr/bin:/bin" \
       /bin/zsh -f -c '
         source "$1"
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
   )"
 
   [[ -z "$output" ]] || fail "Incomplete plugin checkouts emitted startup noise: $output"
@@ -168,7 +168,7 @@ test_completion_audits_the_dump_once_a_day() {
         zmodload zsh/zprof
         source "$1"
         zprof
-      ' zsh "$ROOT_DIR/common/common.zsh" 2>/dev/null | grep -c compaudit || true
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>/dev/null | grep -c compaudit || true
   }
 
   count_startup_audits >/dev/null
@@ -218,7 +218,7 @@ run_completion_startup_probe() {
       [[ -z "$SELFISHELL_TEST_COMPLETION_DIR" ]] || fpath=("$SELFISHELL_TEST_COMPLETION_DIR" $fpath)
       source "$1"
       print STARTUP_COMPLETE
-    ' zsh "$ROOT_DIR/common/common.zsh" 2>&1
+    ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
 }
 
 test_secure_completion_directory_does_not_add_warning() {
@@ -271,7 +271,7 @@ test_macos_managed_zsh_adds_default_cli_prefix_to_path() {
       source "$1"
       [[ "$path[1]" == "$HOME/.local/bin" ]]
       [[ "$path[2]" == "$HOME/.rd/bin" ]]
-    ' zsh "$ROOT_DIR/mac/.zshrc"
+    ' zsh "$ROOT_DIR/config/macos/zshrc"
 
   teardown_test_home
 }
@@ -296,7 +296,7 @@ test_wsl_defers_windows_path_during_initialization() {
         source "$1"
         [[ "$SELFISHELL_TEST_INITIALIZED" == 1 ]]
         print -r -- "${(j.:.)path}"
-      ' zsh "$ROOT_DIR/ubuntu/.zshrc"
+      ' zsh "$ROOT_DIR/config/ubuntu/zshrc"
   )"
 
   [[ "$output" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/bin:/mnt/c/Windows" ]] ||
@@ -337,7 +337,7 @@ test_non_wsl_command_lookup_uses_native_path_semantics() {
         else
           print -r -- "missing=absent"
         fi
-      ' zsh "$ROOT_DIR/common/common.zsh" "$work_dir" "$path_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" "$work_dir" "$path_dir"
   )"
 
   [[ "$output" == "current=cwd-probe
@@ -372,7 +372,7 @@ EOF
       source "$1"
       [[ "$SELFISHELL_TEST_MISE_ACTIVATED" == 1 ]]
       print -r -- "$MISE_GLOBAL_CONFIG_FILE"
-    ' zsh "$ROOT_DIR/common/runtime.zsh"
+    ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
   )"
 
   printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
@@ -385,7 +385,7 @@ EOF
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         print -r -- "$MISE_GLOBAL_CONFIG_FILE"
-      ' zsh "$ROOT_DIR/common/runtime.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
   )"
 
   [[ -z "$developer_config" ]] ||
@@ -411,7 +411,7 @@ test_update_notice_reads_installed_version_file() {
       /bin/zsh -f -c '
         source "$1"
         _selfishell_current_version
-      ' zsh "$ROOT_DIR/common/common.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh"
   )"
 
   [[ "$output" == 1.2.3 ]] || fail "Update notice did not read the installed VERSION file"
@@ -470,7 +470,7 @@ test_update_notice_uses_cache_and_refreshes_in_background_format() {
           command sleep 0.05
         done
         [[ "$(<"$2/available-version")" == 1.1.0 ]]
-      ' zsh "$ROOT_DIR/common/common.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" "$cache_dir"
   )"
 
   [[ "$output" == '[Selfishell] 1.1.0 is available. Run: selfishell update' ]] ||
@@ -510,7 +510,7 @@ test_update_notice_stale_lock_is_reclaimed_after_ttl() {
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
         cat "$2/available-version" 2>/dev/null
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -542,7 +542,7 @@ test_update_notice_fresh_lock_blocks_concurrent_refresh() {
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
         [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_LEFT'* ]] ||
@@ -573,7 +573,7 @@ test_update_notice_stale_empty_lock_directory_is_reclaimed() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -598,7 +598,7 @@ test_update_notice_fresh_empty_lock_directory_is_preserved() {
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
         [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_LEFT'* ]] ||
@@ -626,7 +626,7 @@ test_update_notice_stale_lock_with_only_pid_is_reclaimed() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -655,7 +655,7 @@ test_update_notice_corrupt_created_at_falls_back_to_directory_mtime() {
           source "$1"
           _selfishell_update_notice_refresh "$2" 12345
           [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
     )"
 
     if [[ "$label" == stale ]]; then
@@ -693,7 +693,7 @@ test_update_notice_unreadable_created_at_falls_back_to_directory_mtime() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   chmod 644 "$cache_dir/update-check.lock/created_at" 2>/dev/null || true
@@ -720,7 +720,7 @@ test_update_notice_future_created_at_is_preserved() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_LEFT'* ]] ||
@@ -749,7 +749,7 @@ test_update_notice_lock_ttl_rejects_invalid_values() {
           source "$1"
           _selfishell_update_notice_refresh "$2" 12345
           [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
     )"
 
     [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -776,7 +776,7 @@ test_update_notice_lock_ttl_zero_does_not_mean_instantly_stale() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_LEFT'* ]] ||
@@ -801,7 +801,7 @@ test_update_notice_lock_ttl_honors_valid_custom_value() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -822,7 +822,7 @@ test_update_notice_refresh_removes_lock_even_when_version_lookup_fails() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'LOCK_CLEARED'* ]] ||
@@ -842,7 +842,7 @@ test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined() {
       else
         print "PRESERVED"
       fi
-    ' zsh "$ROOT_DIR/common/update-notice.zsh" "$TEST_ROOT/no-such-lock-dir"
+    ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$TEST_ROOT/no-such-lock-dir"
   )"
 
   [[ "$output" == 'PRESERVED' ]] ||
@@ -871,7 +871,7 @@ test_update_notice_created_at_zero_falls_back_to_directory_mtime() {
           source "$1"
           _selfishell_update_notice_refresh "$2" 12345
           [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
     )"
 
     if [[ "$label" == stale ]]; then
@@ -900,7 +900,7 @@ test_update_notice_refresh_cleans_up_temp_files_on_write_failure() {
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir" 2>/dev/null
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" 2>/dev/null
   )"
   chmod 755 "$cache_dir"
 
@@ -930,7 +930,7 @@ EOF
         source "$1"
         _selfishell_update_notice_refresh "$2" 12345
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
   )"
 
   [[ "$output" == 0 ]] ||
@@ -946,14 +946,14 @@ test_shell_tool_cache_generation_succeeds_atomically() {
   mkdir -p "$cache_dir"
 
   output="$(
-    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'print ok'* ]] || fail "A successful cache generation did not write the expected content: $output"
@@ -970,7 +970,7 @@ test_shell_tool_cache_generation_failures_preserve_existing_cache() {
 
   for label in nonzero-exit empty-output invalid-syntax; do
     output="$(
-      ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+      ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
         /bin/zsh -f -c '
           _selfishell_command_path() { command -v "$1"; }
           source "$1"
@@ -985,7 +985,7 @@ test_shell_tool_cache_generation_failures_preserve_existing_cache() {
           _selfishell_generate_zsh_cache "$2/cache.zsh" fake_tool
           cat "$2/cache.zsh"
           command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-        ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" "$label"
+        ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir" "$label"
     )"
 
     [[ "$output" == *'# preexisting cache'* ]] ||
@@ -1014,10 +1014,10 @@ EOF
   touch "$fake_bin/zoxide"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
       /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
-      zsh "$ROOT_DIR/common/interactive.zsh" 2>/dev/null
+      zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" 2>/dev/null
     cat "$cache_dir/zoxide-init.zsh"
   )"
 
@@ -1042,10 +1042,10 @@ EOF
   printf '# already current\n' >"$cache_dir/zoxide-init.zsh"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
       /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
-      zsh "$ROOT_DIR/common/interactive.zsh" 2>/dev/null
+      zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" 2>/dev/null
     cat "$cache_dir/zoxide-init.zsh"
   )"
 
@@ -1066,14 +1066,14 @@ test_shell_tool_cache_write_failure_preserves_existing_cache() {
   chmod 555 "$cache_dir"
 
   output="$(
-    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" 2>/dev/null | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
   chmod 755 "$cache_dir"
 
@@ -1101,14 +1101,14 @@ EOF
   chmod +x "$fake_bin/mv"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_zsh_cache "$2/cache.zsh" echo "print ok"
         cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'# preexisting cache'* ]] ||
@@ -1132,14 +1132,14 @@ EOF
   chmod +x "$fake_bin/fzf"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         [[ -s "$2/cache.zsh" ]] && cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'fzf-history-widget'* ]] ||
@@ -1164,14 +1164,14 @@ EOF
   chmod +x "$fake_bin/fzf"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'# preexisting fzf cache'* ]] ||
@@ -1201,14 +1201,14 @@ EOF
   chmod +x "$fake_bin/mv"
 
   output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" \
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_generate_fzf_cache "$2/cache.zsh"
         cat "$2/cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir"
   )"
 
   [[ "$output" == *'# preexisting fzf cache'* ]] ||
@@ -1240,13 +1240,13 @@ test_fzf_cache_copy_fallback_success_and_failure() {
   ln -sf "$(command -v cp)" "$restricted_bin/cp"
 
   output="$(
-    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$restricted_bin" \
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" PATH="$restricted_bin" \
       /bin/zsh -f -c '
         source "$1"
         _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
         [[ -s "$2/fallback-cache.zsh" ]] && print FALLBACK_WRITTEN
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
 
   [[ "$output" == *'FALLBACK_WRITTEN'* ]] ||
@@ -1263,13 +1263,13 @@ EOF
   printf '# preexisting fallback cache\n' >"$cache_dir/fallback-cache.zsh"
 
   output="$(
-    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$restricted_bin" \
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" PATH="$restricted_bin" \
       /bin/zsh -f -c '
         source "$1"
         _selfishell_generate_fzf_cache "$2/fallback-cache.zsh"
         cat "$2/fallback-cache.zsh"
         command find "$2" -maxdepth 1 -name "*.tmp.*" | command wc -l | command tr -d " "
-      ' zsh "$ROOT_DIR/common/interactive.zsh" "$cache_dir" 2>/dev/null
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$cache_dir" 2>/dev/null
   )"
 
   [[ "$output" == *'# preexisting fallback cache'* ]] ||
@@ -1294,7 +1294,7 @@ EOF
   done
 
   XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" \
-    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/common" PATH="$fake_bin:/usr/bin:/bin" \
+    ZDOTDIR="" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" PATH="$fake_bin:/usr/bin:/bin" \
     /bin/zsh -f -c '
       _selfishell_command_path() { command -v "$1"; }
       source "$1"
@@ -1305,7 +1305,7 @@ EOF
       (( ! ${+aliases[kg]} )) || exit 1
       (( ! ${+aliases[kd]} )) || exit 1
       (( ! ${+aliases[g]} )) || exit 1
-    ' zsh "$ROOT_DIR/common/interactive.zsh" ||
+    ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" ||
     fail "Interactive shell still defines a cloud or Git alias"
 }
 
@@ -1333,7 +1333,7 @@ EOF
       _selfishell_kubectl_completion || exit 1
       [[ "${_comps[kubectl]}" == _kubectl ]] || exit 1
       (( ! ${+_comps[k]} )) || exit 1
-    ' zsh "$ROOT_DIR/common/completion.zsh" ||
+    ' zsh "$ROOT_DIR/config/shared/zsh/completion.zsh" ||
     fail "Kubectl completion did not keep k unmapped"
 }
 
@@ -1356,7 +1356,7 @@ EOF
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         alias vim
-      ' zsh "$ROOT_DIR/common/aliases.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/aliases.zsh"
   )"
 
   [[ "$output" == *'vim=nvim'* ]] || fail "vim was not redirected to Neovim"
@@ -1374,7 +1374,7 @@ test_minimal_profile_keeps_system_vim() {
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         alias vim 2>/dev/null || true
-      ' zsh "$ROOT_DIR/common/aliases.zsh"
+      ' zsh "$ROOT_DIR/config/shared/zsh/aliases.zsh"
   )"
 
   [[ "$output" != *'nvim'* ]] || fail "Vim alias should not be forced without Neovim"
@@ -1391,10 +1391,10 @@ test_zsh_plugin_pins_match_dependencies_conf() {
     grep -Fq "ver'$expected_commit'" "$ROOT_DIR/$target_file" ||
       fail "$target_file does not pin $repository to the dependencies.conf commit ($expected_commit)"
   done <<'PLUGINS'
-zsh-users/zsh-completions common/completion.zsh
-Aloxaf/fzf-tab common/interactive.zsh
-zsh-users/zsh-autosuggestions common/interactive.zsh
-zdharma-continuum/fast-syntax-highlighting common/interactive.zsh
+zsh-users/zsh-completions config/shared/zsh/completion.zsh
+Aloxaf/fzf-tab config/shared/zsh/interactive.zsh
+zsh-users/zsh-autosuggestions config/shared/zsh/interactive.zsh
+zdharma-continuum/fast-syntax-highlighting config/shared/zsh/interactive.zsh
 PLUGINS
 }
 

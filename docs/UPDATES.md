@@ -64,7 +64,7 @@ repository `lazy-lock.json` is intentionally unnecessary. lazy.nvim may write a
 runtime lock under the Selfishell state directory, but updates cannot move a
 plugin beyond the commit approved in the release manifest.
 `profiles/developer.conf` declares mise-managed developer tool membership;
-exact default versions are pinned only in `common/mise.toml`, updated through
+exact default versions are pinned only in `config/shared/mise.toml`, updated through
 the same review-and-release boundary. Individual project `mise.toml` files
 remain outside Selfishell's update lifecycle.
 

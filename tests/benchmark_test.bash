@@ -67,7 +67,7 @@ test_benchmark_rejects_missing_retained_zsh_module() {
   setup_test_home
   checkout="$TEST_ROOT/checkout"
   cp -R "$ROOT_DIR" "$checkout"
-  mv "$checkout/common/aliases.zsh" "$TEST_ROOT/aliases.zsh"
+  mv "$checkout/config/shared/zsh/aliases.zsh" "$TEST_ROOT/aliases.zsh"
 
   output="$(SELFISHELL_BENCHMARK_ITERATIONS=1 \
     bash "$checkout/scripts/benchmark.sh" --mode base 2>&1)" || status=$?
