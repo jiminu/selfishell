@@ -44,6 +44,9 @@ SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
 "$PREFIX/bin/selfishell" status >/dev/null
 "$PREFIX/bin/selfishell" doctor >/dev/null
 
+vim --not-a-term -c 'if !&number || !&relativenumber | cquit 1 | endif' -c 'q' </dev/null ||
+  fail "Vim did not load Selfishell vimrc on default startup"
+
 SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
   "$PREFIX/bin/selfishell" update --cli-only --version "$NEXT_VERSION" --yes
 [[ "$("$PREFIX/bin/selfishell" version)" == "selfishell $NEXT_VERSION" ]] || fail "CLI update failed"
