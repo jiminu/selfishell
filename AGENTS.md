@@ -59,9 +59,10 @@ Managed defaults are copied under `~/.config/selfishell`. User-facing
 integration uses either managed links or bounded blocks in user-owned
 configuration files.
 
-`~/.zshrc` and `~/.zprofile` remain user-owned, each holding one bounded
-Selfishell block. `~/.zshrc`'s block sources the managed platform entrypoint;
-personal aliases, exports, PATH entries, and functions belong outside it. On
+`~/.zshrc`, `~/.zprofile`, and `~/.vimrc` remain user-owned, each holding
+one bounded Selfishell block. `~/.zshrc`'s block sources the managed platform
+entrypoint; `~/.vimrc`'s block sources the managed Vim entrypoint; personal
+aliases, exports, PATH entries, and functions belong outside it. On
 Ubuntu/WSL, `~/.zshenv` is also user-owned and contains only Selfishell's
 bounded zshenv block (`skip_global_compinit=1`); macOS `~/.zshenv` is not
 managed.

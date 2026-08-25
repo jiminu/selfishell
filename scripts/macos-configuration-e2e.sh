@@ -71,7 +71,7 @@ publish_fixture "$NEXT_VERSION"
 run_primary_lifecycle() {
   local home="$TEST_ROOT/home-primary"
   local prefix="$home/.local"
-  local backups_before backups_after loader_count starship_backup vimrc_backup
+  local backups_before backups_after loader_count starship_backup
   local zshrc_mode_before zshrc_mode_after
 
   export HOME="$home"
@@ -93,11 +93,10 @@ run_primary_lifecycle() {
   # target) must be moved to a timestamped backup, not silently replaced.
   printf 'format = "user starship config"\n' >"$XDG_CONFIG_HOME/starship.toml"
 
-  # A dangling symlink at another managed link target must also be treated
-  # as user data (the -L check in managed_install_link covers this), not
-  # silently followed or deleted.
-  mkdir -p "$XDG_CONFIG_HOME/vim"
-  ln -s /nonexistent-target "$XDG_CONFIG_HOME/vim/vimrc"
+  # Pre-existing user .vimrc with CRLF style, verifying block insertion and restoration.
+  printf 'set nocompatible\r\nset background=dark' >"$HOME/.vimrc"
+  local vimrc_before
+  vimrc_before="$(cat "$HOME/.vimrc")"
 
   SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
     bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$prefix" \
@@ -107,9 +106,13 @@ run_primary_lifecycle() {
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "install did not leave .zshrc as a regular, user-owned file"
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
   [[ "$loader_count" == 1 ]] || fail "install did not add exactly one loader block (found $loader_count)"
+  [[ -f "$HOME/.vimrc" && ! -L "$HOME/.vimrc" ]] || fail "install did not leave .vimrc as a regular, user-owned file"
+  local vimrc_block_count
+  vimrc_block_count="$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")"
+  [[ "$vimrc_block_count" == 1 ]] || fail "install did not add exactly one vimrc block (found $vimrc_block_count)"
   [[ -d "$XDG_CONFIG_HOME/selfishell" ]] || fail "managed configuration was not created under XDG_CONFIG_HOME"
   [[ -d "$XDG_STATE_HOME/selfishell" ]] || fail "managed state was not created under XDG_STATE_HOME"
-  # The managed *links* (starship.toml, vim/vimrc, mise's conf.d entry) live
+  # The managed *links* (starship.toml, nvim, mise's conf.d entry) live
   # under $HOME itself, pointing into the copied $XDG_CONFIG_HOME/selfishell
   # tree -- never directly at the source checkout that this script runs from.
   while IFS= read -r -d '' link; do
@@ -125,8 +128,6 @@ run_primary_lifecycle() {
   starship_backup="$(find "$XDG_CONFIG_HOME" -maxdepth 1 -name 'starship.toml.backup.*')"
   [[ -n "$starship_backup" ]] || fail "a pre-existing starship.toml was not backed up"
   grep -Fq 'user starship config' "$starship_backup" || fail "the starship.toml backup does not hold the original content"
-  vimrc_backup="$(find "$XDG_CONFIG_HOME/vim" -maxdepth 1 -name 'vimrc.backup.*')"
-  [[ -n "$vimrc_backup" ]] || fail "a pre-existing dangling vimrc symlink was not treated as user data"
 
   zshrc_mode_after="$(stat -f '%Lp' "$HOME/.zshrc")"
   [[ "$zshrc_mode_after" == "$zshrc_mode_before" ]] ||
@@ -139,6 +140,8 @@ run_primary_lifecycle() {
     "$prefix/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
   [[ "$loader_count" == 1 ]] || fail "a second install duplicated the loader block (found $loader_count)"
+  vimrc_block_count="$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")"
+  [[ "$vimrc_block_count" == 1 ]] || fail "a second install duplicated the vimrc block (found $vimrc_block_count)"
   backups_after="$(find "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" -name '*.backup.*' | sort)"
   [[ "$backups_before" == "$backups_after" ]] || fail "a second install created an unnecessary backup"
   assert_managed_resources_clean "$prefix" "after an idempotent reinstall"
@@ -158,21 +161,25 @@ run_primary_lifecycle() {
     "$prefix/bin/selfishell" update --tools-only --skip-packages --yes >/dev/null
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
   [[ "$loader_count" == 1 ]] || fail "update duplicated the loader block (found $loader_count)"
-  # The loader block is prepended, so the user's original content is a
+  vimrc_block_count="$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")"
+  [[ "$vimrc_block_count" == 1 ]] || fail "update duplicated the vimrc block (found $vimrc_block_count)"
+  # The loader/vimrc block is prepended, so the user's original content is a
   # suffix of the file, not a prefix.
   [[ "$(cat "$HOME/.zshrc")" == *"$zshrc_before" ]] ||
     fail "update did not preserve the user's original .zshrc content"
+  [[ "$(cat "$HOME/.vimrc")" == *"$vimrc_before" ]] ||
+    fail "update did not preserve the user's original .vimrc content"
   assert_managed_resources_clean "$prefix" "after a configuration update"
 
   # --- uninstall --restore ---
   "$prefix/bin/selfishell" uninstall --restore --yes >/dev/null
   [[ "$(cat "$HOME/.zshrc")" == "$zshrc_before" ]] ||
     fail "uninstall --restore did not preserve the user's .zshrc byte-for-byte"
+  [[ "$(cat "$HOME/.vimrc")" == "$vimrc_before" ]] ||
+    fail "uninstall --restore did not preserve the user's .vimrc byte-for-byte"
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" ]] || fail "uninstall left managed configuration behind"
   grep -Fq 'user starship config' "$XDG_CONFIG_HOME/starship.toml" ||
     fail "uninstall --restore did not restore the original starship.toml"
-  [[ -L "$XDG_CONFIG_HOME/vim/vimrc" && "$(readlink "$XDG_CONFIG_HOME/vim/vimrc")" == /nonexistent-target ]] ||
-    fail "uninstall --restore did not restore the original dangling vimrc symlink"
 
   printf 'PASS: primary configuration lifecycle (clean install, idempotent reinstall, status, update, uninstall --restore)\n'
 }

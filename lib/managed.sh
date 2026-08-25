@@ -176,6 +176,7 @@ managed_select_block_conflict_action() {
 managed_block_definition() {
   local resource="$1"
 
+  MANAGED_BLOCK_COMMENT='#'
   case "$resource" in
     user-zshrc)
       MANAGED_BLOCK_LABEL='Selfishell initialize'
@@ -207,6 +208,16 @@ fi'
 # To override a Selfishell default above, add it to user.ghostty instead.
 config-file = ?user.ghostty"
       ;;
+    user-vimrc)
+      MANAGED_BLOCK_LABEL='Selfishell vimrc'
+      MANAGED_BLOCK_COMMENT='"'
+      # shellcheck disable=SC2016 # Literal for vim to evaluate at startup, not now.
+      MANAGED_BLOCK_BODY='if !empty($XDG_CONFIG_HOME) && filereadable($XDG_CONFIG_HOME . "/selfishell/vim/vimrc")
+  source $XDG_CONFIG_HOME/selfishell/vim/vimrc
+elseif filereadable(expand("~/.config/selfishell/vim/vimrc"))
+  source ~/.config/selfishell/vim/vimrc
+endif'
+      ;;
     *)
       cli_error "Unknown managed block resource: $resource"
       return "$SELFISHELL_EXIT_ERROR"
@@ -215,18 +226,25 @@ config-file = ?user.ghostty"
 }
 
 managed_block_begin() {
-  printf '# >>> %s >>>\n' "$1"
+  local label="$1"
+  local comment="${2:-${MANAGED_BLOCK_COMMENT:-#}}"
+  printf '%s >>> %s >>>\n' "$comment" "$label"
 }
 
 managed_block_end() {
-  printf '# <<< %s <<<\n' "$1"
+  local label="$1"
+  local comment="${2:-${MANAGED_BLOCK_COMMENT:-#}}"
+  printf '%s <<< %s <<<\n' "$comment" "$label"
 }
 
 managed_block_content() {
   local resource="$1"
 
   managed_block_definition "$resource" || return
-  printf '%s\n%s\n%s\n' "$(managed_block_begin "$MANAGED_BLOCK_LABEL")" "$MANAGED_BLOCK_BODY" "$(managed_block_end "$MANAGED_BLOCK_LABEL")"
+  printf '%s\n%s\n%s\n' \
+    "$(managed_block_begin "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")" \
+    "$MANAGED_BLOCK_BODY" \
+    "$(managed_block_end "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")"
 }
 
 # Sets MANAGED_BLOCK_STATUS to absent/malformed/intact based purely on marker
@@ -252,8 +270,8 @@ managed_inspect_block() {
   managed_block_definition "$resource" || return
 
   [[ -f "$target_file" && ! -L "$target_file" ]] || return 0
-  begin_marker="$(managed_block_begin "$MANAGED_BLOCK_LABEL")"
-  end_marker="$(managed_block_end "$MANAGED_BLOCK_LABEL")"
+  begin_marker="$(managed_block_begin "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")"
+  end_marker="$(managed_block_end "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")"
   metadata="$(LC_ALL=C awk -v begin="$begin_marker" -v end="$end_marker" -v label="$MANAGED_BLOCK_LABEL" '
     BEGIN { offset = 0; begin_count = 0; end_count = 0; related_count = 0; start = 0; finish = 0 }
     {
