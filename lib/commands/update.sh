@@ -54,6 +54,7 @@ update_tools_and_configuration() {
       managed_preflight_block_target user-zshenv "$HOME/.zshenv" "$assume_yes" "$dry_run" || return
       ;;
   esac
+  managed_preflight_block_target user-vimrc "$HOME/.vimrc" "$assume_yes" "$dry_run" || return
 
   if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
     managed_preflight_block_target user-ghostty \

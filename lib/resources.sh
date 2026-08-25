@@ -32,7 +32,7 @@ block	user-zshrc	$HOME/.zshrc	-
 block	user-zprofile	$HOME/.zprofile	-
 block	user-zshenv	$HOME/.zshenv	-
 link	user-starship	${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml	$SELFISHELL_CONFIG_DIR/starship.toml
-link	user-vimrc	${XDG_CONFIG_HOME:-$HOME/.config}/vim/vimrc	$SELFISHELL_CONFIG_DIR/vim/vimrc
+block	user-vimrc	$HOME/.vimrc	-
 link	user-nvim	${XDG_CONFIG_HOME:-$HOME/.config}/nvim	$SELFISHELL_CONFIG_DIR/nvim
 block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty	-
 EOF

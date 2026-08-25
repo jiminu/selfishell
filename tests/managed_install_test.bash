@@ -77,7 +77,10 @@ test_install_copies_configuration_and_tracks_resources() {
   grep -Fqx '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Zshenv block start marker is missing"
   grep -Fqx 'skip_global_compinit=1' "$HOME/.zshenv" || fail "Zshenv block body is missing"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/vim/vimrc" "$XDG_CONFIG_HOME/vim/vimrc"
+  [[ -f "$HOME/.vimrc" && ! -L "$HOME/.vimrc" ]] || fail "Vim startup file is not user-owned"
+  grep -Fqx '" >>> Selfishell vimrc >>>' "$HOME/.vimrc" || fail "Vim block start marker is missing"
+  [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-vimrc.state")" == block ]] ||
+    fail "Vim resource was not recorded as a managed block"
   cmp -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/common.zsh" ||
     fail "Common Zsh configuration was not copied"
   cmp -s "$ROOT_DIR/config/shared/zsh/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
@@ -802,6 +805,53 @@ test_macos_lifecycle_never_touches_existing_zshenv() {
   assert_file_content '. "$HOME/.cargo/env"' "$HOME/.zshenv"
   [[ ! -e "$XDG_STATE_HOME/selfishell/resources/user-zshenv.state" ]] ||
     fail "macOS lifecycle created a user-zshenv managed state for an existing file"
+}
+
+test_vimrc_user_content_survives_lifecycle() {
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-vimrc.state"
+
+  printf 'set background=dark\nset nocompatible\n' >"$HOME/.vimrc"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  [[ -f "$HOME/.vimrc" && ! -L "$HOME/.vimrc" ]] || fail "Vim startup file is not user-owned"
+  grep -Fqx '" >>> Selfishell vimrc >>>' "$HOME/.vimrc" || fail "Vim block start marker is missing"
+  grep -Fqx '" <<< Selfishell vimrc <<<' "$HOME/.vimrc" || fail "Vim block end marker is missing"
+  grep -Fq 'set background=dark' "$HOME/.vimrc" || fail "Original .vimrc content was not preserved"
+  [[ "$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")" -eq 1 ]] ||
+    fail "Vim block marker appears more than once"
+  [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Vim resource was not recorded as a managed block"
+
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  [[ "$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")" -eq 1 ]] ||
+    fail "Reinstall duplicated the Vim block marker"
+
+  run_selfishell update --tools-only --skip-packages --yes >/dev/null
+  [[ "$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")" -eq 1 ]] ||
+    fail "Update duplicated the Vim block marker"
+  grep -Fq 'set background=dark' "$HOME/.vimrc" || fail "Original .vimrc content was lost across reinstall/update"
+
+  run_selfishell uninstall --yes >/dev/null
+  ! grep -Fq '" >>> Selfishell vimrc >>>' "$HOME/.vimrc" || fail "Uninstall did not remove the Vim block"
+  assert_file_content $'set background=dark\nset nocompatible' "$HOME/.vimrc"
+}
+
+test_unrelated_vimrc_symlink_is_rejected_without_changes() {
+  local status
+
+  printf 'dotfiles vimrc\n' >"$TEST_ROOT/dotfiles-vimrc"
+  ln -s "$TEST_ROOT/dotfiles-vimrc" "$HOME/.vimrc"
+
+  set +e
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "Vimrc symlink should stop installation"
+  assert_symlink_to "$TEST_ROOT/dotfiles-vimrc" "$HOME/.vimrc"
+  assert_file_content 'dotfiles vimrc' "$TEST_ROOT/dotfiles-vimrc"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected symlink created configuration"
+  [[ ! -e "$XDG_STATE_HOME/selfishell" ]] || fail "Rejected symlink created state"
 }
 
 test_malformed_managed_file_state_variants_are_rejected_without_changes() {

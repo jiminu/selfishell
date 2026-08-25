@@ -240,6 +240,7 @@ command_install() {
       managed_preflight_block_target user-zshenv "$HOME/.zshenv" "$assume_yes" "$dry_run" || return
       ;;
   esac
+  managed_preflight_block_target user-vimrc "$HOME/.vimrc" "$assume_yes" "$dry_run" || return
   profile_load "$profile"
   if [[ "$profile" == "developer" ]]; then
     preflight_mise_global_config || return
