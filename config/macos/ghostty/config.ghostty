@@ -9,6 +9,10 @@ macos-option-as-alt = left
 keybind = global:cmd+grave_accent=toggle_quick_terminal
 keybind = super+left=previous_tab
 keybind = super+right=next_tab
+keybind = ctrl+shift+k=scroll_page_lines:-5
+keybind = ctrl+shift+j=scroll_page_lines:5
+keybind = ctrl+shift+up=scroll_page_lines:-5
+keybind = ctrl+shift+down=scroll_page_lines:5
 
 split-divider-color = #ff6600
 cursor-style = block
