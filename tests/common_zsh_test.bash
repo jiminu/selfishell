@@ -457,16 +457,16 @@ test_update_notice_defers_current_version_lookup_until_available_version_exists(
         [[ -r "$refresh_calls" ]]
 
         : >"$cache_dir/available-version"
-        SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice
+        SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice
         [[ ! -e "$current_calls" ]]
 
         print -r -- 1.1.0 >"$cache_dir/available-version"
-        notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice)"
+        notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice)"
         [[ "$notice" == "[Selfishell] 1.1.0 is available. Run: selfishell update" ]]
         [[ "$(wc -l <"$current_calls")" -eq 1 ]]
 
         print -r -- 1.0.0 >"$cache_dir/available-version"
-        SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice
+        SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice
         [[ ! -e "$cache_dir/available-version" ]]
         [[ "$(wc -l <"$current_calls")" -eq 2 ]]
       ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" "$current_calls" "$refresh_calls"
