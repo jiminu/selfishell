@@ -418,6 +418,64 @@ test_update_notice_reads_installed_version_file() {
   teardown_test_home
 }
 
+test_update_notice_defers_current_version_lookup_until_available_version_exists() {
+  local cache_dir current_calls fake_bin output refresh_calls
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  cache_dir="$HOME/.cache/selfishell"
+  current_calls="$TEST_ROOT/current-calls"
+  refresh_calls="$TEST_ROOT/refresh-calls"
+  mkdir -p "$fake_bin" "$cache_dir"
+  printf '#!/usr/bin/env sh\nexit 0\n' >"$fake_bin/selfishell"
+  chmod +x "$fake_bin/selfishell"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" \
+      ZDOTDIR="" \
+      PATH="$fake_bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        cache_dir="$2"
+        current_calls="$3"
+        refresh_calls="$4"
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        _selfishell_current_version() {
+          print -r -- called >>"$current_calls"
+          print -r -- 1.0.0
+        }
+        _selfishell_update_notice_refresh() {
+          print -r -- scheduled >>"$refresh_calls"
+        }
+
+        SELFISHELL_UPDATE_CHECK_INTERVAL=0 _selfishell_update_notice
+        for attempt in {1..40}; do
+          [[ -r "$refresh_calls" ]] && break
+          command sleep 0.05
+        done
+        [[ ! -e "$current_calls" ]]
+        [[ -r "$refresh_calls" ]]
+
+        : >"$cache_dir/available-version"
+        SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice
+        [[ ! -e "$current_calls" ]]
+
+        print -r -- 1.1.0 >"$cache_dir/available-version"
+        notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice)"
+        [[ "$notice" == "[Selfishell] 1.1.0 is available. Run: selfishell update" ]]
+        [[ "$(wc -l <"$current_calls")" -eq 1 ]]
+
+        print -r -- 1.0.0 >"$cache_dir/available-version"
+        SELFISHELL_UPDATE_CHECK_INTERVAL=999999999 _selfishell_update_notice
+        [[ ! -e "$cache_dir/available-version" ]]
+        [[ "$(wc -l <"$current_calls")" -eq 2 ]]
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" "$current_calls" "$refresh_calls"
+  )"
+
+  [[ -z "$output" ]] || fail "Update notice lazy version lookup test emitted output: $output"
+  teardown_test_home
+}
+
 test_update_notice_uses_cache_and_refreshes_in_background_format() {
   local fake_bin cache_dir output now
 
