@@ -105,7 +105,7 @@ if (($+functions[zinit])); then
     zinit light zsh-users/zsh-autosuggestions
   fi
   if _selfishell_zinit_plugin_ready zdharma-continuum/fast-syntax-highlighting; then
-    zinit ice wait'0' lucid ver'3d574ccf48804b10dca52625df13da5edae7f553'
+    zinit ice wait'0' lucid ver'4672ad5dd9ad68a7effc1476d65afb7c584ce2b3'
     zinit light zdharma-continuum/fast-syntax-highlighting
   fi
 fi
