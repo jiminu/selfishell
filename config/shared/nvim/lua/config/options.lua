@@ -7,7 +7,6 @@ vim.o.winborder = "rounded"
 opt.number = true
 opt.relativenumber = true
 opt.hlsearch = true
-opt.laststatus = 2
 opt.ruler = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
