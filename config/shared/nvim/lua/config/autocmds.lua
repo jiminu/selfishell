@@ -119,6 +119,18 @@ vim.api.nvim_create_autocmd("VimResized", {
   end,
 })
 
+-- Yank leaves no trace of its own: unlike a visual selection, a motion yank
+-- (`yap`, `yi{`, `y3j`) shows nothing, and 'report' (default 2) means charwise
+-- and short linewise yanks print no message either. Flash the yanked range so
+-- an off-by-one text object is visible immediately instead of at paste time.
+-- on_yank() ignores `d`/`c` and skips itself while a macro is executing.
+vim.api.nvim_create_autocmd("TextYankPost", {
+  group = group,
+  callback = function()
+    vim.hl.on_yank()
+  end,
+})
+
 -- Restore the last cursor position when reopening a regular file.
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = group,

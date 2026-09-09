@@ -196,6 +196,19 @@ test_last_cursor_restore_targets_correct_window_and_skips_invalid_cases() {
     fail "Last-cursor-position restore did not target windows correctly: $output"
 }
 
+test_yank_highlights_only_the_yanked_range() {
+  local output
+
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_yank_highlights_only_the_yanked_range (Neovim unavailable)'
+  fi
+
+  output="$(run_neovim_fixture yank_highlight.lua)"
+
+  [[ "$output" == *'yank highlight: OK'* ]] ||
+    fail "Yanked text was not highlighted as expected: $output"
+}
+
 test_mason_lsp_servers_are_versioned() {
   local declared_servers server
 

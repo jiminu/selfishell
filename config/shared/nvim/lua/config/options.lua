@@ -9,6 +9,9 @@ opt.relativenumber = true
 opt.hlsearch = true
 opt.laststatus = 2
 opt.ruler = false
+-- lualine renders the mode in its first section; leaving showmode on
+-- prints "-- INSERT --" on the command line right below it as well.
+opt.showmode = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
 opt.cursorline = true
@@ -41,6 +44,10 @@ opt.fileencodings = { "utf-8", "euc-kr" }
 
 -- Completion menu behavior
 opt.completeopt = { "menu", "menuone", "noselect" }
+-- nvim-cmp reads this for its own menu and treats 0 as "no limit", which
+-- makes the menu as tall as the number of candidates -- easily most of the
+-- screen for an LSP source.
+opt.pumheight = 10
 
 -- Diagnostic display
 vim.diagnostic.config({
