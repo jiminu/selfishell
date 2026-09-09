@@ -7,7 +7,6 @@ vim.o.winborder = "rounded"
 opt.number = true
 opt.relativenumber = true
 opt.hlsearch = true
-opt.laststatus = 2
 opt.ruler = false
 -- lualine renders the mode in its first section; leaving showmode on
 -- prints "-- INSERT --" on the command line right below it as well.
