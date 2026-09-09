@@ -19,7 +19,6 @@ apt_install_managed_packages() {
   local dry_run="$2"
   shift 2
   local package
-  local installed_packages=()
   local missing_packages=()
   local available_packages=()
   local unavailable_packages=()
@@ -46,16 +45,10 @@ apt_install_managed_packages() {
     # one that was removed but not purged ("rc" status: config files remain,
     # binaries gone) -- which would silently skip reinstalling it. Checking
     # the actual Status field distinguishes that from a real "ii" install.
-    if dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
-      installed_packages+=("$package")
-    else
+    if ! dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
       missing_packages+=("$package")
     fi
   done
-
-  if ((${#installed_packages[@]} > 0)); then
-    printf '%sAlready installed apt packages (%d):%s %s\n' "$SELFISHELL_COLOR_CYAN" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
-  fi
 
   ((${#missing_packages[@]} > 0)) || return 0
 
