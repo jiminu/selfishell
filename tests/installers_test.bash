@@ -33,7 +33,7 @@ mise() {
   elif [[ "$1" == "exec" && "$2" == "--" ]]; then
     shift 2
     "$@"
-  elif [[ "$1" == "install" && "${2:-}" == "--dry-run-code" ]]; then
+  elif [[ "$1" == "-q" && "$2" == "install" && "${3:-}" == "--dry-run-code" ]]; then
     return "${MOCK_MISE_DRY_RUN_CODE_EXIT:-1}"
   fi
 }
@@ -64,10 +64,16 @@ setup_installer_test() {
 test_installs_declared_mise_tools_with_managed_config() {
   # shellcheck disable=SC2034 # Read by install_mise_tools in the sourced module.
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
+  MISE_CALLS=()
+  MOCK_MISE_DRY_RUN_CODE_EXIT=1
   install_mise_tools required 0 node@24.18.0 python@3.13.14
 
-  [[ "$MISE_ARGUMENTS" == 'install node@24.18.0 python@3.13.14' ]] ||
-    fail "mise tools were not installed together"
+  ((${#MISE_CALLS[@]} == 2)) ||
+    fail "Expected preflight check followed by install, got: ${MISE_CALLS[*]}"
+  [[ "${MISE_CALLS[0]}" == '-q install --dry-run-code node@24.18.0 python@3.13.14' ]] ||
+    fail "mise preflight check was not called first: ${MISE_CALLS[0]}"
+  [[ "${MISE_CALLS[1]}" == 'install node@24.18.0 python@3.13.14' ]] ||
+    fail "mise tools were not installed together: ${MISE_CALLS[1]}"
   [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "mise install did not use the Selfishell config"
 }
@@ -81,7 +87,7 @@ test_skips_mise_install_when_tools_are_already_installed() {
 
   ((${#MISE_CALLS[@]} == 1)) ||
     fail "Expected only dry-run check call, got: ${MISE_CALLS[*]}"
-  [[ "${MISE_CALLS[0]}" == 'install --dry-run-code -q node@24.18.0 python@3.13.14' ]] ||
+  [[ "${MISE_CALLS[0]}" == '-q install --dry-run-code node@24.18.0 python@3.13.14' ]] ||
     fail "mise dry-run check was not called as expected: ${MISE_CALLS[0]}"
 }
 

@@ -142,7 +142,7 @@ install_mise_tools() {
   selfishell_mise_trust
 
   if MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
-    "$mise_command" install --dry-run-code -q "$@" >/dev/null 2>&1; then
+    "$mise_command" -q install --dry-run-code "$@" >/dev/null 2>&1; then
     return 0
   fi
 
