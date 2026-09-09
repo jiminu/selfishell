@@ -320,6 +320,7 @@ return {
             icons_enabled = false,
           },
           "location",
+          "progress",
         },
         lualine_y = {},
         lualine_z = {},
