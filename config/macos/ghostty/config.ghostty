@@ -3,6 +3,7 @@ theme = Dark+
 window-padding-x = 8
 window-padding-y = 6
 window-padding-balance = true
+window-save-state = always
 
 macos-option-as-alt = left
 
@@ -16,7 +17,12 @@ keybind = ctrl+shift+down=scroll_page_lines:5
 
 split-divider-color = #ff6600
 cursor-style = block
-shell-integration-features = no-cursor
+# ssh-env/ssh-terminfo install Ghostty's terminfo on remote hosts and fall
+# back to xterm-256color, so TERM=xterm-ghostty does not break Neovim and
+# other full-screen programs over ssh. Both are off by default.
+shell-integration-features = no-cursor,ssh-env,ssh-terminfo
+
+mouse-hide-while-typing = true
 
 font-family = "MesloLGS NF"
 font-family = "Noto Sans CJK KR"
