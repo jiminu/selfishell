@@ -10,12 +10,14 @@ source "$ROOT_DIR/lib/installers.sh"
 
 NVIM_ARGUMENTS=""
 MISE_ARGUMENTS=""
+MISE_CALLS=()
 MISE_CONFIG=""
 GIT_ARGUMENTS=""
 GIT_CALLS=()
 NVIM_CALLS=()
 FAKE_NVIM_PATH=""
 NVIM_PLUGINS_VERIFIED=0
+MOCK_MISE_DRY_RUN_CODE_EXIT=1
 
 nvim() {
   NVIM_ARGUMENTS="$*"
@@ -24,12 +26,15 @@ nvim() {
 
 mise() {
   MISE_ARGUMENTS="$*"
+  MISE_CALLS+=("$*")
   MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
   if [[ "$1" == "which" && "$2" == "nvim" ]]; then
     printf '%s\n' "$FAKE_NVIM_PATH"
   elif [[ "$1" == "exec" && "$2" == "--" ]]; then
     shift 2
     "$@"
+  elif [[ "$1" == "install" && "${2:-}" == "--dry-run-code" ]]; then
+    return "${MOCK_MISE_DRY_RUN_CODE_EXIT:-1}"
   fi
 }
 
@@ -53,6 +58,7 @@ verify_neovim_plugins() {
 setup_installer_test() {
   setup_test_home
   export SELFISHELL_ROOT="$ROOT_DIR"
+  MOCK_MISE_DRY_RUN_CODE_EXIT=1
 }
 
 test_installs_declared_mise_tools_with_managed_config() {
@@ -64,6 +70,19 @@ test_installs_declared_mise_tools_with_managed_config() {
     fail "mise tools were not installed together"
   [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "mise install did not use the Selfishell config"
+}
+
+test_skips_mise_install_when_tools_are_already_installed() {
+  # shellcheck disable=SC2034 # Read by install_mise_tools in the sourced module.
+  SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
+  MISE_CALLS=()
+  MOCK_MISE_DRY_RUN_CODE_EXIT=0
+  install_mise_tools required 0 node@24.18.0 python@3.13.14
+
+  ((${#MISE_CALLS[@]} == 1)) ||
+    fail "Expected only dry-run check call, got: ${MISE_CALLS[*]}"
+  [[ "${MISE_CALLS[0]}" == 'install --dry-run-code -q node@24.18.0 python@3.13.14' ]] ||
+    fail "mise dry-run check was not called as expected: ${MISE_CALLS[0]}"
 }
 
 test_provisions_declared_zinit_plugins_without_loading_them() {

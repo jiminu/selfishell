@@ -49,7 +49,6 @@ homebrew_install_packages() {
   local manager="$2"
   local dry_run="$3"
   local package
-  local installed_packages=()
   local missing_packages=()
   shift 3
 
@@ -76,17 +75,10 @@ homebrew_install_packages() {
   fi
 
   for package in "$@"; do
-    if homebrew_package_installed "$manager" "$package"; then
-      installed_packages+=("$package")
-    else
+    if ! homebrew_package_installed "$manager" "$package"; then
       missing_packages+=("$package")
     fi
   done
-
-  if ((${#installed_packages[@]} > 0)); then
-    printf '%sAlready installed Homebrew %s (%d):%s %s\n' \
-      "$SELFISHELL_COLOR_CYAN" "$manager" "${#installed_packages[@]}" "$SELFISHELL_COLOR_RESET" "${installed_packages[*]}"
-  fi
 
   ((${#missing_packages[@]} > 0)) || return 0
 

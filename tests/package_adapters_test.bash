@@ -124,6 +124,29 @@ test_apt_skips_index_update_when_packages_are_installed() {
   [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed apt packages were reinstalled"
 }
 
+test_apt_suppresses_already_installed_output() {
+  local output
+  reset_package_mocks
+  MOCK_DPKG_PACKAGES="first second"
+
+  output="$(apt_install_managed_packages required 0 first second)"
+
+  [[ -z "$output" ]] || fail "Installed apt packages produced output: $output"
+}
+
+test_homebrew_suppresses_already_installed_output() {
+  local output
+  reset_package_mocks
+  MOCK_BREW_FORMULAE="installed"
+  MOCK_BREW_CASKS="font-one"
+
+  output="$(homebrew_install_packages required formula 0 installed)"
+  [[ -z "$output" ]] || fail "Installed Homebrew formulae produced output: $output"
+
+  output="$(homebrew_install_packages optional cask 0 font-one)"
+  [[ -z "$output" ]] || fail "Installed Homebrew casks produced output: $output"
+}
+
 test_apt_non_root_requires_sudo() {
   reset_package_mocks
   MOCK_AVAILABLE_PACKAGES="available"
