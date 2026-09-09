@@ -7,6 +7,8 @@ assert(vim.o.scrolloff == 4, "scrolloff is not configured")
 assert(not vim.o.wrap, "line wrapping is enabled")
 assert(vim.o.confirm, "confirmation is not enabled")
 assert(vim.o.inccommand == "split", "substitution preview is not configured")
+assert(not vim.o.showmode, "the mode is printed twice alongside lualine")
+assert(vim.o.pumheight == 10, "the completion menu height is unbounded")
 
 local function assert_map(mode, lhs, rhs)
   local mapping = vim.fn.maparg(lhs, mode, false, true)
