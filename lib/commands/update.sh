@@ -29,9 +29,10 @@ update_tools_and_configuration() {
   local dry_run="$2"
   local require_configuration="$3"
   local skip_packages="$4"
+  # 1 when command_update closes with the version transition instead, so this
+  # phase leaves the final result to it.
+  local defer_result="$5"
   local profile platform ghostty_enabled=0
-
-  SELFISHELL_UNCHANGED_COUNT=0
 
   selfishell_initialize_paths
   if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
@@ -75,12 +76,10 @@ update_tools_and_configuration() {
   if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
-  ((SELFISHELL_UNCHANGED_COUNT == 0)) ||
-    printf '%s%d items unchanged.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_UNCHANGED_COUNT" "$SELFISHELL_COLOR_RESET"
   if [[ "$dry_run" == 1 ]]; then
     printf '%sTool/configuration dry run complete.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
-  else
-    printf '%sSelfishell tools and configuration updated.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
+  elif [[ "$defer_result" == 0 ]]; then
+    printf '%sSelfishell tools and configuration synchronized.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
   fi
 }
 
@@ -88,6 +87,7 @@ update_cli_release() {
   local version="$1"
   local assume_yes="$2"
   local dry_run="$3"
+  local active=""
 
   if [[ -z "$version" ]]; then
     version="$(release_latest_version)" || {
@@ -99,7 +99,10 @@ update_cli_release() {
     cli_error "Invalid semantic version: $version"
     return "$SELFISHELL_EXIT_USAGE"
   }
-  if [[ -r "$SELFISHELL_ROOT/VERSION" && "$(<"$SELFISHELL_ROOT/VERSION")" == "$version" ]]; then
+  # Read before the release switches: --cli-only keeps running in this process
+  # and is then the only place that knows both ends of the transition.
+  [[ ! -r "$SELFISHELL_ROOT/VERSION" ]] || active="$(<"$SELFISHELL_ROOT/VERSION")"
+  if [[ "$active" == "$version" ]]; then
     SELFISHELL_CLI_UP_TO_DATE=1
     SELFISHELL_CLI_TARGET_VERSION="$version"
     return
@@ -111,6 +114,35 @@ update_cli_release() {
   confirm_action "Update Selfishell CLI to $version?" "$assume_yes" 0 || return
   release_install "$version"
   SELFISHELL_CLI_UPDATED=1
+  SELFISHELL_CLI_SOURCE_VERSION="$active"
+  SELFISHELL_CLI_TARGET_VERSION="$version"
+}
+
+# The version the running release replaced. release_install rewrites the
+# previous-release link to the outgoing version immediately before switching
+# `current`, so the continuation below reports the transition without carrying
+# any state across its `exec`.
+update_replaced_version() {
+  local previous
+
+  release_installation_paths 2>/dev/null || return 0
+  [[ -L "$SELFISHELL_SHARE_DIR/previous" ]] || return 0
+  previous="$(readlink "$SELFISHELL_SHARE_DIR/previous")"
+  printf '%s\n' "${previous##*/}"
+}
+
+# The single closing result for a completed version change. errexit ends the
+# command before this is reached when a selected phase fails, so it reports
+# success only. Release details stay on the GitHub Release.
+update_report_version_change() {
+  local source_version="$1"
+  local target_version="$2"
+
+  if [[ -z "$source_version" || "$source_version" == "$target_version" ]]; then
+    printf '%sSelfishell updated to %s.%s\n' "$SELFISHELL_COLOR_GREEN" "$target_version" "$SELFISHELL_COLOR_RESET"
+    return
+  fi
+  printf '%sSelfishell updated: %s -> %s%s\n' "$SELFISHELL_COLOR_GREEN" "$source_version" "$target_version" "$SELFISHELL_COLOR_RESET"
 }
 
 continue_update_with_new_cli() {
@@ -133,6 +165,8 @@ command_update() {
 
   SELFISHELL_CLI_UPDATED=0
   SELFISHELL_CLI_UP_TO_DATE=0
+  SELFISHELL_CLI_SOURCE_VERSION=""
+  SELFISHELL_CLI_TARGET_VERSION=""
 
   while (("$#" > 0)); do
     case "$1" in
@@ -202,9 +236,18 @@ command_update() {
 
   if [[ "$mode" != cli ]]; then
     if [[ "$mode" == tools && "$continuation" == 0 ]]; then
-      update_tools_and_configuration "$assume_yes" "$dry_run" 1 "$skip_packages"
+      update_tools_and_configuration "$assume_yes" "$dry_run" 1 "$skip_packages" 0
     else
-      update_tools_and_configuration "$assume_yes" "$dry_run" 0 "$skip_packages"
+      update_tools_and_configuration "$assume_yes" "$dry_run" 0 "$skip_packages" "$continuation"
     fi
+  fi
+
+  # A continuation always runs from an installed release; the VERSION guard
+  # only keeps the internal flag harmless outside one.
+  if [[ "$continuation" == 1 && -r "$SELFISHELL_ROOT/VERSION" ]]; then
+    printf '\n'
+    update_report_version_change "$(update_replaced_version)" "$(<"$SELFISHELL_ROOT/VERSION")"
+  elif [[ "$mode" == cli && "$SELFISHELL_CLI_UPDATED" == 1 ]]; then
+    update_report_version_change "$SELFISHELL_CLI_SOURCE_VERSION" "$SELFISHELL_CLI_TARGET_VERSION"
   fi
 }

@@ -1870,7 +1870,7 @@ test_update_ghostty_preflight_stops_before_other_resources_change() {
     fail "Ghostty preflight failure changed an unrelated managed file's state"
   [[ -f "$cache_marker" ]] ||
     fail "Ghostty preflight failure ran shell-tool cache cleanup"
-  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+  ! grep -Fq 'Selfishell tools and configuration synchronized' "$TEST_ROOT/stdout" ||
     fail "Ghostty preflight failure printed a success message"
 }
 
@@ -1898,7 +1898,7 @@ test_update_zshenv_preflight_stops_before_other_resources_change() {
     fail "Zshenv preflight failure changed the Zsh loader block"
   [[ "$(<"$XDG_STATE_HOME/selfishell/resources/vimrc.state")" == "$before_vimrc_state" ]] ||
     fail "Zshenv preflight failure changed an unrelated managed file's state"
-  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+  ! grep -Fq 'Selfishell tools and configuration synchronized' "$TEST_ROOT/stdout" ||
     fail "Zshenv preflight failure printed a success message"
 }
 
@@ -1924,7 +1924,7 @@ test_update_ghostty_preflight_rejects_directory_before_other_resources_change() 
   [[ -d "$target/keep" ]] || fail "Contents under the rejected Ghostty config directory were lost"
   [[ "$(<"$HOME/.zshrc")" == "$before_zshrc" ]] ||
     fail "Ghostty directory preflight failure changed the Zsh loader block"
-  ! grep -Fq 'Selfishell tools and configuration updated' "$TEST_ROOT/stdout" ||
+  ! grep -Fq 'Selfishell tools and configuration synchronized' "$TEST_ROOT/stdout" ||
     fail "Ghostty directory preflight failure printed a success message"
 }
 
@@ -2242,6 +2242,19 @@ test_update_tools_only_yes_preserves_modified_file() {
     fail "Non-interactive update conflict did not report a preserving error"
   [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
     fail "Non-interactive update conflict must not create a conflict backup"
+}
+
+test_tools_only_update_reports_its_own_result_without_a_version_transition() {
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+
+  run_selfishell update --tools-only --skip-packages --yes >"$TEST_ROOT/stdout" 2>&1
+
+  grep -Fq 'Selfishell tools and configuration synchronized' "$TEST_ROOT/stdout" ||
+    fail "--tools-only did not report its own result: $(<"$TEST_ROOT/stdout")"
+  ! grep -Fq 'Selfishell updated' "$TEST_ROOT/stdout" ||
+    fail "--tools-only reported a CLI version transition: $(<"$TEST_ROOT/stdout")"
+  ! grep -Fq 'items unchanged' "$TEST_ROOT/stdout" ||
+    fail "update still printed the unchanged-items summary: $(<"$TEST_ROOT/stdout")"
 }
 
 run_discovered_tests_parallel \

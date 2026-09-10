@@ -771,7 +771,7 @@ EOF
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
   [[ ! -e "$TEST_ROOT/prefix/share/selfishell/previous" ]] ||
     fail "A forced release-move failure must not create a previous link"
-  ! grep -Fq 'CLI updated to' "$TEST_ROOT/stdout" ||
+  ! grep -Fq 'Selfishell updated' "$TEST_ROOT/stdout" ||
     fail "A forced release-move failure printed a success message"
   [[ ! -d "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3" ]] ||
     fail "A forced release-move failure must not leave a partial release directory"
@@ -808,7 +808,7 @@ EOF
 
   ((status != 0)) || fail "A forced activation-link failure should propagate as an error"
   assert_symlink_to "releases/$version" "$TEST_ROOT/prefix/share/selfishell/current"
-  ! grep -Fq 'CLI updated to' "$TEST_ROOT/stdout" ||
+  ! grep -Fq 'Selfishell updated' "$TEST_ROOT/stdout" ||
     fail "A forced activation-link failure printed a success message"
   [[ -d "$TEST_ROOT/prefix/share/selfishell/releases/0.2.3" ]] ||
     fail "The downloaded release directory should still be usable for a retry"
@@ -819,7 +819,7 @@ EOF
 
 test_default_update_skips_missing_configuration_and_updates_cli() {
   local output
-  local cli_line skip_line
+  local result_line skip_line
   local version
 
   version="$RELEASE_FIXTURE_VERSION"
@@ -828,10 +828,32 @@ test_default_update_skips_missing_configuration_and_updates_cli() {
   output="$("$TEST_ROOT/prefix/bin/selfishell" update --version 0.2.3 --yes)"
   [[ "$output" == *'skipping tools and configuration'* ]] ||
     fail "Default update did not skip an uninstalled configuration"
-  cli_line="$(printf '%s\n' "$output" | awk '/CLI updated to/ { print NR; exit }')"
+  # The continuation runs from the new release and learns the version it
+  # replaced from the previous-release link, so the source version here also
+  # proves that link survived the switch.
+  [[ "$output" == *"Selfishell updated: $version -> 0.2.3"* ]] ||
+    fail "Default update did not report the version transition: $output"
+  result_line="$(printf '%s\n' "$output" | awk '/Selfishell updated: / { print NR; exit }')"
   skip_line="$(printf '%s\n' "$output" | awk '/skipping tools and configuration/ { print NR; exit }')"
-  [[ -n "$cli_line" && -n "$skip_line" && "$cli_line" -lt "$skip_line" ]] ||
-    fail "Default update did not continue with the new CLI after switching releases"
+  [[ -n "$result_line" && -n "$skip_line" && "$skip_line" -lt "$result_line" ]] ||
+    fail "Default update did not report its result after continuing with the new CLI"
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_cli_only_update_reports_the_version_transition_once() {
+  local output occurrences version
+
+  version="$RELEASE_FIXTURE_VERSION"
+  run_bootstrap --version "$version" >/dev/null
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes)"
+  [[ "$output" == *"Selfishell updated: $version -> 0.2.3"* ]] ||
+    fail "--cli-only did not report the version transition: $output"
+  occurrences="$(printf '%s\n' "$output" | grep -c 'Selfishell updated' || true)"
+  [[ "$occurrences" == 1 ]] ||
+    fail "--cli-only reported the update $occurrences times: $output"
+  [[ "$output" != *'CLI updated to'* ]] ||
+    fail "--cli-only still printed the release-installation success line: $output"
   assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 

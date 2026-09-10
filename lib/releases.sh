@@ -209,6 +209,7 @@ release_install() {
     cli_error "Failed to activate Selfishell $version."
     return 1
   }
-  printf '%sSelfishell CLI updated to %s.%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"
+  # command_update owns the one closing result for a completed update, so the
+  # switch is not announced here.
   release_prune_inactive
 }
