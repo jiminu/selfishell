@@ -114,6 +114,11 @@ release_platform() {
   esac
 }
 
+# Enforces the retention contract documented in docs/UPDATES.md: only the
+# active release and the rollback release are kept. Those directories are
+# managed product state rather than user data, and the contract is fixed, so a
+# superseded one is removed silently -- `selfishell status` reports the release
+# that can still be rolled back to.
 release_prune_inactive() {
   local current_version previous_version release_dir release_version
 
@@ -130,7 +135,6 @@ release_prune_inactive() {
     release_version="${release_dir##*/}"
     [[ "$release_version" == "$current_version" || "$release_version" == "$previous_version" ]] && continue
     rm -rf "$release_dir"
-    printf '%sRemoved inactive Selfishell release:%s %s.\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_version"
   done
 }
 
