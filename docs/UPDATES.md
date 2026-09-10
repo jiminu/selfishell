@@ -8,6 +8,19 @@ already installed, the command reports that and exits without changing
 anything. Use `--tools-only` to explicitly resynchronize the current release's
 tools and configuration regardless of whether a new release is available.
 
+A successful update finishes with one result line naming the version
+transition, for example `Selfishell updated: 1.2.10 -> 1.2.14`. Release details
+stay on the GitHub Release rather than being reproduced in the CLI, and output
+for work that actually changed the environment, warnings, errors, and
+`--dry-run` previews are unaffected. Because that result closes the whole
+command, declining the tools/configuration confirmation or failing in that
+phase ends the run without reporting the version change even though the CLI
+release has already switched; `selfishell version` confirms the active release.
+`--tools-only` closes with `Selfishell tools and configuration synchronized.`
+and no version transition: that phase resynchronizes the release's tools and
+configuration whether or not anything changes, so its result does not claim
+one.
+
 ```sh
 selfishell status
 selfishell update --yes
