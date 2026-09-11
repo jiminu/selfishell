@@ -15,7 +15,7 @@ right_format = '$python$nodejs$java$username$hostname$aws$kubernetes$jobs$cmd_du
 # ─────────────────────────────
 [directory]
 format = '[$path]($style) '
-style = 'bold fg:#7aa2f7'
+style = 'bold blue'
 
 # Display paths like ~/code/projects/... with limited truncation
 truncation_length = 2
@@ -28,7 +28,7 @@ truncate_to_repo = false
 # ─────────────────────────────
 [git_branch]
 format = '[$branch]($style) '
-style = 'fg:#9ece6a'
+style = 'green'
 
 
 # ─────────────────────────────
@@ -36,7 +36,7 @@ style = 'fg:#9ece6a'
 # ─────────────────────────────
 [git_commit]
 format = '[$hash]($style) '
-style = 'fg:#9ece6a'
+style = 'green'
 only_detached = true
 
 
@@ -45,36 +45,36 @@ only_detached = true
 # Display only during rebase, merge, cherry-pick, etc.
 # ─────────────────────────────
 [git_state]
-style = 'bold fg:#ff9e64'
+style = 'bold yellow'
 
 
 # ─────────────────────────────
 # Git status
 # ─────────────────────────────
 [git_status]
-format = '($all_status$ahead_behind )'
+format = '(($all_status )$ahead_behind)'
 
 # Display counts such as !1
-modified = '[!${count}](bold fg:#e0af68)'
-staged = '[+${count}](bold fg:#9ece6a)'
-untracked = '[?${count}](bold fg:#e0af68)'
-deleted = '[-${count}](bold fg:#f7768e)'
-renamed = '[»${count}](bold fg:#e0af68)'
-conflicted = '[~${count}](bold fg:#f7768e)'
-stashed = '[*${count}](bold fg:#e0af68)'
+modified = '[!${count}](red)'
+staged = '[+${count}](green)'
+untracked = '[?${count}](red)'
+deleted = '[-](red)'
+renamed = '[»](green)'
+conflicted = '[~](bold red)'
+stashed = '[*](yellow)'
 
-ahead = '[⇡${count}](bold fg:#9ece6a)'
-behind = '[⇣${count}](bold fg:#f7768e)'
-diverged = '[⇡${ahead_count}⇣${behind_count}](bold fg:#f7768e)'
+ahead = '[⇡${count}](green) '
+behind = '[⇣${count}](red) '
+diverged = '[⇡${ahead_count}](bold green)[⇣${behind_count}](bold red) '
 
 
 # ─────────────────────────────
 # Command prompt character
 # ─────────────────────────────
 [character]
-success_symbol = '[❯](bold fg:#9ece6a)'
-error_symbol = '[❯](bold fg:#f7768e)'
-vimcmd_symbol = '[❮](bold fg:#9ece6a)'
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'
+vimcmd_symbol = '[❮](bold green)'
 
 
 # ─────────────────────────────
@@ -84,7 +84,7 @@ vimcmd_symbol = '[❮](bold fg:#9ece6a)'
 [status]
 disabled = false
 format = '[✘ $status]($style) '
-style = 'bold fg:#f7768e'
+style = 'bold red'
 
 
 # ─────────────────────────────
@@ -93,7 +93,7 @@ style = 'bold fg:#f7768e'
 [cmd_duration]
 min_time = 2000
 format = '[$duration]($style) '
-style = 'fg:#a9b1d6'
+style = 'bright-black'
 
 
 # ─────────────────────────────
@@ -101,7 +101,7 @@ style = 'fg:#a9b1d6'
 # Hidden when there are no jobs in the current shell
 # ─────────────────────────────
 [jobs]
-style = 'fg:#7dcfff'
+style = 'cyan'
 
 
 # ─────────────────────────────
@@ -109,14 +109,14 @@ style = 'fg:#7dcfff'
 # ─────────────────────────────
 [username]
 format = '[$user]($style)'
-style_user = 'fg:#a9b1d6'
-style_root = 'bold fg:#f7768e'
+style_user = 'bright-black'
+style_root = 'bold red'
 show_always = false
 
 [hostname]
 ssh_only = true
-format = '[@](fg:#a9b1d6)[$hostname]($style) '
-style = 'bold fg:#ff9e64'
+format = '[@](bright-black)[$hostname]($style) '
+style = 'bold yellow'
 
 
 # ─────────────────────────────
@@ -125,12 +125,12 @@ style = 'bold fg:#ff9e64'
 # ─────────────────────────────
 [aws]
 format = '([aws:$profile]($style) )'
-style = 'bold fg:#ff9e64'
+style = 'bold yellow'
 
 [kubernetes]
 disabled = false
 format = '[k8s:$context]($style) '
-style = 'bold fg:#7dcfff'
+style = 'bold cyan'
 detect_files = [
   'Chart.yaml',
   'helmfile.yaml',
@@ -154,14 +154,14 @@ context_alias = '$cluster'
 # ─────────────────────────────
 [python]
 format = '[($virtualenv )]($style)'
-style = 'fg:#e0af68'
+style = 'yellow'
 
 [nodejs]
 format = '[($version )]($style)'
 version_format = 'v${major}'
-style = 'fg:#9ece6a'
+style = 'green'
 
 [java]
 format = '[($version )]($style)'
 version_format = 'v${major}'
-style = 'fg:#ff9e64'
+style = 'yellow'
