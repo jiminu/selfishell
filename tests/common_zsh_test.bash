@@ -1439,6 +1439,25 @@ test_minimal_profile_keeps_system_vim() {
   teardown_test_home
 }
 
+test_git_staged_diff_alias_is_available() {
+  local output
+
+  setup_test_home
+  output="$(
+    PATH="/usr/bin:/bin" \
+      ZDOTDIR="" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        source "$1"
+        alias gds
+      ' zsh "$ROOT_DIR/config/shared/zsh/aliases.zsh"
+  )"
+
+  [[ "$output" == "gds='git diff --staged'" ]] ||
+    fail "gds does not show staged Git changes: $output"
+  teardown_test_home
+}
+
 test_zsh_plugin_pins_match_dependencies_conf() {
   local repository target_file expected_commit
 

@@ -195,7 +195,7 @@ return {
         buffer_selected = {
           fg = "#FFFFFF",
           bg = { attribute = "bg", highlight = "TabLineSel" },
-          bold = true,
+          bold = false,
           italic = false,
           underline = true,
           sp = "#007ACC",
@@ -290,7 +290,7 @@ return {
         lualine_c = {
           {
             "branch",
-            color = { fg = "#5fd700", gui = "bold" },
+            color = { fg = "#5fd700" },
             icon = "",
             padding = { left = 0, right = 1 },
           },

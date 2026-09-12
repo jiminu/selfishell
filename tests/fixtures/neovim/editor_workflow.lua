@@ -120,7 +120,10 @@ local lualine = assert(
 )
 local branch = lualine.opts.sections.lualine_c[1]
 assert(branch.icon == "", "lualine branch icon should be hidden")
-assert(branch.color.fg == "#5fd700" and branch.color.gui == "bold", "lualine branch color is incorrect")
+assert(
+  branch.color.fg == "#5fd700" and branch.color.gui == nil,
+  "lualine branch should use regular bright green"
+)
 assert(branch.padding.left == 0 and branch.padding.right == 1, "lualine branch spacing is incorrect")
 local filetype = lualine.opts.sections.lualine_x[1]
 assert(
@@ -137,6 +140,10 @@ assert(bufferline.event == "VeryLazy", "bufferline is not deferred")
 assert(bufferline.opts.options.always_show_bufferline == false, "bufferline should hide for one buffer")
 assert(bufferline.opts.options.show_buffer_icons == false, "bufferline buffer icons should be hidden")
 assert(bufferline.opts.options.offsets[1].filetype == "NvimTree", "bufferline is not aligned with NvimTree")
+assert(
+  bufferline.opts.highlights.buffer_selected.bold == false,
+  "selected buffer should rely on color and underline instead of bold"
+)
 assert(
   not has_dependency(bufferline, "nvim-tree/nvim-web-devicons"),
   "nvim-web-devicons dependency should be removed"
