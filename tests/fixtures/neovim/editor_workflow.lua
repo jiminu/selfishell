@@ -141,6 +141,10 @@ assert(bufferline.opts.options.always_show_bufferline == false, "bufferline shou
 assert(bufferline.opts.options.show_buffer_icons == false, "bufferline buffer icons should be hidden")
 assert(bufferline.opts.options.offsets[1].filetype == "NvimTree", "bufferline is not aligned with NvimTree")
 assert(
+  bufferline.opts.highlights.buffer_selected.bold == false,
+  "selected buffer should rely on color and underline instead of bold"
+)
+assert(
   not has_dependency(bufferline, "nvim-tree/nvim-web-devicons"),
   "nvim-web-devicons dependency should be removed"
 )

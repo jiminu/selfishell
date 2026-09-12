@@ -195,7 +195,7 @@ return {
         buffer_selected = {
           fg = "#FFFFFF",
           bg = { attribute = "bg", highlight = "TabLineSel" },
-          bold = true,
+          bold = false,
           italic = false,
           underline = true,
           sp = "#007ACC",
