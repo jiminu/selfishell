@@ -290,7 +290,7 @@ return {
         lualine_c = {
           {
             "branch",
-            color = { fg = "#5fd700", gui = "bold" },
+            color = { fg = "#5fd700" },
             icon = "",
             padding = { left = 0, right = 1 },
           },

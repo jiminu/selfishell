@@ -120,7 +120,10 @@ local lualine = assert(
 )
 local branch = lualine.opts.sections.lualine_c[1]
 assert(branch.icon == "", "lualine branch icon should be hidden")
-assert(branch.color.fg == "#5fd700" and branch.color.gui == "bold", "lualine branch color is incorrect")
+assert(
+  branch.color.fg == "#5fd700" and branch.color.gui == nil,
+  "lualine branch should use regular bright green"
+)
 assert(branch.padding.left == 0 and branch.padding.right == 1, "lualine branch spacing is incorrect")
 local filetype = lualine.opts.sections.lualine_x[1]
 assert(

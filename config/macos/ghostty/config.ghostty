@@ -15,7 +15,7 @@ keybind = ctrl+shift+j=scroll_page_lines:5
 keybind = ctrl+shift+up=scroll_page_lines:-5
 keybind = ctrl+shift+down=scroll_page_lines:5
 
-split-divider-color = #ff6600
+split-divider-color = #3f3f46
 cursor-style = block
 # ssh-env/ssh-terminfo install Ghostty's terminfo on remote hosts and fall
 # back to xterm-256color, so TERM=xterm-ghostty does not break Neovim and
