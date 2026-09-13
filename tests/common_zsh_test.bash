@@ -1682,4 +1682,81 @@ test_fzf_tab_git_previews_read_the_repository() {
   teardown_test_home
 }
 
+# The picker is the one fzf surface that does not follow the terminal palette on
+# its own: fzf takes its accents from the 256-color cube, and fzf-tab blanks
+# FZF_DEFAULT_OPTS entirely before invoking it. The palette therefore reaches
+# fzf-tab as a flag rather than through the variable, which belongs to the user
+# and may hold options that break the plugin.
+test_fzf_is_pointed_at_the_terminal_palette() {
+  local output
+
+  setup_test_home
+  setup_fzf_tab_stubs
+  mkdir -p "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" ZDOTDIR="" \
+      PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        print -r -- "opts=$FZF_DEFAULT_OPTS"
+        print -r -- "type=${(t)FZF_DEFAULT_OPTS}"
+        local -a flags
+        zstyle -a ":fzf-tab:complete:cd:x" fzf-flags flags && print -r -- "cd=${(j: :)flags}"
+        # zstyle answers with one pattern rather than a union, so a context that
+        # sets fzf-flags of its own has to carry the palette itself.
+        zstyle -a ":fzf-tab:complete:kill:argument-rest" fzf-flags flags &&
+          print -r -- "kill=${(j: :)flags}"
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>/dev/null
+  )"
+
+  [[ "$output" == *'opts=--color=16'* ]] ||
+    fail "fzf was not pointed at the terminal's own colors: $output"
+  [[ "$output" == *'type='*export* ]] ||
+    fail "FZF_DEFAULT_OPTS was not exported, so fzf will not see it: $output"
+  [[ "$(grep '^cd=' <<<"$output")" == 'cd=--color=16' ]] ||
+    fail "fzf-tab was not given the palette: $output"
+  [[ "$output" == *'kill='*--color=16* ]] ||
+    fail "A context with its own fzf-flags lost the palette: $output"
+  teardown_test_home
+}
+
+# FZF_DEFAULT_OPTS belongs to the user. Whatever is in it has to keep working
+# for the standalone widgets and must not reach fzf-tab, which is broken by
+# several flags it does not set itself -- --with-nth defeats the NUL encoding it
+# uses for candidates outright.
+test_fzf_tab_is_not_handed_the_users_fzf_options() {
+  local output
+
+  setup_test_home
+  setup_fzf_tab_stubs
+  mkdir -p "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" ZDOTDIR="" \
+      PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      FZF_DEFAULT_OPTS='--with-nth=2.. --bind=ctrl-a:select-all' \
+      /bin/zsh -f -c '
+        source "$1"
+        print -r -- "opts=$FZF_DEFAULT_OPTS"
+        local -a flags
+        zstyle -a ":fzf-tab:complete:cd:x" fzf-flags flags && print -r -- "cd=${(j: :)flags}"
+        # zstyle -s blanks the variable when nothing matches, so the sentinel
+        # has to come from its exit status rather than from an initial value.
+        local follows
+        zstyle -s ":fzf-tab:x" use-fzf-default-opts follows || follows=unset
+        print -r -- "follows=$follows"
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>/dev/null
+  )"
+
+  [[ "$output" == *'opts=--with-nth=2.. --bind=ctrl-a:select-all'* ]] ||
+    fail "The user's own FZF_DEFAULT_OPTS was overwritten: $output"
+  # Compared whole rather than searched, so anything that leaked in fails here.
+  [[ "$(grep '^cd=' <<<"$output")" == 'cd=--color=16' ]] ||
+    fail "fzf-tab was handed something other than the palette: $output"
+  [[ "$output" == *'follows=unset'* ]] ||
+    fail "fzf-tab was told to read FZF_DEFAULT_OPTS: $output"
+  teardown_test_home
+}
+
 run_discovered_tests '' teardown_test_home
