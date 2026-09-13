@@ -1508,6 +1508,7 @@ dump_fzf_tab_previews() {
         file ":fzf-tab:complete:vim:x" \
         branch ":fzf-tab:complete:git-switch:x" \
         diff ":fzf-tab:complete:git-add:x" \
+        stash ":fzf-tab:complete:git-stash-show:x" \
         process ":fzf-tab:complete:kill:argument-rest"; do
         zstyle -s "$context" fzf-preview command_string || continue
         print -r -- "$command_string" >"$2/$name"
@@ -1558,7 +1559,7 @@ test_fzf_tab_previews_cover_the_commands_they_advertise() {
 
   dump_fzf_tab_previews
 
-  for name in directory file branch diff process; do
+  for name in directory file branch diff stash process; do
     [[ -s "$previews/$name" ]] ||
       fail "No fzf-tab preview is configured for $name completion"
   done
@@ -1599,6 +1600,7 @@ test_fzf_tab_previews_fall_back_without_leaking_errors() {
   assert_fzf_tab_preview_is_quiet directory '' "$sandbox/gone"
   assert_fzf_tab_preview_is_quiet branch main ''
   assert_fzf_tab_preview_is_quiet diff 'a file.txt' ''
+  assert_fzf_tab_preview_is_quiet stash 'stash@{0}' ''
   assert_fzf_tab_preview_is_quiet process 0 ''
 
   output="$(run_fzf_tab_preview directory "$sandbox" '' "$sandbox" "$restricted_bin")"
@@ -1672,6 +1674,11 @@ test_fzf_tab_git_previews_read_the_repository() {
   output="$(run_fzf_tab_preview diff "$repository" 'staged only.txt' '')"
   [[ "$output" != *'staged-change'* ]] ||
     fail "The diff preview showed work that is already staged: $output"
+
+  git -C "$repository" stash push -q -m 'set the parser aside'
+  output="$(run_fzf_tab_preview stash "$repository" 'stash@{0}' '')"
+  [[ "$output" == *'worktree-change'* ]] ||
+    fail "The stash preview did not show what the stash holds: $output"
   teardown_test_home
 }
 

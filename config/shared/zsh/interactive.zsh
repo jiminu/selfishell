@@ -161,6 +161,15 @@ if (($+functions[zinit])); then
     zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
       'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
 
+    # _git-stash appends its subcommand the same way _git does, so a stash
+    # reference is completed under git-stash-<subcommand>. The bare
+    # `git stash <TAB>` level completes subcommand names instead, which resolve
+    # to nothing and preview empty. `-p` is explicit rather than relying on a
+    # diff option to imply it, so the stash.showStat setting cannot turn the
+    # patch back into a diffstat.
+    zstyle ':fzf-tab:complete:git-stash-(show|pop|apply|drop|branch):*' fzf-preview \
+      'git stash show -p --color=always "$word" 2>/dev/null | head -n 200'
+
     # `ps -p` with an explicit -o format is the subset BSD (macOS) and procps
     # (Ubuntu) agree on. $USERNAME rather than $USER because zsh always defines
     # it, while $USER comes from the environment and can be missing; `ps -u ''`
