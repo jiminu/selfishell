@@ -38,13 +38,20 @@ block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty	-
 EOF
 }
 
+# Every caller consumes this through a process substitution of its own, so a
+# shell-level loop here would be reading from one pipe while writing into
+# another. A signal landing mid-write -- SIGCHLD from the producer exiting is
+# enough -- makes that write fail with EINTR on macOS, and Bash 3.2 reports it
+# instead of retrying: the list is then silently short, and `uninstall
+# --restore` walks a set missing whatever came after the truncation while still
+# reporting success. cut does the field selection in one process that retries
+# for itself.
+#
+# -s keeps a delimiter-free row out of the generated list rather than turning it
+# into a name. Declarations are all tab-separated, so this only bites on a
+# malformed one, and it does not bury it either: the regression test requires
+# these names to be the declarations' name column exactly, and a row that
+# yields no name fails there.
 selfishell_managed_resource_names() {
-  local resource_kind resource_name resource_target resource_source
-
-  # resource_kind/resource_target/resource_source only exist to consume
-  # their tab-separated fields; only the name is needed here.
-  # shellcheck disable=SC2034
-  while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
-    printf '%s\n' "$resource_name"
-  done < <(selfishell_managed_resources)
+  selfishell_managed_resources | cut -s -f2
 }

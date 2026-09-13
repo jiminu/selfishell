@@ -66,6 +66,29 @@ test_every_neovim_configuration_file_is_managed() {
   done < <(find "$ROOT_DIR/config/shared/nvim" -type f -print | sort)
 }
 
+# `uninstall --restore` decides what to put back by walking this list, so a
+# short one leaves a user's original file in place of their own and still
+# reports success. The names have to be the declarations' name column entire.
+test_managed_resource_names_are_the_whole_name_column() {
+  local declared names
+
+  declared="$(
+    SELFISHELL_CONFIG_DIR="$XDG_CONFIG_HOME/selfishell" SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c 'source "$1/lib/resources.sh"; selfishell_managed_resources' _ "$ROOT_DIR" |
+      cut -f2
+  )"
+  names="$(
+    SELFISHELL_CONFIG_DIR="$XDG_CONFIG_HOME/selfishell" SELFISHELL_ROOT="$ROOT_DIR" \
+      bash -c 'source "$1/lib/resources.sh"; selfishell_managed_resource_names' _ "$ROOT_DIR"
+  )"
+
+  [[ -n "$names" ]] || fail "No managed resource names were produced"
+  [[ "$names" == "$declared" ]] ||
+    fail "Managed resource names do not match the declarations: $(
+      diff <(printf '%s\n' "$declared") <(printf '%s\n' "$names") | head -5
+    )"
+}
+
 test_install_copies_configuration_and_tracks_resources() {
   printf 'original zshrc' >"$HOME/.zshrc"
   run_selfishell install --profile minimal --skip-packages --yes >/dev/null
