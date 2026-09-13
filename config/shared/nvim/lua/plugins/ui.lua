@@ -111,17 +111,27 @@ return {
           },
         },
         icons = {
+          git_placement = "right_align",
           glyphs = {
             folder = {
               arrow_closed = ">",
               arrow_open = "v",
+            },
+            git = {
+              unstaged = "M",
+              staged = "S",
+              unmerged = "!",
+              renamed = "R",
+              untracked = "U",
+              deleted = "D",
+              ignored = "",
             },
           },
           show = {
             file = false,
             folder = false,
             folder_arrow = true,
-            git = false,
+            git = true,
           },
         },
       },

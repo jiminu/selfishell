@@ -109,6 +109,12 @@ assert(tree.opts.renderer.icons.glyphs.folder.arrow_open == "v", "NvimTree open 
 assert(not tree.opts.renderer.icons.padding, "NvimTree folder arrows should use the default padding")
 assert(tree.opts.renderer.icons.show.file == false, "NvimTree file icons should remain hidden")
 assert(tree.opts.renderer.icons.show.folder == false, "NvimTree folder icons should remain hidden")
+assert(tree.opts.renderer.icons.show.git == true, "NvimTree git status icons should be enabled")
+assert(tree.opts.renderer.icons.git_placement == "right_align", "NvimTree git status icons should be right-aligned")
+assert(tree.opts.renderer.icons.glyphs.git.unstaged == "M", "NvimTree unstaged indicator should be M")
+assert(tree.opts.renderer.icons.glyphs.git.staged == "S", "NvimTree staged indicator should be S")
+assert(tree.opts.renderer.icons.glyphs.git.untracked == "U", "NvimTree untracked indicator should be U")
+assert(tree.opts.renderer.icons.glyphs.git.ignored == "", "NvimTree ignored indicator should be hidden")
 assert(
   plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile!<CR>",
   "current-file tree mapping does not update the tree root"
