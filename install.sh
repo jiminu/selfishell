@@ -6,10 +6,9 @@ SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/se
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 
-# This script runs standalone, before any Selfishell code is on disk, so it
-# cannot share lib/common.sh's color variables -- it needs its own, gated
-# per output stream the same way (stdout for status, stderr for errors) so
-# piped/redirected/non-terminal output stays plain text.
+# This runs before any Selfishell code is on disk, so it can't share
+# lib/common.sh's colors. Gated per stream the same way, so non-terminal
+# output stays plain text.
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   SELFISHELL_COLOR_GREEN=$'\033[32m'
   SELFISHELL_COLOR_YELLOW=$'\033[33m'
@@ -216,11 +215,10 @@ bootstrap_validate_link_path() {
   fi
 }
 
-# Rejects anything a release archive should never contain (FIFOs, device
-# nodes, sockets, ...) and any symlink that isn't a plain, existing sibling
-# path inside the archive (the release build packages "bin/sfs -> selfishell"
-# this way) -- absolute, traversal-shaped, or dangling targets are rejected
-# so extraction can't smuggle a link pointing outside the release directory.
+# Rejects what a release archive should never hold (FIFOs, device nodes,
+# sockets) and any symlink that isn't a plain existing sibling, as the build
+# packages "bin/sfs -> selfishell": absolute, traversal-shaped, or dangling
+# targets could smuggle a link outside the release directory.
 bootstrap_reject_unexpected_members() {
   local staging="$1"
   local unexpected link target
@@ -369,11 +367,9 @@ main() {
   bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
   bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
 
-  # A duplicate SHA256SUMS line for this archive (even a legitimate,
-  # identical one) would otherwise turn $expected_checksum into a multi-line
-  # value that can never match a single-line hash; `sort -u` collapses
-  # agreeing duplicates while still failing the checks below on genuinely
-  # conflicting ones.
+  # A duplicate SHA256SUMS line, even an identical one, would make
+  # $expected_checksum multi-line and never match. `sort -u` collapses
+  # agreeing duplicates and still fails below on conflicting ones.
   expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file" | sort -u)"
   if [[ -z "$expected_checksum" || "$expected_checksum" == *[!0-9a-fA-F]* ]]; then
     bootstrap_error "No valid checksum found for $archive_name"

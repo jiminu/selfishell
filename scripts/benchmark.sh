@@ -94,13 +94,10 @@ date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
   exit 1
 }
 
-# Installs the pinned mise/starship/zinit into the isolated $TEST_HOME so
-# "full" mode measures a real developer-profile startup, not just whatever
-# happens to already be on the runner's PATH. Reuses dependency_install
-# (the same code the real installer uses) rather than reimplementing
-# download/checkout logic here. fzf and zoxide are intentionally left to
-# the platform package manager -- installing packages is out of scope for
-# this script -- so provision them separately before running --mode full.
+# Installs the pinned mise/starship/zinit into $TEST_HOME so "full" mode
+# measures a real developer-profile startup, not the runner's PATH, reusing
+# dependency_install rather than reimplementing it. fzf and zoxide are left to
+# the package manager, so provision them separately before --mode full.
 install_full_profile_integrations() {
   local name status=0
 

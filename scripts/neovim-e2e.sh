@@ -118,18 +118,13 @@ done <"$ROOT_DIR/dependencies.conf"
 [[ -r "$XDG_STATE_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim runtime lock is missing"
 [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim lock polluted managed configuration"
 
-# nvim-treesitter parsers are no longer bulk-installed ahead of time; config.autocmds
-# installs each parser lazily, in the background, the first time its filetype is
-# opened. The smoke checks below poll with vim.wait() to give that install time to
-# finish instead of asserting the parser is present immediately.
+# Parsers install lazily in the background on first open of a filetype, so the
+# checks below poll with vim.wait() rather than asserting presence immediately.
 #
-# config.autocmds no longer re-fires FileType on the buffer whose install it
-# triggered (that used to force rainbow-delimiters, which only attaches from
-# its own FileType autocmd, to retry once a parser became available). So the
-# first-ever open of a language only proves the parser install and Tree-sitter
-# highlighting itself; rainbow-delimiters is checked separately, in a second
-# Neovim process opening a Python file whose parser is already installed --
-# the ordinary case that doesn't depend on that dropped guarantee.
+# config.autocmds no longer re-fires FileType after an install, which used to
+# make rainbow-delimiters retry once a parser appeared. So a first-ever open
+# proves only the install and Tree-sitter highlighting; rainbow-delimiters is
+# checked separately below against an already-installed parser.
 
 printf 'terraform { required_version = ">= 1.0" }\n' >"$TEST_ROOT/main.tf"
 if ! smoke_output="$(nvim --headless "$TEST_ROOT/main.tf" \
@@ -155,22 +150,15 @@ fi
   fail "Python highlighting smoke did not complete"
 }
 
-# A second, independent Neovim process: the Python parser installed above is
-# already on disk, so this exercises the ordinary FileType flow (no in-flight
-# install, no dropped-guarantee gap) and confirms rainbow-delimiters attaches
-# the way it does for every already-installed language in normal use.
+# A second Neovim process: the Python parser is already on disk, so this is
+# the ordinary FileType flow with no in-flight install.
 #
-# vim.treesitter.start() attaches a LanguageTree but -- like any fresh one --
-# doesn't parse it immediately; that happens lazily, normally the next time
-# Neovim redraws the screen. rainbow-delimiters' own FileType-time attach (see
-# rainbow-delimiters.nvim's plugin/rainbow-delimiters.lua) runs synchronously
-# right after and reads whatever tree state exists at that instant, so in a
-# real interactive session the redraw that follows startup is what makes the
-# first highlight appear; headless has no such redraw to fall back on. Calling
-# parser:parse() directly is what a real redraw would trigger internally
-# (vim.treesitter.highlighter's decoration-provider callbacks call it too) --
-# it fires the same on_changedtree callback rainbow-delimiters already
-# registered when it attached, which is what actually populates its marks.
+# start() attaches a LanguageTree but parses lazily, normally at the next
+# redraw. rainbow-delimiters attaches synchronously at FileType and reads
+# whatever tree exists then, so interactively the post-startup redraw is what
+# produces the first highlight -- and headless has no redraw. parse() here is
+# what that redraw would trigger internally, firing the same on_changedtree
+# callback that populates its marks.
 if ! rainbow_smoke_output="$(nvim --headless "$TEST_ROOT/main.py" \
   '+lua local bufnr = vim.api.nvim_get_current_buf(); assert(vim.bo.filetype == "python", "unexpected filetype: " .. vim.bo.filetype); local parser_ok, parser = pcall(vim.treesitter.get_parser, bufnr, "python"); assert(parser_ok, "Python parser was not already installed for the second process"); parser:parse(); local rainbow = require("rainbow-delimiters.lib"); local attached = vim.wait(5000, function() local settings = rainbow.buffers[bufnr]; if not settings then return false end; local marks = vim.api.nvim_buf_get_extmarks(bufnr, rainbow.nsids.python, 0, -1, { details = true }); for _, mark in ipairs(marks) do local hl = mark[4].hl_group; if type(hl) == "string" and hl:find("RainbowDelimiter", 1, true) == 1 then return true end end return false end); assert(attached, "rainbow-delimiters did not highlight a Python buffer with an already-installed parser"); print("Rainbow-delimiters smoke: OK")' \
   +qa 2>&1)"; then
@@ -182,12 +170,9 @@ fi
   fail "Rainbow-delimiters smoke did not complete"
 }
 
-# Snacks only binds its own enable() call to BufReadPost, which never fires
-# for a path that doesn't exist on disk yet -- so a brand-new file opened as
-# the first buffer (a real BufNewFile, not BufReadPost) is the case that
-# regresses if indent.enable() isn't also called directly after setup. This
-# only checks that the module is enabled, not scope detection itself, which
-# is covered elsewhere.
+# Snacks binds enable() to BufReadPost, which never fires for a path not yet
+# on disk, so a brand-new first buffer is what regresses without the direct
+# indent.enable(). Checks only that the module is enabled, not scope itself.
 if ! bufnewfile_smoke_output="$(nvim --headless "$TEST_ROOT/brand-new.py" \
   '+lua assert(vim.fn.filereadable(vim.fn.expand("%:p")) == 0, "the target file must not already exist for this to be a real BufNewFile check"); assert(require("snacks.indent").enabled == true, "Snacks indent was not enabled for a brand-new file"); print("BufNewFile indent smoke: OK")' \
   +qa 2>&1)"; then

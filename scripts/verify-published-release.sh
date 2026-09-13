@@ -79,13 +79,11 @@ gh release download "$tag" --repo "$repository" --dir "$download_dir"
   fi
 )
 
-# Every release asset is documented (docs/RELEASING.md) as receiving signed
-# build provenance before publication, so an unverifiable attestation must
-# not let this script still report the release as fully verified -- that
-# would silently downgrade to checksum self-consistency only (which proves
-# the archives match their own SHA256SUMS, not that SHA256SUMS reflects what
-# CI actually built) while still exiting 0. Requires an explicit opt-out for
-# environments stuck on a gh CLI that predates `gh attestation`.
+# docs/RELEASING.md documents every asset as carrying signed provenance, so an
+# unverifiable attestation must not still report the release as verified: that
+# downgrades to checksum self-consistency (archives match their own SHA256SUMS,
+# not what CI built) while exiting 0. Opting out has to be explicit, for a gh
+# CLI predating `gh attestation`.
 if gh attestation verify --help >/dev/null 2>&1; then
   for archive in "$download_dir"/selfishell-"$version"-*.tar.gz; do
     gh attestation verify "$archive" --repo "$repository" >/dev/null

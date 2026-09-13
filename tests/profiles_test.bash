@@ -70,17 +70,11 @@ test_developer_includes_development_tools() {
 
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
-  # profiles/developer.conf declares developer-profile membership, while
-  # config/shared/mise.toml is the sole source of truth for exact versions; the
-  # tool name appearing in both is intentional (different
-  # responsibilities), not duplication to collapse into one file. Expected
-  # tools come from mise.toml rather than profiles/developer.conf itself,
-  # since the latter would make this a self-referential check against the
-  # very file that also produces $output. Compared as a sorted set rather
-  # than the literal dry-run line, since profiles/developer.conf's package
-  # order doesn't match mise.toml's [tools] order -- this still catches a
-  # tool missing from either file or an extra tool only
-  # profiles/developer.conf declares.
+  # developer.conf declares membership, mise.toml owns exact versions; a name
+  # in both is different responsibilities, not duplication. Expectations come
+  # from mise.toml because developer.conf also produces $output, which would
+  # make this self-referential. Compared as a sorted set since the two files'
+  # orders differ -- still catching a missing or extra tool either way.
   expected_mise_tools="$(awk '
     /^\[/ { in_tools = ($0 == "[tools]"); next }
     in_tools && NF >= 3 { print $1 }

@@ -39,10 +39,8 @@ _selfishell_command_path() {
   return 1
 }
 
-# Selfishell provisions every pinned Zsh plugin during installation; startup
-# never downloads one. Require a complete checkout rather than just the plugin
-# directory, so an interrupted or partial clone stays quiet instead of making
-# Zinit fail during startup. `selfishell doctor` reports the missing checkout.
+# Startup never downloads a plugin, so require a complete checkout: a partial
+# clone then stays quiet instead of failing Zinit. `doctor` reports it.
 _selfishell_zinit_plugin_ready() {
   local repository="$1"
   [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1

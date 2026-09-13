@@ -24,10 +24,9 @@ setup_managed_home() {
   chmod +x "$TEST_ROOT/bin/chsh"
   export PATH="$TEST_ROOT/bin:$PATH"
 
-  # Conflict tests below assert directly against $SELFISHELL_STATE_DIR (e.g.
-  # its backups/ subdirectory and resource state files). These globals are
-  # derived purely from the XDG_*/HOME values exported above, so scoping the
-  # sourcing to this file keeps every other test's HOME/XDG isolation intact.
+  # Conflict tests below assert against $SELFISHELL_STATE_DIR directly. These
+  # globals derive purely from the XDG_*/HOME values above, so scoping the
+  # sourcing here keeps every other test's isolation intact.
   source "$ROOT_DIR/lib/paths.sh"
   selfishell_initialize_paths
   export SELFISHELL_CONFIG_DIR SELFISHELL_STATE_DIR SELFISHELL_CACHE_DIR SELFISHELL_RESOURCE_STATE_DIR
@@ -814,9 +813,9 @@ test_unrelated_zshenv_symlink_is_rejected_without_changes() {
 test_macos_lifecycle_never_touches_existing_zshenv() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 
-  # Whether install/update ever *creates* ~/.zshenv on a clean macOS HOME is
-  # covered by scripts/macos-configuration-e2e.sh; this test instead covers
-  # the user-data contract for a ~/.zshenv that already exists.
+  # Creating ~/.zshenv on a clean macOS HOME is covered by
+  # scripts/macos-configuration-e2e.sh; this covers the user-data contract
+  # for one that already exists.
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
   printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
 
@@ -1441,13 +1440,10 @@ test_mise_global_config_ownership() {
   [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
 }
 
-# Real (non-dry-run, non-`--skip-packages`) `update` calls reach
-# packages_install_profile, which must not touch the network or need root in
-# tests. Faking apt-get/dpkg satisfies the apt requirement check without
-# `sudo`, and pre-creating the "direct" dependency targets (starship, zinit)
-# makes dependency_install treat them as already present. This is host- and
-# platform-independent: it works whether the test runs on the Ubuntu or
-# macOS CI runner, since it never depends on a real apt-get or network path.
+# A real `update` reaches packages_install_profile, which must not touch the
+# network or need root here. Faking apt-get/dpkg satisfies the apt check
+# without sudo, and pre-creating the direct dependency targets makes
+# dependency_install treat them as present. Works on either CI runner.
 setup_fake_zinit() {
   local real_git
 
@@ -1526,10 +1522,9 @@ test_managed_file_interactive_overwrite_yes() {
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   printf 'user_modified_data\n' >"$target_file"
 
-  # First "y" answers the initial "Install Selfishell configuration?"
-  # confirmation (read from FD 0, before the resource loop remaps it);
-  # the second "y" answers the managed-file conflict prompt (read from FD 3,
-  # a copy of the original stdin taken before that remap).
+  # First "y" answers the install confirmation, read from FD 0 before the
+  # resource loop remaps it; the second answers the conflict prompt, read from
+  # FD 3, the copy of stdin taken before that remap.
   local stdout
   stdout="$(printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages)"
 

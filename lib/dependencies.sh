@@ -110,12 +110,10 @@ dependency_install_download() {
     rm -rf "$temporary_dir"
     return 1
   }
-  # A pre-existing target (e.g. replaced by a directory, or a stale/tampered
-  # install) would otherwise make `mv` nest $extracted inside it instead of
-  # replacing it -- silently leaving the approved binary unreachable while
-  # still reporting success. Move it aside first, mirroring
-  # dependency_install_git's existing-target handling, so mv only ever
-  # renames onto an absent path and a failed activation can be restored.
+  # A pre-existing target (a directory, a tampered install) makes `mv` nest
+  # $extracted inside it rather than replace it, leaving the approved binary
+  # unreachable while reporting success. Move it aside so mv only ever renames
+  # onto an absent path and a failed activation can be restored.
   if [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     previous_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.previous.$$")"
     mv "$DEPENDENCY_TARGET" "$previous_target" || {
@@ -123,10 +121,9 @@ dependency_install_download() {
       return 1
     }
   fi
-  # Guarded explicitly: dependency_install_download runs with errexit
-  # disabled (it's called as `dependency_install_download || return`), so an
-  # unguarded mv failure here would fall through to `rm -rf`, silently
-  # deleting the freshly extracted binary and reporting success.
+  # Guarded explicitly: this runs with errexit disabled (called as `... ||
+  # return`), so an unguarded mv failure would fall through to `rm -rf` and
+  # delete the freshly extracted binary while reporting success.
   if ! mv "$extracted" "$DEPENDENCY_TARGET"; then
     # previous_target may itself be a dangling symlink (moved aside above),
     # which -e alone would miss and skip restoring.
@@ -158,10 +155,9 @@ dependency_install_git() {
     return 1
   }
 
-  # Guarded explicitly: dependency_install_git runs with errexit disabled
-  # (it's called as `dependency_install_git || return`), so an unguarded mv
-  # failure here would previously fall through and delete the working
-  # previous install via the final `rm -rf`. Restore it instead of losing it.
+  # Guarded explicitly: this runs with errexit disabled (called as `... ||
+  # return`), so an unguarded mv failure would fall through to the final
+  # `rm -rf` and destroy the working previous install. Restore it instead.
   if [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     mv "$DEPENDENCY_TARGET" "$previous_target" || {
       rm -rf "$temporary_target"
@@ -183,11 +179,9 @@ dependency_install_git() {
   rm -rf "$previous_target"
 }
 
-# Whether the currently loaded dependency's target is a valid Selfishell-
-# managed install (used only when Selfishell state for it exists). Strict on
-# purpose: Selfishell owns this path, so a directory, non-executable file, or
-# symlink here means a corrupted install that must be repaired, not a shape
-# to tolerate.
+# Whether the loaded dependency's target is a valid managed install (only when
+# state exists). Strict on purpose: Selfishell owns this path, so a directory,
+# non-executable, or symlink is corruption to repair, not a shape to tolerate.
 dependency_managed_target_is_valid() {
   case "$DEPENDENCY_TYPE" in
     download)
@@ -203,11 +197,9 @@ dependency_managed_target_is_valid() {
   esac
 }
 
-# Whether the currently loaded dependency's target, which Selfishell does not
-# own (no recorded state), is usable as that dependency. Deliberately looser
-# than dependency_managed_target_is_valid: an external install may
-# legitimately be a symlink, and a git-type external checkout need not carry
-# `.git` (it may be a release archive or package-managed copy).
+# Whether an unowned target (no recorded state) is usable. Looser than
+# dependency_managed_target_is_valid on purpose: an external install may be a
+# symlink, and a git-type one need not carry `.git`.
 dependency_external_target_is_usable() {
   case "$DEPENDENCY_TYPE" in
     download)

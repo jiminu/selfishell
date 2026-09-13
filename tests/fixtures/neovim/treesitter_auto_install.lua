@@ -1,12 +1,10 @@
--- Exercises config.autocmds' FileType-driven Tree-sitter parser auto-install:
--- nvim-treesitter 1.0+ dropped ensure_installed/auto_install from setup(), so
--- config.autocmds installs a missing parser itself the first time its
--- filetype is opened, instead of relying on a pre-populated static list.
+-- Exercises config.autocmds' FileType-driven parser auto-install:
+-- nvim-treesitter 1.0+ dropped ensure_installed/auto_install, so a missing
+-- parser is installed on the first open of its filetype.
 --
--- Whether a parser is installed is judged solely by nvim-treesitter's own
--- get_installed("parsers"), never by vim.treesitter.start() succeeding or
--- failing -- start() can fail for reasons (e.g. a broken query) that have
--- nothing to do with a missing parser, and repairing that is out of scope.
+-- Installed-ness is judged only by get_installed("parsers"), never by
+-- start() succeeding: start() can fail on a broken query, which is unrelated
+-- to a missing parser and out of scope here.
 
 --- @param name string
 --- @param opts { start_fails: boolean?, available: string[], installed: string[], install_succeeds: boolean?, filetype: string?, mock_treesitter: boolean? }
@@ -76,10 +74,8 @@ do
   )
 end
 
--- A parser nvim-treesitter already reports installed must never be
--- reinstalled -- not even when vim.treesitter.start() keeps failing on it
--- (e.g. a corrupted local install or a broken query). Repairing that is a
--- manual :TSUpdate/:TSInstall! job, not this autocmd's.
+-- An already-installed parser must never be reinstalled, even when start()
+-- keeps failing on it: repairing that is a manual :TSUpdate/:TSInstall! job.
 do
   local exec_ok, _, install_calls = run_scenario("already-installed-not-reinstalled", {
     start_fails = true,
@@ -118,12 +114,9 @@ do
   assert(exec_ok, "FileType autocmd raised an error when nvim-treesitter was unavailable")
 end
 
--- Neovim fires FileType more than once for the same buffer during startup
--- (observed when opening a file from the command line), and separate
--- buffers can independently request the same not-yet-installed language.
--- Either way, install() must only be called once per language while a
--- request is in flight, and every waiting buffer must still get Tree-sitter
--- started on it once the install resolves.
+-- FileType fires more than once per buffer at startup, and separate buffers
+-- can request the same missing language. Either way install() must run once
+-- per in-flight language, and every waiting buffer must still get started.
 do
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil
@@ -161,10 +154,8 @@ do
 
   require("config.autocmds")
 
-  -- vim.api.nvim_create_buf, not :enew: leaving an unmodified :enew buffer
-  -- for another lets Neovim free and immediately reuse its number, which
-  -- would silently collapse buf_a and buf_b into the same buffer and defeat
-  -- the point of this scenario (two genuinely distinct buffers).
+  -- nvim_create_buf, not :enew: Neovim frees an unmodified :enew buffer and
+  -- reuses its number, collapsing buf_a and buf_b into one.
   local buf_a = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_set_current_buf(buf_a)
   vim.bo.filetype = "widgetlang" -- first FileType fire for buf_a
@@ -204,13 +195,9 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
--- install() runs asynchronously and can take a while (network + compile).
--- The buffer it was requested for can move on before it resolves -- loaded
--- a different file, had its filetype changed, or (as observed directly:
--- :enew frees an unmodified buffer's number and the very next :enew reuses
--- it) become a completely different buffer that happens to share the same
--- number. A buffer that's valid but now a different language must not get
--- the stale language's parser started on it.
+-- install() is slow enough that its buffer can move on first: a different
+-- file, a changed filetype, or a wholly different buffer reusing the freed
+-- number. A valid buffer now on another language must not get the stale one.
 do
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil
@@ -323,12 +310,9 @@ do
   package.loaded["nvim-treesitter"] = nil
 end
 
--- install() can fail outright (network down, no compiler, disk full --
--- anything nvim-treesitter surfaces as an error). That must not crash
--- Neovim, must not leave pending_installs stuck thinking one is still in
--- flight (or every later open of that filetype would silently do nothing
--- forever instead of retrying), and must tell the user once -- but not spam
--- a notification on every subsequent failed retry of the same language.
+-- A failing install() must not crash Neovim, must not leave pending_installs
+-- stuck in flight (every later open would then do nothing instead of
+-- retrying), and must notify once rather than on every failed retry.
 do
   package.loaded["config.autocmds"] = nil
   package.loaded["nvim-treesitter"] = nil

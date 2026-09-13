@@ -203,10 +203,8 @@ test_insecure_completion_directory_does_not_block_startup() {
 }
 
 # Selfishell no longer wires its own directory into fpath, so this injects a
-# generic one (via env var, read by the zsh -c script before it sources
-# common.zsh) to exercise the same real compaudit safety path -- run once a
-# day, warn on an insecure entry, never block startup -- fpath would
-# otherwise carry.
+# generic one to exercise the same compaudit path: once a day, warn on an
+# insecure entry, never block startup.
 run_completion_startup_probe() {
   local completion_dir="${1:-}"
   XDG_CACHE_HOME="$HOME/.cache" \
@@ -234,12 +232,10 @@ test_secure_completion_directory_does_not_add_warning() {
   [[ "$with_dir" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete with a secure completion directory: $with_dir"
 
-  # Compare against the same startup with our directory absent entirely, so
-  # this stays hermetic against any *pre-existing, unrelated* insecure
-  # directory the host's own default $fpath might already contain (observed
-  # on a real Ubuntu CI runner, outside Selfishell's control) -- what matters
-  # here is that adding our own secure directory doesn't itself introduce a
-  # new warning, not that the whole host environment is spotless.
+  # Compared against the same startup without our directory, so a
+  # pre-existing insecure entry in the host's own $fpath (seen on an Ubuntu
+  # runner) can't fail this. What matters is that adding ours introduces no
+  # new warning, not that the host is spotless.
   touch -t 202001010000 "$HOME/.zcompdump"
   without_dir="$(run_completion_startup_probe)"
   [[ "$without_dir" == *STARTUP_COMPLETE* ]] ||
@@ -619,10 +615,9 @@ test_update_notice_stale_empty_lock_directory_is_reclaimed() {
   mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
   printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
   chmod +x "$fake_bin/selfishell"
-  # No pid/created_at at all -- either a lock left by a Selfishell version
-  # that predates lock metadata, or a writer that died between mkdir and
-  # its first write -- so only the directory's own (old) mtime is left to
-  # judge staleness by.
+  # No pid/created_at: a lock from a version predating the metadata, or a
+  # writer that died between mkdir and its first write. Only the directory's
+  # own mtime is left to judge staleness by.
   touch -t 202001010000 "$cache_dir/update-check.lock"
 
   output="$(
@@ -1276,13 +1271,10 @@ EOF
   teardown_test_home
 }
 
-# _selfishell_generate_fzf_cache's fallback (cp from the system fzf docs)
-# only triggers when fzf itself is unreachable, so PATH is rebuilt from
-# individually-symlinked tools rather than the usual /usr/bin:/bin --
-# those are the same merged directory on most Linux systems and can't be
-# used to make an installed fzf disappear. Skipped outright wherever that
-# hardcoded fallback path doesn't exist (e.g. CI's shell job, which never
-# installs fzf), since there's nothing this test can exercise there.
+# The cp-from-system-docs fallback only fires when fzf is unreachable, so PATH
+# is rebuilt from individually symlinked tools: /usr/bin and /bin are the same
+# merged directory on most Linux systems and can't hide an installed fzf.
+# Skipped where the fallback path doesn't exist at all.
 test_fzf_cache_copy_fallback_success_and_failure() {
   local restricted_bin cache_dir output tool
 
@@ -1516,10 +1508,9 @@ dump_fzf_tab_previews() {
     ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" "$TEST_ROOT/previews" 2>/dev/null
 }
 
-# Runs preview $1 the way fzf does: from directory $2, with $word set to $3 and
-# $realpath to $4, seeing PATH $5 (default: the caller's). Stderr is captured in
-# $TEST_ROOT/preview-errors, and the exit status is dropped because a preview's
-# status never reaches the user -- only its two output streams do.
+# Runs preview $1 as fzf does: from directory $2, with $word $3, $realpath $4
+# and PATH $5. Stderr goes to $TEST_ROOT/preview-errors; the exit status is
+# dropped because only a preview's output streams reach the user.
 run_fzf_tab_preview() {
   (
     cd "$2" || exit 1
@@ -1566,10 +1557,9 @@ test_fzf_tab_previews_cover_the_commands_they_advertise() {
   teardown_test_home
 }
 
-# The previews are zstyle values, so `zsh -n` over the config file never parses
-# them and the optional tools they reach for are not installed everywhere. Run
-# each one for real with eza, bat and batcat absent, outside a Git repository,
-# and against a path that contains a space.
+# The previews are zstyle values, so `zsh -n` never parses them. Run each for
+# real with eza, bat and batcat absent, outside a Git repository, against a
+# path containing a space.
 test_fzf_tab_previews_fall_back_without_leaking_errors() {
   local errors output previews restricted_bin sandbox tool
 
@@ -1617,10 +1607,9 @@ test_fzf_tab_previews_fall_back_without_leaking_errors() {
   teardown_test_home
 }
 
-# Quiet is not the same as correct: these two previews have to produce the right
-# history and the right hunk. The Git commands they wrap all act on the working
-# tree by default, so a preview built on `git diff HEAD` would also show work
-# that is already staged and that none of them would touch.
+# Quiet is not correct: these previews must produce the right history and hunk.
+# The commands they wrap act on the working tree by default, so a preview built
+# on `git diff HEAD` would also show staged work none of them touch.
 test_fzf_tab_git_previews_read_the_repository() {
   local output repository
 
@@ -1660,10 +1649,9 @@ test_fzf_tab_git_previews_read_the_repository() {
   [[ "$output" == *'record the first revision'* ]] ||
     fail "The branch preview did not resolve a remote branch by its bare name: $output"
 
-  # One file changed in the index alone and one in the working tree alone.
-  # Keeping them apart is what makes the second assertion below meaningful: in a
-  # single file the staged line would sit inside the unstaged hunk as context,
-  # and staged work would look present either way.
+  # One file changed in the index alone, one in the working tree alone. In a
+  # single file the staged line would sit inside the unstaged hunk as context
+  # and look present either way, defeating the assertion below.
   printf 'base\nstaged-change\n' >"$repository/staged only.txt"
   git -C "$repository" add 'staged only.txt'
   printf 'base\nworktree-change\n' >"$repository/worktree only.txt"
@@ -1682,11 +1670,10 @@ test_fzf_tab_git_previews_read_the_repository() {
   teardown_test_home
 }
 
-# The picker is the one fzf surface that does not follow the terminal palette on
-# its own: fzf takes its accents from the 256-color cube, and fzf-tab blanks
-# FZF_DEFAULT_OPTS entirely before invoking it. The palette therefore reaches
-# fzf-tab as a flag rather than through the variable, which belongs to the user
-# and may hold options that break the plugin.
+# The picker is the one fzf surface that doesn't follow the terminal palette:
+# fzf takes accents from the 256-color cube, and fzf-tab blanks
+# FZF_DEFAULT_OPTS before invoking it. So the palette reaches fzf-tab as a
+# flag, not through the user's variable, which may hold breaking options.
 test_fzf_is_pointed_at_the_terminal_palette() {
   local output
 
@@ -1721,10 +1708,9 @@ test_fzf_is_pointed_at_the_terminal_palette() {
   teardown_test_home
 }
 
-# FZF_DEFAULT_OPTS belongs to the user. Whatever is in it has to keep working
-# for the standalone widgets and must not reach fzf-tab, which is broken by
-# several flags it does not set itself -- --with-nth defeats the NUL encoding it
-# uses for candidates outright.
+# FZF_DEFAULT_OPTS belongs to the user: it must keep working for the standalone
+# widgets and must not reach fzf-tab, which several flags break -- --with-nth
+# defeats the NUL encoding it uses for candidates.
 test_fzf_tab_is_not_handed_the_users_fzf_options() {
   local output
 

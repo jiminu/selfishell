@@ -346,18 +346,11 @@ return {
     },
   }),
 
-  -- Tree-sitter-aware scope markers highlight the current scope with
-  -- SnacksIndentScope. Snacks derives scope from the current node's ancestry
-  -- instead of a per-language node-type whitelist, so it covers control-flow
-  -- blocks and generic multiline containers (lists, dicts, call arguments,
-  -- ...) alike; falls back to indentation when Tree-sitter is unavailable or
-  -- finds nothing. Loaded eagerly (not event-lazy) because Snacks itself defers
-  -- enabling indent to BufReadPost, which would otherwise miss the first
-  -- buffer if the plugin loaded any later than that -- and BufReadPost never
-  -- fires at all for a path that doesn't exist yet (BufNewFile) or the
-  -- initial unnamed buffer, so indent.enable() is also called directly
-  -- right after setup. It's idempotent (a no-op once already enabled), so
-  -- Snacks' own BufReadPost handler calling it again later is harmless.
+  -- Scope comes from the node's ancestry rather than a per-language
+  -- node-type whitelist, falling back to indentation when Tree-sitter finds
+  -- nothing. Loaded eagerly because Snacks defers indent to BufReadPost,
+  -- which never fires for BufNewFile or the initial unnamed buffer; the
+  -- direct indent.enable() below covers those and is idempotent.
   plugin("folke/snacks.nvim", {
     lazy = false,
     priority = 1000,
@@ -471,10 +464,9 @@ return {
       },
     },
     opts = {
-      -- Backend pinned to ripgrep: the developer profile guarantees it, but
-      -- not fd, so the picker shouldn't vary by what's personally installed.
-      -- No source shows a leading file icon: without nvim-web-devicons
-      -- there's no icon set to draw from.
+      -- ripgrep is guaranteed by the developer profile; fd is not, so the
+      -- picker shouldn't vary by what's personally installed. No source shows
+      -- a file icon: without nvim-web-devicons there's no icon set to use.
       picker = {
         ui_select = false,
         sources = {
@@ -639,11 +631,9 @@ return {
         "mason",
         "help",
       },
-      -- gitsigns is deliberately left off: the sign column already shows the
-      -- same hunks per-line, and mirroring them here doubled the redraw
-      -- triggers (gitsigns update + diagnostic update) for marginal benefit.
-      -- cursor tracking is also off: it isn't needed and drops the
-      -- CursorMoved/CursorMovedI-driven redraw on every cursor move.
+      -- gitsigns is off: the sign column already shows these hunks, and
+      -- mirroring them doubled the redraw triggers. cursor is off to drop the
+      -- CursorMoved-driven redraw on every cursor move.
       handlers = {
         cursor = false,
         diagnostic = true,

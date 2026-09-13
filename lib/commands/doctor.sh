@@ -32,10 +32,9 @@ doctor_report_package() {
   fi
 }
 
-# Shell startup never downloads a Zsh plugin: it silently skips one whose
-# Zinit checkout is missing or incomplete. Without this check a degraded shell
-# has no visible cause, because the zinit package itself still reports as
-# installed.
+# Shell startup silently skips a plugin whose checkout is missing, and the
+# zinit package still reports as installed, so a degraded shell would
+# otherwise have no visible cause.
 doctor_report_zinit_plugins() {
   local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
   local manifest record_type repository revision plugin_dir current_revision
@@ -47,10 +46,9 @@ doctor_report_zinit_plugins() {
   manifest="$(dependencies_manifest_path)"
   [[ -r "$manifest" ]] || return 0
 
-  # install_zinit_plugins reprovisions any checkout that doesn't match the
-  # manifest, but only when `selfishell install`/`update` actually runs;
-  # ordinary shell startup never does. This is doctor's way to surface drift
-  # between those runs without having to invoke install/update speculatively.
+  # install_zinit_plugins only reprovisions during `install`/`update`, never
+  # at shell startup, so this surfaces drift between those runs without
+  # invoking them speculatively.
   while read -r record_type repository revision _; do
     [[ "$record_type" == zsh-plugin ]] || continue
     plugin_dir="$data_home/zinit/plugins/${repository//\//---}"

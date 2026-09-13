@@ -420,14 +420,11 @@ test_download_dependency_replaces_directory_target_without_nesting() {
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 
-  # Simulates a target that was replaced by a directory (tampering, or a
-  # stale leftover) while its recorded version already matches the current
-  # approved version: `mv` onto an existing directory renames *into* it
-  # instead of replacing it, so without the fix this would silently leave
-  # the approved binary unreachable at $HOME/.local/bin/tool/archive while
-  # still reporting success. The matching recorded version also means this
-  # covers dependency_managed_target_is_valid() correctly rejecting a
-  # directory-shaped target instead of taking the Up to date fast path.
+  # A target replaced by a directory while its recorded version still matches:
+  # `mv` renames *into* an existing directory, leaving the approved binary
+  # unreachable while reporting success. The matching version also makes this
+  # cover dependency_managed_target_is_valid rejecting a directory-shaped
+  # target rather than taking the Up to date fast path.
   mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
   printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
   mkdir -p "$HOME/.local/bin/tool"
@@ -499,10 +496,9 @@ test_git_dependency_install_recovers_from_stale_previous_target() {
   printf 'git testgit v1.0 linux amd64 %s - .local/share/testgit marker\n' "$repo" >"$SELFISHELL_DEPENDENCIES_FILE"
   printf 'stale leftover\n' >"$TEST_ROOT/stale-marker"
 
-  # A ".previous.$$"-named directory already occupying the exact path this
-  # process would use (as a killed prior run sharing a reused PID would
-  # leave behind) must not make the install corrupt or nest its target; it
-  # should simply be skipped in favor of an unused path.
+  # A ".previous.$$" directory already on the exact path this process would
+  # use, as a killed run with a reused PID leaves behind, must be skipped for
+  # an unused path rather than corrupting or nesting the target.
   bash -c '
     source "$1/lib/common.sh"
     source "$1/lib/paths.sh"

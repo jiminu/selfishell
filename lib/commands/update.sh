@@ -118,10 +118,9 @@ update_cli_release() {
   SELFISHELL_CLI_TARGET_VERSION="$version"
 }
 
-# The version the running release replaced. release_install rewrites the
-# previous-release link to the outgoing version immediately before switching
-# `current`, so the continuation below reports the transition without carrying
-# any state across its `exec`.
+# The version the running release replaced: release_install rewrites the
+# previous-release link just before switching `current`, so the continuation
+# below reports the transition without carrying state across its `exec`.
 update_replaced_version() {
   local previous
 

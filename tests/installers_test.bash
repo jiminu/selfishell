@@ -229,10 +229,9 @@ test_zinit_plugin_at_approved_revision_is_a_noop() {
     fail "A plugin already at its approved revision should not invoke Zinit at all"
 }
 
-# Declared zsh-plugin checkouts are Selfishell-managed dependencies (see
-# AGENTS.md): a checkout at the wrong revision, dirty, or otherwise not an
-# exact match is reprovisioned via the same fresh-provisioning path used for
-# a missing plugin, rather than preserved as user data.
+# These checkouts are managed dependencies (see AGENTS.md): anything not an
+# exact revision match goes through the same fresh-provisioning path as a
+# missing plugin rather than being preserved as user data.
 test_outdated_zinit_plugin_checkout_is_reprovisioned() {
   local manifest
   local plugin_dir

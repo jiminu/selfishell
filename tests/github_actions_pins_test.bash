@@ -5,11 +5,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-# Every `uses:` reference across the workflows must be pinned to a full
-# 40-character commit SHA (with a `# vX.Y.Z` comment recording the version
-# it corresponds to), not a mutable tag like `@v6` -- so a compromised or
-# retagged upstream action can't silently start running different code the
-# next time a workflow triggers.
+# Every `uses:` must pin a full 40-character SHA (with a `# vX.Y.Z` comment),
+# never a mutable tag: a compromised or retagged upstream action would
+# otherwise start running different code on the next trigger.
 test_github_actions_are_pinned_to_full_commit_shas() {
   local workflow line action_at ref
 
@@ -76,14 +74,11 @@ test_release_workflow_scopes_permissions_per_job() {
   done
 }
 
-# `gh pr list ... | grep -q '^0$' && gh pr create ...` used to make the whole
-# step exit non-zero whenever an automation PR was already open (grep finds
-# no match, and under GitHub Actions' default `bash -e`, that failing left
-# side of `&&` becomes the script's own exit status) -- which is this
-# workflow's normal steady state, so every scheduled run reported failure and
-# opened a bogus alert issue. Extract the fixed if/else block directly out of
-# the workflow file and execute it with a mocked `gh`, so this stays honest
-# to whatever the YAML actually contains rather than a copy that can drift.
+# `gh pr list | grep -q '^0$' && gh pr create` made the step exit non-zero
+# whenever a PR was already open: under Actions' default `bash -e`, the failing
+# left side of `&&` becomes the exit status. That is the steady state, so every
+# scheduled run reported failure. The if/else block is extracted from the
+# workflow file and run with a mocked `gh`, so this can't drift from the YAML.
 extract_lines_between() {
   local file="$1"
   local start_pattern="$2"
@@ -166,16 +161,12 @@ EOF
   teardown_test_home
 }
 
-# On a pull_request event, the "changes" job's checkout is the PR's own
-# (unreviewed) content, including its own copy of scripts/classify-ci-changes.sh
-# -- which gates whether the real lifecycle e2e jobs run. A PR could edit
-# that script to always report "nothing relevant changed" and suppress its
-# own e2e coverage. The fix runs the classifier as it exists at $BASE_SHA
-# (a commit that predates the PR) instead of the checked-out copy. This test
-# builds a real throwaway git repo with a "trusted" classifier at the base
-# commit and a "tampered" one at the head commit, extracts the actual
-# "Detect runtime changes" run: block out of ci.yml, and confirms it produces
-# the base (trusted) classifier's output, not the tampered one's.
+# On a pull_request the "changes" job checks out the PR's own unreviewed
+# copy of scripts/classify-ci-changes.sh, which gates the lifecycle e2e jobs --
+# so a PR could edit it to suppress its own coverage. The classifier is instead
+# run as it exists at $BASE_SHA. This builds a throwaway repo with a trusted
+# classifier at the base and a tampered one at the head, extracts the real
+# run: block from ci.yml, and confirms the trusted output wins.
 test_ci_classification_step_uses_base_ref_classifier_not_pr_content() {
   local workflow="$ROOT_DIR/.github/workflows/ci.yml"
   local snippet repo base_sha head_sha github_output github_summary status

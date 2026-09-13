@@ -27,13 +27,10 @@ test_complete_release_lifecycle() {
   export PATH="$TEST_ROOT/bin:$PATH"
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
-  # A real install provisions the pinned plugins alongside Zinit itself. Model
-  # that here so doctor sees a complete state instead of the degraded one it
-  # must report. Doctor now compares each checkout's HEAD against the
-  # manifest's pinned revision, so these must be real repositories -- real
-  # upstream commit hashes can't be reproduced locally, so the manifest is
-  # pointed at a rewritten copy that pins whatever commit each local fixture
-  # repo actually produces.
+  # A real install provisions the pinned plugins alongside Zinit, so model that
+  # or doctor reports the degraded state. Doctor compares each HEAD against the
+  # manifest, so these must be real repositories; upstream hashes can't be
+  # reproduced locally, so the manifest points at a rewritten copy.
   manifest="$TEST_ROOT/dependencies.conf"
   grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   while read -r _ repository _; do

@@ -21,11 +21,8 @@ zstyle ':completion:*' matcher-list \
 autoload -Uz compinit compaudit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
 
-# The (#q) glob qualifier is only recognized when EXTENDED_GLOB is set, and it
-# is off by default. Without it this test never globs, reports every dump as
-# stale, and makes compinit re-run compaudit on every interactive startup --
-# about 10ms. Enable the option locally so the once-a-day audit works as
-# intended (see tests/common_zsh_test.bash).
+# (#q) needs EXTENDED_GLOB, which is off by default; without it the test never
+# globs, every dump reads as stale, and compaudit re-runs each startup (~10ms).
 _selfishell_zcompdump_is_stale() {
   setopt localoptions extendedglob
   [[ -n "$1"(#qN.mh+24) ]]
@@ -36,10 +33,8 @@ if [[ ! -o interactive ]]; then
   # check to perform (or bypass) on this path.
   compinit -C -d "$ZCOMPDUMP"
 elif _selfishell_zcompdump_is_stale "$ZCOMPDUMP"; then
-  # Run the real insecure-directory scan ourselves so we can decide how to
-  # respond: warn and continue (-i, silent) rather than let compinit's
-  # default behavior block startup on a `read -q` prompt, or -u's blanket
-  # "treat everything as secure" skip the scan entirely.
+  # Scan ourselves to warn and continue: compinit's default blocks startup on
+  # a `read -q` prompt, and -u would skip the scan altogether.
   if [[ -n "$(compaudit 2>/dev/null)" ]]; then
     print -u2 "selfishell: insecure completion directories detected; run 'compaudit' for details."
     compinit -i -d "$ZCOMPDUMP"

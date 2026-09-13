@@ -59,10 +59,9 @@ test_treesitter_auto_installs_missing_parsers_on_filetype() {
 test_every_neovim_plugin_has_an_approved_revision() {
   local repository revision declared_plugins configured_plugins diff_output
 
-  # lazy.nvim bootstraps itself (config/lazy.lua) rather than being declared
-  # via plugin(...) in config/shared/nvim/lua/plugins/*.lua, so it's pinned in
-  # dependencies.conf without a matching Lua declaration -- checked
-  # separately below instead of folded into the set comparison.
+  # lazy.nvim bootstraps itself in config/lazy.lua rather than being declared
+  # via plugin(...), so it is pinned without a matching Lua declaration and is
+  # checked separately below.
   declared_plugins="$(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/config/shared/nvim/lua/plugins/*.lua | sort -u)"
   configured_plugins="$(awk '$1 == "nvim-plugin" && $2 != "folke/lazy.nvim" { print $2 }' "$ROOT_DIR/dependencies.conf" | sort -u)"
 
@@ -216,11 +215,9 @@ test_mason_lsp_servers_are_versioned() {
     grep -oE '"[^"]+"' | tr -d '"')"
   [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
 
-  # Most Mason packages track bare semver, optionally "v"-prefixed when a
-  # package's version follows its upstream release tag verbatim (e.g. tombi's
-  # v1.2.7 GitHub releases). marksman instead cuts dated releases
-  # (YYYY-MM-DD), so that exact-date form is accepted too -- any of these
-  # still pins to one specific, resolvable Mason version.
+  # Mason packages track bare semver, "v"-prefixed when the version follows an
+  # upstream tag verbatim (tombi). marksman cuts dated releases, so YYYY-MM-DD
+  # is accepted too; all three still pin one resolvable version.
   while IFS= read -r server; do
     [[ "$server" =~ ^[A-Za-z0-9_-]+@(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] ||
       fail "Default LSP server is not pinned to a supported version format: $server"

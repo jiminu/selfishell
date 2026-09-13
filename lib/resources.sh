@@ -38,20 +38,15 @@ block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty	-
 EOF
 }
 
-# Every caller consumes this through a process substitution of its own, so a
-# shell-level loop here would be reading from one pipe while writing into
-# another. A signal landing mid-write -- SIGCHLD from the producer exiting is
-# enough -- makes that write fail with EINTR on macOS, and Bash 3.2 reports it
-# instead of retrying: the list is then silently short, and `uninstall
-# --restore` walks a set missing whatever came after the truncation while still
-# reporting success. cut does the field selection in one process that retries
-# for itself.
+# Callers consume this through their own process substitution, so a shell loop
+# here would read one pipe while writing another. A signal mid-write (SIGCHLD
+# from the producer is enough) fails with EINTR on macOS, and Bash 3.2 reports
+# rather than retries it: the list silently truncates and `uninstall --restore`
+# walks a short set while reporting success. cut retries for itself.
 #
-# -s keeps a delimiter-free row out of the generated list rather than turning it
-# into a name. Declarations are all tab-separated, so this only bites on a
-# malformed one, and it does not bury it either: the regression test requires
-# these names to be the declarations' name column exactly, and a row that
-# yields no name fails there.
+# -s drops a delimiter-free row instead of turning it into a name. Only a
+# malformed declaration hits this, and it isn't buried: the regression test
+# requires these names to match the name column exactly.
 selfishell_managed_resource_names() {
   selfishell_managed_resources | cut -s -f2
 }
