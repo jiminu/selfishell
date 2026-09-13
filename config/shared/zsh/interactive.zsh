@@ -83,6 +83,18 @@ fi
 unset _selfishell_zoxide_bin
 
 if _selfishell_fzf_bin="$(command -v fzf)"; then
+  # fzf's default scheme takes its accents from the 256-color cube, so the
+  # picker looks the same whatever the terminal theme is. Scheme 16 keeps it to
+  # the terminal's own sixteen colors instead -- the same choice the prompt
+  # makes by naming colors rather than pinning hex values. It is spelled 16 and
+  # not base16 because the base16 alias is newer than the fzf Ubuntu 24.04
+  # ships (0.44.1), which rejects an unknown scheme outright and would take
+  # every fzf invocation down with it. A value from the environment wins, so
+  # this is a default and not a policy -- and it reaches only the standalone
+  # widgets, Ctrl-T and Ctrl-R. fzf-tab is given its colors directly below
+  # rather than through this variable, which may hold anything at all.
+  export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
+
   _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
   if [[ ! -s "$_selfishell_fzf_cache" || "$_selfishell_fzf_bin" -nt "$_selfishell_fzf_cache" ]]; then
     _selfishell_generate_fzf_cache "$_selfishell_fzf_cache"
@@ -106,6 +118,14 @@ if (($+functions[zinit])); then
     # alone and never the selection itself. The rules stay per-command on
     # purpose: a catch-all ':fzf-tab:complete:*' would also fire for option
     # flags and other candidates that are not paths, refs, or PIDs.
+
+    # fzf-tab blanks FZF_DEFAULT_OPTS before invoking fzf, so the picker needs
+    # the palette handed to it directly. Passing the variable through instead
+    # (use-fzf-default-opts) would forward whatever else the user keeps in it,
+    # and the flags fzf-tab does not set itself -- --bind, --with-nth,
+    # --preview-window -- are exactly the ones that break it: --with-nth
+    # defeats the NUL encoding it uses for candidates. Only the colors cross.
+    zstyle ':fzf-tab:*' fzf-flags --color=16
 
     # Group headers ([files], [directories], ...) above each candidate block.
     zstyle ':completion:*:descriptions' format '[%d]'
@@ -177,7 +197,9 @@ if (($+functions[zinit])); then
     zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
     zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
       'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'
-    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --preview-window=down:4:wrap
+    # zstyle answers with the most specific matching pattern rather than a
+    # union, so this context has to repeat the palette the general rule sets.
+    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --color=16 --preview-window=down:4:wrap
   fi
 
   if _selfishell_zinit_plugin_ready zsh-users/zsh-autosuggestions; then
