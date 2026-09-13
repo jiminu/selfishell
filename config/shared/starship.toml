@@ -54,7 +54,7 @@ style = 'bold yellow'
 format = '(($all_status )$ahead_behind)'
 
 # Colour groups states -- yellow an unstaged edit, green the index, red losing a
-# file, blue untracked. Seven distinct hues collide when set inline.
+# file, blue untracked, grey a stash set aside. Seven hues collide set inline.
 
 # Display counts such as !1
 modified = '[!${count}](yellow)'
@@ -64,7 +64,7 @@ deleted = '[-](red)'
 renamed = '[»](green)'
 # Counted where the number moves; deleted and renamed would always read 1.
 conflicted = '[~${count}](bold bright-red)'
-stashed = '[*${count}](white)'
+stashed = '[*${count}](bright-black)'
 
 ahead = '[⇡${count}](green) '
 behind = '[⇣${count}](red) '
