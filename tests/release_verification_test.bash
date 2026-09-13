@@ -79,10 +79,9 @@ test_published_release_verification() {
     fail "Published release verification did not report attestation verification"
 }
 
-# A gh CLI without attestation support must not let this script silently
-# downgrade to checksum self-consistency only while still reporting the
-# release as fully verified -- docs/RELEASING.md documents attestation as a
-# guaranteed property of every release.
+# A gh CLI without attestation support must not silently downgrade this to
+# checksum self-consistency while still reporting the release as verified:
+# docs/RELEASING.md guarantees attestation on every release.
 test_published_release_verification_fails_without_attestation_by_default() {
   local version=9.8.8
   local status=0

@@ -120,10 +120,9 @@ command_uninstall() {
     return "$result"
   fi
 
-  # Remove in reverse declaration order so user-facing entrypoints (links,
-  # blocks) come off before the Selfishell-internal managed targets they
-  # point at -- resources.sh generally declares internal files first and
-  # user-owned paths last. Validation above still runs in declaration order.
+  # Reverse declaration order, so user-facing entrypoints come off before the
+  # internal targets they point at (resources.sh declares internal files
+  # first). Validation above still runs in declaration order.
   while IFS= read -r resource; do
     resources+=("$resource")
   done < <(selfishell_managed_resource_names)

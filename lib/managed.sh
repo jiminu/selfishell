@@ -18,11 +18,9 @@ managed_state_exists() {
   [[ -e "$state_file" || -L "$state_file" ]]
 }
 
-# Returns 1 for both a missing state file and a malformed one (short,
-# truncated, or holding unrecognized field values); callers that must tell
-# the two apart -- so a corrupted state can't be silently treated as "no
-# state" and its resource mistaken for a fresh install -- check
-# managed_state_exists() themselves after this returns false.
+# Returns 1 for both a missing and a malformed state file. Callers that must
+# tell them apart -- so corruption isn't mistaken for a fresh install -- check
+# managed_state_exists() after this returns false.
 managed_read_state() {
   local state_file
   state_file="$(managed_state_path "$1")"
@@ -117,11 +115,9 @@ managed_atomic_copy() {
   }
 }
 
-# Managed regular-file conflicts are handled from inside a
-# `while ... done < <(selfishell_managed_resources)` loop, which redirects
-# FD 0 to the resource list for the duration of the loop. FD 3 is a copy of
-# the real stdin created once in lib/common.sh before that redirection takes
-# effect, so conflict prompts must check and read FD 3, not FD 0.
+# These conflicts are handled inside a `while ... done < <(...)` loop, which
+# holds FD 0 for its duration, so prompts must read FD 3 -- lib/common.sh's
+# copy of the real stdin -- instead.
 managed_conflict_is_interactive() {
   selfishell_is_interactive
 }
@@ -200,10 +196,9 @@ fi'
       ;;
     user-ghostty)
       MANAGED_BLOCK_LABEL='Selfishell ghostty'
-      # config-file directives are processed in declaration order, but always
-      # after every other key in this file. Declaring the optional override
-      # second means user.ghostty (if present) is applied after, and so wins
-      # over, the Selfishell defaults included first.
+      # config-file directives are processed in declaration order, but after
+      # every other key, so declaring the override second lets user.ghostty
+      # win over the defaults included first.
       MANAGED_BLOCK_BODY="config-file = $SELFISHELL_CONFIG_DIR/ghostty/config.ghostty
 # To override a Selfishell default above, add it to user.ghostty instead.
 config-file = ?user.ghostty"
@@ -247,15 +242,11 @@ managed_block_content() {
     "$(managed_block_end "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")"
 }
 
-# Sets MANAGED_BLOCK_STATUS to absent/malformed/intact based purely on marker
-# structure, and MANAGED_BLOCK_CHECKSUM to the live block bytes' checksum.
-# "intact" means the markers are well-formed -- it deliberately does NOT
-# compare against managed_block_content's current output, so a resource whose
-# body has legitimately changed across a Selfishell release (unlike the
-# hand-written checksum a user would produce by editing the block) is never
-# mistaken for user tampering. Callers that need to know whether the content
-# is up to date or was actually modified compare MANAGED_BLOCK_CHECKSUM
-# against their own reference checksum themselves.
+# Sets MANAGED_BLOCK_STATUS from marker structure alone and
+# MANAGED_BLOCK_CHECKSUM from the live bytes. "intact" means well-formed
+# markers and deliberately does not compare against current content, so a body
+# that changed across a release is never read as user tampering. Callers
+# compare MANAGED_BLOCK_CHECKSUM against their own reference themselves.
 managed_inspect_block() {
   local resource="$1"
   local target_file="$2"
@@ -357,12 +348,10 @@ managed_preflight_zsh_loader() {
   managed_preflight_block_target user-zshrc "$target_file" "$assume_yes" "$dry_run"
 }
 
-# Rewrites target_file with the managed block region (MANAGED_BLOCK_START,
-# MANAGED_BLOCK_LENGTH, set by the caller's prior managed_inspect_block call)
-# replaced by content_resource's managed block content, or removed entirely
-# if content_resource is omitted. Shared splice mechanics for
-# managed_replace_block and managed_remove_block, which otherwise differ only
-# in whether replacement content is inserted.
+# Rewrites target_file with the block region (MANAGED_BLOCK_START/LENGTH, set
+# by the caller's prior managed_inspect_block) replaced by content_resource's
+# content, or removed when it is omitted. Shared by managed_replace_block and
+# managed_remove_block.
 managed_splice_block() {
   local target_file="$1"
   local content_resource="${2:-}"
@@ -557,12 +546,10 @@ managed_install_file() {
   local original_backup="-"
   local conflict_backup=""
   local answer=""
-  # Updated is only accurate when an active managed file actually existed on
-  # disk immediately before this run and got replaced -- an "active" prior
-  # state alone isn't enough: the target may have been deleted since (e.g. by
-  # the user), in which case this run recreates it and that's an Installed.
-  # A "pending" state (interrupted before or during a previous install) must
-  # likewise still be reported as a fresh Installed, not an Updated.
+  # Updated requires a managed file that actually existed on disk just before
+  # this run: an "active" prior state alone isn't enough, since the target may
+  # have been deleted since and this run recreates it. "pending" (an
+  # interrupted install) is likewise a fresh Installed.
   local previously_active_file=0
 
   source_checksum="$(managed_checksum "$source_file")"

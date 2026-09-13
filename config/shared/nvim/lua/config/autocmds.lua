@@ -4,24 +4,15 @@ local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true 
 -- nvim-treesitter plugin no longer enables it through setup()/opts.
 vim.treesitter.language.register("terraform", "tf")
 
--- nvim-treesitter 1.0+ also dropped ensure_installed/auto_install from
--- setup(), so install a missing parser the first time its filetype is
--- opened rather than maintaining a separate static list to bulk-install
--- ahead of time.
---
--- Neovim fires FileType for a buffer more than once during startup (e.g.
--- opening a file from the command line), so track in-flight installs per
--- language ourselves: calling nvim-treesitter's install() a second time
--- before the first finishes routes through its own concurrent-install
--- guard, which blocks on a *nested* vim.wait() -- timing-sensitive enough
--- that it was observed to leave a buffer's highlighter never started.
+-- nvim-treesitter 1.0+ also dropped ensure_installed/auto_install, so
+-- parsers install lazily on FileType. Neovim fires FileType more than once
+-- per buffer, and a second install() before the first finishes blocks on a
+-- nested vim.wait() -- observed to leave a highlighter never started -- so
+-- track in-flight installs here rather than relying on its own guard.
 local pending_installs = {}
 
--- Languages whose install() has already failed once and been reported to
--- the user this session. Only suppresses the notification, not the retry:
--- pending_installs is what actually gates a retry, and it's always cleared
--- regardless of outcome, so the next file open of the same language tries
--- again even though this stays set.
+-- Suppresses a repeat notification only, never the retry: pending_installs
+-- gates retries and is cleared regardless of outcome.
 local notified_failures = {}
 
 local function ensure_parser_installed(buf, lang)
@@ -30,10 +21,8 @@ local function ensure_parser_installed(buf, lang)
     return
   end
 
-  -- vim.treesitter.start() succeeding or failing is not the signal here --
-  -- it can fail for reasons unrelated to a missing parser (e.g. a broken
-  -- query), and it's not this function's job to repair that. Whether the
-  -- parser itself is actually on disk is the only thing that matters.
+  -- start() can fail for reasons unrelated to a missing parser (a broken
+  -- query, say), so only the parser's presence on disk is the signal.
   if vim.list_contains(treesitter.get_installed("parsers"), lang) then
     return
   end
@@ -41,30 +30,22 @@ local function ensure_parser_installed(buf, lang)
     return
   end
 
-  -- A set keyed by buffer, not a list: Neovim fires FileType for the same
-  -- buffer more than once (see above), and without deduping here that
-  -- buffer would get queued twice and be retried twice below.
+  -- Keyed by buffer, not a list: FileType repeats, and a list would queue
+  -- and retry the same buffer twice.
   if pending_installs[lang] then
     pending_installs[lang][buf] = true
     return
   end
   pending_installs[lang] = { [buf] = true }
 
-  -- A query-only partial install (query dir present, parser file missing)
-  -- would make nvim-treesitter's own install() treat the language as
-  -- already done and no-op. force = true is the only way through that
-  -- public API to make sure the parser actually gets installed here; this
-  -- is safe because this call is only reached when get_installed("parsers")
-  -- above already confirmed the parser itself is missing.
+  -- A query-only partial install makes install() no-op; force is the only
+  -- way past it. Safe here: the check above confirmed the parser is missing.
   treesitter.install(lang, { force = true }):await(function(_, installed)
     local buffers = pending_installs[lang]
     pending_installs[lang] = nil
     if not installed then
-      -- Network down, no compiler, disk full, an nvim-treesitter internal
-      -- error -- whatever it was, tell the user once per language per
-      -- session instead of leaving highlighting silently missing with no
-      -- explanation. pending_installs is already cleared above, so the
-      -- next time any buffer of this language opens, a fresh attempt runs.
+      -- Report once per language per session rather than leaving
+      -- highlighting silently missing.
       if not notified_failures[lang] then
         notified_failures[lang] = true
         vim.notify(
@@ -80,12 +61,8 @@ local function ensure_parser_installed(buf, lang)
     end
 
     for pending_buf in pairs(buffers) do
-      -- The install ran asynchronously and could take a while (network +
-      -- compile); the buffer may have loaded a different file (or a
-      -- different filetype in the same buffer) by the time it resolves.
-      -- Confirm it's still the language this install was for before
-      -- touching it, or a stale parser could get attached to content it
-      -- doesn't belong to.
+      -- The install is slow enough that the buffer may hold a different
+      -- filetype by now; re-check, or a parser attaches to foreign content.
       local current_lang = vim.api.nvim_buf_is_valid(pending_buf)
         and vim.treesitter.language.get_lang(vim.bo[pending_buf].filetype)
       if current_lang == lang then
@@ -119,11 +96,8 @@ vim.api.nvim_create_autocmd("VimResized", {
   end,
 })
 
--- Yank leaves no trace of its own: unlike a visual selection, a motion yank
--- (`yap`, `yi{`, `y3j`) shows nothing, and 'report' (default 2) means charwise
--- and short linewise yanks print no message either. Flash the yanked range so
--- an off-by-one text object is visible immediately instead of at paste time.
--- on_yank() ignores `d`/`c` and skips itself while a macro is executing.
+-- A motion yank shows nothing, and 'report' (default 2) silences short ones
+-- too, so flash the range to catch an off-by-one text object before paste.
 vim.api.nvim_create_autocmd("TextYankPost", {
   group = group,
   callback = function()

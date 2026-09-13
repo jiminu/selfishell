@@ -495,12 +495,10 @@ test_update_preserves_non_link_previous_path_with_a_warning() {
 # path as a versioned installation at all, so a corrupted current can never
 # reach release_atomic_link to be silently replaced.
 #
-# This must invoke the retained release's own binary directly rather than
-# "$TEST_ROOT/prefix/bin/selfishell": that entrypoint's target string embeds
-# "current" as a path component, so once current is a regular file, the shell
-# fails resolving the path itself (ENOTDIR) before release_installation_paths
-# ever runs -- which would make this test pass even if that guard were
-# deleted entirely.
+# Invokes the retained release's own binary, not prefix/bin/selfishell: that
+# entrypoint embeds "current" as a path component, so once current is a regular
+# file the shell fails with ENOTDIR before release_installation_paths runs --
+# and the test would pass even with that guard deleted.
 test_update_rejects_non_link_current_path() {
   local version status retained_cli
 
@@ -707,10 +705,9 @@ test_default_update_reports_up_to_date_without_synchronizing() {
     fail "Default update at the latest release did not report up to date: $output"
   [[ "$output" != *'already at'* ]] ||
     fail "Default update printed the CLI-only wording as well as the up-to-date message: $output"
-  # No profile is installed in this fixture, so update_tools_and_configuration
-  # would have printed this exact message had it run at all -- its absence is
-  # proof the tools/configuration phase was skipped, not just that its final
-  # summary line was suppressed.
+  # No profile is installed here, so update_tools_and_configuration would have
+  # printed this had it run: its absence proves the phase was skipped, not just
+  # that the summary line was suppressed.
   [[ "$output" != *'skipping tools and configuration'* ]] ||
     fail "Default update ran the tools/configuration phase despite already being at the latest release: $output"
 }

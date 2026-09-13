@@ -4,14 +4,11 @@ source "$SELFISHELL_COMMON_DIR/aliases.zsh"
 # Shell tools configure key bindings before interactive plugins load.
 SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
 
-# Writes "$@"'s stdout to $target through a temp file, validated non-empty
-# and zsh-syntax-clean before the atomic rename, so a process killed
-# mid-generation (a closed terminal, a signal) can never leave a partially
-# written, non-empty cache that then gets sourced forever without
-# regenerating (the caller's [[ -s ]] check can't tell "empty" from
-# "truncated"). Only fits tools whose init output is exactly one command's
-# stdout; fzf's fallback-to-a-copied-file shape doesn't, so it stays
-# separate below rather than forcing it through this signature.
+# Writes "$@"'s stdout to $target through a temp file, validated non-empty and
+# zsh-syntax-clean before the atomic rename: the caller's [[ -s ]] can't tell
+# "empty" from "truncated", so a kill mid-generation would otherwise leave a
+# partial cache sourced forever. fzf's copied-file fallback doesn't fit this
+# shape and stays separate below.
 _selfishell_generate_zsh_cache() {
   local target="$1"
   shift
@@ -83,16 +80,11 @@ fi
 unset _selfishell_zoxide_bin
 
 if _selfishell_fzf_bin="$(command -v fzf)"; then
-  # fzf's default scheme takes its accents from the 256-color cube, so the
-  # picker looks the same whatever the terminal theme is. Scheme 16 keeps it to
-  # the terminal's own sixteen colors instead -- the same choice the prompt
-  # makes by naming colors rather than pinning hex values. It is spelled 16 and
-  # not base16 because the base16 alias is newer than the fzf Ubuntu 24.04
-  # ships (0.44.1), which rejects an unknown scheme outright and would take
-  # every fzf invocation down with it. A value from the environment wins, so
-  # this is a default and not a policy -- and it reaches only the standalone
-  # widgets, Ctrl-T and Ctrl-R. fzf-tab is given its colors directly below
-  # rather than through this variable, which may hold anything at all.
+  # Scheme 16 keeps fzf to the terminal's own colors, as the prompt does by
+  # naming colors. Spelled 16, not base16: that alias postdates the fzf Ubuntu
+  # 24.04 ships (0.44.1), which rejects an unknown scheme outright and would
+  # take every invocation down with it. The environment wins, so this is a
+  # default, not a policy, and it reaches only Ctrl-T and Ctrl-R.
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
 
   _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
@@ -112,28 +104,20 @@ if (($+functions[zinit])); then
     zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
     zinit light Aloxaf/fzf-tab
 
-    # fzf-tab only reads these styles when a completion actually runs, so the
-    # block below adds no forks and no disk I/O to shell startup. Each preview
-    # runs in an fzf worker process, so a slow one delays the preview pane
-    # alone and never the selection itself. The rules stay per-command on
-    # purpose: a catch-all ':fzf-tab:complete:*' would also fire for option
-    # flags and other candidates that are not paths, refs, or PIDs.
+    # These styles are read only when a completion runs, so startup pays
+    # nothing, and each preview runs in an fzf worker. Rules stay per-command
+    # on purpose: a catch-all would fire for option flags too.
 
-    # fzf-tab blanks FZF_DEFAULT_OPTS before invoking fzf, so the picker needs
-    # the palette handed to it directly. Passing the variable through instead
-    # (use-fzf-default-opts) would forward whatever else the user keeps in it,
-    # and the flags fzf-tab does not set itself -- --bind, --with-nth,
-    # --preview-window -- are exactly the ones that break it: --with-nth
-    # defeats the NUL encoding it uses for candidates. Only the colors cross.
+    # fzf-tab blanks FZF_DEFAULT_OPTS, so hand it the palette directly.
+    # use-fzf-default-opts would forward the rest of the user's variable, and
+    # --with-nth defeats the NUL encoding it uses for candidates.
     zstyle ':fzf-tab:*' fzf-flags --color=16
 
     # Group headers ([files], [directories], ...) above each candidate block.
     zstyle ':completion:*:descriptions' format '[%d]'
 
-    # fzf-tab exports $realpath for candidates zsh added as files; it holds the
-    # full path, while $word is only the part after the common prefix. Both
-    # branches cap their output so a deep tree or a large file cannot flood the
-    # pane, and both fall back to coreutils when eza/bat are not installed.
+    # $realpath is the full path; $word is only the part after the common
+    # prefix. Both branches cap output and fall back to coreutils.
     _selfishell_fzf_tab_path_preview='
       if [[ -d "$realpath" ]]; then
         if command -v eza >/dev/null 2>&1; then
@@ -155,45 +139,31 @@ if (($+functions[zinit])); then
     zstyle ':fzf-tab:complete:(cat|bat|batcat|less|nano|vim|nvim|view):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
     unset _selfishell_fzf_tab_path_preview
 
-    # zsh's _git appends the subcommand to the completion context
-    # (curcontext=${curcontext%:*}-$line[1]:), so `git switch` completes under
-    # `git-switch`. Its candidates include remote branches stripped of their
-    # remote (__git_remote_branch_names_noprefix), and `git log feature/x` does
-    # not resolve those, so show-ref -- which searches refs/heads before
-    # refs/remotes, like git itself -- maps the candidate to a hash first. The
-    # $word fallback keeps raw commits and HEAD working, and a candidate that
-    # resolves to nothing just previews as an empty pane.
+    # _git appends the subcommand to the context, so this completes under
+    # `git-switch`. Candidates include remote branches stripped of their remote,
+    # which `git log` cannot resolve, so show-ref maps them to a hash first.
+    # The $word fallback keeps raw commits and HEAD working.
     zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
       ref="$(git show-ref --hash "$word" 2>/dev/null | head -n 1)"
       git log --oneline --decorate --color=always -10 "${ref:-$word}" 2>/dev/null
     '
 
-    # What matters when staging or discarding is the pending change, not the
-    # file's contents. Plain `git diff` is the working-tree change, which is
-    # what all three commands act on by default and also what zsh offers as
-    # candidates here (_git-add completes ls-files --modified, git restore and
-    # git diff their changed-in-working-tree files). An option that moves the
-    # target, `git restore --staged` above all, is not read: the preview would
-    # have to parse the command line, and the candidate is simply previewed
-    # empty instead. Untracked files have no diff and preview empty too.
-    # $realpath is unset for candidates zsh did not add as files, hence the
-    # $word fallback.
+    # The pending change matters here, not the file's contents, and plain
+    # `git diff` is what all three commands act on by default. Options that
+    # move the target (`restore --staged`) would need command-line parsing and
+    # are not read; those candidates preview empty, as untracked files do.
     zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
       'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
 
-    # _git-stash appends its subcommand the same way _git does, so a stash
-    # reference is completed under git-stash-<subcommand>. The bare
-    # `git stash <TAB>` level completes subcommand names instead, which resolve
-    # to nothing and preview empty. `-p` is explicit rather than relying on a
-    # diff option to imply it, so the stash.showStat setting cannot turn the
-    # patch back into a diffstat.
+    # _git-stash appends its subcommand too, so refs complete under
+    # git-stash-<subcommand>; the bare level previews empty. `-p` is explicit
+    # so stash.showStat cannot turn the patch back into a diffstat.
     zstyle ':fzf-tab:complete:git-stash-(show|pop|apply|drop|branch):*' fzf-preview \
       'git stash show -p --color=always "$word" 2>/dev/null | head -n 200'
 
-    # `ps -p` with an explicit -o format is the subset BSD (macOS) and procps
-    # (Ubuntu) agree on. $USERNAME rather than $USER because zsh always defines
-    # it, while $USER comes from the environment and can be missing; `ps -u ''`
-    # then swallows the next argument and complains instead of listing.
+    # An explicit -o format is the subset BSD (macOS) and procps (Ubuntu)
+    # agree on. $USERNAME because zsh always defines it, unlike $USER: `ps -u ''`
+    # swallows the next argument and complains instead of listing.
     zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
     zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
       'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'

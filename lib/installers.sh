@@ -27,12 +27,9 @@ install_zinit_plugins() {
     plugin_previous=""
     failure_message=""
 
-    # Declared zsh-plugin checkouts are Selfishell-managed dependencies, not
-    # user data (see AGENTS.md): any state other than an exact match with the
-    # approved revision -- missing, a different revision, a dirty working
-    # tree, a non-Git path, or a partial checkout -- is uniformly
-    # reprovisioned from scratch rather than classified and recovered case by
-    # case.
+    # These checkouts are managed dependencies, not user data (see AGENTS.md),
+    # so anything but an exact match with the approved revision is
+    # reprovisioned from scratch rather than recovered case by case.
     if [[ -d "$plugin_dir/.git" ]] &&
       current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" &&
       [[ "$current_revision" == "$revision" ]] &&

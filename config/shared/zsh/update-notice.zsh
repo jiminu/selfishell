@@ -1,12 +1,7 @@
-# Prints the timestamp a lock has been stale since -- its recorded
-# created_at if that's a valid positive integer, otherwise the lock
-# directory's own mtime via zsh/stat (covers a lock left by an older
-# Selfishell version, one whose writer died right after mkdir before it
-# could write metadata, or corrupt metadata) -- or fails if the lock isn't
-# stale, or its age can't be determined at all, in which case the caller
-# must leave the lock alone rather than guess. zsh/stat is used instead of
-# the external `stat` command because its flags differ between Linux and
-# macOS/BSD.
+# Prints when a lock went stale: its created_at, else the directory's mtime
+# (an older Selfishell, or a writer that died before writing metadata).
+# Fails if the lock isn't stale or its age is unknowable -- the caller must
+# then leave it alone. zsh/stat, not `stat`: the flags differ across BSD.
 _selfishell_update_lock_stale_since() {
   local lock_dir="$1"
   local lock_ttl="$2"
@@ -46,22 +41,16 @@ _selfishell_update_notice_refresh() {
   command mkdir -p "$cache_dir" 2>/dev/null || return
 
   if ! command mkdir "$lock_dir" 2>/dev/null; then
-    # A prior refresh may have been killed (e.g. the terminal was closed)
-    # before it could remove its own lock, which would otherwise wedge every
-    # future check silently forever. If the lock is older than the TTL,
-    # treat it as abandoned and take over.
+    # A killed refresh leaves its lock behind and would wedge every future
+    # check, so a lock older than the TTL is treated as abandoned.
     zmodload zsh/datetime 2>/dev/null
     now="${EPOCHSECONDS:-$(command date +%s)}"
 
     lock_created_at="$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" || return
-    # Re-check immediately before reclaiming: if the lock's staleness
-    # signature changed since the check above, a concurrent refresh has
-    # already renewed it, so leave it alone instead of tearing down a lock
-    # that's no longer stale. This narrows, without fully closing, the race
-    # between two processes that both saw the same lock as abandoned; a
-    # second concurrent recovery that still slips through just means two
-    # redundant checks, not corruption, since available-version/
-    # update-checked-at are still written atomically below.
+    # Re-check before reclaiming: a changed signature means a concurrent
+    # refresh renewed it. This narrows, but does not close, the race between
+    # two reclaimers -- a slip means redundant checks, not corruption, since
+    # the writes below are atomic.
     [[ "$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" == "$lock_created_at" ]] || return
     command rm -rf "$lock_dir" 2>/dev/null
     command mkdir "$lock_dir" 2>/dev/null || return
@@ -89,12 +78,9 @@ _selfishell_update_notice_refresh() {
       command rm -f "$temporary"
     fi
   } always {
-    # Guaranteed to run even if the block above returns early or errors, so
-    # a normal failure (e.g. no network) can't leak the lock the same way a
-    # killed process does.
-    # rm -rf, not rmdir: the lock directory now holds pid/created_at files,
-    # so a plain rmdir would silently fail to remove it every time, wedging
-    # the very next check behind a "fresh-looking" lock it can never clear.
+    # Runs even when the block above returns early, so an ordinary failure
+    # can't leak the lock. rm -rf, not rmdir: the directory holds metadata
+    # files, and a failing rmdir would wedge the next check behind it.
     command rm -rf "$lock_dir" 2>/dev/null
   }
 }

@@ -108,10 +108,9 @@ install_default_shell() {
   fi
 }
 
-# Read-only counterpart to install_atomic_user_file_once: fails fast, before
-# any package installation or managed-configuration writes, if the target
-# path exists as something install_atomic_user_file_once would refuse to
-# touch (anything but a regular file or symlink).
+# Read-only counterpart to install_atomic_user_file_once: fails before any
+# package install or configuration write if the target is something that
+# function would refuse to touch (anything but a regular file or symlink).
 preflight_atomic_user_file_once() {
   local target_file="$1"
   local label="$2"

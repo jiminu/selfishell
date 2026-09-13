@@ -45,10 +45,9 @@ command_rollback() {
       return "$SELFISHELL_EXIT_ERROR"
     }
     target="$(readlink "$SELFISHELL_SHARE_DIR/previous")"
-    # `previous` is only ever written by release_atomic_link as
-    # "releases/<version>" (see release_install, rollback below), so require
-    # it to still have exactly that shape before trusting it: a hand-edited
-    # or corrupted link must never repoint `current` at an unvalidated path.
+    # release_atomic_link only ever writes `previous` as "releases/<version>",
+    # so require that shape before trusting it: a hand-edited or corrupted
+    # link must never repoint `current` at an unvalidated path.
     requested="${target#releases/}"
     if [[ "$target" != "releases/$requested" ]] ||
       ! selfishell_version_is_valid "$requested" ||

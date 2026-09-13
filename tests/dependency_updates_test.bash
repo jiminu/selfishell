@@ -300,10 +300,9 @@ EOF
     fail "An individually-valid pin was committed even though the batch failed"
 }
 
-# A newer stable candidate must land in config/shared/mise.toml -- the sole source
-# of truth for these versions -- while every other mise-managed pin
-# (including node/python, which this updater never queries) stays
-# byte-for-byte unchanged.
+# A newer stable candidate must land in config/shared/mise.toml, the sole
+# source of truth, while every other pin -- including node/python, never
+# queried -- stays byte-for-byte unchanged.
 test_mise_tool_update_bumps_pin_in_mise_toml_only() {
   local manifest metadata zsh_root
 

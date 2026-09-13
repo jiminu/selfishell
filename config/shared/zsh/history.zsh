@@ -9,10 +9,7 @@ setopt EXTENDED_HISTORY
 setopt INC_APPEND_HISTORY_TIME
 setopt HIST_IGNORE_SPACE
 
-# Normalize spacing before a line is recorded. Ctrl-R is fzf's widget and it
-# drops duplicates by exact string match, so `git status` typed with a stray
-# double space is a second entry competing for the same slot. This makes that
-# deduplication work rather than adding another layer of it: the entry, its
-# timestamp and its duration are all still kept, which the dup-pruning options
-# cannot say.
+# fzf's Ctrl-R drops duplicates by exact string match, so a stray double space
+# makes a second entry. Normalizing feeds that dedup rather than adding another
+# layer, and unlike the dup-pruning options it keeps timestamp and duration.
 setopt HIST_REDUCE_BLANKS

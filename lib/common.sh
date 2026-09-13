@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
-# Duplicate original stdin (FD 0) to FD 3. Command loops such as
-# `while ... done < <(selfishell_managed_resources)` redirect FD 0 to their
-# process substitution for the loop's duration, which would otherwise make
-# real interactive input unreachable from prompts issued inside the loop
-# body (see managed_install_file's conflict prompt in lib/managed.sh).
+# Duplicate stdin to FD 3: loops like `while ... done < <(...)` redirect FD 0
+# for their duration, cutting prompts in the loop body off from the terminal
+# (see managed_install_file's conflict prompt in lib/managed.sh).
 exec 3<&0
 
 # These constants are consumed by command modules after this file is sourced.
@@ -14,10 +12,8 @@ SELFISHELL_EXIT_OK=0
 SELFISHELL_EXIT_ERROR=1
 SELFISHELL_EXIT_USAGE=2
 
-# Colors for [OK]/[ERROR]-style markers and suggested follow-up commands in
-# `doctor` and `status` output. Left empty (and thus a no-op) unless stdout
-# is a terminal, so redirected, piped, or test-captured output stays
-# byte-identical to plain text.
+# Markers and follow-up commands in `doctor`/`status`. Empty unless stdout is
+# a terminal, so piped or test-captured output stays byte-identical.
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   # shellcheck disable=SC2034
   SELFISHELL_COLOR_GREEN=$'\033[32m'
@@ -46,10 +42,8 @@ else
   SELFISHELL_COLOR_RESET=
 fi
 
-# cli_error writes to stderr, which can be a terminal independently of
-# stdout (e.g. `selfishell doctor | tee log.txt` redirects stdout but not
-# stderr), so its color needs its own -t 2 check rather than reusing the
-# stdout-gated variables above.
+# stderr can be a terminal independently of stdout (`doctor | tee log.txt`),
+# so this needs its own -t 2 check rather than the stdout-gated vars above.
 if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
   SELFISHELL_COLOR_RED_STDERR=$'\033[31m'
   SELFISHELL_COLOR_YELLOW_STDERR=$'\033[33m'
@@ -74,10 +68,9 @@ have_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# Returns an unused path starting from $1, appending an incrementing suffix
-# on collision (mirroring install.sh's bootstrap_atomic_link). Used to name
-# temporary/backup paths for atomic swaps so a leftover from a killed prior
-# run -- however it got there -- never blocks a later retry.
+# An unused path from $1, with an incrementing suffix on collision (mirroring
+# install.sh's bootstrap_atomic_link). Names temp/backup paths for atomic
+# swaps, so a leftover from a killed run never blocks a retry.
 selfishell_unique_path() {
   local base="$1"
   local candidate="$base"
@@ -154,11 +147,9 @@ require_no_arguments() {
   fi
 }
 
-# FD 3 holds a copy of the real stdin made when this file was sourced (see
-# `exec 3<&0` above). Checking and reading FD 3 instead of FD 0 keeps this
-# check correct even when called from inside a loop that has redirected
-# FD 0 away from the terminal. SELFISHELL_TEST_TTY lets tests drive real
-# prompt/read logic over a piped FD 3 without an actual terminal attached.
+# FD 3 is the copy of real stdin from `exec 3<&0` above; reading it instead of
+# FD 0 stays correct inside a loop that redirected FD 0 away from the terminal.
+# SELFISHELL_TEST_TTY lets tests drive this over a pipe with no terminal.
 selfishell_is_interactive() {
   [[ -t 3 || -n "${SELFISHELL_TEST_TTY:-}" ]]
 }

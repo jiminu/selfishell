@@ -114,10 +114,9 @@ discover_metadata() {
   done
 }
 
-# Maps a mise-managed tool this updater is allowed to bump to its upstream
-# GitHub repository. node and python are intentionally absent: they stay
-# manually managed, and discover_metadata() never queries anything not
-# listed here.
+# Maps a bumpable mise tool to its upstream repository. node and python are
+# deliberately absent -- they stay manual, and discover_metadata() never
+# queries anything unlisted.
 mise_tool_repository() {
   case "$1" in
     neovim) printf 'neovim/neovim\n' ;;
@@ -184,11 +183,9 @@ stage_exact_replacement() {
   mv "$staged_file.next" "$staged_file"
 }
 
-# Stages every "mise-tool" bump in $metadata against config/shared/mise.toml's
-# current pin -- the sole source of truth for these versions. A candidate
-# that isn't a strictly newer, validly-formed version is silently skipped
-# -- no downgrade, no no-op edit -- so a repeated run with the same
-# candidate produces no further diff.
+# Stages every "mise-tool" bump against config/shared/mise.toml's pin, the
+# sole source of truth. Anything not strictly newer and well-formed is
+# skipped, so a repeated run produces no further diff.
 stage_mise_tool_updates() {
   local staged_dir="$1"
   local mise_toml_target="config/shared/mise.toml"
@@ -226,9 +223,8 @@ stage_mise_tool_updates() {
   done <"$metadata"
 }
 
-# Builds the updated manifest into $output without touching the real
-# manifest file; the caller only commits it once every Zsh plugin pin
-# rewrite below has also validated, so a rejected pin bump can never leave
+# Builds into $output without touching the real manifest; the caller commits
+# only once every pin rewrite below validates, so a rejected bump can't leave
 # dependencies.conf and the Zinit pins out of sync.
 build_manifest() {
   local output="$1"
@@ -313,10 +309,9 @@ build_manifest() {
   ' "$metadata" "$manifest" >"$output"
 }
 
-# Maps a pinned Zsh plugin's repository to the file that hardcodes its
-# Zinit `ver'<sha>'` pin, so a bump can target that exact string instead of
-# a blanket repo-wide substitution. An unrecognized repository is a hard
-# failure rather than a silent no-op.
+# Maps a plugin's repository to the file hardcoding its `ver'<sha>'` pin, so a
+# bump targets that exact string rather than substituting repo-wide. An
+# unrecognized repository fails hard rather than no-oping.
 zsh_plugin_pin_file() {
   case "$1" in
     zsh-users/zsh-completions) printf 'config/shared/zsh/completion.zsh\n' ;;
@@ -327,11 +322,9 @@ zsh_plugin_pin_file() {
   esac
 }
 
-# Rewrites one plugin's `ver'<old>'` pin to `ver'<new>'` on a staged copy
-# under $staged_dir, chaining onto an earlier plugin's edit to the same
-# file instead of re-copying it from disk. Nothing here touches a real
-# file: stage_zsh_plugin_pins' caller only commits the staged copies once
-# every plugin (and the manifest) has validated.
+# Rewrites one plugin's pin on a staged copy under $staged_dir, chaining onto
+# an earlier edit to the same file rather than re-copying it. Nothing real is
+# touched until the caller commits every validated copy.
 stage_zsh_plugin_pin() {
   local repository="$1" old_commit="$2" new_commit="$3" staged_dir="$4"
   local target_file staged_file match_count
@@ -371,10 +364,9 @@ stage_zsh_plugin_pin() {
   mv "$staged_file.next" "$staged_file"
 }
 
-# Stages every `zsh-plugin` bump in $metadata against the pre-update
-# commit recorded in $manifest (build_manifest hasn't overwritten it yet,
-# since it only writes to a temp file). Returns non-zero without staging
-# anything further as soon as one plugin fails to validate.
+# Stages every `zsh-plugin` bump against the pre-update commit in $manifest,
+# which build_manifest hasn't overwritten yet. Returns non-zero without
+# staging further as soon as one plugin fails to validate.
 stage_zsh_plugin_pins() {
   local staged_dir="$1"
   local type name commit old_commit

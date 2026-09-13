@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
 
-# Exercises the real managed-configuration lifecycle (install, idempotent
-# reinstall, status, update, uninstall --restore, purge) against an isolated
-# HOME on a genuine macOS runner -- the only lifecycle E2E that previously
-# existed (scripts/ubuntu-container-e2e.sh) only ran on Ubuntu, leaving BSD
-# touch/stat/sed differences, macOS's Bash 3.2, and Ghostty's preflight path
-# unverified end-to-end. Uses --skip-packages throughout so this never
-# installs Homebrew formulae/casks or needs network access, except where a
-# real CLI release install is the thing under test (which uses file://
-# release fixtures built locally, never the network either).
+# Runs the managed-configuration lifecycle against an isolated HOME on a real
+# macOS runner: the Ubuntu-only E2E left BSD touch/stat/sed, Bash 3.2, and
+# Ghostty's preflight unverified. --skip-packages throughout, so no Homebrew
+# and no network -- release installs use locally built file:// fixtures.
 
 set -euo pipefail
 
@@ -28,12 +23,9 @@ fail() {
   exit 1
 }
 
-# `status`'s own exit code also reflects missing *required* packages, which
-# --skip-packages guarantees throughout this script (by design, to avoid
-# real Homebrew installs) -- so it is not a useful "is anything actually
-# wrong" signal here. Managed resources reporting anything other than [OK]
-# is: a resource file/link/block was not left in the state the CLI itself
-# considers correct.
+# `status`'s exit code also reflects missing required packages, which
+# --skip-packages guarantees here, so it says nothing useful. A managed
+# resource reporting other than [OK] does.
 assert_managed_resources_clean() {
   local prefix="$1"
   local context="$2"
@@ -185,10 +177,9 @@ run_primary_lifecycle() {
 }
 
 # -----------------------------------------------------------------------
-# Ghostty preflight: a separate, isolated install where Ghostty defaults to
-# enabled (no prior state, --yes) so its config-path preflight and managed
-# files are exercised, while --skip-packages guarantees the actual Ghostty
-# Homebrew cask is never installed.
+# A separate isolated install where Ghostty defaults to enabled (no prior
+# state, --yes), exercising its config-path preflight and managed files while
+# --skip-packages keeps the cask from ever being installed.
 # -----------------------------------------------------------------------
 run_ghostty_preflight_check() {
   local home="$TEST_ROOT/home-ghostty"
@@ -248,10 +239,9 @@ run_purge_lifecycle() {
 }
 
 # -----------------------------------------------------------------------
-# macOS-specific portability: this whole script already runs every step
-# above against a real macOS runner's BSD touch/stat/sed, mktemp, and
-# XDG-override handling; this section double-checks a couple of things
-# not otherwise implied by the lifecycle passing.
+# Every step above already ran against BSD touch/stat/sed, mktemp, and
+# XDG-override handling; this checks the few things the lifecycle passing
+# does not otherwise imply.
 # -----------------------------------------------------------------------
 run_macos_portability_checks() {
   local bash_version

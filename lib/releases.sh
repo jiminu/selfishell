@@ -50,12 +50,9 @@ release_installation_paths() {
   SELFISHELL_SHARE_DIR="$share_dir"
 }
 
-# Confirms "$SELFISHELL_RELEASES_DIR/$version" is a real directory (not a
-# symlink -- which -x/-r would otherwise follow, accepting some other path's
-# contents as this version's release) and both looks complete (an executable
-# CLI is present) and actually contains the version it claims to, so a
-# corrupted, incomplete, mislabeled, or symlinked release directory is never
-# activated or rolled back to.
+# Confirms the release directory is real (not a symlink, which -x/-r would
+# follow, accepting another path's contents), complete, and actually holds the
+# version it claims, so a corrupt or mislabeled one is never activated.
 release_directory_is_valid() {
   local version="$1"
   local dir="$SELFISHELL_RELEASES_DIR/$version"
@@ -64,11 +61,10 @@ release_directory_is_valid() {
   [[ -x "$dir/bin/selfishell" && -r "$dir/VERSION" && "$(<"$dir/VERSION")" == "$version" ]]
 }
 
-# Rejects anything a release archive should never contain (FIFOs, device
-# nodes, sockets, ...) and any symlink that isn't a plain, existing sibling
-# path inside the archive (the release build packages "bin/sfs -> selfishell"
-# this way) -- absolute, traversal-shaped, or dangling targets are rejected
-# so extraction can't smuggle a link pointing outside the release directory.
+# Rejects what a release archive should never hold (FIFOs, device nodes,
+# sockets) and any symlink that isn't a plain existing sibling, as the build
+# packages "bin/sfs -> selfishell": absolute, traversal-shaped, or dangling
+# targets could smuggle a link outside the release directory.
 release_validate_extracted_members() {
   local staging="$1"
   local unexpected link target
@@ -114,11 +110,9 @@ release_platform() {
   esac
 }
 
-# Enforces the retention contract documented in docs/UPDATES.md: only the
-# active release and the rollback release are kept. Those directories are
-# managed product state rather than user data, and the contract is fixed, so a
-# superseded one is removed silently -- `selfishell status` reports the release
-# that can still be rolled back to.
+# The retention contract in docs/UPDATES.md: only the active and rollback
+# releases are kept. These are managed product state, not user data, so a
+# superseded one goes silently; `status` reports what can still be rolled to.
 release_prune_inactive() {
   local current_version previous_version release_dir release_version
 
@@ -159,11 +153,9 @@ release_install() {
     rm -rf "$temporary_dir"
     return 1
   }
-  # A duplicate SHA256SUMS line for the same archive (even a legitimate,
-  # identical one) would otherwise turn $expected into a multi-line value
-  # that can never equal the single-line $actual; `sort -u` collapses
-  # agreeing duplicates while still failing closed on genuinely conflicting
-  # ones (the multi-line value then just stays a mismatch).
+  # A duplicate SHA256SUMS line, even an identical one, would make $expected
+  # multi-line and never equal $actual. `sort -u` collapses agreeing
+  # duplicates and still fails closed on conflicting ones.
   expected="$(awk -v name="$archive_name" '$2 == name { print $1 }' "$checksum_file" | sort -u)"
   actual="$(dependency_sha256 "$archive")"
   if [[ -z "$expected" || "$actual" != "$expected" ]]; then

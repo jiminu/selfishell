@@ -5,10 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-# These only exercise argument parsing and --mode base (no external
-# integrations, no network); --mode full provisions real tools over the
-# network, so it's exercised manually (bash scripts/benchmark.sh --mode full)
-# rather than here, which would make the regular test suite network-dependent.
+# Argument parsing and --mode base only. --mode full provisions real tools over
+# the network, so it is run manually rather than made a suite dependency.
 
 test_benchmark_rejects_unknown_mode() {
   local status=0
@@ -148,11 +146,9 @@ test_benchmark_writes_opt_in_zprof_report() {
   teardown_test_home
 }
 
-# Argument parsing and mode validation must happen before benchmark.sh
-# creates its temp directory, so every early-exit path above (missing
-# --mode value, unknown --mode, unknown option, an invalid env-var mode)
-# leaves nothing behind. TMPDIR is scoped to an isolated sandbox so this
-# check can't be confused by unrelated temp entries on the real system.
+# Argument and mode validation must precede the temp directory, so every
+# early-exit path above leaves nothing behind. TMPDIR is sandboxed so
+# unrelated temp entries can't confuse the check.
 test_benchmark_early_exit_paths_leave_no_temp_directory() {
   local leftover
 
