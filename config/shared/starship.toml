@@ -53,14 +53,17 @@ style = 'bold yellow'
 [git_status]
 format = '(($all_status )$ahead_behind)'
 
+# Colors mark the kind of change, as VS Code does, rather than the
+# index/worktree split git(1) colors -- the symbols already carry that.
+
 # Display counts such as !1
-modified = '[!${count}](red)'
+modified = '[!${count}](yellow)'
 staged = '[+${count}](green)'
-untracked = '[?${count}](red)'
+untracked = '[?${count}](bright-green)'
 deleted = '[-](red)'
-renamed = '[»](green)'
-conflicted = '[~](bold red)'
-stashed = '[*](yellow)'
+renamed = '[»](bright-green)'
+conflicted = '[~](bold bright-red)'
+stashed = '[*](cyan)'
 
 ahead = '[⇡${count}](green) '
 behind = '[⇣${count}](red) '
