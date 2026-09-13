@@ -439,6 +439,36 @@ return {
         end,
         desc = "Fuzzy search in buffer",
       },
+      -- Snacks' own <leader>g prefix: these ask what changed across the
+      -- repository, while gitsigns' <leader>h acts on the hunk at the cursor.
+      {
+        "<leader>gs",
+        function()
+          Snacks.picker.git_status()
+        end,
+        desc = "Git status",
+      },
+      {
+        "<leader>gd",
+        function()
+          Snacks.picker.git_diff()
+        end,
+        desc = "Changed hunks",
+      },
+      {
+        "<leader>gl",
+        function()
+          Snacks.picker.git_log()
+        end,
+        desc = "Git log",
+      },
+      {
+        "<leader>gf",
+        function()
+          Snacks.picker.git_log_file()
+        end,
+        desc = "Git log for current file",
+      },
     },
     opts = {
       -- Backend pinned to ripgrep: the developer profile guarantees it, but
@@ -462,6 +492,14 @@ return {
           -- just the cwd; Snacks defaults to cwd-only.
           diagnostics = {
             filter = { cwd = false },
+          },
+          -- Both reach the same filename formatter as the sources above. The
+          -- git log pickers don't -- their commit glyph is Snacks' own.
+          git_status = {
+            icons = { files = { enabled = false } },
+          },
+          git_diff = {
+            icons = { files = { enabled = false } },
           },
         },
       },
