@@ -1475,4 +1475,204 @@ zdharma-continuum/fast-syntax-highlighting config/shared/zsh/interactive.zsh
 PLUGINS
 }
 
+# Writes a Zinit stub plus an fzf stub into $TEST_ROOT so interactive.zsh takes
+# the branch that configures fzf-tab. The plugin directory itself is left to the
+# caller, since its absence is what the guard is supposed to detect.
+setup_fzf_tab_stubs() {
+  local fake_bin="$TEST_ROOT/bin"
+  local zinit_home="$HOME/.local/share/zinit/zinit.git"
+
+  mkdir -p "$fake_bin" "$zinit_home"
+  cat >"$fake_bin/fzf" <<'EOF'
+#!/bin/sh
+printf ':\n'
+EOF
+  chmod +x "$fake_bin/fzf"
+  cat >"$zinit_home/zinit.zsh" <<'EOF'
+typeset -gA ZINIT
+ZINIT[PLUGINS_DIR]="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
+zinit() { : }
+EOF
+}
+
+# Writes each configured preview command to $TEST_ROOT/previews/<name>, so the
+# tests can run them the way fzf does instead of matching their source text.
+dump_fzf_tab_previews() {
+  mkdir -p "$TEST_ROOT/previews"
+  XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" ZDOTDIR="" \
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+    /bin/zsh -f -c '
+      source "$1"
+      for name context in \
+        directory ":fzf-tab:complete:cd:x" \
+        file ":fzf-tab:complete:vim:x" \
+        branch ":fzf-tab:complete:git-switch:x" \
+        diff ":fzf-tab:complete:git-add:x" \
+        process ":fzf-tab:complete:kill:argument-rest"; do
+        zstyle -s "$context" fzf-preview command_string || continue
+        print -r -- "$command_string" >"$2/$name"
+      done
+    ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" "$TEST_ROOT/previews" 2>/dev/null
+}
+
+# Runs preview $1 the way fzf does: from directory $2, with $word set to $3 and
+# $realpath to $4, seeing PATH $5 (default: the caller's). Stderr is captured in
+# $TEST_ROOT/preview-errors, and the exit status is dropped because a preview's
+# status never reaches the user -- only its two output streams do.
+run_fzf_tab_preview() {
+  (
+    cd "$2" || exit 1
+    PATH="${5:-$PATH}" word="$3" realpath="$4" \
+      /bin/zsh -f -c "$(cat "$TEST_ROOT/previews/$1")" 2>"$TEST_ROOT/preview-errors"
+  ) || true
+}
+
+test_fzf_tab_previews_wait_for_the_plugin() {
+  local output
+
+  setup_test_home
+  setup_fzf_tab_stubs
+
+  output="$(
+    XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share" ZDOTDIR="" \
+      PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      /bin/zsh -f -c '
+        source "$1"
+        # zstyle -L reports 1 when nothing matches, which is the passing case.
+        zstyle -L ":fzf-tab:complete:*" fzf-preview || true
+      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
+  )"
+
+  [[ -z "$output" ]] ||
+    fail "Previews were configured even though fzf-tab is not installed: $output"
+  teardown_test_home
+}
+
+test_fzf_tab_previews_cover_the_commands_they_advertise() {
+  local name previews
+
+  setup_test_home
+  setup_fzf_tab_stubs
+  previews="$TEST_ROOT/previews"
+  mkdir -p "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
+
+  dump_fzf_tab_previews
+
+  for name in directory file branch diff process; do
+    [[ -s "$previews/$name" ]] ||
+      fail "No fzf-tab preview is configured for $name completion"
+  done
+  teardown_test_home
+}
+
+# The previews are zstyle values, so `zsh -n` over the config file never parses
+# them and the optional tools they reach for are not installed everywhere. Run
+# each one for real with eza, bat and batcat absent, outside a Git repository,
+# and against a path that contains a space.
+test_fzf_tab_previews_fall_back_without_leaking_errors() {
+  local errors output previews restricted_bin sandbox tool
+
+  setup_test_home
+  setup_fzf_tab_stubs
+  previews="$TEST_ROOT/previews"
+  restricted_bin="$TEST_ROOT/restricted-bin"
+  sandbox="$TEST_ROOT/sandbox/a dir"
+  mkdir -p "$restricted_bin" "$sandbox" \
+    "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
+  printf 'one\ntwo\n' >"$sandbox/a file.txt"
+  for tool in git ps head ls; do
+    ln -sf "$(command -v "$tool")" "$restricted_bin/$tool"
+  done
+
+  dump_fzf_tab_previews
+
+  assert_fzf_tab_preview_is_quiet() {
+    run_fzf_tab_preview "$1" "$sandbox" "$2" "$3" "$restricted_bin" >/dev/null
+    errors="$(cat "$TEST_ROOT/preview-errors")"
+    [[ -z "$errors" ]] ||
+      fail "The $1 preview wrote to stderr: $errors"
+  }
+
+  # $sandbox is not a repository, so the Git previews run against one here.
+  assert_fzf_tab_preview_is_quiet directory '' "$sandbox"
+  assert_fzf_tab_preview_is_quiet file '' "$sandbox/a file.txt"
+  assert_fzf_tab_preview_is_quiet directory '' "$sandbox/gone"
+  assert_fzf_tab_preview_is_quiet branch main ''
+  assert_fzf_tab_preview_is_quiet diff 'a file.txt' ''
+  assert_fzf_tab_preview_is_quiet process 0 ''
+
+  output="$(run_fzf_tab_preview directory "$sandbox" '' "$sandbox" "$restricted_bin")"
+  [[ "$output" == *'a file.txt'* ]] ||
+    fail "The directory preview showed nothing without eza: $output"
+  output="$(run_fzf_tab_preview file "$sandbox" '' "$sandbox/a file.txt" "$restricted_bin")"
+  [[ "$output" == *'two'* ]] ||
+    fail "The file preview showed nothing without bat: $output"
+  output="$(run_fzf_tab_preview branch "$sandbox" main '' "$restricted_bin")"
+  [[ -z "$output" ]] ||
+    fail "The branch preview produced output outside a repository: $output"
+
+  unset -f assert_fzf_tab_preview_is_quiet
+  teardown_test_home
+}
+
+# Quiet is not the same as correct: these two previews have to produce the right
+# history and the right hunk. The Git commands they wrap all act on the working
+# tree by default, so a preview built on `git diff HEAD` would also show work
+# that is already staged and that none of them would touch.
+test_fzf_tab_git_previews_read_the_repository() {
+  local output repository
+
+  setup_test_home
+  setup_fzf_tab_stubs
+  # The space is deliberate: the previews quote their candidate, and a path that
+  # cannot survive one is the failure this catches.
+  repository="$TEST_ROOT/a repository"
+  mkdir -p "$repository" "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
+  dump_fzf_tab_previews
+
+  # An identity plus empty config files, so that neither the developer's
+  # ~/.gitconfig nor /etc/gitconfig -- commit signing above all -- can reach the
+  # commits below or the previews that read them.
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+  export GIT_AUTHOR_NAME=selfishell GIT_AUTHOR_EMAIL=selfishell@example.invalid
+  export GIT_COMMITTER_NAME=selfishell GIT_COMMITTER_EMAIL=selfishell@example.invalid
+
+  git -C "$repository" init -q -b main
+  printf 'base\n' >"$repository/staged only.txt"
+  printf 'base\n' >"$repository/worktree only.txt"
+  git -C "$repository" add -A
+  git -C "$repository" commit -q -m 'record the first revision'
+  git -C "$repository" branch feature/login
+  # A remote-tracking ref with no local branch, which is how a branch someone
+  # else pushed reaches the candidate list: zsh offers it stripped of its
+  # remote, and `git log release-2` cannot resolve that.
+  git -C "$repository" update-ref refs/remotes/origin/release-2 HEAD
+  git -C "$repository" commit -q --allow-empty -m 'drop the unused flag'
+
+  output="$(run_fzf_tab_preview branch "$repository" feature/login '')"
+  [[ "$output" == *'record the first revision'* ]] ||
+    fail "The branch preview did not show the branch's commits: $output"
+  [[ "$output" != *'drop the unused flag'* ]] ||
+    fail "The branch preview showed commits the branch does not contain: $output"
+  output="$(run_fzf_tab_preview branch "$repository" release-2 '')"
+  [[ "$output" == *'record the first revision'* ]] ||
+    fail "The branch preview did not resolve a remote branch by its bare name: $output"
+
+  # One file changed in the index alone and one in the working tree alone.
+  # Keeping them apart is what makes the second assertion below meaningful: in a
+  # single file the staged line would sit inside the unstaged hunk as context,
+  # and staged work would look present either way.
+  printf 'base\nstaged-change\n' >"$repository/staged only.txt"
+  git -C "$repository" add 'staged only.txt'
+  printf 'base\nworktree-change\n' >"$repository/worktree only.txt"
+
+  output="$(run_fzf_tab_preview diff "$repository" 'worktree only.txt' '')"
+  [[ "$output" == *'worktree-change'* ]] ||
+    fail "The diff preview did not show the working tree change: $output"
+  output="$(run_fzf_tab_preview diff "$repository" 'staged only.txt' '')"
+  [[ "$output" != *'staged-change'* ]] ||
+    fail "The diff preview showed work that is already staged: $output"
+  teardown_test_home
+}
+
 run_discovered_tests '' teardown_test_home

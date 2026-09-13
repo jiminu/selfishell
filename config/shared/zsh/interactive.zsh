@@ -99,7 +99,78 @@ if (($+functions[zinit])); then
   if command -v fzf >/dev/null 2>&1 && _selfishell_zinit_plugin_ready Aloxaf/fzf-tab; then
     zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
     zinit light Aloxaf/fzf-tab
+
+    # fzf-tab only reads these styles when a completion actually runs, so the
+    # block below adds no forks and no disk I/O to shell startup. Each preview
+    # runs in an fzf worker process, so a slow one delays the preview pane
+    # alone and never the selection itself. The rules stay per-command on
+    # purpose: a catch-all ':fzf-tab:complete:*' would also fire for option
+    # flags and other candidates that are not paths, refs, or PIDs.
+
+    # Group headers ([files], [directories], ...) above each candidate block.
+    zstyle ':completion:*:descriptions' format '[%d]'
+
+    # fzf-tab exports $realpath for candidates zsh added as files; it holds the
+    # full path, while $word is only the part after the common prefix. Both
+    # branches cap their output so a deep tree or a large file cannot flood the
+    # pane, and both fall back to coreutils when eza/bat are not installed.
+    _selfishell_fzf_tab_path_preview='
+      if [[ -d "$realpath" ]]; then
+        if command -v eza >/dev/null 2>&1; then
+          eza --tree --level=2 --color=always "$realpath" 2>/dev/null
+        else
+          ls -lA "$realpath" 2>/dev/null
+        fi | head -n 200
+      elif [[ -f "$realpath" ]]; then
+        if command -v bat >/dev/null 2>&1; then
+          bat --color=always --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+        elif command -v batcat >/dev/null 2>&1; then
+          batcat --color=always --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+        else
+          head -n 200 "$realpath" 2>/dev/null
+        fi
+      fi
+    '
+    zstyle ':fzf-tab:complete:(cd|z|__zoxide_z):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
+    zstyle ':fzf-tab:complete:(cat|bat|batcat|less|nano|vim|nvim|view):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
+    unset _selfishell_fzf_tab_path_preview
+
+    # zsh's _git appends the subcommand to the completion context
+    # (curcontext=${curcontext%:*}-$line[1]:), so `git switch` completes under
+    # `git-switch`. Its candidates include remote branches stripped of their
+    # remote (__git_remote_branch_names_noprefix), and `git log feature/x` does
+    # not resolve those, so show-ref -- which searches refs/heads before
+    # refs/remotes, like git itself -- maps the candidate to a hash first. The
+    # $word fallback keeps raw commits and HEAD working, and a candidate that
+    # resolves to nothing just previews as an empty pane.
+    zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
+      ref="$(git show-ref --hash "$word" 2>/dev/null | head -n 1)"
+      git log --oneline --decorate --color=always -10 "${ref:-$word}" 2>/dev/null
+    '
+
+    # What matters when staging or discarding is the pending change, not the
+    # file's contents. Plain `git diff` is the working-tree change, which is
+    # what all three commands act on by default and also what zsh offers as
+    # candidates here (_git-add completes ls-files --modified, git restore and
+    # git diff their changed-in-working-tree files). An option that moves the
+    # target, `git restore --staged` above all, is not read: the preview would
+    # have to parse the command line, and the candidate is simply previewed
+    # empty instead. Untracked files have no diff and preview empty too.
+    # $realpath is unset for candidates zsh did not add as files, hence the
+    # $word fallback.
+    zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
+      'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
+
+    # `ps -p` with an explicit -o format is the subset BSD (macOS) and procps
+    # (Ubuntu) agree on. $USERNAME rather than $USER because zsh always defines
+    # it, while $USER comes from the environment and can be missing; `ps -u ''`
+    # then swallows the next argument and complains instead of listing.
+    zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
+    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
+      'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'
+    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --preview-window=down:4:wrap
   fi
+
   if _selfishell_zinit_plugin_ready zsh-users/zsh-autosuggestions; then
     zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
     zinit light zsh-users/zsh-autosuggestions
