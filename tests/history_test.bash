@@ -12,17 +12,22 @@ test_history_module_uses_persistent_extended_history() {
   output="$(
     HOME="$HOME" ZDOTDIR="" /bin/zsh -f -c '
       source "$1"
-      [[ "$HISTFILE" == "$HOME/.zsh_history" ]]
-      [[ "$HISTSIZE" == 10000 ]]
-      [[ "$SAVEHIST" == 10000 ]]
-      [[ -o EXTENDED_HISTORY ]]
-      [[ -o INC_APPEND_HISTORY_TIME ]]
-      [[ -o HIST_IGNORE_SPACE ]]
+      # A bare [[ ]] does not stop a -c script, so each check has to report the
+      # mismatch itself: anything printed before the marker breaks the exact
+      # comparison below and names what went wrong.
+      [[ "$HISTFILE" == "$HOME/.zsh_history" ]] || print -r -- "HISTFILE=$HISTFILE"
+      [[ "$HISTSIZE" == 10000 ]] || print -r -- "HISTSIZE=$HISTSIZE"
+      [[ "$SAVEHIST" == 10000 ]] || print -r -- "SAVEHIST=$SAVEHIST"
+      for option in EXTENDED_HISTORY INC_APPEND_HISTORY_TIME HIST_IGNORE_SPACE \
+        HIST_REDUCE_BLANKS; do
+        [[ -o $option ]] || print -r -- "unset: $option"
+      done
       print HISTORY_CONFIG_OK
     ' zsh "$ROOT_DIR/config/shared/zsh/history.zsh"
   )"
 
-  [[ "$output" == HISTORY_CONFIG_OK ]] || fail "Zsh history configuration was not applied"
+  [[ "$output" == HISTORY_CONFIG_OK ]] ||
+    fail "Zsh history configuration was not applied: $output"
   teardown_test_home
 }
 
