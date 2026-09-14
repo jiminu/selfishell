@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 
-# Runs the managed-configuration lifecycle against an isolated HOME on a real
-# macOS runner: the Ubuntu-only E2E left BSD touch/stat/sed, Bash 3.2, and
-# Ghostty's preflight unverified. --skip-packages throughout, so no Homebrew
-# and no network -- release installs use locally built file:// fixtures.
+# Exercise the macOS configuration lifecycle in an isolated HOME using local releases
+# and --skip-packages; no package installation or network access is needed.
 
 set -euo pipefail
 
@@ -23,17 +21,13 @@ fail() {
   exit 1
 }
 
-# `status`'s exit code also reflects missing required packages, which
-# --skip-packages guarantees here, so it says nothing useful. A managed
-# resource reporting other than [OK] does.
+# Check resource markers because status may also fail for uninstalled packages.
 assert_managed_resources_clean() {
   local prefix="$1"
   local context="$2"
   local status_output
 
-  # Captured rather than piped directly into grep: under `pipefail`,
-  # status's own (expected, package-driven) exit code would otherwise
-  # poison the pipeline's exit status regardless of what grep finds.
+  # Capture separately so a package-related status failure cannot trip pipefail.
   status_output="$("$prefix/bin/selfishell" status 2>&1)" || true
   printf '%s\n' "$status_output" | grep -Eq '\[CHANGED\]|\[MALFORMED\]|\[PENDING\]' &&
     fail "status reported a changed, malformed, or pending managed resource $context"
@@ -55,11 +49,7 @@ publish_fixture() {
 publish_fixture "$INITIAL_VERSION"
 publish_fixture "$NEXT_VERSION"
 
-# -----------------------------------------------------------------------
-# Primary lifecycle: clean install, idempotent reinstall, status, update,
-# uninstall --restore -- all configuration-only (--skip-packages), all
-# against an isolated HOME/XDG sandbox that is never the real runner HOME.
-# -----------------------------------------------------------------------
+# Configuration lifecycle
 run_primary_lifecycle() {
   local home="$TEST_ROOT/home-primary"
   local prefix="$home/.local"
@@ -72,9 +62,7 @@ run_primary_lifecycle() {
   export XDG_CACHE_HOME="$home/xdg-cache"
   mkdir -p "$HOME" "$XDG_CONFIG_HOME"
 
-  # No trailing newline and a CRLF-styled line, so the real (not mocked)
-  # lifecycle proves it preserves both byte-for-byte, matching M8's
-  # acceptance criteria for the loader block.
+  # Check byte preservation with CRLF content and no trailing newline.
   printf 'export SELFISHELL_E2E_MARKER=1\r\nalias ll="ls -la"' >"$HOME/.zshrc"
   local zshrc_before
   zshrc_before="$(cat "$HOME/.zshrc")"
@@ -104,9 +92,7 @@ run_primary_lifecycle() {
   [[ "$vimrc_block_count" == 1 ]] || fail "install did not add exactly one vimrc block (found $vimrc_block_count)"
   [[ -d "$XDG_CONFIG_HOME/selfishell" ]] || fail "managed configuration was not created under XDG_CONFIG_HOME"
   [[ -d "$XDG_STATE_HOME/selfishell" ]] || fail "managed state was not created under XDG_STATE_HOME"
-  # The managed *links* (starship.toml, nvim, mise's conf.d entry) live
-  # under $HOME itself, pointing into the copied $XDG_CONFIG_HOME/selfishell
-  # tree -- never directly at the source checkout that this script runs from.
+  # Managed links must target installed configuration, not the source checkout.
   while IFS= read -r -d '' link; do
     case "$(readlink "$link")" in
       "$ROOT_DIR"*) fail "$link links directly into the source checkout instead of the copied managed configuration" ;;
@@ -146,9 +132,7 @@ run_primary_lifecycle() {
   assert_managed_resources_clean "$prefix" "on a clean install"
 
   # --- configuration update ---
-  # --tools-only --skip-packages keeps this configuration-only, same as the
-  # install step above. The CLI-release path is not part of --tools-only,
-  # confirmed by pointing it at an unreachable release root.
+  # An unreachable release root verifies this configuration update stays offline.
   SELFISHELL_RELEASE_ROOT='file:///network-must-not-be-used' \
     "$prefix/bin/selfishell" update --tools-only --skip-packages --yes >/dev/null
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
@@ -176,11 +160,7 @@ run_primary_lifecycle() {
   printf 'PASS: primary configuration lifecycle (clean install, idempotent reinstall, status, update, uninstall --restore)\n'
 }
 
-# -----------------------------------------------------------------------
-# A separate isolated install where Ghostty defaults to enabled (no prior
-# state, --yes), exercising its config-path preflight and managed files while
-# --skip-packages keeps the cask from ever being installed.
-# -----------------------------------------------------------------------
+# Default Ghostty configuration
 run_ghostty_preflight_check() {
   local home="$TEST_ROOT/home-ghostty"
   local prefix="$home/.local"
@@ -207,11 +187,7 @@ run_ghostty_preflight_check() {
   printf 'PASS: Ghostty config-path preflight and managed files (no package installed)\n'
 }
 
-# -----------------------------------------------------------------------
-# Purge: a separate, isolated bootstrap install, then uninstall --restore
-# --purge, verifying the CLI link, release data, cache, and state are all
-# removed (package-manager-installed tools are never touched).
-# -----------------------------------------------------------------------
+# CLI purge
 run_purge_lifecycle() {
   local home="$TEST_ROOT/home-purge"
   local prefix="$home/.local"
@@ -238,11 +214,7 @@ run_purge_lifecycle() {
   printf 'PASS: purge removes the CLI, releases, cache, and state\n'
 }
 
-# -----------------------------------------------------------------------
-# Every step above already ran against BSD touch/stat/sed, mktemp, and
-# XDG-override handling; this checks the few things the lifecycle passing
-# does not otherwise imply.
-# -----------------------------------------------------------------------
+# macOS compatibility checks
 run_macos_portability_checks() {
   local bash_version
 

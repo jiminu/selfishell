@@ -39,6 +39,14 @@ uses that recorded profile to install missing Apt, Homebrew, and directly
 managed tools before updating configuration. Apt and Homebrew retain
 responsibility for versions of packages they already manage.
 
+Changing from `developer` to `minimal` changes future tool synchronization;
+it does not remove previously installed tools or configuration. Existing
+Neovim and mise configuration links remain active, and `selfishell status`
+continues to check all tracked paths, including retained developer resources.
+To remove managed configuration before setting up a smaller profile, run
+`selfishell uninstall --restore`, then `selfishell install --profile minimal`.
+Uninstall leaves installed packages and user-created files in place.
+
 Profile package requirements have two failure policies:
 
 - `required` packages must be available and install successfully;

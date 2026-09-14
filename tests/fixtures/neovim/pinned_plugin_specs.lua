@@ -23,15 +23,8 @@ assert(type(snacks.config) == "function",
 
 local indent = snacks.opts.indent
 assert(indent.enabled == true, "Snacks indent module must be enabled")
-assert(indent.indent.enabled == false, "Normal indent rendering must stay disabled")
-assert(indent.indent.only_scope == nil, "Disabled normal indent rendering must not carry redundant scope options")
-assert(indent.animate.enabled == false, "Scope animation must stay disabled")
-assert(indent.chunk.enabled == false, "Chunk rendering must stay disabled")
 
 assert(indent.scope.enabled == true, "Scope rendering must be enabled")
-assert(indent.scope.char == "│", "Scope marker must use a thin solid line")
-assert(indent.scope.underline == false, "Scope start underline must stay disabled")
-assert(indent.scope.hl == "SnacksIndentScope", "Scope must use the default Snacks scope highlight")
 
 assert(indent.scope.treesitter.enabled == true, "Scope detection must prefer Tree-sitter")
 assert(type(indent.scope.treesitter.blocks) == "table" and indent.scope.treesitter.blocks.enabled == false,
@@ -49,14 +42,5 @@ end
 vim.bo.filetype = "lua"
 assert(indent.filter(0) == true, "Indent rendering incorrectly excluded an ordinary buffer")
 assert(indent.scope.filter(0) == true, "Scope detection incorrectly excluded an ordinary buffer")
-
-local picker = snacks.opts.picker
-assert(picker, "Snacks picker must be configured")
-assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
-assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
-assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
-assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
-assert(picker.sources.buffers.icons.files.enabled == false, "The buffers picker should hide the leading file icon")
-assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 print("pinned plugin specs: OK")

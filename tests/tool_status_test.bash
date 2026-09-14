@@ -144,27 +144,109 @@ test_maps_package_name_to_executable() {
     fail "mise selector was not mapped to its executable"
 }
 
-# profiles/*.conf declares mise packages by bare tool name only (no
-# @version); the approved version must come from config/shared/mise.toml, not be
-# parsed out of that bare name.
-test_detects_mise_tool_version() {
+setup_mise_inventory() {
   cat >"$TEST_ROOT/bin/mise" <<'EOF'
 #!/usr/bin/env bash
-[[ "$*" == 'current node' ]] || exit 1
+printf '%s\n' "$*" >>"$HOME/mise-calls"
+[[ "$*" == current ]] || exit 1
 [[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_CONFIG_DIR/mise/selfishell.toml" ]] || exit 1
-printf '24.18.0\n'
+cat "$HOME/mise-inventory"
+[[ ! -f "$HOME/mise-fail" ]]
 EOF
   chmod +x "$TEST_ROOT/bin/mise"
   export SELFISHELL_CONFIG_DIR
   export SELFISHELL_ROOT="$TEST_ROOT/selfishell-root"
   mkdir -p "$SELFISHELL_ROOT/config/shared"
-  printf '[tools]\nnode = "24.18.0"\n' >"$SELFISHELL_ROOT/config/shared/mise.toml"
+  cat >"$SELFISHELL_ROOT/config/shared/mise.toml" <<'EOF'
+[tools]
+node = "24.18.0"
+python = "3.13.14"
+neovim = "0.12.5"
+tree-sitter = "0.27.0"
+uv = "0.12.13"
+gh = "2.100.0"
+
+[settings]
+node = "ignored"
+EOF
+  printf 'node 24.18.0\npython 3.13.14 3.12.0\n' >"$HOME/mise-inventory"
+}
+
+# Approved mise versions come from mise.toml, not the profile's bare tool names.
+test_detects_mise_tool_version() {
+  setup_mise_inventory
 
   tool_status_detect mise node linux amd64
 
   [[ "$TOOL_STATUS_INSTALLED" == 24.18.0 ]] || fail "mise tool version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == mise ]] || fail "mise tool source was not reported"
   [[ "$TOOL_STATUS_APPROVED" == 24.18.0 ]] || fail "mise approved version was not read from config/shared/mise.toml"
+}
+
+test_reuses_mise_inventory_and_approved_versions_until_reset() {
+  local tool expected
+  setup_mise_inventory
+  tool_status_detect mise node linux amd64
+
+  printf 'python 3.14.0\n' >"$HOME/mise-inventory"
+  printf '[tools]\npython = "3.14.0"\n' >"$SELFISHELL_ROOT/config/shared/mise.toml"
+  tool_status_detect mise python linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == '3.13.14 3.12.0' && "$TOOL_STATUS_SOURCE" == mise ]] ||
+    fail "Cached mise inventory lost multiple versions or was reloaded"
+  [[ "$TOOL_STATUS_APPROVED" == 3.13.14 ]] || fail "Approved mise versions were reloaded before reset"
+  while read -r tool expected; do
+    tool_status_detect mise "$tool" linux amd64
+    [[ "$TOOL_STATUS_APPROVED" == "$expected" ]] || fail "Wrong approved version for $tool"
+  done <<'EOF'
+neovim 0.12.5
+tree-sitter 0.27.0
+uv 0.12.13
+gh 2.100.0
+EOF
+  [[ "$(wc -l <"$HOME/mise-calls" | tr -d ' ')" == 1 ]] || fail "mise inventory should be loaded once"
+
+  tool_status_reset_cache
+  tool_status_detect mise python linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == 3.14.0 && "$TOOL_STATUS_APPROVED" == 3.14.0 ]] ||
+    fail "Reset did not refresh both mise inventories"
+  [[ "$(wc -l <"$HOME/mise-calls" | tr -d ' ')" == 2 ]] || fail "Reset did not reload mise inventory once"
+}
+
+test_mise_inventory_missing_and_failed_queries_use_executable_fallback() {
+  setup_mise_inventory
+  # This test runs in isolation; keep its missing-tool case independent of CI's PATH.
+  have_command() {
+    [[ "$1" != gh ]] && command -v "$1" >/dev/null 2>&1
+  }
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/uv"
+  chmod +x "$TEST_ROOT/bin/uv"
+  tool_status_detect mise uv linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == detected && "$TOOL_STATUS_SOURCE" == external ]] ||
+    fail "Tool absent from mise inventory did not use executable fallback"
+  tool_status_detect mise gh linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none ]] ||
+    fail "Tool absent from mise inventory was not reported missing"
+
+  touch "$HOME/mise-fail"
+  printf 'uv 0.12.13\ngh 2.100.0\n' >"$HOME/mise-inventory"
+  tool_status_reset_cache
+  tool_status_detect mise uv linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == detected && "$TOOL_STATUS_SOURCE" == external ]] ||
+    fail "Failed mise query did not discard partial output and use executable fallback"
+  tool_status_detect mise gh linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none && "$TOOL_STATUS_APPROVED" == 2.100.0 ]] ||
+    fail "Failed mise query did not preserve missing status and approved version"
+  [[ "$(wc -l <"$HOME/mise-calls" | tr -d ' ')" == 2 ]] || fail "Failed mise inventory was queried again before reset"
+}
+
+test_mise_inventory_uses_managed_mise_outside_path() {
+  setup_mise_inventory
+  mkdir -p "$HOME/.local/bin"
+  mv "$TEST_ROOT/bin/mise" "$HOME/.local/bin/mise"
+
+  tool_status_detect mise node linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == 24.18.0 && "$TOOL_STATUS_SOURCE" == mise ]] ||
+    fail "Managed mise outside PATH was not used for inventory"
 }
 
 run_discovered_tests setup_tool_status_home teardown_tool_status_home

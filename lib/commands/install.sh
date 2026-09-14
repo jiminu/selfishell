@@ -44,6 +44,11 @@ install_managed_configuration() {
         if [[ "$resource_name" == ghostty-config ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
+        # Invalidate before replacing the generator so an interrupted install
+        # cannot leave new configuration paired with old initialization code.
+        if [[ "$dry_run" == "0" && "$resource_name" == zsh-interactive ]] && ! cmp -s "$resource_source" "$resource_target"; then
+          rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
+        fi
         managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes"
         ;;
       link)
@@ -68,7 +73,6 @@ install_managed_configuration() {
   done < <(selfishell_managed_resources)
 
   if [[ "$dry_run" == "0" ]]; then
-    rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
     selfishell_mise_trust
   fi
 }

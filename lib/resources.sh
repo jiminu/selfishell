@@ -38,15 +38,8 @@ block	user-ghostty	${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty	-
 EOF
 }
 
-# Callers consume this through their own process substitution, so a shell loop
-# here would read one pipe while writing another. A signal mid-write (SIGCHLD
-# from the producer is enough) fails with EINTR on macOS, and Bash 3.2 reports
-# rather than retries it: the list silently truncates and `uninstall --restore`
-# walks a short set while reporting success. cut retries for itself.
-#
-# -s drops a delimiter-free row instead of turning it into a name. Only a
-# malformed declaration hits this, and it isn't buried: the regression test
-# requires these names to match the name column exactly.
+# Use cut to avoid Bash 3.2's EINTR truncation with nested process substitutions.
+# -s excludes malformed rows without a delimiter.
 selfishell_managed_resource_names() {
   selfishell_managed_resources | cut -s -f2
 }

@@ -12,8 +12,6 @@ return {
       local cmp = require("cmp")
 
       cmp.setup({
-        -- Neovim 0.12's native snippet engine replaces LuaSnip; it expands
-        -- the same LSP snippet syntax cmp already hands it.
         snippet = {
           expand = function(args)
             vim.snippet.expand(args.body)
@@ -26,8 +24,7 @@ return {
           ["<C-f>"] = cmp.mapping.scroll_docs(4),
           ["<C-Space>"] = cmp.mapping.complete(),
 
-          -- Preserves the existing behavior: Enter accepts the first item
-          -- even when it has not been explicitly selected.
+          -- Enter accepts the first item even without an explicit selection.
           ["<CR>"] = cmp.mapping.confirm({ select = true }),
 
           ["<Tab>"] = cmp.mapping(function(fallback)

@@ -420,11 +420,7 @@ test_download_dependency_replaces_directory_target_without_nesting() {
   export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
   printf 'download tool 1.0 linux amd64 file://%s %s .local/bin/tool raw\n' "$payload" "$checksum" >"$SELFISHELL_DEPENDENCIES_FILE"
 
-  # A target replaced by a directory while its recorded version still matches:
-  # `mv` renames *into* an existing directory, leaving the approved binary
-  # unreachable while reporting success. The matching version also makes this
-  # cover dependency_managed_target_is_valid rejecting a directory-shaped
-  # target rather than taking the Up to date fast path.
+  # A directory at the same recorded version must be replaced, not nested into by mv.
   mkdir -p "$XDG_STATE_HOME/selfishell/dependencies"
   printf '1.0\n' >"$XDG_STATE_HOME/selfishell/dependencies/tool"
   mkdir -p "$HOME/.local/bin/tool"

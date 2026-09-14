@@ -65,9 +65,7 @@ test_every_neovim_configuration_file_is_managed() {
   done < <(find "$ROOT_DIR/config/shared/nvim" -type f -print | sort)
 }
 
-# `uninstall --restore` decides what to put back by walking this list, so a
-# short one leaves a user's original file in place of their own and still
-# reports success. The names have to be the declarations' name column entire.
+# Uninstall must enumerate every declared resource to restore all user backups.
 test_managed_resource_names_are_the_whole_name_column() {
   local declared names
 
@@ -121,7 +119,7 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader state version was not recorded"
   [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == block ]] ||
     fail "Zsh loader was not recorded as a managed block"
-
+  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "Minimal install created a developer mise config"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -158,6 +156,10 @@ test_developer_install_includes_neovim_configuration() {
     fail "Neovim options module was not installed for the developer profile"
   cmp -s "$ROOT_DIR/config/shared/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
     fail "Neovim lsp plugin was not installed for the developer profile"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" && ! -L "$XDG_CONFIG_HOME/mise/config.toml" ]] ||
+    fail "Developer install did not create a user-owned mise config"
+  ! grep -Fqx "$XDG_CONFIG_HOME/mise/config.toml" "$SELFISHELL_RESOURCE_STATE_DIR"/*.state ||
+    fail "User-owned mise config was recorded as a managed resource"
 }
 
 test_macos_install_includes_ghostty_configuration() {
@@ -1068,6 +1070,55 @@ test_status_detects_modified_managed_file() {
   [[ "$status" -eq 1 ]] || fail "Changed managed file should make status fail"
 }
 
+test_managed_file_replaced_by_same_content_symlink_is_preserved() {
+  local target="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
+  local personal="$TEST_ROOT/personal-vimrc"
+  local state="$SELFISHELL_RESOURCE_STATE_DIR/vimrc.state"
+  local operation rc
+
+  source "$ROOT_DIR/lib/common.sh"
+  source "$ROOT_DIR/lib/managed.sh"
+  source "$ROOT_DIR/lib/commands/status.sh"
+  managed_install_file vimrc "$ROOT_DIR/config/shared/vimrc" "$target" 0 1 >/dev/null
+  cp "$state" "$TEST_ROOT/original.state"
+  mv "$target" "$personal"
+  ln -s "$personal" "$target"
+
+  SELFISHELL_STATUS_RESOURCE_COUNT=0
+  SELFISHELL_STATUS_RESULT=0
+  status_resource vimrc >"$TEST_ROOT/status"
+  ((SELFISHELL_STATUS_RESULT != 0)) || fail "Status accepted a replaced managed file symlink"
+
+  for operation in install preflight uninstall; do
+    rc=0
+    case "$operation" in
+      install) managed_install_file vimrc "$ROOT_DIR/config/shared/vimrc" "$target" 0 1 >/dev/null 2>&1 || rc=$? ;;
+      preflight) managed_validate_uninstall_resource vimrc >/dev/null 2>&1 || rc=$? ;;
+      uninstall) managed_uninstall_resource vimrc 1 0 >/dev/null 2>&1 || rc=$? ;;
+    esac
+    ((rc != 0)) || fail "$operation accepted a replaced managed file symlink"
+    assert_symlink_to "$personal" "$target"
+    cmp -s "$personal" "$ROOT_DIR/config/shared/vimrc" || fail "$operation changed the personal file"
+    cmp -s "$state" "$TEST_ROOT/original.state" || fail "$operation changed resource state"
+  done
+}
+
+test_minimal_profile_keeps_retained_developer_configuration_visible() {
+  local target="$XDG_CONFIG_HOME/selfishell/nvim/init.lua"
+  local output rc=0
+
+  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  assert_file_content minimal "$SELFISHELL_STATE_DIR/profile"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
+
+  printf '\n-- personal edit\n' >>"$target"
+  output="$(run_selfishell status 2>&1)" || rc=$?
+  ((rc != 0)) || fail "Status ignored modified retained developer configuration"
+  [[ "$output" == *"[CHANGED] $target"* ]] || fail "Status omitted retained Neovim configuration: $output"
+}
+
 test_status_uses_current_resource_list() {
   local output
 
@@ -1297,50 +1348,40 @@ test_install_does_not_depend_on_checkout() {
     fail "Zsh configuration depended on the removed checkout"
 }
 
-test_mise_config_global_creation_and_no_state() {
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml was not created on developer install"
-  [[ ! -f "$XDG_STATE_HOME/selfishell/resources/mise-config-global.state" ]] || fail "mise-config-global state should not exist"
-}
-
-test_mise_config_global_minimal_profile() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should not be created for minimal profile"
-}
-
 test_mise_config_global_preserves_existing_types() {
-  # 일반 파일
+  source "$ROOT_DIR/lib/common.sh"
+  source "$ROOT_DIR/lib/commands/install.sh"
+
+  # Exercise the create-once boundary directly; the developer/minimal
+  # installation tests above cover command wiring.
   mkdir -p "$XDG_CONFIG_HOME/mise"
   printf 'user_owned_data_content_bytes\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  install_mise_global_config 0 >/dev/null
   assert_file_content 'user_owned_data_content_bytes' "$XDG_CONFIG_HOME/mise/config.toml"
 
-  # 일반 symlink
   rm -f "$XDG_CONFIG_HOME/mise/config.toml"
   printf 'link_target_content\n' >"$TEST_ROOT/real_config.toml"
   ln -s "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  install_mise_global_config 0 >/dev/null
   assert_symlink_to "$TEST_ROOT/real_config.toml" "$XDG_CONFIG_HOME/mise/config.toml"
+  assert_file_content 'link_target_content' "$TEST_ROOT/real_config.toml"
 
-  # symlink-to-directory
   rm -f "$XDG_CONFIG_HOME/mise/config.toml"
   mkdir -p "$TEST_ROOT/some_dir"
   ln -s "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  install_mise_global_config 0 >/dev/null
   assert_symlink_to "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
 
-  # symlink-to-special (dangling)
+  # Removing the referent leaves a dangling link, which is still user data.
   rm -rf "$TEST_ROOT/some_dir"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  [[ -L "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dangling symlink was removed"
-  [[ "$(readlink "$XDG_CONFIG_HOME/mise/config.toml")" == "$TEST_ROOT/some_dir" ]] || fail "dangling symlink target changed"
+  install_mise_global_config 0 >/dev/null
+  assert_symlink_to "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
+  [[ ! -e "$SELFISHELL_RESOURCE_STATE_DIR" ]] || fail "Create-once file acquired managed state"
 }
 
 test_mise_config_global_idempotency_and_status() {
   local tool
-  # nvim, not neovim: tool_status_executable() maps the mise package name
-  # "neovim" to its real executable "nvim" (same as "ripgrep" -> "rg"
-  # below), so status's fallback have_command check looks for that binary.
+  # Mock executable names, not mise package names.
   for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise nvim tree-sitter node python uv gh; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
@@ -1348,7 +1389,11 @@ test_mise_config_global_idempotency_and_status() {
   mkdir -p "$HOME/.local/share/zinit/zinit.git"
   touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
 
+  mkdir -p "$XDG_CONFIG_HOME/mise"
+  printf 'pre-existing user config\n' >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  assert_file_content 'pre-existing user config' "$XDG_CONFIG_HOME/mise/config.toml"
+  cp "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$TEST_ROOT/defaults.before"
   printf 'modified by user 123\n' >"$XDG_CONFIG_HOME/mise/config.toml"
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
   assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
@@ -1358,23 +1403,16 @@ test_mise_config_global_idempotency_and_status() {
   status_out="$(run_selfishell status 2>&1)" || status=$?
   ((status == 0)) || fail "status failed after user modified config.toml (exit code $status)"
   [[ "$status_out" != *'config.toml'* ]] || fail "user-owned config.toml should not be reported by status"
+  cmp -s "$TEST_ROOT/defaults.before" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
+    fail "Editing user configuration changed managed defaults"
+  run_selfishell uninstall --restore --yes >/dev/null
+  assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
 }
 
 test_mise_config_global_uninstall_preservation() {
   run_selfishell install --profile developer --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
   [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should remain after uninstall"
-
-  mkdir -p "$XDG_CONFIG_HOME/mise"
-  printf 'pre_existing_data\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  run_selfishell uninstall --restore --yes >/dev/null
-  assert_file_content 'pre_existing_data' "$XDG_CONFIG_HOME/mise/config.toml"
-
-  : >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  run_selfishell uninstall --restore --yes >/dev/null
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "empty config.toml was deleted on uninstall"
 }
 
 test_mise_config_global_dry_run_and_directory_error() {
@@ -1430,14 +1468,6 @@ EOF
         [[ -z "${MISE_GLOBAL_CONFIG_FILE+x}" ]]
       ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
   )" || fail "runtime created MISE_GLOBAL_CONFIG_FILE"
-}
-
-test_mise_global_config_ownership() {
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  printf 'node = "24"\n' >>"$XDG_CONFIG_HOME/mise/config.toml"
-  local selfishell_toml_content
-  selfishell_toml_content="$(<"$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml")"
-  [[ "$selfishell_toml_content" != *'node = "24"'* ]] || fail "Selfishell default configuration was mutated by user global config write"
 }
 
 # A real `update` reaches packages_install_profile, which must not touch the
@@ -1504,9 +1534,7 @@ EOF
   setup_fake_zinit
 }
 
-# Copies the checkout into its own root so a test can change a managed
-# resource's *source* file (to simulate a new Selfishell release) without
-# mutating the real repository under test.
+# Use a private checkout to simulate release changes without modifying the test source.
 build_release_copy() {
   local release_root="$1"
 
@@ -1514,6 +1542,39 @@ build_release_copy() {
   cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/config" "$release_root/"
   printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/dependencies.conf"
+}
+
+test_reinstall_preserves_tool_caches_until_generator_configuration_changes() {
+  local release_root="$TEST_ROOT/release"
+  local cache_dir="$XDG_CACHE_HOME/selfishell"
+  local scenario tool
+
+  build_release_copy "$release_root"
+  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+  mkdir -p "$cache_dir"
+  for tool in zoxide fzf starship; do
+    printf '# cached %s init\n' "$tool" >"$cache_dir/$tool-init.zsh"
+  done
+
+  for scenario in unchanged unrelated dry-run changed; do
+    case "$scenario" in
+      unrelated) printf '\nset noshowmode\n' >>"$release_root/config/shared/vimrc" ;;
+      dry-run) printf '\n# updated generator\n' >>"$release_root/config/shared/zsh/interactive.zsh" ;;
+    esac
+    if [[ "$scenario" == dry-run ]]; then
+      bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes --dry-run >/dev/null
+    else
+      bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+    fi
+    for tool in zoxide fzf starship; do
+      if [[ "$scenario" == changed ]]; then
+        [[ ! -e "$cache_dir/$tool-init.zsh" ]] || fail "$tool cache survived a generator change"
+      else
+        [[ -f "$cache_dir/$tool-init.zsh" ]] || fail "$scenario install removed $tool cache"
+        [[ "$(<"$cache_dir/$tool-init.zsh")" == "# cached $tool init" ]] || fail "$scenario install rewrote $tool cache"
+      fi
+    done
+  done
 }
 
 test_managed_file_interactive_overwrite_yes() {
@@ -1745,9 +1806,7 @@ test_managed_file_overwrite_conflict_atomic_copy_failure_preserves_backup_and_st
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
   local saved_state="$TEST_ROOT/vimrc.state.before"
-  # A dedicated directory, not $TEST_ROOT/bin: that one is permanently on
-  # PATH for the whole test (it holds the fake chsh from setup_managed_home),
-  # so a fake `cp` planted there would still shadow the real one on retry.
+  # Keep the failing command off the persistent test PATH so retry uses the real one.
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
@@ -1791,9 +1850,7 @@ EOF
 test_managed_link_ln_failure_restores_preexisting_regular_file() {
   local link_path="$XDG_CONFIG_HOME/starship.toml"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
-  # A dedicated directory, not $TEST_ROOT/bin: that one is permanently on
-  # PATH for the whole test (it holds the fake chsh from setup_managed_home),
-  # so a fake `ln` planted there would still shadow the real one on retry.
+  # Keep the failing command off the persistent test PATH so retry uses the real one.
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
@@ -1974,36 +2031,78 @@ test_block_install_failure_cleans_up_temporary_files() {
     fail "A failed block install must not be recorded as active"
 }
 
+test_block_splice_preserves_surrounding_bytes_and_permissions() {
+  local target="$HOME/block-target"
+  local prefix="$TEST_ROOT/prefix" suffix="$TEST_ROOT/suffix"
+  local expected="$TEST_ROOT/expected"
+
+  source "$ROOT_DIR/lib/common.sh"
+  source "$ROOT_DIR/lib/managed.sh"
+  # Cross copy-buffer boundaries with multibyte text, NULs, CRLF, and no final newline.
+  awk 'BEGIN { for (i = 0; i < 8192; i++) printf "personal config\r\n" }' >"$prefix"
+  printf '앞\000뒤\n' >>"$prefix"
+  cp "$prefix" "$suffix"
+  printf 'no final newline' >>"$suffix"
+  {
+    cat "$prefix"
+    printf 'old block\n'
+    cat "$suffix"
+  } >"$target"
+  chmod 640 "$target"
+  MANAGED_BLOCK_START="$(wc -c <"$prefix")"
+  MANAGED_BLOCK_LENGTH=10
+
+  managed_splice_block "$target" user-vimrc
+  {
+    cat "$prefix"
+    managed_block_content user-vimrc
+    cat "$suffix"
+  } >"$expected"
+  cmp -s "$expected" "$target" || fail "Block replacement changed surrounding bytes"
+  MANAGED_BLOCK_LENGTH="$(managed_block_content user-vimrc | wc -c)"
+  managed_splice_block "$target"
+  cat "$prefix" "$suffix" >"$expected"
+  cmp -s "$expected" "$target" || fail "Block removal changed surrounding bytes"
+  [[ "$(find "$target" -prune -perm 640 -print)" == "$target" ]] || fail "Block splicing changed file permissions"
+}
+
 test_block_remove_failure_cleans_up_temporary_files() {
   local target="$HOME/.zshrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-zshrc.state"
-  local before_checksum
-  local status=0
-  local tmp_count
+  local before_checksum reader status tmp_count
 
   printf 'original zshrc\n' >"$target"
   run_selfishell install --skip-packages --yes >/dev/null
+  {
+    printf 'personal prefix\n'
+    cat "$target"
+  } >"$TEST_ROOT/before-zshrc"
+  cp "$TEST_ROOT/before-zshrc" "$target"
   before_checksum="$(sed -n '7p' "$state_file")"
 
-  set +e
-  bash -c '
-    source "$1/lib/common.sh"
-    source "$1/lib/paths.sh"
-    selfishell_initialize_paths
-    source "$1/lib/managed.sh"
-    dd() { return 1; }
-    managed_read_state user-zshrc
-    managed_remove_block user-zshrc "$2"
-  ' _ "$ROOT_DIR" "$target" >/dev/null 2>"$TEST_ROOT/stderr"
-  status=$?
-  set -e
+  for reader in dd head tail; do
+    status=0
+    bash -c '
+      source "$1/lib/common.sh"
+      source "$1/lib/paths.sh"
+      selfishell_initialize_paths
+      source "$1/lib/managed.sh"
+      case "$3" in
+        dd) dd() { return 1; } ;;
+        head) head() { return 1; } ;;
+        tail) tail() { return 1; } ;;
+      esac
+      managed_read_state user-zshrc
+      managed_remove_block user-zshrc "$2"
+    ' _ "$ROOT_DIR" "$target" "$reader" >/dev/null 2>"$TEST_ROOT/stderr" || status=$?
 
-  [[ "$status" -ne 0 ]] || fail "A forced dd failure during block removal should propagate as an error"
-  tmp_count="$(find "$HOME" -maxdepth 1 -name '.zshrc.tmp.*' | wc -l)"
-  [[ "$tmp_count" -eq 0 ]] || fail "A failed block removal left a temporary file behind"
-  grep -Fqx '# >>> Selfishell initialize >>>' "$target" || fail "A failed block removal altered the managed block"
-  [[ "$(sed -n '7p' "$state_file")" == "$before_checksum" ]] ||
-    fail "A failed block removal must not change resource state"
+    [[ "$status" -ne 0 ]] || fail "A forced $reader failure during block removal should propagate as an error"
+    tmp_count="$(find "$HOME" -maxdepth 1 -name '.zshrc.tmp.*' | wc -l)"
+    [[ "$tmp_count" -eq 0 ]] || fail "A failed block removal left a temporary file behind"
+    cmp -s "$TEST_ROOT/before-zshrc" "$target" || fail "A failed block removal changed user bytes"
+    [[ "$(sed -n '7p' "$state_file")" == "$before_checksum" ]] ||
+      fail "A failed block removal must not change resource state"
+  done
 }
 
 test_block_install_chmod_failure_leaves_no_target_or_state() {

@@ -2,7 +2,7 @@
 
 status_resource() {
   local resource="$1"
-  local current_checksum
+  local current_checksum=""
 
   if ! managed_read_state "$resource"; then
     if managed_state_exists "$resource"; then
@@ -45,7 +45,7 @@ status_resource() {
       fi
       ;;
     file)
-      if [[ -f "$MANAGED_STATE_TARGET" ]]; then
+      if managed_path_is_regular_file "$MANAGED_STATE_TARGET"; then
         current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
       fi
       if [[ -n "$current_checksum" && "$current_checksum" == "$MANAGED_STATE_CHECKSUM" ]]; then
@@ -158,13 +158,15 @@ command_status() {
     selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" status_report_package "$profile_platform"
   fi
 
+  if [[ "$profile" == minimal ]] &&
+    { managed_state_exists user-nvim || managed_state_exists mise-config-link; }; then
+    printf '%s[INFO]%s Previously installed developer configuration is retained and checked below.\n' \
+      "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+  fi
+
+  # The selected profile controls future installation, not ownership of paths
+  # retained from an earlier profile or platform.
   while IFS= read -r resource; do
-    if [[ "$profile" != "developer" && ("$resource" == nvim-* || "$resource" == user-nvim) ]]; then
-      continue
-    fi
-    if [[ "$platform" != "macos" && "$resource" == user-ghostty ]]; then
-      continue
-    fi
     status_resource "$resource"
   done < <(selfishell_managed_resource_names)
 
