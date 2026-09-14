@@ -112,6 +112,10 @@ in the state directory records completed setup, not a package selection.
 Mise-managed tool membership is declared in
 `packages.conf`; exact versions for those tools are pinned in
 `config/shared/mise.toml`, the source of truth for mise-managed tool versions.
+Installer-owned mise operations run from the release's `config/shared`
+directory so a caller's project cannot override approved tool versions.
+Status and doctor query installed versions, not merely configured requests;
+an orphaned mise shim does not count as an external tool installation.
 
 When the tools/configuration phase runs, `--skip-packages` must skip package
 and tool installation and apply managed configuration only. A default update

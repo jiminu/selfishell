@@ -37,7 +37,7 @@ checkout.
 
 ### Full-environment mode
 
-Full mode additionally provisions the pinned mise, Starship, and Zinit -- with
+Full mode additionally provisions the pinned mise, Starship, fzf, zoxide, and Zinit -- with
 its pinned Zsh plugins -- into the benchmark's own isolated `HOME`, via the
 same code path the real installer uses, so `interactive-cached` reflects a
 real full-environment startup rather than whatever happens to already be on
@@ -47,11 +47,8 @@ the runner's `PATH`. It:
   changed;
 - uses that home as its working directory and gives mise an isolated global
   config;
-- installs the pinned mise, Starship, and Zinit (with its pinned plugins)
-  into that isolated `HOME`, with Starship installed through mise using the
-  release's exact pin;
-- measures fzf and zoxide only if they are already on `PATH` -- installing
-  those tools is out of scope for this script, so provision them first;
+- installs the pinned mise and Zinit (with its pinned plugins), plus Starship,
+  fzf, and zoxide through mise using the release's exact pins;
 - needs network access to provision those tools, so it is not part of the
   regular (network-free) unit test suite, or run in CI -- run it locally
   when needed.

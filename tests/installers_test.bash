@@ -12,6 +12,7 @@ NVIM_ARGUMENTS=""
 MISE_ARGUMENTS=""
 MISE_CALLS=()
 MISE_CONFIG=""
+MISE_WORKDIR=""
 GIT_ARGUMENTS=""
 GIT_CALLS=()
 NVIM_CALLS=()
@@ -25,10 +26,16 @@ nvim() {
 }
 
 mise() {
+  MISE_WORKDIR="$PWD"
+  if [[ "$1" == -C ]]; then
+    MISE_WORKDIR="$2"
+    shift 2
+  fi
   MISE_ARGUMENTS="$*"
   MISE_CALLS+=("$*")
   MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
   if [[ "$1" == "which" && "$2" == "nvim" ]]; then
+    [[ "$MISE_WORKDIR" == "$SELFISHELL_ROOT/config/shared" ]] || return 1
     printf '%s\n' "$FAKE_NVIM_PATH"
   elif [[ "$1" == "exec" && "$2" == "--" ]]; then
     shift 2
@@ -76,6 +83,8 @@ test_installs_declared_mise_tools_with_managed_config() {
     fail "mise tools were not installed together: ${MISE_CALLS[1]}"
   [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "mise install did not use the Selfishell config"
+  [[ "$MISE_WORKDIR" == "$ROOT_DIR/config/shared" ]] ||
+    fail "mise install inherited the caller project directory: $MISE_WORKDIR"
 }
 
 test_skips_mise_install_when_tools_are_already_installed() {
@@ -89,6 +98,8 @@ test_skips_mise_install_when_tools_are_already_installed() {
     fail "Expected only dry-run check call, got: ${MISE_CALLS[*]}"
   [[ "${MISE_CALLS[0]}" == '-q install --dry-run-code node@24.18.0 python@3.13.14' ]] ||
     fail "mise dry-run check was not called as expected: ${MISE_CALLS[0]}"
+  [[ "$MISE_WORKDIR" == "$ROOT_DIR/config/shared" ]] ||
+    fail "mise preflight inherited the caller project directory: $MISE_WORKDIR"
 }
 
 test_provisions_declared_zinit_plugins_without_loading_them() {
@@ -363,6 +374,8 @@ test_runs_neovim_inside_mise_environment() {
     fail "Neovim did not run through mise exec: $MISE_ARGUMENTS"
   [[ "$MISE_CONFIG" == "$ROOT_DIR/config/shared/mise.toml" ]] ||
     fail "Neovim mise environment did not use the Selfishell config"
+  [[ "$MISE_WORKDIR" == "$ROOT_DIR/config/shared" ]] ||
+    fail "Neovim mise environment inherited the caller project directory"
   [[ "${NVIM_CALLS[0]}" == '--headless +qa' ]] ||
     fail "mise exec did not invoke Neovim: ${NVIM_CALLS[*]}"
 }

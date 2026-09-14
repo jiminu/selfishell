@@ -148,8 +148,13 @@ setup_mise_inventory() {
   cat >"$TEST_ROOT/bin/mise" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$HOME/mise-calls"
-[[ "$*" == current ]] || exit 1
-[[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_CONFIG_DIR/mise/selfishell.toml" ]] || exit 1
+if [[ "$*" == current || "$*" == "-C $SELFISHELL_ROOT/config/shared current" ]]; then
+  printf 'gh 2.100.0\n'
+  exit 0
+elif [[ "$*" != "-C $SELFISHELL_ROOT/config/shared ls --current --installed --no-header --no-truncate" ]]; then
+  exit 1
+fi
+[[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_ROOT/config/shared/mise.toml" ]] || exit 1
 cat "$HOME/mise-inventory"
 [[ ! -f "$HOME/mise-fail" ]]
 EOF
@@ -169,7 +174,22 @@ gh = "2.100.0"
 [settings]
 node = "ignored"
 EOF
-  printf 'node 24.18.0\npython 3.13.14 3.12.0\n' >"$HOME/mise-inventory"
+  printf 'node 24.18.0 /config/mise.toml 24.18.0\npython 3.13.14 /config/mise.toml 3.13.14\npython 3.12.0 /config/mise.toml 3.12.0\n' >"$HOME/mise-inventory"
+}
+
+test_configured_but_uninstalled_mise_tool_is_missing() {
+  setup_mise_inventory
+  # An existing mise shim does not prove the underlying tool is installed.
+  export MISE_DATA_DIR="$TEST_ROOT/mise-data"
+  mkdir -p "$MISE_DATA_DIR/shims"
+  ln -s "$TEST_ROOT/bin/mise" "$MISE_DATA_DIR/shims/gh"
+  export PATH="$MISE_DATA_DIR/shims:$PATH"
+
+  tool_status_detect mise gh linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none ]] ||
+    fail "Configured but uninstalled tool was reported present: $TOOL_STATUS_INSTALLED ($TOOL_STATUS_SOURCE)"
+  [[ "$TOOL_STATUS_APPROVED" == 2.100.0 ]] || fail "Missing tool lost its approved version"
+  unset MISE_DATA_DIR
 }
 
 # Approved mise versions come from mise.toml, not the manifest's bare tool names.

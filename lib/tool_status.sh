@@ -90,7 +90,7 @@ tool_status_executable() {
 
 tool_status_mise_version() {
   local tool="$1"
-  local mise_command="" name versions
+  local mise_command="" name versions extra
 
   TOOL_STATUS_MISE_VERSION=""
   TOOL_STATUS_APPROVED=""
@@ -109,7 +109,10 @@ tool_status_mise_version() {
       mise_command="$HOME/.local/bin/mise"
     fi
     if [[ -n "$mise_command" ]]; then
-      TOOL_STATUS_MISE_VERSIONS="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/selfishell.toml" "$mise_command" current 2>/dev/null)" ||
+      # `current` also lists configured but uninstalled versions. Query one
+      # installed-only inventory, independent of the caller's project config.
+      TOOL_STATUS_MISE_VERSIONS="$(NO_COLOR=1 MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
+        "$mise_command" -C "$SELFISHELL_ROOT/config/shared" ls --current --installed --no-header --no-truncate 2>/dev/null)" ||
         TOOL_STATUS_MISE_VERSIONS=""
     fi
     TOOL_STATUS_MISE_READY=1
@@ -121,13 +124,12 @@ tool_status_mise_version() {
       break
     fi
   done <<<"$TOOL_STATUS_MISE_APPROVED_VERSIONS"
-  while read -r name versions; do
+  while read -r name versions extra; do
     if [[ "$name" == "$tool" && -n "$versions" ]]; then
-      TOOL_STATUS_MISE_VERSION="$versions"
-      return
+      TOOL_STATUS_MISE_VERSION="${TOOL_STATUS_MISE_VERSION:+$TOOL_STATUS_MISE_VERSION }$versions"
     fi
   done <<<"$TOOL_STATUS_MISE_VERSIONS"
-  return 1
+  [[ -n "$TOOL_STATUS_MISE_VERSION" ]]
 }
 
 tool_status_detect() {
@@ -135,7 +137,7 @@ tool_status_detect() {
   local package="$2"
   local dependency_platform="$3"
   local architecture="$4"
-  local output state
+  local output state executable_path mise_shims
 
   TOOL_STATUS_INSTALLED="missing"
   TOOL_STATUS_SOURCE="none"
@@ -202,7 +204,14 @@ tool_status_detect() {
       ;;
   esac
 
-  if have_command "$(tool_status_executable "$package")"; then
+  output="$(tool_status_executable "$package")"
+  if have_command "$output"; then
+    executable_path="$(command -v "$output")"
+    # Shims can exist after a tool was removed. They are not external installs.
+    mise_shims="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}/shims"
+    if [[ "$manager" == mise && "$executable_path" == "$mise_shims/"* ]]; then
+      return 0
+    fi
     TOOL_STATUS_INSTALLED="detected"
     TOOL_STATUS_SOURCE="external"
   fi
