@@ -142,6 +142,9 @@ jobs:
           source lib/dependencies.sh
           dependency_install mise linux amd64
 
+      - name: Verify update cleanup with pinned mise
+        run: PATH="$HOME/.local/bin:$PATH" bash tests/updates_test.bash
+
       - name: Read pinned Neovim toolchain
         run: |
           mise_version() {

@@ -117,6 +117,17 @@ directory so a caller's project cannot override approved tool versions.
 Status and doctor query installed versions, not merely configured requests;
 an orphaned mise shim does not count as an external tool installation.
 
+Successful tool/configuration updates prune unused mise versions by default,
+scoped to the current platform's declared mise tools. Preserve current pins
+through mise's tracked configuration. Exclude the previous release's mise
+configuration during cleanup, even if already tracked; rollback-only tool
+versions are not retained. Keep the CLI rollback release and project tracking
+intact. Never call prune with an empty tool list. Skip cleanup on incomplete
+setup (including optional package failures), `--skip-packages`, and CLI-only/no-op updates. Dry-run must
+not invoke mise, since even its read-only commands can write metadata. Cleanup
+failures warn without invalidating a completed synchronization. See
+`docs/UPDATES.md` for project-version retention limits.
+
 When the tools/configuration phase runs, `--skip-packages` must skip package
 and tool installation and apply managed configuration only. A default update
 whose target release is already active exits before that phase; use
