@@ -41,6 +41,12 @@ write_mise_toml_fixtures() {
   mkdir -p "$zsh_root/config/shared"
   cat >"$zsh_root/config/shared/mise.toml" <<'EOF'
 [tools]
+fzf = "0.74.3"
+zoxide = "0.9.8"
+ripgrep = "15.1.0"
+eza = "0.23.4"
+bat = "0.26.0"
+jq = "1.8.1"
 node = "24.18.0"
 python = "3.13.14"
 neovim = "0.12.4"
@@ -323,6 +329,24 @@ test_mise_tool_update_bumps_pin_in_mise_toml_only() {
     fail "node was modified; this updater must never touch it"
   grep -Fqx 'python = "3.13.14"' "$zsh_root/config/shared/mise.toml" ||
     fail "python was modified; this updater must never touch it"
+}
+
+# Developer CLI tools use the same reviewed pin update path as the existing
+# mise-managed runtimes.
+test_mise_tool_update_bumps_moved_cli_pin() {
+  local manifest metadata zsh_root
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  metadata="$TEST_ROOT/metadata"
+  zsh_root="$TEST_ROOT/zsh-root"
+  write_mise_toml_fixtures "$zsh_root"
+  : >"$manifest"
+  printf 'mise-tool fzf 0.74.4\n' >"$metadata"
+
+  run_dependency_update "$manifest" "$metadata" "$zsh_root"
+
+  grep -Fqx 'fzf = "0.74.4"' "$zsh_root/config/shared/mise.toml" ||
+    fail "The moved fzf CLI pin was not updated"
 }
 
 # uv's real upstream history jumps from a 0.5.x pin to 0.12.x: a naive

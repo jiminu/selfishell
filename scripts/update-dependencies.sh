@@ -107,18 +107,25 @@ discover_metadata() {
   done
 
   local tool repository candidate_tag
-  for tool in neovim tree-sitter uv gh; do
+  for tool in fzf zoxide ripgrep eza bat jq neovim tree-sitter uv gh; do
     repository="$(mise_tool_repository "$tool")"
     candidate_tag="$(github_latest_tag "$repository")"
-    printf 'mise-tool %s %s\n' "$tool" "${candidate_tag#v}" >>"$metadata"
+    candidate_tag="${candidate_tag#v}"
+    candidate_tag="${candidate_tag#jq-}"
+    printf 'mise-tool %s %s\n' "$tool" "$candidate_tag" >>"$metadata"
   done
 }
 
-# Maps a bumpable mise tool to its upstream repository. node and python are
-# deliberately absent -- they stay manual, and discover_metadata() never
-# queries anything unlisted.
+# Maps a bumpable mise tool to its upstream repository. node and python stay
+# manual because their release lines need a policy choice, not a latest tag.
 mise_tool_repository() {
   case "$1" in
+    fzf) printf 'junegunn/fzf\n' ;;
+    zoxide) printf 'ajeetdsouza/zoxide\n' ;;
+    ripgrep) printf 'BurntSushi/ripgrep\n' ;;
+    eza) printf 'eza-community/eza\n' ;;
+    bat) printf 'sharkdp/bat\n' ;;
+    jq) printf 'jqlang/jq\n' ;;
     neovim) printf 'neovim/neovim\n' ;;
     tree-sitter) printf 'tree-sitter/tree-sitter\n' ;;
     uv) printf 'astral-sh/uv\n' ;;

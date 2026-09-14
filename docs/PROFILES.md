@@ -17,9 +17,12 @@ interactive Zsh. Selfishell keeps its defaults in
 `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/selfishell.toml` (which is symlinked to `~/.config/mise/conf.d/selfishell.toml` so it is automatically loaded by `mise`); a project's
 `mise.toml` can select different tool versions.
 
-Built-in mise tools use exact reviewed versions pinned in `config/shared/mise.toml`,
-the single source of truth for these versions. Projects remain free to
-override them in a local `mise.toml`. Updating these defaults requires a normal
+Developer tools managed by mise use exact reviewed versions pinned in
+`config/shared/mise.toml`, the single source of truth for these versions. This
+includes FZF, Zoxide, Ripgrep, Eza, Bat, jq, Neovim, Tree-sitter CLI, Node.js,
+Python, uv, and GitHub CLI on both macOS and Ubuntu. Eza and Bat remain optional;
+failure to install either does not stop setup. Projects remain free to override
+the defaults in a local `mise.toml`. Updating the defaults requires a normal
 Selfishell release and never happens during shell startup.
 
 Preview without changing the machine:
@@ -36,8 +39,10 @@ selfishell install --profile minimal --yes
 
 The active profile is recorded in the XDG state directory. `selfishell update`
 uses that recorded profile to install missing Apt, Homebrew, and directly
-managed tools before updating configuration. Apt and Homebrew retain
-responsibility for versions of packages they already manage.
+managed tools and synchronize mise tools before updating configuration. Apt and
+Homebrew retain responsibility for packages still declared through them.
+Copies of a tool left from an older profile release are not removed
+automatically; after mise activation, its pinned tool version takes precedence.
 
 Profile package requirements have two failure policies:
 

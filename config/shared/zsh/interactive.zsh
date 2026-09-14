@@ -81,10 +81,8 @@ unset _selfishell_zoxide_bin
 
 if _selfishell_fzf_bin="$(command -v fzf)"; then
   # Scheme 16 keeps fzf to the terminal's own colors, as the prompt does by
-  # naming colors. Spelled 16, not base16: that alias postdates the fzf Ubuntu
-  # 24.04 ships (0.44.1), which rejects an unknown scheme outright and would
-  # take every invocation down with it. The environment wins, so this is a
-  # default, not a policy, and it reaches only Ctrl-T and Ctrl-R.
+  # naming colors. The environment wins, so this is a default, not a policy,
+  # and it reaches only Ctrl-T and Ctrl-R.
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
 
   _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"

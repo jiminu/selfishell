@@ -65,8 +65,8 @@ test_minimal_excludes_developer_environment() {
 }
 
 test_developer_includes_development_tools() {
-  local output full_output
-  local expected_mise_tools actual_mise_tools
+  local output full_output macos_output apt_plan homebrew_plan
+  local expected_mise_tools actual_mise_tools required_mise_tools optional_mise_tools
 
   output="$(run_profile_dry_run developer)"
   full_output="$(bash "$ROOT_DIR/bin/selfishell" install --profile developer --dry-run)"
@@ -80,7 +80,11 @@ test_developer_includes_development_tools() {
     in_tools && NF >= 3 { print $1 }
   ' "$ROOT_DIR/config/shared/mise.toml" | sort)"
   actual_mise_tools="$(printf '%s\n' "$output" |
+    sed -n 's/^Would sync \(required\|optional\) mise tools: //p' | tr ' ' '\n' | sort)"
+  required_mise_tools="$(printf '%s\n' "$output" |
     sed -n 's/^Would sync required mise tools: //p' | tr ' ' '\n' | sort)"
+  optional_mise_tools="$(printf '%s\n' "$output" |
+    sed -n 's/^Would sync optional mise tools: //p' | tr ' ' '\n' | sort)"
 
   assert_minimal_foundation "$output"
   [[ "$output" == *'direct package: mise'* ]] ||
@@ -88,6 +92,23 @@ test_developer_includes_development_tools() {
   [[ -n "$actual_mise_tools" ]] || fail "Developer profile did not report required mise tools"
   [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
     fail "Developer profile mise tools do not match config/shared/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
+  [[ "$required_mise_tools" == $'fzf\ngh\njq\nneovim\nnode\npython\nripgrep\ntree-sitter\nuv\nzoxide' ]] ||
+    fail "Developer profile required mise tools are incorrect: $required_mise_tools"
+  [[ "$optional_mise_tools" == $'bat\neza' ]] ||
+    fail "Developer profile optional mise tools are incorrect: $optional_mise_tools"
+  apt_plan="$(printf '%s\n' "$output" | grep 'apt packages:' || true)"
+  for tool in fzf zoxide ripgrep eza bat jq; do
+    ! grep -Eq "(^|[[:space:]])$tool([[:space:]]|$)" <<<"$apt_plan" ||
+      fail "Developer CLI tool remained in the Apt install plan: $tool"
+  done
+
+  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
+  macos_output="$(run_profile_dry_run developer)"
+  homebrew_plan="$(printf '%s\n' "$macos_output" | grep 'Homebrew formula' || true)"
+  for tool in fzf zoxide ripgrep eza bat jq; do
+    ! grep -Eq "(^|[[:space:]])$tool([[:space:]]|$)" <<<"$homebrew_plan" ||
+      fail "Developer CLI tool remained in the Homebrew install plan: $tool"
+  done
   [[ "$full_output" == *'Neovim plugins'* ]] || fail "Developer profile is missing Neovim plugin setup"
 }
 
