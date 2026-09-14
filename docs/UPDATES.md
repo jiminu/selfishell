@@ -46,6 +46,29 @@ configuration for the current release.
 skips package and tool installation and applies managed configuration only,
 the same contract `selfishell install` follows.
 
+After a successful tools/configuration update, Selfishell automatically runs
+`mise prune --tools --yes`, scoped to its mise tools for the current platform.
+It first registers the current release configuration with mise so its pinned
+versions remain available. During cleanup only, the previous release's mise
+configuration is excluded, even if mise already tracks it. Rollback-only tool
+versions are not retained; versions still needed by mise's tracked, trusted
+project configurations are retained. The previous CLI release and its
+configuration files remain intact. Unrelated tools and
+tracked configuration links are not removed. This is mise's unused-version
+cleanup, not just removal of versions installed by Selfishell: versions of these
+tools used only via environment variables, one-off `mise exec tool@version`, or
+untracked projects can be removed. Keep such versions in a project configuration
+and load it with mise before updating. See [mise prune](https://mise.jdx.dev/cli/prune.html).
+
+Cleanup does not run on installation, rollback, `--cli-only`, `--skip-packages`,
+an already-current default update, or a failed synchronization. If an optional
+package failed to install, cleanup is skipped too. Cleanup or retention-preflight
+failures produce a warning without undoing the successful synchronization.
+For safety, configured mise `ignored_config_paths` also disables automatic
+cleanup: ignored configurations cannot protect their pinned versions.
+`--dry-run` describes the cleanup scope without invoking mise or writing its
+tracking/cache metadata; it does not enumerate individual deletion candidates.
+
 `status` reports local CLI, rollback, tools, and managed-resource state
 only; it never checks the network. Use `selfishell version --available` to
 check the latest published release, or rely on the automatic update notice.
@@ -67,8 +90,10 @@ to select an exact release. `--version` cannot be combined with `--tools-only`.
 configuration, or the active CLI release.
 
 `selfishell rollback` exchanges the `current` and `previous` release links and
-does not use the network. An exact retained version can be selected with
-`selfishell rollback VERSION`.
+does not use the network. It restores the CLI release, not the managed
+configuration or tool installations. Reapplying the older environment may
+require downloading tool versions removed by cleanup. An exact retained
+version can be selected with `selfishell rollback VERSION`.
 
 Direct download and Git dependency versions are changed only by reviewing and
 updating `dependencies.conf` in a new Selfishell release.

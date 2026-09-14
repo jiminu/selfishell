@@ -21,6 +21,12 @@ Already installed apt/Homebrew packages are left at their current version
 (mise-managed and Selfishell direct tools are synced to their pinned
 versions). Selfishell update does not perform a general Apt/Homebrew
 upgrade.
+
+After successful tool/configuration synchronization, unused versions of
+Selfishell's mise tools are pruned automatically. Current versions and those
+needed by mise's tracked project configurations are retained; versions needed
+only by the rollback release are not.
+--skip-packages also skips cleanup; --dry-run only describes the cleanup scope.
 EOF
 }
 
@@ -46,7 +52,7 @@ update_tools_and_configuration() {
   package_manifest_load || return
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
-  confirm_action "Synchronize Selfishell packages and configuration?" "$assume_yes" "$dry_run" || return
+  confirm_action "Synchronize Selfishell packages and configuration (including unused mise version cleanup unless --skip-packages)?" "$assume_yes" "$dry_run" || return
   platform="$(detect_platform)"
   managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
   managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
@@ -73,6 +79,8 @@ update_tools_and_configuration() {
   install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled" "$assume_yes"
   if [[ "$skip_packages" == "0" ]]; then
     install_neovim_plugins "$dry_run" || return
+    packages_prune_mise "$platform" "$dry_run" ||
+      cli_warn "Could not prune unused mise versions; tools and configuration were synchronized."
   fi
   if [[ "$dry_run" == 1 ]]; then
     printf '%sTool/configuration dry run complete.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
