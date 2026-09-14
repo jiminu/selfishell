@@ -1,14 +1,10 @@
 local group = vim.api.nvim_create_augroup("UserGeneralAutocmds", { clear = true })
 
--- Neovim 0.12 uses the built-in Tree-sitter highlighter. The current
--- nvim-treesitter plugin no longer enables it through setup()/opts.
+-- nvim-treesitter installs parsers; Neovim enables highlighting separately.
 vim.treesitter.language.register("terraform", "tf")
 
--- nvim-treesitter 1.0+ also dropped ensure_installed/auto_install, so
--- parsers install lazily on FileType. Neovim fires FileType more than once
--- per buffer, and a second install() before the first finishes blocks on a
--- nested vim.wait() -- observed to leave a highlighter never started -- so
--- track in-flight installs here rather than relying on its own guard.
+-- Repeated FileType events can nest install() waits and prevent highlighting.
+-- Track each in-flight language until installation finishes.
 local pending_installs = {}
 
 -- Suppresses a repeat notification only, never the retry: pending_installs
@@ -44,8 +40,6 @@ local function ensure_parser_installed(buf, lang)
     local buffers = pending_installs[lang]
     pending_installs[lang] = nil
     if not installed then
-      -- Report once per language per session rather than leaving
-      -- highlighting silently missing.
       if not notified_failures[lang] then
         notified_failures[lang] = true
         vim.notify(
@@ -96,8 +90,7 @@ vim.api.nvim_create_autocmd("VimResized", {
   end,
 })
 
--- A motion yank shows nothing, and 'report' (default 2) silences short ones
--- too, so flash the range to catch an off-by-one text object before paste.
+-- Highlight yanks that Vim's normal change reporting does not show.
 vim.api.nvim_create_autocmd("TextYankPost", {
   group = group,
   callback = function()

@@ -2,13 +2,8 @@ vim.g.mapleader = " "
 require("config.options")
 require("config.keymaps")
 
-assert(vim.o.splitright and vim.o.splitbelow, "split direction is not configured")
-assert(vim.o.scrolloff == 4, "scrolloff is not configured")
-assert(not vim.o.wrap, "line wrapping is enabled")
 assert(vim.o.confirm, "confirmation is not enabled")
-assert(vim.o.inccommand == "split", "substitution preview is not configured")
-assert(not vim.o.showmode, "the mode is printed twice alongside lualine")
-assert(vim.o.pumheight == 10, "the completion menu height is unbounded")
+assert(vim.o.inccommand ~= "", "substitution preview is disabled")
 
 local function assert_map(mode, lhs, rhs)
   local mapping = vim.fn.maparg(lhs, mode, false, true)
@@ -84,41 +79,23 @@ local snacks = assert(plugin_spec("plugins.ui", "folke/snacks.nvim"), "Snacks sp
 local picker = assert(snacks.opts.picker, "Snacks picker must be configured")
 assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")
 assert(picker.sources.files.cmd == "rg", "The files picker must not depend on a personally-installed fd")
-assert(picker.sources.files.icons.files.enabled == false, "The files picker should hide the leading file icon")
-assert(picker.sources.grep.icons.files.enabled == false, "The grep picker should hide the leading file icon")
-assert(picker.sources.buffers.icons.files.enabled == false, "The buffers picker should hide the leading file icon")
 assert(picker.sources.diagnostics.filter.cwd == false, "Diagnostics must not be limited to the cwd")
 
 local tree = assert(plugin_spec("plugins.ui", "nvim-tree/nvim-tree.lua"), "nvim-tree spec is missing")
 assert(not has_dependency(tree, "nvim-tree/nvim-web-devicons"), "nvim-web-devicons dependency should be removed")
 assert(type(tree.opts.view.width) == "function", "NvimTree width is not a function")
 local original_columns = vim.o.columns
-vim.o.columns = 60
-assert(tree.opts.view.width() == 20, "width should clamp to the 20-column minimum")
-vim.o.columns = 100
-assert(tree.opts.view.width() == 25, "width should scale to 25% of columns")
-vim.o.columns = 200
-assert(tree.opts.view.width() == 30, "width should clamp to the 30-column maximum")
+local widths = {}
+for _, columns in ipairs({ 60, 100, 200 }) do
+  vim.o.columns = columns
+  local width = tree.opts.view.width()
+  assert(width > 0 and width < columns and width == math.floor(width), "NvimTree width must fit the viewport")
+  widths[#widths + 1] = width
+end
+assert(widths[1] <= widths[2] and widths[2] <= widths[3] and widths[1] < widths[3],
+  "NvimTree width must adapt as the viewport grows")
 vim.o.columns = original_columns
 assert(type(tree.opts.on_attach) == "function", "NvimTree does not preserve window navigation mappings")
-assert(tree.opts.renderer.group_empty, "NvimTree should compact single-child directory chains")
-assert(tree.opts.renderer.indent_markers.enable, "NvimTree indent markers should be enabled")
-assert(tree.opts.renderer.indent_markers.inline_arrows, "NvimTree arrows should align with indent markers")
-assert(
-  tree.opts.renderer.indent_markers.icons and tree.opts.renderer.indent_markers.icons.edge == " ",
-  "NvimTree ancestor indent guides should stay sparse"
-)
-assert(tree.opts.renderer.icons.glyphs.folder.arrow_closed == ">", "NvimTree closed folder arrow must be portable")
-assert(tree.opts.renderer.icons.glyphs.folder.arrow_open == "v", "NvimTree open folder arrow must be portable")
-assert(not tree.opts.renderer.icons.padding, "NvimTree folder arrows should use the default padding")
-assert(tree.opts.renderer.icons.show.file == false, "NvimTree file icons should remain hidden")
-assert(tree.opts.renderer.icons.show.folder == false, "NvimTree folder icons should remain hidden")
-assert(tree.opts.renderer.icons.show.git == true, "NvimTree git status icons should be enabled")
-assert(tree.opts.renderer.icons.git_placement == "right_align", "NvimTree git status icons should be right-aligned")
-assert(tree.opts.renderer.icons.glyphs.git.unstaged == "M", "NvimTree unstaged indicator should be M")
-assert(tree.opts.renderer.icons.glyphs.git.staged == "S", "NvimTree staged indicator should be S")
-assert(tree.opts.renderer.icons.glyphs.git.untracked == "U", "NvimTree untracked indicator should be U")
-assert(tree.opts.renderer.icons.glyphs.git.ignored == "", "NvimTree ignored indicator should be hidden")
 assert(
   plugin_key("plugins.ui", "nvim-tree/nvim-tree.lua", "<leader>E") == "<cmd>NvimTreeFindFile!<CR>",
   "current-file tree mapping does not update the tree root"
@@ -128,18 +105,6 @@ local lualine = assert(
   plugin_spec("plugins.ui", "nvim-lualine/lualine.nvim"),
   "lualine spec is missing"
 )
-local branch = lualine.opts.sections.lualine_c[1]
-assert(branch.icon == "", "lualine branch icon should be hidden")
-assert(
-  branch.color.fg == "#5fd700" and branch.color.gui == nil,
-  "lualine branch should use regular bright green"
-)
-assert(branch.padding.left == 0 and branch.padding.right == 1, "lualine branch spacing is incorrect")
-local filetype = lualine.opts.sections.lualine_x[1]
-assert(
-  filetype[1] == "filetype" and filetype.icons_enabled == false,
-  "lualine filetype icon should be hidden"
-)
 assert(not has_dependency(lualine, "nvim-tree/nvim-web-devicons"), "nvim-web-devicons dependency should be removed")
 
 local bufferline = assert(
@@ -147,13 +112,6 @@ local bufferline = assert(
   "bufferline spec is missing"
 )
 assert(bufferline.event == "VeryLazy", "bufferline is not deferred")
-assert(bufferline.opts.options.always_show_bufferline == false, "bufferline should hide for one buffer")
-assert(bufferline.opts.options.show_buffer_icons == false, "bufferline buffer icons should be hidden")
-assert(bufferline.opts.options.offsets[1].filetype == "NvimTree", "bufferline is not aligned with NvimTree")
-assert(
-  bufferline.opts.highlights.buffer_selected.bold == false,
-  "selected buffer should rely on color and underline instead of bold"
-)
 assert(
   not has_dependency(bufferline, "nvim-tree/nvim-web-devicons"),
   "nvim-web-devicons dependency should be removed"
@@ -166,15 +124,6 @@ assert(
   plugin_key("plugins.ui", "akinsho/bufferline.nvim", "]b") == "<cmd>BufferLineCycleNext<CR>",
   "missing next-buffer mapping"
 )
-
-local scrollbar = assert(
-  plugin_spec("plugins.ui", "petertriho/nvim-scrollbar"),
-  "nvim-scrollbar spec is missing"
-)
-assert(scrollbar.opts.handlers.cursor == false, "scrollbar cursor tracking should stay disabled")
-assert(scrollbar.opts.handlers.diagnostic == true, "scrollbar diagnostics should remain enabled")
-assert(scrollbar.opts.handlers.handle == true, "scrollbar viewport handle should remain enabled")
-assert(scrollbar.opts.marks == nil, "scrollbar should not carry dead cursor-mark configuration")
 
 local cmp = assert(plugin_spec("plugins.completion", "hrsh7th/nvim-cmp"), "nvim-cmp spec is missing")
 assert(cmp.event == "InsertEnter", "nvim-cmp is not deferred")

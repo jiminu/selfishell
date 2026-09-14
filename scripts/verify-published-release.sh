@@ -79,11 +79,7 @@ gh release download "$tag" --repo "$repository" --dir "$download_dir"
   fi
 )
 
-# docs/RELEASING.md documents every asset as carrying signed provenance, so an
-# unverifiable attestation must not still report the release as verified: that
-# downgrades to checksum self-consistency (archives match their own SHA256SUMS,
-# not what CI built) while exiting 0. Opting out has to be explicit, for a gh
-# CLI predating `gh attestation`.
+# Require attestations unless explicitly skipped; matching checksums alone do not prove provenance.
 if gh attestation verify --help >/dev/null 2>&1; then
   for archive in "$download_dir"/selfishell-"$version"-*.tar.gz; do
     gh attestation verify "$archive" --repo "$repository" >/dev/null

@@ -8,43 +8,40 @@ source "$ROOT_DIR/tests/test_helper.bash"
 # Argument parsing and --mode base only. --mode full provisions real tools over
 # the network, so it is run manually rather than made a suite dependency.
 
+assert_benchmark_early_exit() {
+  local expected_status="$1" expected_message="$2"
+  local status=0 output leftover
+  shift 2
+
+  setup_test_home
+  mkdir -p "$TEST_ROOT/tmp"
+  output="$(TMPDIR="$TEST_ROOT/tmp" "$@" 2>&1)" || status=$?
+
+  [[ "$status" -eq "$expected_status" ]] || fail "Expected exit $expected_status, got $status: $output"
+  [[ "$output" == *"$expected_message"* ]] || fail "Missing message '$expected_message': $output"
+  leftover="$(find "$TEST_ROOT/tmp" -mindepth 1)"
+  [[ -z "$leftover" ]] || fail "An early-exit path left temporary files behind: $leftover"
+  teardown_test_home
+}
+
 test_benchmark_rejects_unknown_mode() {
-  local status=0
-  local output
-
-  output="$(bash "$ROOT_DIR/scripts/benchmark.sh" --mode bogus 2>&1)" || status=$?
-
-  [[ "$status" -eq 2 ]] || fail "An unknown --mode should exit 2 (got $status)"
-  [[ "$output" == *'must be "base" or "full"'* ]] || fail "Unknown --mode did not explain the valid values: $output"
+  assert_benchmark_early_exit 2 'must be "base" or "full"' \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode bogus
 }
 
 test_benchmark_rejects_missing_mode_value() {
-  local status=0
-  local output
-
-  output="$(bash "$ROOT_DIR/scripts/benchmark.sh" --mode 2>&1)" || status=$?
-
-  [[ "$status" -eq 2 ]] || fail "A --mode with no following value should exit 2 (got $status)"
-  [[ "$output" == *'--mode requires base or full'* ]] || fail "A missing --mode value did not explain usage: $output"
+  assert_benchmark_early_exit 2 '--mode requires base or full' \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode
 }
 
 test_benchmark_rejects_unknown_option() {
-  local status=0
-  local output
-
-  output="$(bash "$ROOT_DIR/scripts/benchmark.sh" --bogus-flag 2>&1)" || status=$?
-
-  [[ "$status" -eq 2 ]] || fail "An unknown option should exit 2 (got $status)"
-  [[ "$output" == *'Unknown option: --bogus-flag'* ]] || fail "Unknown option did not name the flag: $output"
+  assert_benchmark_early_exit 2 'Unknown option: --bogus-flag' \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --bogus-flag
 }
 
 test_benchmark_help_documents_both_modes() {
-  local output
-
-  output="$(bash "$ROOT_DIR/scripts/benchmark.sh" --help)"
-
-  [[ "$output" == *'base'* && "$output" == *'full'* ]] ||
-    fail "--help did not document both benchmark modes: $output"
+  assert_benchmark_early_exit 0 '[--mode base|full]' \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --help
 }
 
 test_benchmark_base_mode_runs_without_network() {
@@ -64,7 +61,9 @@ test_benchmark_rejects_missing_retained_zsh_module() {
 
   setup_test_home
   checkout="$TEST_ROOT/checkout"
-  cp -R "$ROOT_DIR" "$checkout"
+  mkdir -p "$checkout/scripts"
+  cp "$ROOT_DIR/scripts/benchmark.sh" "$checkout/scripts/"
+  cp -R "$ROOT_DIR/config" "$checkout/config"
   mv "$checkout/config/shared/zsh/aliases.zsh" "$TEST_ROOT/aliases.zsh"
 
   output="$(SELFISHELL_BENCHMARK_ITERATIONS=1 \
@@ -123,12 +122,8 @@ EOF
 }
 
 test_benchmark_profile_env_var_is_equivalent_to_mode_flag() {
-  local output
-
-  output="$(SELFISHELL_BENCHMARK_PROFILE=bogus bash "$ROOT_DIR/scripts/benchmark.sh" 2>&1)" || true
-
-  [[ "$output" == *'must be "base" or "full"'* ]] ||
-    fail "SELFISHELL_BENCHMARK_PROFILE was not honored as a --mode equivalent: $output"
+  assert_benchmark_early_exit 2 'must be "base" or "full"' \
+    env SELFISHELL_BENCHMARK_PROFILE=bogus bash "$ROOT_DIR/scripts/benchmark.sh"
 }
 
 test_benchmark_writes_opt_in_zprof_report() {
@@ -143,27 +138,6 @@ test_benchmark_writes_opt_in_zprof_report() {
 
   [[ -s "$profile_file" ]] || fail "Benchmark did not write the requested zprof report"
   grep -Fq 'num  calls' "$profile_file" || fail "Benchmark output is not a zprof report"
-  teardown_test_home
-}
-
-# Argument and mode validation must precede the temp directory, so every
-# early-exit path above leaves nothing behind. TMPDIR is sandboxed so
-# unrelated temp entries can't confuse the check.
-test_benchmark_early_exit_paths_leave_no_temp_directory() {
-  local leftover
-
-  setup_test_home
-  trap teardown_test_home EXIT
-
-  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --mode >/dev/null 2>&1 || true
-  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --mode bogus >/dev/null 2>&1 || true
-  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --bogus-flag >/dev/null 2>&1 || true
-  TMPDIR="$TEST_ROOT" bash "$ROOT_DIR/scripts/benchmark.sh" --help >/dev/null 2>&1 || true
-  TMPDIR="$TEST_ROOT" SELFISHELL_BENCHMARK_PROFILE=bogus bash "$ROOT_DIR/scripts/benchmark.sh" >/dev/null 2>&1 || true
-
-  leftover="$(find "$TEST_ROOT" -maxdepth 1 -name 'selfishell-benchmark.*')"
-  [[ -z "$leftover" ]] || fail "An early-exit path left a benchmark temp directory behind: $leftover"
-
   teardown_test_home
 }
 

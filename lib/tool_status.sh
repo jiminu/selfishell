@@ -10,6 +10,9 @@ tool_status_reset_cache() {
   TOOL_STATUS_BREW_CASKS_READY=0
   TOOL_STATUS_APT_PACKAGES=""
   TOOL_STATUS_APT_PACKAGES_READY=0
+  TOOL_STATUS_MISE_VERSIONS=""
+  TOOL_STATUS_MISE_APPROVED_VERSIONS=""
+  TOOL_STATUS_MISE_READY=0
 }
 
 tool_status_apt_version() {
@@ -85,17 +88,46 @@ tool_status_executable() {
   esac
 }
 
-tool_status_mise_toml_version() {
-  local mise_toml="$1" tool="$2"
+tool_status_mise_version() {
+  local tool="$1"
+  local mise_command="" name versions
 
-  awk -v tool="$tool" '
-    /^\[/ { in_tools = ($0 == "[tools]"); next }
-    in_tools && $1 == tool {
-      gsub(/[[:space:]"]/, "", $3)
-      print $3
-      exit
-    }
-  ' "$mise_toml" 2>/dev/null
+  TOOL_STATUS_MISE_VERSION=""
+  TOOL_STATUS_APPROVED=""
+  if [[ "$TOOL_STATUS_MISE_READY" == 0 ]]; then
+    # mise.toml owns approved versions; profile records contain only tool names.
+    TOOL_STATUS_MISE_APPROVED_VERSIONS="$(awk '
+      /^\[/ { in_tools = ($0 == "[tools]"); next }
+      in_tools && $2 == "=" {
+        gsub(/[[:space:]"]/, "", $3)
+        print $1, $3
+      }
+    ' "$SELFISHELL_ROOT/config/shared/mise.toml" 2>/dev/null)" || TOOL_STATUS_MISE_APPROVED_VERSIONS=""
+    if have_command mise; then
+      mise_command="$(command -v mise)"
+    elif [[ -x "$HOME/.local/bin/mise" ]]; then
+      mise_command="$HOME/.local/bin/mise"
+    fi
+    if [[ -n "$mise_command" ]]; then
+      TOOL_STATUS_MISE_VERSIONS="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/selfishell.toml" "$mise_command" current 2>/dev/null)" ||
+        TOOL_STATUS_MISE_VERSIONS=""
+    fi
+    TOOL_STATUS_MISE_READY=1
+  fi
+
+  while read -r name versions; do
+    if [[ "$name" == "$tool" ]]; then
+      TOOL_STATUS_APPROVED="$versions"
+      break
+    fi
+  done <<<"$TOOL_STATUS_MISE_APPROVED_VERSIONS"
+  while read -r name versions; do
+    if [[ "$name" == "$tool" && -n "$versions" ]]; then
+      TOOL_STATUS_MISE_VERSION="$versions"
+      return
+    fi
+  done <<<"$TOOL_STATUS_MISE_VERSIONS"
+  return 1
 }
 
 tool_status_detect() {
@@ -161,24 +193,11 @@ tool_status_detect() {
       fi
       ;;
     mise)
-      local mise_tool="$package"
-      local mise_command=""
-      # config/shared/mise.toml is the sole source of truth for a mise-managed
-      # tool's approved version; profiles/*.conf only declares the tool
-      # name, so the approved version can't be parsed out of $package.
-      TOOL_STATUS_APPROVED="$(tool_status_mise_toml_version "$SELFISHELL_ROOT/config/shared/mise.toml" "$mise_tool")"
-      if have_command mise; then
-        mise_command="$(command -v mise)"
-      elif [[ -x "$HOME/.local/bin/mise" ]]; then
-        mise_command="$HOME/.local/bin/mise"
-      fi
-      if [[ -n "$mise_command" ]]; then
-        output="$(MISE_GLOBAL_CONFIG_FILE="${SELFISHELL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/selfishell}/mise/selfishell.toml" "$mise_command" current "$mise_tool" 2>/dev/null)" || output=""
-        if [[ -n "$output" ]]; then
-          TOOL_STATUS_INSTALLED="$output"
-          TOOL_STATUS_SOURCE="mise"
-          return
-        fi
+      tool_status_mise_version "$package" || true
+      if [[ -n "$TOOL_STATUS_MISE_VERSION" ]]; then
+        TOOL_STATUS_INSTALLED="$TOOL_STATUS_MISE_VERSION"
+        TOOL_STATUS_SOURCE="mise"
+        return
       fi
       ;;
   esac

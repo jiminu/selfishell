@@ -78,9 +78,7 @@ _selfishell_update_notice_refresh() {
       command rm -f "$temporary"
     fi
   } always {
-    # Runs even when the block above returns early, so an ordinary failure
-    # can't leak the lock. rm -rf, not rmdir: the directory holds metadata
-    # files, and a failing rmdir would wedge the next check behind it.
+    # Release the lock, including its metadata, even on an early return.
     command rm -rf "$lock_dir" 2>/dev/null
   }
 }

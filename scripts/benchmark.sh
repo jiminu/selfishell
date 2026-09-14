@@ -59,9 +59,7 @@ case "$PROFILE_MODE" in
     ;;
 esac
 
-# Argument parsing and mode validation happen above, before this creates
-# anything on disk, so --help/a bad --mode/an unknown option can never
-# leave a benchmark temp directory behind.
+# Validate arguments before creating any temporary files.
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
 TEST_DATA_HOME="$TEST_HOME/.local/share"
@@ -127,8 +125,9 @@ fi
 
 case "$PROFILE_MODE" in
   base)
-    # compdump atomically replaces its cache through the external mv command.
+    # Completion uses mv for the dump and touch for its empty audit marker.
     ln -s /bin/mv "$TEST_HOME/.local/bin/mv"
+    ln -s /usr/bin/touch "$TEST_HOME/.local/bin/touch"
     COMMON_PATH="$TEST_HOME/.local/bin"
     INTERACTIVE_PATH="$ROOT_DIR/bin:$TEST_HOME/.local/bin"
     ;;

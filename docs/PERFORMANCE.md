@@ -56,7 +56,29 @@ the runner's `PATH`. It:
   regular (network-free) unit test suite, or run in CI -- run it locally
   when needed.
 
-`common-first` is the once-per-day completion cache generation cost.
+Interactive startup audits completion directories on first use and once daily.
+The `.zcompdump.audit` marker records the audit separately from `.zcompdump`,
+which can be reused without rewriting it. Insecure entries are excluded without
+a prompt. After a clean audit, warm startups reuse the dump without another
+audit. Insecure paths are audited on each startup until repaired, so restoring
+the completion search path cannot reintroduce an excluded directory. A replaced
+audit marker (a symlink, nonempty file, or another path type) is preserved and
+also causes startup to audit again.
+
+fzf, zoxide, and Starship initialization caches survive unchanged installs and
+configuration reapplication. A changed `zsh/interactive.zsh` generator invalidates
+these caches before installation; unrelated managed configuration changes leave
+them intact. Startup compares the resolved executable path and file identity
+using Zsh's built-in stat module, so replacing a tool or rolling back to an older
+binary regenerates its initialization even when its timestamp is preserved.
+The identity comment and syntax-checked initialization are activated together by
+an atomic rename. Failed generation retains the previous cache and retries on
+the next startup. Older caches without an identity comment regenerate once.
+Identity checks use whole-second timestamps rather than hashing the executable
+on every startup. A same-size edit within the same second that preserves both
+the inode and mtime can go undetected; remove that tool's init cache to regenerate it.
+
+`common-first` measures initial completion cache generation.
 `common-cached` and `interactive-cached` represent ordinary warm startup. The
 first-run metric is informational and does not have a performance budget.
 

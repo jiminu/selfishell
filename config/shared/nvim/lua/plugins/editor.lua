@@ -1,7 +1,6 @@
 local plugin = require("config.plugin_versions").spec
 
 return {
-  -- Automatic bracket/quote pairs.
   plugin("windwp/nvim-autopairs", {
     event = "InsertEnter",
     opts = {},
@@ -18,7 +17,6 @@ return {
     end,
   }),
 
-  -- VS Code-style colored delimiters.
   plugin("HiPhish/rainbow-delimiters.nvim", {
     -- Load before the initial buffer's FileType event so the plugin can attach.
     event = { "BufReadPre", "BufNewFile" },
@@ -34,14 +32,11 @@ return {
     end,
   }),
 
-  -- Keymap guide: helpful for Space leader mappings.
   plugin("folke/which-key.nvim", {
     event = "VeryLazy",
     opts = {
       icons = {
-        -- Disable per-mapping filetype/devicons icon lookups; which-key
-        -- deep-merges `keys` with its Nerd Font defaults, so every key
-        -- must be listed here explicitly or it keeps its default glyph.
+        -- which-key deep-merges keys, so every Nerd Font default needs an override.
         mappings = false,
         keys = {
           Up = "Up ",

@@ -1,68 +1,37 @@
-# ~/.config/starship.toml
-
-# Add a blank line between commands
 add_newline = true
 
-# Left prompt
 format = '$directory$git_branch$git_commit$git_state$git_status$character'
 
-# Right prompt
 right_format = '$status$cmd_duration$jobs$username$hostname$python$nodejs$java$aws$kubernetes'
 
-# ─────────────────────────────
-# Current directory
-# ─────────────────────────────
 [directory]
 format = '[$path]($style) '
 style = 'bold blue'
 
-# Display paths like ~/code/projects/... with limited truncation
 truncation_length = 2
 truncation_symbol = '.../'
 truncate_to_repo = false
 
-
-# ─────────────────────────────
-# Git branch
-# ─────────────────────────────
 [git_branch]
 format = '[$branch]($style) '
 style = 'green'
 
-
-# ─────────────────────────────
-# Detached HEAD commit
-# ─────────────────────────────
 [git_commit]
 format = '[$hash]($style) '
 style = 'green'
 only_detached = true
 
-
-# ─────────────────────────────
-# Git operation state
-# Display only during rebase, merge, cherry-pick, etc.
-# ─────────────────────────────
 [git_state]
 style = 'bold yellow'
 
-
-# ─────────────────────────────
-# Git status
-# ─────────────────────────────
 [git_status]
 format = '(($all_status )$ahead_behind)'
 
-# Colour groups states -- yellow an unstaged edit, green the index, red losing a
-# file, blue untracked, grey a stash set aside. Seven hues collide set inline.
-
-# Display counts such as !1
 modified = '[!${count}](yellow)'
 staged = '[+${count}](green)'
 untracked = '[?${count}](bright-blue)'
 deleted = '[-](red)'
 renamed = '[»](green)'
-# Counted where the number moves; deleted and renamed would always read 1.
 conflicted = '[~${count}](bold bright-red)'
 stashed = '[*${count}](bright-black)'
 
@@ -70,46 +39,24 @@ ahead = '[⇡${count}](green) '
 behind = '[⇣${count}](red) '
 diverged = '[⇡${ahead_count}](bold green)[⇣${behind_count}](bold red) '
 
-
-# ─────────────────────────────
-# Command prompt character
-# ─────────────────────────────
 [character]
 success_symbol = '[❯](bold green)'
 error_symbol = '[❯](bold red)'
 vimcmd_symbol = '[❮](bold green)'
 
-
-# ─────────────────────────────
-# Exit code of the previous command
-# Hidden when the command succeeds
-# ─────────────────────────────
 [status]
 disabled = false
 format = '[✘ $status]($style) '
 style = 'bold red'
 
-
-# ─────────────────────────────
-# Duration of long-running commands
-# ─────────────────────────────
 [cmd_duration]
 min_time = 2000
 format = '[$duration]($style) '
 style = 'bright-black'
 
-
-# ─────────────────────────────
-# Background jobs
-# Hidden when there are no jobs in the current shell
-# ─────────────────────────────
 [jobs]
 style = 'cyan'
 
-
-# ─────────────────────────────
-# Remote session
-# ─────────────────────────────
 [username]
 format = '[$user]($style)'
 style_user = 'bright-black'
@@ -121,11 +68,6 @@ ssh_only = true
 format = '[@](bright-black)[$hostname]($style) '
 style = 'bold yellow'
 
-
-# ─────────────────────────────
-# Cloud environment
-# Display the AWS profile and Kubernetes context
-# ─────────────────────────────
 [aws]
 format = '([aws:$profile]($style) )'
 style = 'bold yellow'
@@ -150,11 +92,6 @@ detect_folders = ['k8s', 'kubernetes', 'helm', 'charts']
 context_pattern = 'arn:aws:eks:[^:]+:[^:]+:cluster/(?P<cluster>[^/]+)'
 context_alias = '$cluster'
 
-
-# ─────────────────────────────
-# Project runtime versions
-# Display only when related files exist in the current directory
-# ─────────────────────────────
 [python]
 format = '[($virtualenv )]($style)'
 style = 'yellow'

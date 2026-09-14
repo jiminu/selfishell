@@ -5,9 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# Discovered rather than hand-listed so a new lib/scripts/tests file is
-# checked automatically; mapfile is intentionally avoided since it's not
-# available on Bash 3.2 (macOS's default /bin/bash).
+# Discover new files automatically; avoid mapfile for Bash 3.2 compatibility.
 bash_files=()
 while IFS= read -r file; do
   bash_files+=("$file")
@@ -29,10 +27,14 @@ done < <(
 )
 
 printf 'Checking Bash syntax\n'
-bash -n "${bash_files[@]}"
+for file in "${bash_files[@]}"; do
+  bash -n "$file"
+done
 
 printf 'Checking Zsh syntax\n'
-zsh -n "${zsh_files[@]}"
+for file in "${zsh_files[@]}"; do
+  zsh -n "$file"
+done
 
 printf 'Running ShellCheck\n'
 shellcheck -x "${bash_files[@]}"

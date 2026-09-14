@@ -74,11 +74,6 @@ test_release_workflow_scopes_permissions_per_job() {
   done
 }
 
-# `gh pr list | grep -q '^0$' && gh pr create` made the step exit non-zero
-# whenever a PR was already open: under Actions' default `bash -e`, the failing
-# left side of `&&` becomes the exit status. That is the steady state, so every
-# scheduled run reported failure. The if/else block is extracted from the
-# workflow file and run with a mocked `gh`, so this can't drift from the YAML.
 extract_lines_between() {
   local file="$1"
   local start_pattern="$2"
@@ -161,12 +156,7 @@ EOF
   teardown_test_home
 }
 
-# On a pull_request the "changes" job checks out the PR's own unreviewed
-# copy of scripts/classify-ci-changes.sh, which gates the lifecycle e2e jobs --
-# so a PR could edit it to suppress its own coverage. The classifier is instead
-# run as it exists at $BASE_SHA. This builds a throwaway repo with a trusted
-# classifier at the base and a tampered one at the head, extracts the real
-# run: block from ci.yml, and confirms the trusted output wins.
+# Run the workflow with trusted base and tampered head classifiers; the base must win.
 test_ci_classification_step_uses_base_ref_classifier_not_pr_content() {
   local workflow="$ROOT_DIR/.github/workflows/ci.yml"
   local snippet repo base_sha head_sha github_output github_summary status

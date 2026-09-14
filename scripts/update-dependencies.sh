@@ -174,9 +174,7 @@ mise_tool_current_version() {
   ' "$mise_toml"
 }
 
-# Rewrites $staged_file's single "$old" occurrence to "$new", failing if it
-# isn't found exactly once -- mirrors stage_zsh_plugin_pin's guarantee that
-# an ambiguous or absent target is a hard failure, not a silent partial edit.
+# Require exactly one matching line before rewriting a staged file.
 stage_exact_replacement() {
   local staged_file="$1" old="$2" new="$3"
   local match_count

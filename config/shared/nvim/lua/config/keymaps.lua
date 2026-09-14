@@ -1,7 +1,6 @@
 local map = vim.keymap.set
 local M = {}
 
--- Clear search highlighting
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
   silent = true,
   desc = "Clear search highlight",
@@ -37,7 +36,6 @@ end, {
   desc = "Delete buffer",
 })
 
--- Keep the selection active while adjusting indentation.
 map("x", "<", "<gv", {
   desc = "Indent left and reselect",
 })
@@ -45,7 +43,6 @@ map("x", ">", ">gv", {
   desc = "Indent right and reselect",
 })
 
--- Diagnostic navigation
 map("n", "[d", function()
   vim.diagnostic.jump({ count = -1, float = true })
 end, { desc = "Previous diagnostic" })
