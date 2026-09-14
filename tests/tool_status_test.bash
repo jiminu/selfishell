@@ -214,6 +214,10 @@ EOF
 
 test_mise_inventory_missing_and_failed_queries_use_executable_fallback() {
   setup_mise_inventory
+  # This test runs in isolation; keep its missing-tool case independent of CI's PATH.
+  have_command() {
+    [[ "$1" != gh ]] && command -v "$1" >/dev/null 2>&1
+  }
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/uv"
   chmod +x "$TEST_ROOT/bin/uv"
   tool_status_detect mise uv linux amd64

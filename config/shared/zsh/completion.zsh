@@ -30,10 +30,10 @@ _selfishell_completion_needs_audit() {
 }
 
 if [[ -o interactive ]] && _selfishell_completion_needs_audit "$ZCOMPDUMP"; then
-  # -i performs one audit and excludes insecure entries without prompting.
-  # compinit sets _comp_secure when that audit finds insecure entries.
+  # -i excludes insecure entries; -D rebuilds even when an unaudited dump has
+  # the same file count. Recompile immediately to replace same-age bytecode.
   unset _comp_secure
-  if compinit -i -d "$ZCOMPDUMP"; then
+  if compinit -i -d "$ZCOMPDUMP" -D; then
     if [[ "${_comp_secure:-}" == yes ]]; then
       print -u2 "selfishell: insecure completion directories detected; run 'compaudit' for details."
     fi
@@ -41,13 +41,13 @@ if [[ -o interactive ]] && _selfishell_completion_needs_audit "$ZCOMPDUMP"; then
     # keep auditing instead of following a link or changing an occupied path.
     if [[ ! -L "$ZCOMPDUMP.audit" && ( ! -e "$ZCOMPDUMP.audit" ||
           ( -f "$ZCOMPDUMP.audit" && ! -s "$ZCOMPDUMP.audit" ) ) ]]; then
-      if [[ "${_comp_secure:-}" == yes ]]; then
-        # A new shell restores fpath: re-audit until it is clean so an excluded
-        # directory cannot shadow a safe function while loading a cached dump.
-        command rm -f "$ZCOMPDUMP.audit" 2>/dev/null
-      elif [[ -s "$ZCOMPDUMP" ]]; then
-        command touch "$ZCOMPDUMP.audit" 2>/dev/null
-      fi
+      command rm -f "$ZCOMPDUMP.audit" 2>/dev/null
+    fi
+    # Invalidate the old marker before rebuilding; a failed write must not
+    # let the next shell skip the audit and restore insecure fpath entries.
+    if compdump && zcompile "$ZCOMPDUMP" && [[ "${_comp_secure:-}" != yes &&
+         ! -e "$ZCOMPDUMP.audit" && ! -L "$ZCOMPDUMP.audit" ]]; then
+      command touch "$ZCOMPDUMP.audit" 2>/dev/null
     fi
   fi
 else

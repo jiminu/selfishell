@@ -188,7 +188,6 @@ assert_foreign_completion_audit_marker_preserved() {
     fail "Startup changed the timestamp of a foreign $1 audit marker"
 }
 
-# Audit freshness survives a reused dump, which compinit need not rewrite.
 # Check the presence of audit work, without depending on timings or call counts.
 test_completion_audits_the_dump_once_a_day() {
   local audits_when_fresh audits_when_stale audits_after_refresh marker_type
@@ -196,6 +195,7 @@ test_completion_audits_the_dump_once_a_day() {
   setup_test_home
   mkdir -p "$HOME/completion-functions" "$HOME/.local/share" "$HOME/bin"
   ln -s /bin/mv "$HOME/bin/mv"
+  ln -s /bin/rm "$HOME/bin/rm"
   ln -s /usr/bin/touch "$HOME/bin/touch"
   # Copy the actual Zsh functions into a secure fixture directory: an insecure
   # host site-functions directory must not turn the clean-cache test into a
@@ -251,7 +251,7 @@ test_completion_audits_the_dump_once_a_day() {
 test_insecure_completion_directory_does_not_block_startup() {
   local output completion_dir scenario
 
-  for scenario in missing noninteractive removed expired foreign-file foreign-symlink foreign-empty-symlink foreign-dangling foreign-directory; do
+  for scenario in missing noninteractive removed compile-failure expired foreign-file foreign-symlink foreign-empty-symlink foreign-dangling foreign-directory; do
     setup_test_home
     completion_dir="$TEST_ROOT/insecure-completions"
     mkdir -p "$completion_dir" "$HOME/.local/share"
@@ -262,8 +262,12 @@ test_insecure_completion_directory_does_not_block_startup() {
     printf '#compdef selfishell-safe-probe\nprint INSECURE_LOADED\n' >"$completion_dir/_selfishell_safe_probe"
     case "$scenario" in
       foreign-*) setup_foreign_completion_audit_marker "${scenario#foreign-}" ;;
-      noninteractive) run_completion_startup_probe "$completion_dir" +i >/dev/null ;;
-      removed)
+      noninteractive)
+        run_completion_startup_probe "$completion_dir" +i >/dev/null
+        # An unchanged file count must not validate an unaudited dump.
+        touch "$TEST_ROOT/secure-completions/_added_one" "$TEST_ROOT/secure-completions/_added_two"
+        ;;
+      removed | compile-failure)
         run_completion_startup_probe "$completion_dir" >/dev/null
         # A previous clean audit must not survive a new insecure audit.
         touch "$HOME/.zcompdump.audit"
@@ -275,7 +279,7 @@ test_insecure_completion_directory_does_not_block_startup() {
         ;;
     esac
 
-    output="$(run_completion_startup_probe "$completion_dir")"
+    output="$(SELFISHELL_TEST_FAIL_COMPILE="$scenario" run_completion_startup_probe "$completion_dir")"
     [[ "$output" == *STARTUP_COMPLETE* ]] ||
       fail "Startup blocked ($scenario): $output"
     [[ "$output" == *SAFE_COMPLETION* && "$output" != *INSECURE_REGISTERED* &&
@@ -303,6 +307,9 @@ run_completion_startup_probe() {
     SELFISHELL_TEST_COMPLETION_DIR="$completion_dir" \
     /bin/zsh -f "$shell_mode" -c '
       [[ -z "$SELFISHELL_TEST_COMPLETION_DIR" ]] || fpath=("$SELFISHELL_TEST_COMPLETION_DIR" "${SELFISHELL_TEST_COMPLETION_DIR:h}/secure-completions" $fpath)
+      if [[ "$SELFISHELL_TEST_FAIL_COMPILE" == compile-failure ]]; then
+        zcompile() { return 1; }
+      fi
       source "$1"
       (( ! ${+_comps[selfishell-insecure-probe]} )) || print INSECURE_REGISTERED
       (( ! ${+_comps[selfishell-safe-probe]} )) || _selfishell_safe_probe
