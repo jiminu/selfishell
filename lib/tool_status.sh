@@ -95,7 +95,7 @@ tool_status_mise_version() {
   TOOL_STATUS_MISE_VERSION=""
   TOOL_STATUS_APPROVED=""
   if [[ "$TOOL_STATUS_MISE_READY" == 0 ]]; then
-    # mise.toml owns approved versions; profile records contain only tool names.
+    # mise.toml owns approved versions; package records contain only tool names.
     TOOL_STATUS_MISE_APPROVED_VERSIONS="$(awk '
       /^\[/ { in_tools = ($0 == "[tools]"); next }
       in_tools && $2 == "=" {

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-packages_install_profile() {
+packages_install() {
   local platform="$1"
   local dry_run="$2"
   local index
-  local profile_platform
+  local package_platform
   local architecture=""
   local required_apt=()
   local optional_apt=()
@@ -30,24 +30,24 @@ packages_install_profile() {
   # shellcheck disable=SC2034
   SELFISHELL_BREW_CASKS_READY=0
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
-  profile_platform="$(platform_profile_platform "$platform")"
+  package_platform="$(platform_package_platform "$platform")"
 
-  for ((index = 0; index < ${#PROFILE_PACKAGES[@]}; index++)); do
-    if [[ "${PROFILE_PLATFORMS[$index]}" != "all" && "${PROFILE_PLATFORMS[$index]}" != "$profile_platform" ]]; then
+  for ((index = 0; index < ${#PACKAGE_NAMES[@]}; index++)); do
+    if [[ "${PACKAGE_PLATFORMS[$index]}" != "all" && "${PACKAGE_PLATFORMS[$index]}" != "$package_platform" ]]; then
       continue
     fi
 
-    case "${PROFILE_REQUIREMENTS[$index]}:${PROFILE_MANAGERS[$index]}" in
-      required:apt) required_apt+=("${PROFILE_PACKAGES[$index]}") ;;
-      optional:apt) optional_apt+=("${PROFILE_PACKAGES[$index]}") ;;
-      required:formula) required_formula+=("${PROFILE_PACKAGES[$index]}") ;;
-      optional:formula) optional_formula+=("${PROFILE_PACKAGES[$index]}") ;;
-      required:cask) required_cask+=("${PROFILE_PACKAGES[$index]}") ;;
-      optional:cask) optional_cask+=("${PROFILE_PACKAGES[$index]}") ;;
-      required:direct) required_direct+=("${PROFILE_PACKAGES[$index]}") ;;
-      optional:direct) optional_direct+=("${PROFILE_PACKAGES[$index]}") ;;
-      required:mise) required_mise+=("${PROFILE_PACKAGES[$index]}") ;;
-      optional:mise) optional_mise+=("${PROFILE_PACKAGES[$index]}") ;;
+    case "${PACKAGE_REQUIREMENTS[$index]}:${PACKAGE_MANAGERS[$index]}" in
+      required:apt) required_apt+=("${PACKAGE_NAMES[$index]}") ;;
+      optional:apt) optional_apt+=("${PACKAGE_NAMES[$index]}") ;;
+      required:formula) required_formula+=("${PACKAGE_NAMES[$index]}") ;;
+      optional:formula) optional_formula+=("${PACKAGE_NAMES[$index]}") ;;
+      required:cask) required_cask+=("${PACKAGE_NAMES[$index]}") ;;
+      optional:cask) optional_cask+=("${PACKAGE_NAMES[$index]}") ;;
+      required:direct) required_direct+=("${PACKAGE_NAMES[$index]}") ;;
+      optional:direct) optional_direct+=("${PACKAGE_NAMES[$index]}") ;;
+      required:mise) required_mise+=("${PACKAGE_NAMES[$index]}") ;;
+      optional:mise) optional_mise+=("${PACKAGE_NAMES[$index]}") ;;
     esac
   done
 

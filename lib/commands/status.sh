@@ -114,8 +114,7 @@ command_status() {
   local verbose=0
   local current_version="unknown"
   local rollback_version="none"
-  local platform profile_platform dependency_platform architecture
-  local profile=""
+  local platform package_platform dependency_platform architecture
   local resource
 
   while (("$#" > 0)); do
@@ -149,23 +148,15 @@ command_status() {
 
   platform="$(detect_platform)"
   dependency_platform="$(platform_dependency_platform "$platform")"
-  profile_platform="$(platform_profile_platform "$platform")"
+  package_platform="$(platform_package_platform "$platform")"
   architecture="$(detect_architecture)"
 
-  if [[ -r "$SELFISHELL_STATE_DIR/profile" ]]; then
-    profile="$(<"$SELFISHELL_STATE_DIR/profile")"
-    printf '%s[INFO]%s Installed profile: %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$profile"
-    selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" status_report_package "$profile_platform"
+  if [[ -r "$SELFISHELL_STATE_DIR/configured" ]]; then
+    printf '%s[INFO]%s Selfishell configuration is installed.\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    selfishell_scan_packages "$dependency_platform" "$architecture" status_report_package "$package_platform"
   fi
 
-  if [[ "$profile" == minimal ]] &&
-    { managed_state_exists user-nvim || managed_state_exists mise-config-link; }; then
-    printf '%s[INFO]%s Previously installed developer configuration is retained and checked below.\n' \
-      "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
-  fi
-
-  # The selected profile controls future installation, not ownership of paths
-  # retained from an earlier profile or platform.
+  # Check every tracked path, including resources retained from another platform.
   while IFS= read -r resource; do
     status_resource "$resource"
   done < <(selfishell_managed_resource_names)

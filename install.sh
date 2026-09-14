@@ -45,14 +45,13 @@ bootstrap_help() {
   cat <<'EOF'
 Usage:
   install.sh [--version VERSION] [--prefix PATH] [--setup] [--yes]
-             [--profile NAME] [--skip-packages]
+             [--skip-packages]
 
 Options:
   --version VERSION  Install an exact Selfishell release
   --prefix PATH      Installation prefix (default: $HOME/.local)
   --setup            Run 'selfishell install' after installing the CLI
   --yes              Skip setup confirmation when used with --setup
-  --profile NAME     Profile passed to setup (default: developer)
   --skip-packages    Pass configuration-only mode to setup
   --help             Show this help
 EOF
@@ -277,7 +276,6 @@ main() {
   local prefix="${HOME}/.local"
   local setup=0
   local assume_yes=0
-  local profile=developer
   local skip_packages=0
   local platform
   local architecture
@@ -317,14 +315,6 @@ main() {
         ;;
       --setup) setup=1 ;;
       --yes) assume_yes=1 ;;
-      --profile)
-        shift
-        (("$#" > 0)) || {
-          bootstrap_error "--profile requires a value"
-          return 2
-        }
-        profile="$1"
-        ;;
       --skip-packages) skip_packages=1 ;;
       help | --help | -h)
         bootstrap_help
@@ -428,7 +418,7 @@ main() {
   fi
 
   if [[ "$setup" == "1" ]]; then
-    setup_args=(install --profile "$profile")
+    setup_args=(install)
     [[ "$skip_packages" == "1" ]] && setup_args+=(--skip-packages)
     [[ "$assume_yes" == "1" ]] && setup_args+=(--yes)
     "$bin_dir/selfishell" "${setup_args[@]}"

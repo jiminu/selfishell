@@ -13,7 +13,7 @@ Install the CLI:
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
 ```
 
-Then install the default `developer` environment and verify it:
+Then install the development environment and verify it:
 
 ```bash
 selfishell install
@@ -32,35 +32,27 @@ Ghostty, and platform notes.
 
 - A consistent Zsh environment across supported macOS and Ubuntu systems.
 - A Starship prompt, useful aliases, completions, and managed shell defaults.
-- `minimal` and `developer` profiles, with Neovim and development tooling in
-  the developer profile.
+- Neovim, mise-managed runtimes, CLI tools, and build tooling.
 - Checksum-verified release updates and a retained release for offline rollback.
 - User-owned shell files: personal aliases, exports, functions, and project
   tooling stay outside Selfishell-managed blocks.
 
 ![Selfishell Neovim workspace showing the file explorer, buffer tabs, shell-script syntax highlighting, and compact statusline](img/nvim.png)
 
-## Profiles
+## Development Environment
 
-`developer` is the default profile; choose `minimal` explicitly for a lighter
-shell setup.
-
-| Profile | Includes |
-| --- | --- |
-| `minimal` | Core Zsh, Git, Vim, Starship, Zinit, and shell configuration |
-| `developer` | Everything in `minimal`, plus Neovim, mise-managed runtimes, CLI/editor tools, and build tooling |
-
-See [Profiles](docs/PROFILES.md) for the complete package list and profile
-behavior.
+`selfishell install` sets up one consistent environment: Zsh, Git, Vim,
+Starship, Zinit, Neovim, mise-managed runtimes, CLI tools, and build tooling.
+See [Environment](docs/ENVIRONMENT.md) for tool management and editor behavior.
 
 ## Everyday Commands
 
 | Command | Use it to |
 | --- | --- |
-| `selfishell status` | Show the active profile, managed resources, and CLI/rollback version. |
+| `selfishell status` | Show installed tools, managed resources, and CLI/rollback version. |
 | `selfishell doctor` | Diagnose the current installation. |
 | `selfishell version --available` | Check the latest published release. |
-| `selfishell update` | Update the CLI, profile tools, and configuration. |
+| `selfishell update` | Update the CLI, tools, and configuration. |
 | `selfishell rollback` | Return to the previous retained release offline. |
 | `selfishell uninstall --restore --dry-run` | Preview restoring backed-up configuration. |
 
@@ -80,7 +72,7 @@ startup.
 
 - [Installation](docs/INSTALLATION.md) — setup, uninstallation, Ghostty, and
   platform notes.
-- [Profiles](docs/PROFILES.md) — package choices and Neovim workflow.
+- [Environment](docs/ENVIRONMENT.md) — managed tools and Neovim workflow.
 - [Python development](docs/PYTHON.md) — Python tooling and project setup.
 - [Updates and rollback](docs/UPDATES.md) — release updates and recovery.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common installation and shell

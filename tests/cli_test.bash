@@ -170,12 +170,12 @@ test_doctor_rejects_unsupported_platform() {
     fail "Doctor should provide an actionable platform message"
 }
 
-test_doctor_does_not_require_compiler_for_minimal_profile() {
+test_doctor_checks_compiler_for_installed_environment() {
   local output
 
   setup_test_home
   mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf '1\n' >"$HOME/.local/state/selfishell/configured"
   printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
   printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
@@ -192,7 +192,7 @@ test_doctor_does_not_require_compiler_for_minimal_profile() {
   )"
   set -e
 
-  [[ "$output" != *'C compiler:'* ]] || fail "Minimal profile should not require a C compiler"
+  [[ "$output" == *'C compiler:'* ]] || fail "Installed environment should check for a C compiler"
   teardown_test_home
 }
 
@@ -207,7 +207,7 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
   plugins_dir="$HOME/.local/share/zinit/plugins"
   mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
     "$HOME/.local/share/zinit/zinit.git"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf '1\n' >"$HOME/.local/state/selfishell/configured"
   printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
   printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
@@ -267,7 +267,7 @@ test_doctor_reports_zinit_plugin_revision_drift() {
   plugin_dir="$plugins_dir/${repository//\//---}"
   mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
     "$HOME/.local/share/zinit/zinit.git" "$plugin_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf '1\n' >"$HOME/.local/state/selfishell/configured"
   printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
   printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"
@@ -316,7 +316,7 @@ test_doctor_reports_dirty_zinit_plugin_checkout() {
   plugin_dir="$plugins_dir/${repository//\//---}"
   mkdir -p "$HOME/.local/state/selfishell" "$TEST_ROOT/bin" \
     "$HOME/.local/share/zinit/zinit.git" "$plugin_dir"
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
+  printf '1\n' >"$HOME/.local/state/selfishell/configured"
   printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
   printf 'Linux version 6.8.0\n' >"$TEST_ROOT/proc-version"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt"

@@ -1,4 +1,5 @@
 [tools]
+starship = "1.26.0"
 fzf = "0.74.4"
 zoxide = "0.10.0"
 ripgrep = "15.2.0"
@@ -14,4 +15,3 @@ gh = "2.100.0"
 
 [settings]
 not_found_auto_install = false
-

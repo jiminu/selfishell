@@ -172,7 +172,7 @@ EOF
   printf 'node 24.18.0\npython 3.13.14 3.12.0\n' >"$HOME/mise-inventory"
 }
 
-# Approved mise versions come from mise.toml, not the profile's bare tool names.
+# Approved mise versions come from mise.toml, not the manifest's bare tool names.
 test_detects_mise_tool_version() {
   setup_mise_inventory
 

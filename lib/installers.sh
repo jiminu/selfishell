@@ -97,7 +97,7 @@ install_direct_package() {
   dependency_platform="$(platform_dependency_platform "$platform")"
 
   case "$package" in
-    starship | mise)
+    mise)
       dependency_install "$package" "$dependency_platform" "$architecture"
       ;;
     zinit)
@@ -295,7 +295,7 @@ install_neovim_plugins() {
   fi
 
   if ! nvim_command="$(selfishell_nvim_command)"; then
-    cli_error "Could not locate Neovim after installing the developer profile."
+    cli_error "Could not locate Neovim after installing the development environment."
     return 1
   fi
 

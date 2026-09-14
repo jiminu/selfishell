@@ -544,7 +544,7 @@ test_fails_neovim_plugins_when_neovim_is_unavailable() {
 
   [[ -z "$GIT_ARGUMENTS" ]] || fail "Missing Neovim still cloned lazy.nvim"
   [[ ! -e "$lazy_path" ]] || fail "Missing Neovim still prepared lazy.nvim"
-  [[ "$output" == *'Could not locate Neovim after installing the developer profile.'* ]] ||
+  [[ "$output" == *'Could not locate Neovim after installing the development environment.'* ]] ||
     fail "Missing Neovim failure was not actionable: $output"
 }
 

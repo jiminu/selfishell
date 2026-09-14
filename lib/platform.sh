@@ -138,8 +138,8 @@ platform_dependency_platform() {
   esac
 }
 
-# ubuntu-wsl has no profile-package entries of its own; it shares ubuntu's.
-platform_profile_platform() {
+# ubuntu-wsl has no package entries of its own; it shares ubuntu's.
+platform_package_platform() {
   case "$1" in
     ubuntu | ubuntu-wsl) printf 'ubuntu\n' ;;
     *) printf '%s\n' "$1" ;;

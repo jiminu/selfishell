@@ -263,7 +263,7 @@ test_status_does_not_use_network() {
   version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
   "$TEST_ROOT/prefix/bin/selfishell" \
-    install --profile minimal --skip-packages --yes >/dev/null
+    install --skip-packages --yes >/dev/null
   mkdir -p "$fake_bin"
   cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -705,7 +705,7 @@ test_default_update_reports_up_to_date_without_synchronizing() {
     fail "Default update at the latest release did not report up to date: $output"
   [[ "$output" != *'already at'* ]] ||
     fail "Default update printed the CLI-only wording as well as the up-to-date message: $output"
-  # No profile is installed here, so update_tools_and_configuration would have
+  # No configuration is installed here, so update_tools_and_configuration would have
   # printed this had it run: its absence proves the phase was skipped, not just
   # that the summary line was suppressed.
   [[ "$output" != *'skipping tools and configuration'* ]] ||
@@ -951,7 +951,7 @@ test_setup_is_explicit_and_can_skip_packages() {
 
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Setup did not create a user-owned .zshrc"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Setup did not add the Zsh loader"
-  assert_file_content 'developer' "$XDG_STATE_HOME/selfishell/profile"
+  assert_file_content '1' "$XDG_STATE_HOME/selfishell/configured"
 }
 
 test_missing_bin_path_prints_actionable_message() {

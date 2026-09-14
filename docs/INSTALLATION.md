@@ -9,8 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 selfishell install
 ```
 
-`selfishell install` selects the recommended `developer` profile. Use
-`selfishell install --profile minimal` for a lightweight shell setup.
+`selfishell install` sets up the complete development environment.
 
 ## Verification coverage
 
@@ -41,9 +40,9 @@ The bootstrap installs only the CLI unless `--setup` is explicitly supplied.
 Version discovery prefers the latest stable release and otherwise uses the
 newest version tag only after its exact `VERSION` release asset is published.
 
-### Install CLI and default profile together
+### Install CLI and environment together
 
-Install the CLI and default `developer` profile non-interactively:
+Install the CLI and development environment non-interactively:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
@@ -60,7 +59,7 @@ Use an exact release in controlled environments:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --version <version>
-selfishell install --profile developer --yes
+selfishell install --yes
 ```
 
 The archive is downloaded to a temporary directory, checked against the
@@ -74,7 +73,7 @@ release for offline rollback and removes older inactive releases.
 For configuration-only installation after the CLI is provisioned:
 
 ```sh
-selfishell install --profile developer --skip-packages --yes
+selfishell install --skip-packages --yes
 ```
 
 `--skip-packages` performs configuration-only installation without package or

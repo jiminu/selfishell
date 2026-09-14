@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
-test_minimal_profile_initializes_git_completion_without_zinit() {
+test_git_completion_initializes_without_zinit() {
   setup_test_home
   local output
 
@@ -1210,7 +1210,7 @@ EOF
   teardown_test_home
 }
 
-test_minimal_profile_keeps_system_vim() {
+test_missing_neovim_keeps_system_vim() {
   local output
 
   setup_test_home

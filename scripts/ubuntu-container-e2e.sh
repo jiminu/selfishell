@@ -6,7 +6,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-container-e2e.XXXXXX")"
 INITIAL_VERSION=0.0.0-container.1
 NEXT_VERSION=0.0.0-container.2
+export HOME="$TEST_ROOT/home"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_STATE_HOME="$HOME/.local/state"
+export XDG_CACHE_HOME="$HOME/.cache"
 PREFIX="$HOME/.local"
+export PATH="$PREFIX/bin:$PATH"
 RELEASE_ROOT="$TEST_ROOT/releases"
 
 cleanup() {
@@ -32,6 +38,7 @@ trap cleanup EXIT HUP INT TERM
 
 [[ "$(id -u)" == 0 ]] || fail "the Ubuntu container test must run as root"
 command -v sudo >/dev/null 2>&1 && fail "the test image unexpectedly contains sudo"
+mkdir -p "$HOME"
 
 publish_fixture "$INITIAL_VERSION"
 publish_fixture "$NEXT_VERSION"
@@ -40,7 +47,7 @@ SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
   bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$PREFIX"
 
 SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
-  "$PREFIX/bin/selfishell" install --profile minimal --yes
+  "$PREFIX/bin/selfishell" install --yes
 "$PREFIX/bin/selfishell" status >/dev/null
 "$PREFIX/bin/selfishell" doctor >/dev/null
 

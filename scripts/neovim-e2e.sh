@@ -85,7 +85,7 @@ if zsh_path="$(command -v zsh 2>/dev/null)"; then
   export SHELL="$zsh_path"
 fi
 
-bash "$ROOT_DIR/bin/selfishell" install --profile developer --skip-packages --yes >/dev/null
+bash "$ROOT_DIR/bin/selfishell" install --skip-packages --yes >/dev/null
 
 verify_mise_global_config_ownership
 
