@@ -1,10 +1,4 @@
--- Exercises config.autocmds' FileType-driven parser auto-install:
--- nvim-treesitter 1.0+ dropped ensure_installed/auto_install, so a missing
--- parser is installed on the first open of its filetype.
---
--- Installed-ness is judged only by get_installed("parsers"), never by
--- start() succeeding: start() can fail on a broken query, which is unrelated
--- to a missing parser and out of scope here.
+-- Parser presence, not start() success, determines whether installation is needed.
 
 --- @param name string
 --- @param opts { start_fails: boolean?, available: string[], installed: string[], install_succeeds: boolean?, filetype: string?, mock_treesitter: boolean? }

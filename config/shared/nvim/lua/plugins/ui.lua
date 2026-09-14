@@ -49,7 +49,6 @@ local function lualine_mode_color()
 end
 
 return {
-  -- Theme: must be available during startup.
   plugin("mofiqul/vscode.nvim", {
     lazy = false,
     priority = 1000,
@@ -58,7 +57,6 @@ return {
     end,
   }),
 
-  -- File explorer: loaded only when its command or keymap is used.
   plugin("nvim-tree/nvim-tree.lua", {
     main = "nvim-tree",
     cmd = {
@@ -98,8 +96,6 @@ return {
         git_ignored = false,
       },
       renderer = {
-        -- Keep folders distinct without spending the narrow tree's width on
-        -- icons, and show native branch guides for nested directories.
         add_trailing = true,
         group_empty = true,
         highlight_git = "name",
@@ -138,8 +134,6 @@ return {
     },
   }),
 
-  -- Buffer tabs: keep the critical startup path clear and hide the bar when a
-  -- single buffer is open.
   plugin("akinsho/bufferline.nvim", {
     event = "VeryLazy",
     keys = {
@@ -157,8 +151,7 @@ return {
     opts = {
       options = {
         always_show_bufferline = false,
-        -- Disabling this avoids ever touching nvim-web-devicons: it's
-        -- checked before the (also pcall-guarded) require.
+        -- Disable icon lookups to avoid loading nvim-web-devicons.
         show_buffer_icons = false,
         close_command = function(bufnr)
           Snacks.bufdelete(bufnr)
@@ -279,7 +272,6 @@ return {
     },
   }),
 
-  -- Statusline: not required for the critical startup path.
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
     opts = {
@@ -346,11 +338,7 @@ return {
     },
   }),
 
-  -- Scope comes from the node's ancestry rather than a per-language
-  -- node-type whitelist, falling back to indentation when Tree-sitter finds
-  -- nothing. Loaded eagerly because Snacks defers indent to BufReadPost,
-  -- which never fires for BufNewFile or the initial unnamed buffer; the
-  -- direct indent.enable() below covers those and is idempotent.
+  -- Load eagerly and enable directly: Snacks' BufReadPost hook misses new and unnamed buffers.
   plugin("folke/snacks.nvim", {
     lazy = false,
     priority = 1000,
@@ -464,9 +452,7 @@ return {
       },
     },
     opts = {
-      -- ripgrep is guaranteed by the developer profile; fd is not, so the
-      -- picker shouldn't vary by what's personally installed. No source shows
-      -- a file icon: without nvim-web-devicons there's no icon set to use.
+      -- The developer profile guarantees ripgrep, but not fd.
       picker = {
         ui_select = false,
         sources = {
@@ -480,13 +466,10 @@ return {
           buffers = {
             icons = { files = { enabled = false } },
           },
-          -- Telescope's diagnostics picker showed the whole workspace, not
-          -- just the cwd; Snacks defaults to cwd-only.
+          -- Include diagnostics across the whole workspace.
           diagnostics = {
             filter = { cwd = false },
           },
-          -- Both reach the same filename formatter as the sources above. The
-          -- git log pickers don't -- their commit glyph is Snacks' own.
           git_status = {
             icons = { files = { enabled = false } },
           },
@@ -528,7 +511,6 @@ return {
     end,
   }),
 
-  -- Git changes, hunk actions, and blame information.
   plugin("lewis6991/gitsigns.nvim", {
     event = { "BufReadPre", "BufNewFile" },
     opts = {
@@ -567,7 +549,6 @@ return {
           end
         end, "Previous Git change")
 
-        -- Hunk actions.
         map("n", "<leader>hp", gitsigns.preview_hunk, "Preview Git hunk")
         map("n", "<leader>hi", gitsigns.preview_hunk_inline, "Preview Git hunk inline")
         map("n", "<leader>hs", gitsigns.stage_hunk, "Stage Git hunk")
@@ -587,7 +568,6 @@ return {
           })
         end, "Reset selected Git lines")
 
-        -- Blame and diff.
         map("n", "<leader>hb", function()
           gitsigns.blame_line({ full = true })
         end, "Show Git blame")
@@ -598,26 +578,21 @@ return {
           gitsigns.diffthis("~")
         end, "Diff against previous commit")
 
-        -- Optional visual features.
         map("n", "<leader>ub", gitsigns.toggle_current_line_blame, "Toggle Git blame")
         map("n", "<leader>uw", gitsigns.toggle_word_diff, "Toggle Git word diff")
 
-        -- Git hunk text object.
         map({ "o", "x" }, "ih", gitsigns.select_hunk, "Select Git hunk")
       end,
     },
   }),
 
-  -- Scrollbar with the current viewport and diagnostics.
   plugin("petertriho/nvim-scrollbar", {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
     opts = {
       show_in_active_only = true,
       hide_if_all_visible = true,
-      -- The default handle color (linked to CursorColumn) is nearly
-      -- indistinguishable from vscode.nvim's background. Use VS Code's own
-      -- scrollbar slider color/opacity instead of a fully opaque gray.
+      -- The default CursorColumn color is hard to see against this theme.
       handle = {
         blend = 60,
         color = "#797979",
@@ -631,9 +606,7 @@ return {
         "mason",
         "help",
       },
-      -- gitsigns is off: the sign column already shows these hunks, and
-      -- mirroring them doubled the redraw triggers. cursor is off to drop the
-      -- CursorMoved-driven redraw on every cursor move.
+      -- Avoid duplicate hunk redraws and a redraw on every cursor move.
       handlers = {
         cursor = false,
         diagnostic = true,
@@ -644,7 +617,6 @@ return {
     },
   }),
 
-  -- Inline document preview.
   plugin("OXY2DEV/markview.nvim", {
     ft = { "markdown", "quarto", "rmd", "typst", "asciidoc" },
     keys = {
@@ -656,7 +628,6 @@ return {
     },
     opts = {
       preview = {
-        -- Avoid nvim-web-devicons, as elsewhere in this file.
         icon_provider = "internal",
       },
     },

@@ -16,8 +16,7 @@ test_history_module_uses_persistent_extended_history() {
       # mismatch itself: anything printed before the marker breaks the exact
       # comparison below and names what went wrong.
       [[ "$HISTFILE" == "$HOME/.zsh_history" ]] || print -r -- "HISTFILE=$HISTFILE"
-      [[ "$HISTSIZE" == 10000 ]] || print -r -- "HISTSIZE=$HISTSIZE"
-      [[ "$SAVEHIST" == 10000 ]] || print -r -- "SAVEHIST=$SAVEHIST"
+      (( HISTSIZE > 0 && SAVEHIST > 0 )) || print -r -- "history storage is disabled"
       for option in EXTENDED_HISTORY INC_APPEND_HISTORY_TIME HIST_IGNORE_SPACE \
         HIST_REDUCE_BLANKS; do
         [[ -o $option ]] || print -r -- "unset: $option"

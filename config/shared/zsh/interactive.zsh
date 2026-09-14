@@ -1,14 +1,24 @@
-# Aliases
 source "$SELFISHELL_COMMON_DIR/aliases.zsh"
 
 # Shell tools configure key bindings before interactive plugins load.
 SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
 
-# Writes "$@"'s stdout to $target through a temp file, validated non-empty and
-# zsh-syntax-clean before the atomic rename: the caller's [[ -s ]] can't tell
-# "empty" from "truncated", so a kill mid-generation would otherwise leave a
-# partial cache sourced forever. fzf's copied-file fallback doesn't fit this
-# shape and stays separate below.
+# Compare executable identity, not cache age: rollbacks can restore an older
+# mtime. Keep the key in the cache itself so it activates with the validated code.
+# The generators below consume the key set by this check, without another stat.
+_selfishell_zsh_cache_current() {
+  local target="$1" binary="${2:A}" header
+  local -A info
+  _selfishell_zsh_cache_key=""
+  zmodload -F zsh/stat b:zstat 2>/dev/null || return 1
+  zstat -H info -- "$binary" 2>/dev/null || return 1
+  _selfishell_zsh_cache_key="# selfishell-tool ${(q)binary} $info[device] $info[inode] $info[size] $info[mtime] $info[ctime]"
+  [[ -s "$target" ]] && IFS= read -r header <"$target" &&
+    [[ "$header" == "$_selfishell_zsh_cache_key" ]]
+}
+
+# Validate before atomic activation so interrupted generation cannot leave a
+# partial cache that subsequent startups would source.
 _selfishell_generate_zsh_cache() {
   local target="$1"
   shift
@@ -25,6 +35,11 @@ _selfishell_generate_zsh_cache() {
     return 1
   }
   command zsh -n "$temporary" >/dev/null 2>&1 || {
+    command rm -f "$temporary"
+    return 1
+  }
+  local init="$(<"$temporary")"
+  print -r -- "${_selfishell_zsh_cache_key:-}"$'\n'"$init" >|"$temporary" || {
     command rm -f "$temporary"
     return 1
   }
@@ -63,6 +78,11 @@ _selfishell_generate_fzf_cache() {
     command rm -f "$temporary"
     return 1
   }
+  local init="$(<"$temporary")"
+  print -r -- "${_selfishell_zsh_cache_key:-}"$'\n'"$init" >|"$temporary" || {
+    command rm -f "$temporary"
+    return 1
+  }
   command mv -f "$temporary" "$target" || {
     command rm -f "$temporary"
     return 1
@@ -71,7 +91,7 @@ _selfishell_generate_fzf_cache() {
 
 if _selfishell_zoxide_bin="$(command -v zoxide)"; then
   _selfishell_zoxide_cache="$SELFISHELL_CACHE_DIR/zoxide-init.zsh"
-  if [[ ! -s "$_selfishell_zoxide_cache" || "$_selfishell_zoxide_bin" -nt "$_selfishell_zoxide_cache" ]]; then
+  if ! _selfishell_zsh_cache_current "$_selfishell_zoxide_cache" "$_selfishell_zoxide_bin"; then
     _selfishell_generate_zsh_cache "$_selfishell_zoxide_cache" zoxide init zsh
   fi
   [[ -s "$_selfishell_zoxide_cache" ]] && source "$_selfishell_zoxide_cache"
@@ -80,15 +100,11 @@ fi
 unset _selfishell_zoxide_bin
 
 if _selfishell_fzf_bin="$(command -v fzf)"; then
-  # Scheme 16 keeps fzf to the terminal's own colors, as the prompt does by
-  # naming colors. Spelled 16, not base16: that alias postdates the fzf Ubuntu
-  # 24.04 ships (0.44.1), which rejects an unknown scheme outright and would
-  # take every invocation down with it. The environment wins, so this is a
-  # default, not a policy, and it reaches only Ctrl-T and Ctrl-R.
+  # Ubuntu 24.04's fzf supports "16", but not the newer "base16" alias.
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
 
   _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
-  if [[ ! -s "$_selfishell_fzf_cache" || "$_selfishell_fzf_bin" -nt "$_selfishell_fzf_cache" ]]; then
+  if ! _selfishell_zsh_cache_current "$_selfishell_fzf_cache" "$_selfishell_fzf_bin"; then
     _selfishell_generate_fzf_cache "$_selfishell_fzf_cache"
   fi
   [[ -s "$_selfishell_fzf_cache" ]] && source "$_selfishell_fzf_cache"
@@ -104,16 +120,13 @@ if (($+functions[zinit])); then
     zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
     zinit light Aloxaf/fzf-tab
 
-    # These styles are read only when a completion runs, so startup pays
-    # nothing, and each preview runs in an fzf worker. Rules stay per-command
-    # on purpose: a catch-all would fire for option flags too.
+    # Keep previews per-command so they do not run for option flags.
 
     # fzf-tab blanks FZF_DEFAULT_OPTS, so hand it the palette directly.
     # use-fzf-default-opts would forward the rest of the user's variable, and
     # --with-nth defeats the NUL encoding it uses for candidates.
     zstyle ':fzf-tab:*' fzf-flags --color=16
 
-    # Group headers ([files], [directories], ...) above each candidate block.
     zstyle ':completion:*:descriptions' format '[%d]'
 
     # $realpath is the full path; $word is only the part after the common
@@ -148,10 +161,7 @@ if (($+functions[zinit])); then
       git log --oneline --decorate --color=always -10 "${ref:-$word}" 2>/dev/null
     '
 
-    # The pending change matters here, not the file's contents, and plain
-    # `git diff` is what all three commands act on by default. Options that
-    # move the target (`restore --staged`) would need command-line parsing and
-    # are not read; those candidates preview empty, as untracked files do.
+    # Preview unstaged changes. Command-line options such as --staged are not parsed.
     zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
       'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
 
@@ -161,9 +171,7 @@ if (($+functions[zinit])); then
     zstyle ':fzf-tab:complete:git-stash-(show|pop|apply|drop|branch):*' fzf-preview \
       'git stash show -p --color=always "$word" 2>/dev/null | head -n 200'
 
-    # An explicit -o format is the subset BSD (macOS) and procps (Ubuntu)
-    # agree on. $USERNAME because zsh always defines it, unlike $USER: `ps -u ''`
-    # swallows the next argument and complains instead of listing.
+    # Use a ps format shared by BSD and procps; zsh always defines USERNAME.
     zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
     zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
       'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'
@@ -184,7 +192,7 @@ fi
 
 if _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
-  if [[ ! -s "$_selfishell_starship_cache" || "$_selfishell_starship_bin" -nt "$_selfishell_starship_cache" ]]; then
+  if ! _selfishell_zsh_cache_current "$_selfishell_starship_cache" "$_selfishell_starship_bin"; then
     _selfishell_generate_zsh_cache "$_selfishell_starship_cache" starship init zsh
   fi
   [[ -s "$_selfishell_starship_cache" ]] && source "$_selfishell_starship_cache"
@@ -192,4 +200,4 @@ if _selfishell_starship_bin="$(command -v starship)"; then
 fi
 unset _selfishell_starship_bin
 
-unset SELFISHELL_CACHE_DIR
+unset SELFISHELL_CACHE_DIR _selfishell_zsh_cache_key

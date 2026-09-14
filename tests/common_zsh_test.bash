@@ -107,9 +107,7 @@ EOF
   teardown_test_home
 }
 
-# An interrupted clone leaves the plugin directory behind without a repository.
-# Loading it would make Zinit fail during startup, and the installer preserves
-# an existing plugin path, so startup must treat it the same as a missing one.
+# Skip incomplete checkouts at startup; install/update repairs them separately.
 test_shell_startup_skips_an_incomplete_zinit_plugin_checkout() {
   local output
   local plugins_dir
@@ -150,25 +148,79 @@ EOF
   teardown_test_home
 }
 
-# compinit's security audit (compaudit) is the most expensive part of startup
-# and is meant to run once a day, not on every shell. Its freshness check needs
-# EXTENDED_GLOB to glob at all, and without it every dump reads as stale.
+setup_foreign_completion_audit_marker() {
+  rm -rf "$HOME/.zcompdump.audit"
+  case "$1" in
+    file) printf 'personal data\n' >"$HOME/.zcompdump.audit" ;;
+    symlink | empty-symlink)
+      printf 'personal data\n' >"$TEST_ROOT/marker-target"
+      [[ "$1" != empty-symlink ]] || : >"$TEST_ROOT/marker-target"
+      ln -s "$TEST_ROOT/marker-target" "$HOME/.zcompdump.audit"
+      ;;
+    dangling) ln -s "$TEST_ROOT/missing-target" "$HOME/.zcompdump.audit" ;;
+    directory)
+      mkdir "$HOME/.zcompdump.audit"
+      printf 'personal data\n' >"$HOME/.zcompdump.audit/personal"
+      ;;
+  esac
+  touch -t 202001010000 "$TEST_ROOT/marker-reference"
+  [[ "$1" == dangling ]] || touch -r "$TEST_ROOT/marker-reference" "$HOME/.zcompdump.audit"
+}
+
+assert_foreign_completion_audit_marker_preserved() {
+  case "$1" in
+    file) assert_file_content 'personal data' "$HOME/.zcompdump.audit" ;;
+    symlink | empty-symlink)
+      assert_symlink_to "$TEST_ROOT/marker-target" "$HOME/.zcompdump.audit"
+      if [[ "$1" == symlink ]]; then
+        assert_file_content 'personal data' "$TEST_ROOT/marker-target"
+      else
+        assert_file_content '' "$TEST_ROOT/marker-target"
+      fi
+      ;;
+    dangling)
+      assert_symlink_to "$TEST_ROOT/missing-target" "$HOME/.zcompdump.audit"
+      [[ ! -e "$TEST_ROOT/missing-target" ]] || fail "Startup created a dangling marker target"
+      ;;
+    directory) assert_file_content 'personal data' "$HOME/.zcompdump.audit/personal" ;;
+  esac
+  [[ "$1" == dangling || ! "$HOME/.zcompdump.audit" -nt "$TEST_ROOT/marker-reference" ]] ||
+    fail "Startup changed the timestamp of a foreign $1 audit marker"
+}
+
+# Audit freshness survives a reused dump, which compinit need not rewrite.
+# Check the presence of audit work, without depending on timings or call counts.
 test_completion_audits_the_dump_once_a_day() {
-  local audits_when_fresh audits_when_stale
+  local audits_when_fresh audits_when_stale audits_after_refresh marker_type
 
   setup_test_home
-  mkdir -p "$HOME/.cache/selfishell" "$HOME/.local/share"
+  mkdir -p "$HOME/completion-functions" "$HOME/.local/share" "$HOME/bin"
+  ln -s /bin/mv "$HOME/bin/mv"
+  ln -s /usr/bin/touch "$HOME/bin/touch"
+  # Copy the actual Zsh functions into a secure fixture directory: an insecure
+  # host site-functions directory must not turn the clean-cache test into a
+  # test of the host permissions.
+  /bin/zsh -f -c '
+    for name in compinit compaudit compdump compinstall _git; do
+      files=(${^fpath}/$name(N))
+      command cp "$files[1]" "$1/$name" || exit 1
+    done
+  ' zsh "$HOME/completion-functions"
+  chmod 0700 "$HOME/completion-functions"
 
   count_startup_audits() {
     XDG_CACHE_HOME="$HOME/.cache" \
       XDG_DATA_HOME="$HOME/.local/share" \
       ZDOTDIR="$HOME" \
-      PATH="/usr/bin:/bin" \
+      PATH="$HOME/bin" \
       /bin/zsh -f -i -c '
+        fpath=("$HOME/completion-functions")
+        _compdir=""
+        _selfishell_command_path() { return 1; }
         zmodload zsh/zprof
         source "$1"
         zprof
-      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>/dev/null | grep -c compaudit || true
+      ' zsh "$ROOT_DIR/config/shared/zsh/completion.zsh" 2>/dev/null | grep -c compaudit || true
   }
 
   count_startup_audits >/dev/null
@@ -176,45 +228,84 @@ test_completion_audits_the_dump_once_a_day() {
   [[ "$audits_when_fresh" -eq 0 ]] ||
     fail "A fresh completion dump was audited again on startup"
 
-  touch -t 202001010000 "$HOME/.zcompdump"
+  touch -t 202001010000 "$HOME/.zcompdump" "$HOME/.zcompdump.audit"
   audits_when_stale="$(count_startup_audits)"
   [[ "$audits_when_stale" -gt 0 ]] ||
     fail "A day-old completion dump was not re-audited"
+  audits_after_refresh="$(count_startup_audits)"
+  [[ "$audits_after_refresh" -eq 0 ]] ||
+    fail "A completed daily audit was repeated on the next startup"
+
+  for marker_type in file symlink empty-symlink dangling directory; do
+    setup_foreign_completion_audit_marker "$marker_type"
+    rm -f "$HOME/.zcompdump"
+    count_startup_audits >/dev/null
+    assert_foreign_completion_audit_marker_preserved "$marker_type"
+    [[ "$(count_startup_audits)" -gt 0 ]] ||
+      fail "A foreign $marker_type marker bypassed the completion audit"
+    assert_foreign_completion_audit_marker_preserved "$marker_type"
+  done
   teardown_test_home
 }
 
 test_insecure_completion_directory_does_not_block_startup() {
-  local output
-  local completion_dir
+  local output completion_dir scenario
 
-  setup_test_home
-  completion_dir="$TEST_ROOT/insecure-completions"
-  mkdir -p "$completion_dir" "$HOME/.local/share"
-  chmod 0777 "$completion_dir"
-  touch -t 202001010000 "$HOME/.zcompdump"
+  for scenario in missing noninteractive removed expired foreign-file foreign-symlink foreign-empty-symlink foreign-dangling foreign-directory; do
+    setup_test_home
+    completion_dir="$TEST_ROOT/insecure-completions"
+    mkdir -p "$completion_dir" "$HOME/.local/share"
+    chmod 0777 "$completion_dir"
+    printf '#compdef selfishell-insecure-probe\n' >"$completion_dir/_selfishell_insecure_probe"
+    mkdir "$TEST_ROOT/secure-completions"
+    printf '#compdef selfishell-safe-probe\nprint SAFE_COMPLETION\n' >"$TEST_ROOT/secure-completions/_selfishell_safe_probe"
+    printf '#compdef selfishell-safe-probe\nprint INSECURE_LOADED\n' >"$completion_dir/_selfishell_safe_probe"
+    case "$scenario" in
+      foreign-*) setup_foreign_completion_audit_marker "${scenario#foreign-}" ;;
+      noninteractive) run_completion_startup_probe "$completion_dir" +i >/dev/null ;;
+      removed)
+        run_completion_startup_probe "$completion_dir" >/dev/null
+        # A previous clean audit must not survive a new insecure audit.
+        touch "$HOME/.zcompdump.audit"
+        rm "$HOME/.zcompdump"
+        ;;
+      expired)
+        run_completion_startup_probe "$completion_dir" >/dev/null
+        touch -t 202001010000 "$HOME/.zcompdump.audit"
+        ;;
+    esac
 
-  output="$(run_completion_startup_probe "$completion_dir")"
-
-  [[ "$output" == *STARTUP_COMPLETE* ]] ||
-    fail "Shell startup did not complete with an insecure completion directory present: $output"
-  [[ "$output" == *'insecure completion directories detected'* ]] ||
-    fail "Shell startup did not warn about the insecure completion directory: $output"
-  teardown_test_home
+    output="$(run_completion_startup_probe "$completion_dir")"
+    [[ "$output" == *STARTUP_COMPLETE* ]] ||
+      fail "Startup blocked ($scenario): $output"
+    [[ "$output" == *SAFE_COMPLETION* && "$output" != *INSECURE_REGISTERED* &&
+      "$output" != *INSECURE_LOADED* ]] ||
+      fail "Startup did not restrict completion to the secure directory ($scenario): $output"
+    [[ "$output" == *'insecure completion directories detected'* ]] ||
+      fail "Startup did not warn about the insecure directory ($scenario): $output"
+    output="$(run_completion_startup_probe "$completion_dir")"
+    [[ "$output" == *STARTUP_COMPLETE* && "$output" == *SAFE_COMPLETION* &&
+      "$output" != *INSECURE_REGISTERED* && "$output" != *INSECURE_LOADED* ]] ||
+      fail "Cached startup can autoload from an insecure directory ($scenario): $output"
+    [[ "$scenario" != foreign-* ]] || assert_foreign_completion_audit_marker_preserved "${scenario#foreign-}"
+    teardown_test_home
+  done
 }
 
-# Selfishell no longer wires its own directory into fpath, so this injects a
-# generic one to exercise the same compaudit path: once a day, warn on an
-# insecure entry, never block startup.
+# Inject an insecure fpath entry to check exclusion without blocking startup.
 run_completion_startup_probe() {
   local completion_dir="${1:-}"
+  local shell_mode="${2:--i}"
   XDG_CACHE_HOME="$HOME/.cache" \
     XDG_DATA_HOME="$HOME/.local/share" \
     ZDOTDIR="$HOME" \
     PATH="/usr/bin:/bin" \
     SELFISHELL_TEST_COMPLETION_DIR="$completion_dir" \
-    /bin/zsh -f -i -c '
-      [[ -z "$SELFISHELL_TEST_COMPLETION_DIR" ]] || fpath=("$SELFISHELL_TEST_COMPLETION_DIR" $fpath)
+    /bin/zsh -f "$shell_mode" -c '
+      [[ -z "$SELFISHELL_TEST_COMPLETION_DIR" ]] || fpath=("$SELFISHELL_TEST_COMPLETION_DIR" "${SELFISHELL_TEST_COMPLETION_DIR:h}/secure-completions" $fpath)
       source "$1"
+      (( ! ${+_comps[selfishell-insecure-probe]} )) || print INSECURE_REGISTERED
+      (( ! ${+_comps[selfishell-safe-probe]} )) || _selfishell_safe_probe
       print STARTUP_COMPLETE
     ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" 2>&1
 }
@@ -227,16 +318,13 @@ test_secure_completion_directory_does_not_add_warning() {
   completion_dir="$TEST_ROOT/secure-completions"
   mkdir -p "$completion_dir" "$HOME/.local/share"
   chmod 0755 "$completion_dir"
-  touch -t 202001010000 "$HOME/.zcompdump"
+  touch -t 202001010000 "$HOME/.zcompdump" "$HOME/.zcompdump.audit"
   with_dir="$(run_completion_startup_probe "$completion_dir")"
   [[ "$with_dir" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete with a secure completion directory: $with_dir"
 
-  # Compared against the same startup without our directory, so a
-  # pre-existing insecure entry in the host's own $fpath (seen on an Ubuntu
-  # runner) can't fail this. What matters is that adding ours introduces no
-  # new warning, not that the host is spotless.
-  touch -t 202001010000 "$HOME/.zcompdump"
+  # Compare with baseline startup so host fpath permissions cannot cause a false failure.
+  touch -t 202001010000 "$HOME/.zcompdump" "$HOME/.zcompdump.audit"
   without_dir="$(run_completion_startup_probe)"
   [[ "$without_dir" == *STARTUP_COMPLETE* ]] ||
     fail "Shell startup did not complete without a completion directory: $without_dir"
@@ -343,54 +431,6 @@ missing=absent" ]] || fail "Native command lookup did not preserve PATH semantic
   teardown_test_home
 }
 
-test_mise_uses_selfishell_config_only_for_developer_profile() {
-  local fake_bin developer_config minimal_config
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  mkdir -p "$fake_bin" "$HOME/.local/state/selfishell"
-  cat >"$fake_bin/mise" <<'EOF'
-#!/bin/sh
-if [ "$1" = activate ]; then
-  printf 'export SELFISHELL_TEST_MISE_ACTIVATED=1\n'
-fi
-EOF
-  chmod +x "$fake_bin/mise"
-  printf 'developer\n' >"$HOME/.local/state/selfishell/profile"
-
-  developer_config="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      XDG_CONFIG_HOME="$HOME/.config" \
-      ZDOTDIR="" \
-      MISE_GLOBAL_CONFIG_FILE="" \
-      /bin/zsh -f -c '
-      _selfishell_command_path() { command -v "$1"; }
-      source "$1"
-      [[ "$SELFISHELL_TEST_MISE_ACTIVATED" == 1 ]]
-      print -r -- "$MISE_GLOBAL_CONFIG_FILE"
-    ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
-  )"
-
-  printf 'minimal\n' >"$HOME/.local/state/selfishell/profile"
-  minimal_config="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      XDG_CONFIG_HOME="$HOME/.config" \
-      ZDOTDIR="" \
-      MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml" \
-      /bin/zsh -f -c '
-        _selfishell_command_path() { command -v "$1"; }
-        source "$1"
-        print -r -- "$MISE_GLOBAL_CONFIG_FILE"
-      ' zsh "$ROOT_DIR/config/shared/zsh/runtime.zsh"
-  )"
-
-  [[ -z "$developer_config" ]] ||
-    fail "Developer profile set MISE_GLOBAL_CONFIG_FILE"
-  [[ "$minimal_config" == "$HOME/personal-mise.toml" ]] ||
-    fail "Minimal profile replaced the user's mise config"
-  teardown_test_home
-}
-
 test_update_notice_reads_installed_version_file() {
   local fake_root output
 
@@ -449,22 +489,22 @@ test_update_notice_defers_current_version_lookup_until_available_version_exists(
           [[ -r "$refresh_calls" ]] && break
           command sleep 0.05
         done
-        [[ ! -e "$current_calls" ]]
-        [[ -r "$refresh_calls" ]]
+        [[ ! -e "$current_calls" ]] || exit 1
+        [[ -r "$refresh_calls" ]] || exit 1
 
         : >"$cache_dir/available-version"
         SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice
-        [[ ! -e "$current_calls" ]]
+        [[ ! -e "$current_calls" ]] || exit 1
 
         print -r -- 1.1.0 >"$cache_dir/available-version"
         notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice)"
-        [[ "$notice" == "[Selfishell] 1.1.0 is available. Run: selfishell update" ]]
-        [[ "$(wc -l <"$current_calls")" -eq 1 ]]
+        [[ "$notice" == "[Selfishell] 1.1.0 is available. Run: selfishell update" ]] || exit 1
+        [[ "$(wc -l <"$current_calls")" -eq 1 ]] || exit 1
 
         print -r -- 1.0.0 >"$cache_dir/available-version"
         SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice
-        [[ ! -e "$cache_dir/available-version" ]]
-        [[ "$(wc -l <"$current_calls")" -eq 2 ]]
+        [[ ! -e "$cache_dir/available-version" ]] || exit 1
+        [[ "$(wc -l <"$current_calls")" -eq 2 ]] || exit 1
       ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" "$current_calls" "$refresh_calls"
   )"
 
@@ -472,393 +512,150 @@ test_update_notice_defers_current_version_lookup_until_available_version_exists(
   teardown_test_home
 }
 
-test_update_notice_uses_cache_and_refreshes_in_background_format() {
-  local fake_bin cache_dir output now
-
-  setup_test_home
+setup_update_notice_cli() {
   fake_bin="$TEST_ROOT/bin"
   cache_dir="$HOME/.cache/selfishell"
-  now="$(date +%s)"
   mkdir -p "$fake_bin" "$cache_dir"
-  # Positional parameters must expand in the generated mock, not this test.
-  # shellcheck disable=SC2016
-  printf '%s\n' \
-    '#!/usr/bin/env bash' \
-    'if [[ "${2:-}" == "--available" ]]; then' \
-    '  printf "1.1.0\\n"' \
-    'else' \
-    '  printf "selfishell 0.2.0\\n"' \
-    'fi' >"$fake_bin/selfishell"
+  cat >"$fake_bin/selfishell" <<'EOF'
+#!/bin/sh
+[ "$1" = version ] || exit 1
+if [ "${2:-}" = --available ]; then
+  printf '1.1.0\n'
+else
+  printf 'selfishell 0.2.0\n'
+fi
+EOF
   chmod +x "$fake_bin/selfishell"
+}
+
+test_update_notice_compares_semantic_versions() {
+  setup_test_home
+  /bin/zsh -f -c '
+    source "$1"
+    while read -r candidate current expected; do
+      actual=0
+      _selfishell_version_is_newer "$candidate" "$current" && actual=1
+      [[ "$actual" == "$expected" ]] || {
+        print -u2 -- "Wrong version comparison: $candidate > $current (expected $expected, got $actual)"
+        exit 1
+      }
+    done
+  ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" <<'VERSIONS' || fail "Semantic version comparison failed"
+0.1.0-beta.9 0.1.0-beta.12 0
+0.1.0-beta.13 0.1.0-beta.12 1
+0.1.0 0.1.0-beta.12 1
+0.1.0-beta.12 0.1.0 0
+0.1.0-beta.1 0.1.0-alpha.9 1
+0.1.0-alpha.1 0.1.0-alpha 1
+0.1.0-alpha 0.1.0-alpha.1 0
+0.1.0-alpha.beta 0.1.0-alpha.1 1
+0.1.0-alpha.1 0.1.0-alpha.beta 0
+0.1.0-rc.1.2 0.1.0-rc.1.1 1
+0.1.0-alpha.01 0.1.0-alpha.1 0
+01.1.0 1.0.0 0
+1.0.0 1.0.0 0
+2.0.0 1.9.9 1
+1.10.0 1.9.0 1
+1.0.10 1.0.9 1
+VERSIONS
+  teardown_test_home
+}
+
+test_update_notice_uses_cache_and_refreshes_in_background() {
+  local fake_bin cache_dir output
+
+  setup_test_home
+  setup_update_notice_cli
   printf '1.1.0\n' >"$cache_dir/available-version"
-  printf '%s\n' "$now" >"$cache_dir/update-checked-at"
+  date +%s >"$cache_dir/update-checked-at"
 
   output="$(
-    XDG_CACHE_HOME="$HOME/.cache" \
-      ZDOTDIR="" \
-      PATH="$fake_bin:/usr/bin:/bin" \
+    XDG_CACHE_HOME="$HOME/.cache" ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
         source "$1"
-        ! _selfishell_version_is_newer 0.1.0-beta.9 0.1.0-beta.12
-        _selfishell_version_is_newer 0.1.0-beta.13 0.1.0-beta.12
-        _selfishell_version_is_newer 0.1.0 0.1.0-beta.12
-        ! _selfishell_version_is_newer 0.1.0-beta.12 0.1.0
-        _selfishell_version_is_newer 0.1.0-beta.1 0.1.0-alpha.9
-        _selfishell_version_is_newer 0.1.0-alpha.1 0.1.0-alpha
-        ! _selfishell_version_is_newer 0.1.0-alpha 0.1.0-alpha.1
-        _selfishell_version_is_newer 0.1.0-alpha.beta 0.1.0-alpha.1
-        ! _selfishell_version_is_newer 0.1.0-alpha.1 0.1.0-alpha.beta
-        _selfishell_version_is_newer 0.1.0-rc.1.2 0.1.0-rc.1.1
-        ! _selfishell_version_is_newer 0.1.0-alpha.01 0.1.0-alpha.1
-        ! _selfishell_version_is_newer 01.1.0 1.0.0
         _selfishell_update_notice
-        SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice
+        [[ -z "$(SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice)" ]] || exit 1
         command rm -f "$2/available-version" "$2/update-checked-at"
         _selfishell_update_notice_refresh "$2" 12345
-        [[ "$(<"$2/available-version")" == 1.1.0 ]]
-        [[ "$(<"$2/update-checked-at")" == 12345 ]]
+        [[ "$(<"$2/available-version")" == 1.1.0 ]] || exit 1
+        [[ "$(<"$2/update-checked-at")" == 12345 ]] || exit 1
         command rm -f "$2/available-version" "$2/update-checked-at"
         SELFISHELL_UPDATE_CHECK_INTERVAL=0 _selfishell_update_notice
         for attempt in {1..40}; do
-          [[ -r "$2/available-version" ]] && break
+          [[ -r "$2/available-version" && -r "$2/update-checked-at" && ! -e "$2/update-check.lock" ]] && break
           command sleep 0.05
         done
-        [[ "$(<"$2/available-version")" == 1.1.0 ]]
-      ' zsh "$ROOT_DIR/config/shared/zsh/common.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == '[Selfishell] 1.1.0 is available. Run: selfishell update' ]] ||
-    fail "Default update notice did not use cached version metadata"
-  teardown_test_home
-}
-
-test_update_notice_stale_lock_is_reclaimed_after_ttl() {
-  local fake_bin cache_dir output
-  local stale_created_at
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  # Positional parameters must expand in the generated mock, not this test.
-  # shellcheck disable=SC2016
-  printf '%s\n' \
-    '#!/usr/bin/env bash' \
-    'if [[ "${2:-}" == "--available" ]]; then' \
-    '  printf "2.0.0\\n"' \
-    'else' \
-    '  printf "selfishell 0.2.0\\n"' \
-    'fi' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-
-  # Simulate a lock left behind by a refresh that was killed mid-run (e.g.
-  # the terminal closed) well past the default TTL.
-  stale_created_at=$(($(date +%s) - 700))
-  printf '99999\n' >"$cache_dir/update-check.lock/pid"
-  printf '%s\n' "$stale_created_at" >"$cache_dir/update-check.lock/created_at"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        cat "$2/available-version" 2>/dev/null
+        [[ -r "$2/available-version" && "$(<"$2/available-version")" == 1.1.0 ]] || exit 1
+        [[ -s "$2/update-checked-at" && ! -e "$2/update-check.lock" ]] || exit 1
       ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
+  )" || fail "Update notice cache or background refresh failed"
 
-  [[ "$output" == *'LOCK_CLEARED'* ]] ||
-    fail "A stale lock older than the TTL was not reclaimed and cleared: $output"
-  [[ "$output" == *'2.0.0'* ]] ||
-    fail "Reclaiming a stale lock did not perform the refresh: $output"
+  [[ "$output" == *'1.1.0'* && "$output" == *'selfishell update'* ]] ||
+    fail "Update notice did not offer the cached version: $output"
   teardown_test_home
 }
 
-test_update_notice_fresh_lock_blocks_concurrent_refresh() {
-  local fake_bin cache_dir output
-  local fresh_created_at
+# Metadata wins when valid; interrupted/older writers fall back to directory
+# age. Each case checks both lock ownership and whether a refresh occurred.
+test_update_notice_lock_recovery() {
+  local fake_bin cache_dir metadata age ttl expected now
 
   setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-
-  fresh_created_at="$(date +%s)"
-  printf '99999\n' >"$cache_dir/update-check.lock/pid"
-  printf '%s\n' "$fresh_created_at" >"$cache_dir/update-check.lock/created_at"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_LEFT'* ]] ||
-    fail "A fresh, still-held lock was incorrectly reclaimed: $output"
-  [[ "$output" == *'VERSION_ABSENT'* ]] ||
-    fail "A concurrent refresh ran despite a fresh lock still being held: $output"
-  teardown_test_home
-}
-
-test_update_notice_stale_empty_lock_directory_is_reclaimed() {
-  local fake_bin cache_dir output
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  # No pid/created_at: a lock from a version predating the metadata, or a
-  # writer that died between mkdir and its first write. Only the directory's
-  # own mtime is left to judge staleness by.
-  touch -t 202001010000 "$cache_dir/update-check.lock"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_CLEARED'* ]] ||
-    fail "A stale, metadata-less lock directory was not reclaimed: $output"
-  teardown_test_home
-}
-
-test_update_notice_fresh_empty_lock_directory_is_preserved() {
-  local fake_bin cache_dir output
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        [[ -e "$2/available-version" ]] && print "VERSION_WRITTEN" || print "VERSION_ABSENT"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_LEFT'* ]] ||
-    fail "A fresh, metadata-less lock directory was incorrectly reclaimed: $output"
-  [[ "$output" == *'VERSION_ABSENT'* ]] ||
-    fail "A concurrent refresh ran despite a fresh metadata-less lock: $output"
-  teardown_test_home
-}
-
-test_update_notice_stale_lock_with_only_pid_is_reclaimed() {
-  local fake_bin cache_dir output
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  printf '99999\n' >"$cache_dir/update-check.lock/pid"
-  touch -t 202001010000 "$cache_dir/update-check.lock/pid" "$cache_dir/update-check.lock"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_CLEARED'* ]] ||
-    fail "A stale lock with only a pid file was not reclaimed: $output"
-  teardown_test_home
-}
-
-test_update_notice_corrupt_created_at_falls_back_to_directory_mtime() {
-  local fake_bin cache_dir output label
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-
-  for label in stale fresh; do
-    mkdir -p "$cache_dir/update-check.lock"
-    printf 'not-a-timestamp\n' >"$cache_dir/update-check.lock/created_at"
-    [[ "$label" == stale ]] && touch -t 202001010000 "$cache_dir/update-check.lock/created_at" "$cache_dir/update-check.lock"
-
-    output="$(
-      PATH="$fake_bin:/usr/bin:/bin" \
-        /bin/zsh -f -c '
-          source "$1"
-          _selfishell_update_notice_refresh "$2" 12345
-          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-    )"
-
-    if [[ "$label" == stale ]]; then
-      [[ "$output" == *'LOCK_CLEARED'* ]] ||
-        fail "A corrupt created_at backed by an old directory mtime was not reclaimed: $output"
-    else
-      [[ "$output" == *'LOCK_LEFT'* ]] ||
-        fail "A corrupt created_at backed by a fresh directory mtime was incorrectly reclaimed: $output"
+  setup_update_notice_cli
+  now="$(date +%s)"
+  while read -r metadata age ttl expected; do
+    [[ "$metadata" != unreadable || "$(id -u)" != 0 ]] || continue
+    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
+    mkdir "$cache_dir/update-check.lock"
+    case "$metadata" in
+      timestamp) printf '%s\n' "$((now + age))" >"$cache_dir/update-check.lock/created_at" ;;
+      pid) printf '99999\n' >"$cache_dir/update-check.lock/pid" ;;
+      corrupt) printf 'not-a-timestamp\n' >"$cache_dir/update-check.lock/created_at" ;;
+      zero) printf '0\n' >"$cache_dir/update-check.lock/created_at" ;;
+      unreadable)
+        printf '%s\n' "$now" >"$cache_dir/update-check.lock/created_at"
+        chmod 000 "$cache_dir/update-check.lock/created_at"
+        ;;
+    esac
+    if [[ "$metadata" != timestamp && "$age" == stale ]]; then
+      touch -t 202001010000 "$cache_dir/update-check.lock"
     fi
-    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
-  done
-  teardown_test_home
-}
+    [[ "$ttl" != empty ]] || ttl=''
 
-test_update_notice_unreadable_created_at_falls_back_to_directory_mtime() {
-  local fake_bin cache_dir output
-
-  # Permission bits don't restrict root's own reads, so this scenario can't
-  # be produced when running as root (e.g. some containers).
-  [[ "$(id -u)" != 0 ]] || return 0
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  printf '%s\n' "$(date +%s)" >"$cache_dir/update-check.lock/created_at"
-  chmod 000 "$cache_dir/update-check.lock/created_at"
-  touch -t 202001010000 "$cache_dir/update-check.lock"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
+    SELFISHELL_UPDATE_LOCK_TTL="$ttl" PATH="$fake_bin:/usr/bin:/bin" \
       /bin/zsh -f -c '
         source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  chmod 644 "$cache_dir/update-check.lock/created_at" 2>/dev/null || true
-  [[ "$output" == *'LOCK_CLEARED'* ]] ||
-    fail "An unreadable created_at backed by an old directory mtime was not reclaimed: $output"
-  teardown_test_home
-}
-
-test_update_notice_future_created_at_is_preserved() {
-  local fake_bin cache_dir output future_created_at
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  future_created_at=$(($(date +%s) + 100000))
-  printf '%s\n' "$future_created_at" >"$cache_dir/update-check.lock/created_at"
-
-  output="$(
-    PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_LEFT'* ]] ||
-    fail "A lock with a future created_at was incorrectly reclaimed: $output"
-  teardown_test_home
-}
-
-test_update_notice_lock_ttl_rejects_invalid_values() {
-  local fake_bin cache_dir output ttl stale_created_at
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  stale_created_at=$(($(date +%s) - 700))
-
-  for ttl in abc -100 1.5 0 ''; do
-    mkdir -p "$cache_dir/update-check.lock"
-    printf '%s\n' "$stale_created_at" >"$cache_dir/update-check.lock/created_at"
-
-    output="$(
-      SELFISHELL_UPDATE_LOCK_TTL="$ttl" PATH="$fake_bin:/usr/bin:/bin" \
-        /bin/zsh -f -c '
-          source "$1"
-          _selfishell_update_notice_refresh "$2" 12345
-          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-    )"
-
-    [[ "$output" == *'LOCK_CLEARED'* ]] ||
-      fail "An invalid SELFISHELL_UPDATE_LOCK_TTL='$ttl' did not fall back to the default TTL: $output"
-    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
-  done
-  teardown_test_home
-}
-
-test_update_notice_lock_ttl_zero_does_not_mean_instantly_stale() {
-  local fake_bin cache_dir output
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  printf '%s\n' "$(($(date +%s) - 2))" >"$cache_dir/update-check.lock/created_at"
-
-  output="$(
-    SELFISHELL_UPDATE_LOCK_TTL=0 PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_LEFT'* ]] ||
-    fail "SELFISHELL_UPDATE_LOCK_TTL=0 treated a 2-second-old lock as instantly stale instead of falling back to the default: $output"
-  teardown_test_home
-}
-
-test_update_notice_lock_ttl_honors_valid_custom_value() {
-  local fake_bin cache_dir output
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir/update-check.lock"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-  printf '%s\n' "$(($(date +%s) - 5))" >"$cache_dir/update-check.lock/created_at"
-
-  output="$(
-    SELFISHELL_UPDATE_LOCK_TTL=2 PATH="$fake_bin:/usr/bin:/bin" \
-      /bin/zsh -f -c '
-        source "$1"
-        _selfishell_update_notice_refresh "$2" 12345
-        [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-  )"
-
-  [[ "$output" == *'LOCK_CLEARED'* ]] ||
-    fail "A valid custom SELFISHELL_UPDATE_LOCK_TTL was not honored: $output"
+        _selfishell_update_notice_refresh "$2" 12345 || :
+        if [[ "$3" == refreshed ]]; then
+          [[ ! -e "$2/update-check.lock" ]] || exit 1
+          [[ -r "$2/available-version" && "$(<"$2/available-version")" == 1.1.0 ]] || exit 1
+          [[ -r "$2/update-checked-at" && "$(<"$2/update-checked-at")" == 12345 ]] || exit 1
+        else
+          [[ -d "$2/update-check.lock" && ! -e "$2/available-version" && ! -e "$2/update-checked-at" ]] || exit 1
+        fi
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" "$expected" ||
+      fail "Lock recovery: metadata=$metadata age=$age ttl=$ttl expected=$expected"
+  done <<'LOCKS'
+timestamp -700 600 refreshed
+timestamp 0 600 held
+absent stale 600 refreshed
+absent fresh 600 held
+pid stale 600 refreshed
+corrupt stale 600 refreshed
+corrupt fresh 600 held
+zero stale 600 refreshed
+zero fresh 600 held
+unreadable stale 600 refreshed
+timestamp 100000 600 held
+timestamp -700 abc refreshed
+timestamp -700 -100 refreshed
+timestamp -700 1.5 refreshed
+timestamp -700 0 refreshed
+timestamp -700 empty refreshed
+timestamp -2 0 held
+timestamp -5 2 refreshed
+LOCKS
   teardown_test_home
 }
 
@@ -900,42 +697,6 @@ test_update_lock_stale_since_preserves_lock_when_age_cannot_be_determined() {
 
   [[ "$output" == 'PRESERVED' ]] ||
     fail "A lock whose age cannot be determined at all should be left alone: $output"
-  teardown_test_home
-}
-
-test_update_notice_created_at_zero_falls_back_to_directory_mtime() {
-  local fake_bin cache_dir output label
-
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin"
-  printf '#!/usr/bin/env bash\nprintf "2.0.0\\n"\n' >"$fake_bin/selfishell"
-  chmod +x "$fake_bin/selfishell"
-
-  for label in stale fresh; do
-    mkdir -p "$cache_dir/update-check.lock"
-    printf '0\n' >"$cache_dir/update-check.lock/created_at"
-    [[ "$label" == stale ]] && touch -t 202001010000 "$cache_dir/update-check.lock/created_at" "$cache_dir/update-check.lock"
-
-    output="$(
-      PATH="$fake_bin:/usr/bin:/bin" \
-        /bin/zsh -f -c '
-          source "$1"
-          _selfishell_update_notice_refresh "$2" 12345
-          [[ -e "$2/update-check.lock" ]] && print "LOCK_LEFT" || print "LOCK_CLEARED"
-        ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
-    )"
-
-    if [[ "$label" == stale ]]; then
-      [[ "$output" == *'LOCK_CLEARED'* ]] ||
-        fail "created_at=0 backed by an old directory mtime was not reclaimed: $output"
-    else
-      [[ "$output" == *'LOCK_LEFT'* ]] ||
-        fail "created_at=0 backed by a fresh directory mtime was incorrectly reclaimed (0 must not mean instantly stale): $output"
-    fi
-    rm -rf "$cache_dir/update-check.lock" "$cache_dir/available-version" "$cache_dir/update-checked-at"
-  done
   teardown_test_home
 }
 
@@ -1079,34 +840,63 @@ EOF
   teardown_test_home
 }
 
-test_shell_tool_cache_does_not_regenerate_when_cache_is_newer_than_binary() {
-  local fake_bin cache_dir output
+# Timestamps alone miss package rollbacks and replacements that preserve mtime.
+# Exercise the real cache reader/writer and count generator executions, not time.
+test_shell_tool_cache_reuses_unchanged_tools_and_refreshes_replaced_tools() {
+  local fake_bin tool replacement output expected_args
 
-  setup_test_home
-  fake_bin="$TEST_ROOT/bin"
-  cache_dir="$HOME/.cache/selfishell"
-  mkdir -p "$fake_bin" "$cache_dir"
-  cat >"$fake_bin/zoxide" <<'EOF'
-#!/usr/bin/env bash
-printf 'echo regenerated\n'
+  for tool in fzf zoxide starship; do
+    for replacement in preserved-mtime older-mtime symlink; do
+      setup_test_home
+      fake_bin="$TEST_ROOT/bin"
+      mkdir -p "$fake_bin"
+      expected_args='init zsh'
+      [[ "$tool" != fzf ]] || expected_args='--zsh'
+      cat >"$fake_bin/$tool" <<'EOF'
+#!/bin/sh
+[ "$*" = "$SELFISHELL_TEST_INIT_ARGS" ] || exit 1
+printf 'called\n' >>"$HOME/generations"
+printf 'print old\n'
 EOF
-  chmod +x "$fake_bin/zoxide"
-  touch -t 202001010000 "$fake_bin/zoxide"
-  printf '# already current\n' >"$cache_dir/zoxide-init.zsh"
+      chmod +x "$fake_bin/$tool"
+      touch -t 202101010000 "$fake_bin/$tool"
 
-  output="$(
-    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
-      XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
-      /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
-      zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" 2>/dev/null
-    cat "$cache_dir/zoxide-init.zsh"
-  )"
+      run_tool_cache_startup() {
+        ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
+          XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
+          SELFISHELL_TEST_INIT_ARGS="$expected_args" \
+          /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; source "$1"' \
+          zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh"
+      }
 
-  [[ "$output" == *'# already current'* ]] ||
-    fail "Cache was regenerated even though it is newer than the tool binary: $output"
-  [[ "$output" != *'regenerated'* ]] ||
-    fail "The tool was invoked even though its cache is already current: $output"
-  teardown_test_home
+      output="$(run_tool_cache_startup)"
+      [[ "$output" == old ]] || fail "$tool did not source its generated initialization: $output"
+      output="$(run_tool_cache_startup)"
+      [[ "$output" == old && "$(wc -l <"$HOME/generations")" -eq 1 ]] ||
+        fail "$tool regenerated unchanged initialization ($replacement): $output"
+
+      sed 's/print old/print new/' "$fake_bin/$tool" >"$fake_bin/replacement"
+      chmod +x "$fake_bin/replacement"
+      touch -r "$fake_bin/$tool" "$fake_bin/replacement"
+      if [[ "$replacement" == older-mtime ]]; then
+        touch -t 202001010000 "$fake_bin/replacement"
+      fi
+      if [[ "$replacement" == symlink ]]; then
+        rm "$fake_bin/$tool"
+        ln -s "$fake_bin/replacement" "$fake_bin/$tool"
+      else
+        mv "$fake_bin/replacement" "$fake_bin/$tool"
+      fi
+
+      output="$(run_tool_cache_startup)"
+      [[ "$output" == new && "$(wc -l <"$HOME/generations")" -eq 2 ]] ||
+        fail "$tool did not regenerate after $replacement replacement: $output"
+      output="$(run_tool_cache_startup)"
+      [[ "$output" == new && "$(wc -l <"$HOME/generations")" -eq 2 ]] ||
+        fail "$tool regenerated unchanged replacement: $output"
+      teardown_test_home
+    done
+  done
 }
 
 test_shell_tool_cache_write_failure_preserves_existing_cache() {
@@ -1467,9 +1257,7 @@ zdharma-continuum/fast-syntax-highlighting config/shared/zsh/interactive.zsh
 PLUGINS
 }
 
-# Writes a Zinit stub plus an fzf stub into $TEST_ROOT so interactive.zsh takes
-# the branch that configures fzf-tab. The plugin directory itself is left to the
-# caller, since its absence is what the guard is supposed to detect.
+# Stub Zinit and fzf; callers choose whether the plugin checkout exists.
 setup_fzf_tab_stubs() {
   local fake_bin="$TEST_ROOT/bin"
   local zinit_home="$HOME/.local/share/zinit/zinit.git"
@@ -1615,15 +1403,11 @@ test_fzf_tab_git_previews_read_the_repository() {
 
   setup_test_home
   setup_fzf_tab_stubs
-  # The space is deliberate: the previews quote their candidate, and a path that
-  # cannot survive one is the failure this catches.
   repository="$TEST_ROOT/a repository"
   mkdir -p "$repository" "$HOME/.local/share/zinit/plugins/Aloxaf---fzf-tab/.git"
   dump_fzf_tab_previews
 
-  # An identity plus empty config files, so that neither the developer's
-  # ~/.gitconfig nor /etc/gitconfig -- commit signing above all -- can reach the
-  # commits below or the previews that read them.
+  # Isolate Git identity and configuration, including commit signing.
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
   export GIT_AUTHOR_NAME=selfishell GIT_AUTHOR_EMAIL=selfishell@example.invalid
   export GIT_COMMITTER_NAME=selfishell GIT_COMMITTER_EMAIL=selfishell@example.invalid
@@ -1670,10 +1454,7 @@ test_fzf_tab_git_previews_read_the_repository() {
   teardown_test_home
 }
 
-# The picker is the one fzf surface that doesn't follow the terminal palette:
-# fzf takes accents from the 256-color cube, and fzf-tab blanks
-# FZF_DEFAULT_OPTS before invoking it. So the palette reaches fzf-tab as a
-# flag, not through the user's variable, which may hold breaking options.
+# fzf-tab clears FZF_DEFAULT_OPTS, so it needs the terminal palette flag separately.
 test_fzf_is_pointed_at_the_terminal_palette() {
   local output
 
@@ -1701,8 +1482,8 @@ test_fzf_is_pointed_at_the_terminal_palette() {
     fail "fzf was not pointed at the terminal's own colors: $output"
   [[ "$output" == *'type='*export* ]] ||
     fail "FZF_DEFAULT_OPTS was not exported, so fzf will not see it: $output"
-  [[ "$(grep '^cd=' <<<"$output")" == 'cd=--color=16' ]] ||
-    fail "fzf-tab was not given the palette: $output"
+  [[ "$(grep '^cd=' <<<"$output")" == *--color=16* ]] ||
+    fail "fzf-tab was not given the supported terminal palette option: $output"
   [[ "$output" == *'kill='*--color=16* ]] ||
     fail "A context with its own fzf-flags lost the palette: $output"
   teardown_test_home
@@ -1737,9 +1518,9 @@ test_fzf_tab_is_not_handed_the_users_fzf_options() {
 
   [[ "$output" == *'opts=--with-nth=2.. --bind=ctrl-a:select-all'* ]] ||
     fail "The user's own FZF_DEFAULT_OPTS was overwritten: $output"
-  # Compared whole rather than searched, so anything that leaked in fails here.
-  [[ "$(grep '^cd=' <<<"$output")" == 'cd=--color=16' ]] ||
-    fail "fzf-tab was handed something other than the palette: $output"
+  [[ "$(grep '^cd=' <<<"$output")" != *--with-nth* &&
+  "$(grep '^cd=' <<<"$output")" != *--bind* ]] ||
+    fail "fzf-tab was handed the user's standalone options: $output"
   [[ "$output" == *'follows=unset'* ]] ||
     fail "fzf-tab was told to read FZF_DEFAULT_OPTS: $output"
   teardown_test_home

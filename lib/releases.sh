@@ -153,9 +153,7 @@ release_install() {
     rm -rf "$temporary_dir"
     return 1
   }
-  # A duplicate SHA256SUMS line, even an identical one, would make $expected
-  # multi-line and never equal $actual. `sort -u` collapses agreeing
-  # duplicates and still fails closed on conflicting ones.
+  # Collapse agreeing checksum entries; conflicting duplicates still fail verification.
   expected="$(awk -v name="$archive_name" '$2 == name { print $1 }' "$checksum_file" | sort -u)"
   actual="$(dependency_sha256 "$archive")"
   if [[ -z "$expected" || "$actual" != "$expected" ]]; then
@@ -205,7 +203,5 @@ release_install() {
     cli_error "Failed to activate Selfishell $version."
     return 1
   }
-  # command_update owns the one closing result for a completed update, so the
-  # switch is not announced here.
   release_prune_inactive
 }

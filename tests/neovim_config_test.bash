@@ -59,9 +59,7 @@ test_treesitter_auto_installs_missing_parsers_on_filetype() {
 test_every_neovim_plugin_has_an_approved_revision() {
   local repository revision declared_plugins configured_plugins diff_output
 
-  # lazy.nvim bootstraps itself in config/lazy.lua rather than being declared
-  # via plugin(...), so it is pinned without a matching Lua declaration and is
-  # checked separately below.
+  # config/lazy.lua loads the preinstalled lazy.nvim outside plugin(...) declarations.
   declared_plugins="$(sed -n 's/.*plugin("\([^"]*\)".*/\1/p' "$ROOT_DIR"/config/shared/nvim/lua/plugins/*.lua | sort -u)"
   configured_plugins="$(awk '$1 == "nvim-plugin" && $2 != "folke/lazy.nvim" { print $2 }' "$ROOT_DIR/dependencies.conf" | sort -u)"
 

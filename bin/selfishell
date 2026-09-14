@@ -2,11 +2,7 @@
 
 set -euo pipefail
 
-# Every command pays for this resolution, so strip the directory with
-# parameter expansion instead of an external `dirname`: that one process is
-# roughly a third of `selfishell version`'s runtime. `${path%/*}` leaves a bare
-# filename unchanged, and a path with no directory means the current one --
-# what `dirname` reports as ".".
+# Avoid spawning dirname on every invocation; a bare filename needs a "." fallback.
 SELFISHELL_SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SELFISHELL_SOURCE" ]]; do
   SELFISHELL_SOURCE_DIR="${SELFISHELL_SOURCE%/*}"

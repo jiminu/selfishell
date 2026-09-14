@@ -6,9 +6,7 @@ SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/se
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 
-# This runs before any Selfishell code is on disk, so it can't share
-# lib/common.sh's colors. Gated per stream the same way, so non-terminal
-# output stays plain text.
+# Bootstrap cannot source lib/common.sh yet; gate colors separately for each stream.
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   SELFISHELL_COLOR_GREEN=$'\033[32m'
   SELFISHELL_COLOR_YELLOW=$'\033[33m'
@@ -367,9 +365,7 @@ main() {
   bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
   bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
 
-  # A duplicate SHA256SUMS line, even an identical one, would make
-  # $expected_checksum multi-line and never match. `sort -u` collapses
-  # agreeing duplicates and still fails below on conflicting ones.
+  # Collapse agreeing checksum entries; conflicting duplicates still fail verification.
   expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file" | sort -u)"
   if [[ -z "$expected_checksum" || "$expected_checksum" == *[!0-9a-fA-F]* ]]; then
     bootstrap_error "No valid checksum found for $archive_name"

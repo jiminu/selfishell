@@ -3,6 +3,11 @@
 MANAGED_BLOCK_OVERWRITE_RESOURCES=""
 MANAGED_BLOCK_SKIP_RESOURCES=""
 
+# A link to an unchanged regular file is still a user-replaced path.
+managed_path_is_regular_file() {
+  [[ -f "$1" && ! -L "$1" ]]
+}
+
 managed_checksum() {
   cksum <"$1" | awk '{print $1 ":" $2}'
 }
@@ -242,11 +247,8 @@ managed_block_content() {
     "$(managed_block_end "$MANAGED_BLOCK_LABEL" "$MANAGED_BLOCK_COMMENT")"
 }
 
-# Sets MANAGED_BLOCK_STATUS from marker structure alone and
-# MANAGED_BLOCK_CHECKSUM from the live bytes. "intact" means well-formed
-# markers and deliberately does not compare against current content, so a body
-# that changed across a release is never read as user tampering. Callers
-# compare MANAGED_BLOCK_CHECKSUM against their own reference themselves.
+# "intact" describes marker structure only. Callers compare MANAGED_BLOCK_CHECKSUM
+# with the recorded checksum, not with the current release's block content.
 managed_inspect_block() {
   local resource="$1"
   local target_file="$2"
@@ -348,10 +350,8 @@ managed_preflight_zsh_loader() {
   managed_preflight_block_target user-zshrc "$target_file" "$assume_yes" "$dry_run"
 }
 
-# Rewrites target_file with the block region (MANAGED_BLOCK_START/LENGTH, set
-# by the caller's prior managed_inspect_block) replaced by content_resource's
-# content, or removed when it is omitted. Shared by managed_replace_block and
-# managed_remove_block.
+# Requires a prior managed_inspect_block. Replace its block region with
+# content_resource, or remove it when that argument is omitted.
 managed_splice_block() {
   local target_file="$1"
   local content_resource="${2:-}"
@@ -367,7 +367,7 @@ managed_splice_block() {
     return "$SELFISHELL_EXIT_ERROR"
   }
   if ((MANAGED_BLOCK_START > 0)); then
-    dd if="$target_file" bs=1 count="$MANAGED_BLOCK_START" 2>/dev/null >"$temporary_file" || {
+    head -c "$MANAGED_BLOCK_START" "$target_file" >"$temporary_file" || {
       rm -f "$temporary_file"
       return "$SELFISHELL_EXIT_ERROR"
     }
@@ -381,7 +381,7 @@ managed_splice_block() {
   file_size="$(LC_ALL=C wc -c <"$target_file")"
   suffix_start=$((MANAGED_BLOCK_START + MANAGED_BLOCK_LENGTH))
   if ((suffix_start < file_size)); then
-    dd if="$target_file" bs=1 skip="$suffix_start" 2>/dev/null >>"$temporary_file" || {
+    tail -c "+$((suffix_start + 1))" "$target_file" >>"$temporary_file" || {
       rm -f "$temporary_file"
       return "$SELFISHELL_EXIT_ERROR"
     }
@@ -560,7 +560,7 @@ managed_install_file() {
     fi
     original_backup="$MANAGED_STATE_BACKUP"
 
-    if [[ -f "$target_file" ]]; then
+    if managed_path_is_regular_file "$target_file"; then
       [[ "$MANAGED_STATE_STATUS" != "active" ]] || previously_active_file=1
       current_checksum="$(managed_checksum "$target_file")"
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
@@ -743,7 +743,7 @@ managed_uninstall_resource() {
       fi
       ;;
     file)
-      if [[ -f "$MANAGED_STATE_TARGET" ]]; then
+      if managed_path_is_regular_file "$MANAGED_STATE_TARGET"; then
         current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")" || return
         if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
           cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"
@@ -810,7 +810,7 @@ managed_validate_uninstall_resource() {
       fi
       ;;
     file)
-      if [[ -f "$MANAGED_STATE_TARGET" ]]; then
+      if managed_path_is_regular_file "$MANAGED_STATE_TARGET"; then
         current_checksum="$(managed_checksum "$MANAGED_STATE_TARGET")"
         if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" ]]; then
           cli_error "Managed file was modified; preserving it: $MANAGED_STATE_TARGET"

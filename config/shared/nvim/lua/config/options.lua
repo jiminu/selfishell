@@ -1,6 +1,5 @@
 local opt = vim.opt
 
--- Floating windows (diagnostics, hover, signature help, ...)
 vim.o.winborder = "rounded"
 
 -- UI
@@ -8,8 +7,7 @@ opt.number = true
 opt.relativenumber = true
 opt.hlsearch = true
 opt.ruler = false
--- lualine renders the mode in its first section; leaving showmode on
--- prints "-- INSERT --" on the command line right below it as well.
+-- lualine already displays the mode.
 opt.showmode = false
 opt.termguicolors = true
 opt.signcolumn = "yes"
@@ -43,12 +41,9 @@ opt.fileencodings = { "utf-8", "euc-kr" }
 
 -- Completion menu behavior
 opt.completeopt = { "menu", "menuone", "noselect" }
--- nvim-cmp reads this for its own menu and treats 0 as "no limit", which
--- makes the menu as tall as the number of candidates -- easily most of the
--- screen for an LSP source.
+-- Also caps nvim-cmp's menu; 0 leaves it unlimited.
 opt.pumheight = 10
 
--- Diagnostic display
 vim.diagnostic.config({
   virtual_text = {
     prefix = "●",

@@ -355,9 +355,7 @@ test_doctor_reports_dirty_zinit_plugin_checkout() {
   teardown_test_home
 }
 
-# SELFISHELL_ROOT is resolved with parameter expansion rather than `dirname`,
-# and `${path%/*}` leaves a bare filename unchanged. Every invocation form has
-# to keep finding the repository root, including through chained symlinks.
+# Root resolution must support bare filenames and chained symlinks.
 test_cli_resolves_root_from_every_invocation_form() {
   local expected link_dir
 

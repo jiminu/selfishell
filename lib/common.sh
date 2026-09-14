@@ -58,8 +58,6 @@ cli_error() {
   printf '%sselfishell:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
-# Reports a non-fatal condition to stderr. Unlike cli_error, the caller
-# is free to continue execution or return success afterward.
 cli_warn() {
   printf '%sselfishell: warning:%s %s\n' "$SELFISHELL_COLOR_YELLOW_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
@@ -164,7 +162,6 @@ selfishell_answer_is_yes() {
   esac
 }
 
-# Matches a negative prompt answer (n/N/no/NO). See selfishell_answer_is_yes.
 selfishell_answer_is_no() {
   case "$1" in
     n | N | no | NO) return 0 ;;

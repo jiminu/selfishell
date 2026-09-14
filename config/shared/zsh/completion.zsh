@@ -21,30 +21,39 @@ zstyle ':completion:*' matcher-list \
 autoload -Uz compinit compaudit
 ZCOMPDUMP="${ZDOTDIR:-$HOME}/.zcompdump"
 
-# (#q) needs EXTENDED_GLOB, which is off by default; without it the test never
-# globs, every dump reads as stale, and compaudit re-runs each startup (~10ms).
-_selfishell_zcompdump_is_stale() {
+# The dump can be created by a noninteractive shell or reused without being
+# rewritten, so its mtime cannot tell us when a security audit last ran.
+_selfishell_completion_needs_audit() {
   setopt localoptions extendedglob
-  [[ -n "$1"(#qN.mh+24) ]]
+  [[ ! -s "$1" || ! -f "$1.audit" || -L "$1.audit" || -s "$1.audit" ||
+     -n "$1.audit"(#qN.mh+24) ]]
 }
 
-if [[ ! -o interactive ]]; then
-  # -C skips compaudit entirely regardless of -u/-i, so there is no security
-  # check to perform (or bypass) on this path.
-  compinit -C -d "$ZCOMPDUMP"
-elif _selfishell_zcompdump_is_stale "$ZCOMPDUMP"; then
-  # Scan ourselves to warn and continue: compinit's default blocks startup on
-  # a `read -q` prompt, and -u would skip the scan altogether.
-  if [[ -n "$(compaudit 2>/dev/null)" ]]; then
-    print -u2 "selfishell: insecure completion directories detected; run 'compaudit' for details."
-    compinit -i -d "$ZCOMPDUMP"
-  else
-    compinit -d "$ZCOMPDUMP"
+if [[ -o interactive ]] && _selfishell_completion_needs_audit "$ZCOMPDUMP"; then
+  # -i performs one audit and excludes insecure entries without prompting.
+  # compinit sets _comp_secure when that audit finds insecure entries.
+  unset _comp_secure
+  if compinit -i -d "$ZCOMPDUMP"; then
+    if [[ "${_comp_secure:-}" == yes ]]; then
+      print -u2 "selfishell: insecure completion directories detected; run 'compaudit' for details."
+    fi
+    # Only an empty regular marker is ours. Preserve user replacements and
+    # keep auditing instead of following a link or changing an occupied path.
+    if [[ ! -L "$ZCOMPDUMP.audit" && ( ! -e "$ZCOMPDUMP.audit" ||
+          ( -f "$ZCOMPDUMP.audit" && ! -s "$ZCOMPDUMP.audit" ) ) ]]; then
+      if [[ "${_comp_secure:-}" == yes ]]; then
+        # A new shell restores fpath: re-audit until it is clean so an excluded
+        # directory cannot shadow a safe function while loading a cached dump.
+        command rm -f "$ZCOMPDUMP.audit" 2>/dev/null
+      elif [[ -s "$ZCOMPDUMP" ]]; then
+        command touch "$ZCOMPDUMP.audit" 2>/dev/null
+      fi
+    fi
   fi
 else
   compinit -C -d "$ZCOMPDUMP"
 fi
-unfunction _selfishell_zcompdump_is_stale
+unfunction _selfishell_completion_needs_audit
 
 if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
   zcompile "$ZCOMPDUMP"
