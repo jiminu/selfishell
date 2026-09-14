@@ -3,10 +3,9 @@
 print_install_help() {
   cat <<'EOF'
 Usage:
-  selfishell install [--profile NAME] [--skip-packages] [--dry-run] [--yes]
+  selfishell install [--skip-packages] [--dry-run] [--yes]
 
 Options:
-  --profile NAME  Select minimal or developer (default: developer)
   --skip-packages Skip package and tool installation and apply managed configuration only
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
@@ -17,9 +16,8 @@ EOF
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
-  local profile="$3"
-  local ghostty_enabled="${4:-0}"
-  local assume_yes="${5:-0}"
+  local ghostty_enabled="${3:-0}"
+  local assume_yes="${4:-0}"
   local zsh_source
   local resource_kind resource_name resource_target resource_source
 
@@ -35,9 +33,6 @@ install_managed_configuration() {
   while IFS=$'\t' read -r resource_kind resource_name resource_target resource_source; do
     case "$resource_kind" in
       file)
-        if [[ "$profile" != "developer" && "$resource_name" == nvim-* ]]; then
-          continue
-        fi
         if [[ "$resource_name" == "zshrc-config" ]]; then
           resource_source="$zsh_source"
         fi
@@ -52,9 +47,6 @@ install_managed_configuration() {
         managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes"
         ;;
       link)
-        if [[ "$profile" != "developer" && ("$resource_name" == user-nvim || "$resource_name" == mise-config-link) ]]; then
-          continue
-        fi
         managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
         ;;
       block)
@@ -195,7 +187,6 @@ install_mise_global_config() {
 command_install() {
   local assume_yes=0
   local dry_run=0
-  local profile=developer
   local skip_packages=0
   local platform
   local ghostty_enabled=0
@@ -208,14 +199,6 @@ command_install() {
       --dry-run) dry_run=1 ;;
       --yes) assume_yes=1 ;;
       --skip-packages) skip_packages=1 ;;
-      --profile)
-        shift
-        if (("$#" == 0)); then
-          cli_error "--profile requires a value"
-          return "$SELFISHELL_EXIT_USAGE"
-        fi
-        profile="$1"
-        ;;
       help | --help | -h)
         print_install_help
         return
@@ -228,6 +211,7 @@ command_install() {
     shift
   done
 
+  package_manifest_load || return
   platform="$(detect_platform)"
   if ! platform_is_supported "$platform"; then
     cli_error "Managed installation is unavailable on $(platform_label "$platform")."
@@ -244,10 +228,7 @@ command_install() {
       ;;
   esac
   managed_preflight_block_target user-vimrc "$HOME/.vimrc" "$assume_yes" "$dry_run" || return
-  profile_load "$profile"
-  if [[ "$profile" == "developer" ]]; then
-    preflight_mise_global_config || return
-  fi
+  preflight_mise_global_config || return
 
   if [[ "$platform" == "macos" ]]; then
     if [[ -r "$SELFISHELL_STATE_DIR/ghostty" ]]; then
@@ -270,36 +251,34 @@ command_install() {
   if [[ "$skip_packages" == "1" ]]; then
     printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
-    packages_install_profile "$platform" "$dry_run"
+    packages_install "$platform" "$dry_run"
     if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
       homebrew_install_packages optional cask "$dry_run" ghostty
     fi
   fi
 
-  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
-  if [[ "$profile" == "developer" ]]; then
-    install_mise_global_config "$dry_run" || return
-  fi
-  if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled" "$assume_yes"
+  install_mise_global_config "$dry_run" || return
+  if [[ "$skip_packages" == "0" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
   install_default_shell "$dry_run" "$assume_yes"
 
   if [[ "$dry_run" == "0" ]]; then
-    local profile_state
-    local temporary_profile_state
+    local configured_state
+    local temporary_configured_state
     local ghostty_state
     local temporary_ghostty_state
     mkdir -p "$SELFISHELL_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
 
-    profile_state="$SELFISHELL_STATE_DIR/profile"
-    temporary_profile_state="$(mktemp "${profile_state}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
-    printf '%s\n' "$profile" >"$temporary_profile_state" || {
-      rm -f "$temporary_profile_state"
+    configured_state="$SELFISHELL_STATE_DIR/configured"
+    temporary_configured_state="$(mktemp "${configured_state}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
+    printf '1\n' >"$temporary_configured_state" || {
+      rm -f "$temporary_configured_state"
       return "$SELFISHELL_EXIT_ERROR"
     }
-    mv "$temporary_profile_state" "$profile_state" || {
-      rm -f "$temporary_profile_state"
+    mv "$temporary_configured_state" "$configured_state" || {
+      rm -f "$temporary_configured_state"
       return "$SELFISHELL_EXIT_ERROR"
     }
 

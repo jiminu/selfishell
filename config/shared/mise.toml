@@ -1,4 +1,11 @@
 [tools]
+starship = "1.26.0"
+fzf = "0.74.4"
+zoxide = "0.10.0"
+ripgrep = "15.2.0"
+eza = "0.23.5"
+bat = "0.26.1"
+jq = "1.8.2"
 node = "24.18.0"
 python = "3.13.14"
 neovim = "0.12.5"
@@ -8,5 +15,3 @@ gh = "2.100.0"
 
 [settings]
 not_found_auto_install = false
-
-

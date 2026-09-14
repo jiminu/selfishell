@@ -15,5 +15,5 @@ Recommended deployment controls:
 3. Provision Homebrew separately if executing its upstream bootstrap is not an
    acceptable trust decision.
 4. Never place credentials, tokens, kubeconfigs, internal URLs, or certificate
-   private keys in a profile or this repository.
-5. Validate the selected profile on a clean managed image before broad rollout.
+   private keys in package configuration or this repository.
+5. Validate the environment on a clean managed image before broad rollout.

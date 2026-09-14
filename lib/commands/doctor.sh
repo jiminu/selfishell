@@ -89,7 +89,7 @@ command_doctor() {
   local platform
   local architecture
   local package_manager
-  local profile profile_platform dependency_platform
+  local package_platform dependency_platform
   local result="$SELFISHELL_EXIT_OK"
 
   platform="$(detect_platform)"
@@ -138,32 +138,28 @@ command_doctor() {
   fi
 
   selfishell_initialize_paths
-  if [[ -r "$SELFISHELL_STATE_DIR/profile" ]] && platform_is_supported "$platform"; then
+  if [[ -r "$SELFISHELL_STATE_DIR/configured" ]] && platform_is_supported "$platform"; then
     tool_status_reset_cache
-    profile="$(<"$SELFISHELL_STATE_DIR/profile")"
-    doctor_info "Installed profile: $profile"
-    if [[ "$profile" == developer ]]; then
-      doctor_info "Developer profile active: Neovim and mise-managed runtimes are enabled."
-      if have_command gcc; then
-        doctor_ok "C compiler: gcc ($(gcc --version | head -n 1))"
-      elif have_command clang; then
-        doctor_ok "C compiler: clang ($(clang --version | head -n 1))"
+    doctor_info "Selfishell configuration is installed."
+    if have_command gcc; then
+      doctor_ok "C compiler: gcc ($(gcc --version | head -n 1))"
+    elif have_command clang; then
+      doctor_ok "C compiler: clang ($(clang --version | head -n 1))"
+    else
+      doctor_error "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)"
+      if [[ "$platform" == "macos" ]]; then
+        printf "        Install Xcode Command Line Tools by running: %sxcode-select --install%s\n" \
+          "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
       else
-        doctor_error "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)"
-        if [[ "$platform" == "macos" ]]; then
-          printf "        Install Xcode Command Line Tools by running: %sxcode-select --install%s\n" \
-            "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
-        else
-          printf "        Install build tools by running: %ssudo apt install build-essential%s\n" \
-            "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
-        fi
-        result="$SELFISHELL_EXIT_ERROR"
+        printf "        Install build tools by running: %ssudo apt install build-essential%s\n" \
+          "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
       fi
+      result="$SELFISHELL_EXIT_ERROR"
     fi
     dependency_platform="$(platform_dependency_platform "$platform")"
-    profile_platform="$(platform_profile_platform "$platform")"
+    package_platform="$(platform_package_platform "$platform")"
     DOCTOR_RESULT="$result"
-    selfishell_scan_profile_packages "$profile" "$dependency_platform" "$architecture" doctor_report_package "$profile_platform"
+    selfishell_scan_packages "$dependency_platform" "$architecture" doctor_report_package "$package_platform"
     doctor_report_zinit_plugins
     result="$DOCTOR_RESULT"
   fi

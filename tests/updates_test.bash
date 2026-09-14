@@ -37,24 +37,24 @@ run_dependency_install() {
   ' _ "$ROOT_DIR" "$dependency"
 }
 
-test_tools_update_synchronizes_profile_packages() {
+test_tools_update_synchronizes_packages() {
   local output
   export XDG_CONFIG_HOME="$HOME/.config"
   mkdir -p "$XDG_STATE_HOME/selfishell"
-  printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
+  printf '1\n' >"$XDG_STATE_HOME/selfishell/configured"
 
   output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --dry-run)"
   [[ "$output" == *'Would install required apt packages:'* ]] ||
     fail "Tools update did not synchronize package-manager packages"
-  [[ "$output" == *'git'* ]] || fail "Tools update did not include the current profile packages"
-  [[ "$output" != *'Neovim plugins'* ]] || fail "Minimal tools update included Neovim plugin setup"
+  [[ "$output" == *'git'* ]] || fail "Tools update did not include the environment packages"
+  [[ "$output" == *'Neovim plugins'* ]] || fail "Tools update omitted Neovim plugin setup"
 }
 
 test_tools_update_skip_packages_avoids_package_operations() {
   local output
   export XDG_CONFIG_HOME="$HOME/.config"
   mkdir -p "$XDG_STATE_HOME/selfishell"
-  printf 'minimal\n' >"$XDG_STATE_HOME/selfishell/profile"
+  printf '1\n' >"$XDG_STATE_HOME/selfishell/configured"
 
   output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --skip-packages --dry-run)"
   [[ "$output" == *'Skipping package and tool installation.'* ]] ||

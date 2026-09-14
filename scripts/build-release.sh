@@ -54,7 +54,7 @@ mkdir -p "$payload_dir" "$output_dir"
 cp -R \
   "$ROOT_DIR/bin" \
   "$ROOT_DIR/lib" \
-  "$ROOT_DIR/profiles" \
+  "$ROOT_DIR/packages.conf" \
   "$ROOT_DIR/config" \
   "$payload_dir/"
 cp "$ROOT_DIR/dependencies.conf" "$payload_dir/"

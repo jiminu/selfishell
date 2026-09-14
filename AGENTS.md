@@ -11,7 +11,7 @@ and Ubuntu on WSL. Installation must be simple, maintenance predictable, and the
 user experience consistent across supported platforms.
 
 - The immutable `v<version>` Git tag is the release version source of truth.
-- `profiles/*.conf` defines built-in package profiles.
+- `packages.conf` defines the environment's package membership.
 - `dependencies.conf` pins direct downloads and Git dependencies.
 - `config/shared/mise.toml` pins mise-managed developer tools.
 - `docs/RELEASING.md` is the release procedure.
@@ -26,7 +26,7 @@ Supported commands are `help`, `version`, `doctor`, `install`, `status`,
 `update`, `rollback`, and `uninstall`. Keep their responsibilities narrow:
 
 - the bootstrap installs only the CLI unless `--setup` is explicit;
-- `selfishell install` explicitly installs a profile and configuration;
+- `selfishell install` explicitly installs the development environment and configuration;
 - `update --cli-only` and `update --tools-only` keep release and environment
   updates separable;
 - rollback uses a retained release without downloading it again;
@@ -88,8 +88,8 @@ Preserve these lifecycle invariants:
   macOS Bash 3.2 unless the product explicitly installs another interpreter.
 - Keep Homebrew and Apt operations in `lib/package_managers/`; do not scatter
   platform branches through command implementations.
-- Keep profile files declarative: only supported `include` and `package`
-  records, never executable shell code.
+- Keep `packages.conf` declarative: only supported `package` records, never
+  executable shell code.
 - Make repeated setup safe and idempotent.
 - Download to a temporary location, verify it, and activate it atomically.
 - Never execute an unversioned remote release payload as the installer.
@@ -103,16 +103,19 @@ Preserve these lifecycle invariants:
 - Ordinary shell startup must never install updates or block on the network. A
   cached release notice may refresh metadata in a non-blocking background job.
 
-## Profiles and Dependencies
+## Packages and Dependencies
 
-`developer` is the default profile and includes `minimal` plus the larger
-interactive tools, jq, build tools, and language/editor tooling. `minimal` is
-the explicit lightweight choice. Ghostty is a separate saved macOS installation
-choice.
+Selfishell provides one development environment, without selectable profiles.
+Ghostty is a separate saved macOS installation choice. The `configured` marker
+in the state directory records completed setup, not a package selection.
 
-The developer profile's mise-managed tool membership is declared in
-`profiles/developer.conf`; exact versions for those tools are pinned in
+Mise-managed tool membership is declared in
+`packages.conf`; exact versions for those tools are pinned in
 `config/shared/mise.toml`, the source of truth for mise-managed tool versions.
+Installer-owned mise operations run from the release's `config/shared`
+directory so a caller's project cannot override approved tool versions.
+Status and doctor query installed versions, not merely configured requests;
+an orphaned mise shim does not count as an external tool installation.
 
 When the tools/configuration phase runs, `--skip-packages` must skip package
 and tool installation and apply managed configuration only. A default update
@@ -162,7 +165,7 @@ instead. After publication, verify all four archives, `SHA256SUMS`, generated
 ## Verification
 
 Run the smallest relevant tests while iterating, then run the repository gate
-for any shell, lifecycle, profile, dependency, or release change:
+for any shell, lifecycle, package, dependency, or release change:
 
 ```sh
 bash scripts/check.sh
@@ -190,7 +193,7 @@ it; the gate remains required for the change categories listed above.
 | --- | --- |
 | `bin/`, `lib/` | CLI commands, lifecycle, platform and package adapters |
 | `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
-| `profiles/`, `dependencies.conf` | Declarative profiles and approved dependencies |
+| `packages.conf`, `dependencies.conf` | Declarative packages and approved dependencies |
 | `tests/` | Isolated unit and lifecycle coverage |
 | `scripts/` | Validation, benchmarks, dependency discovery, release builds |
 | `.github/` | CI, dependency automation, and release publication |

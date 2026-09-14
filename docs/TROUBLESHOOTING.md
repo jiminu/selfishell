@@ -15,7 +15,7 @@ selfishell doctor
 selfishell status
 ```
 
-`status` reports tools from the active profile as Selfishell-managed, Homebrew,
+`status` reports tools from the environment as Selfishell-managed, Homebrew,
 apt, external, or missing. Package-manager versions are reported without an
 exact approved version because those repositories control resolution. It
 returns nonzero when required tools are missing or managed configuration is

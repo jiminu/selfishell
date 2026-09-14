@@ -16,12 +16,11 @@ Usage: scripts/benchmark.sh [--mode base|full]
   base  Selfishell's own startup cost, independent of external integrations
         (mise/starship/zinit/fzf/zoxide are excluded). This is the default.
 
-  full  Installs the pinned mise, starship, and zinit (with its pinned
+  full  Installs the pinned mise, starship, fzf, zoxide, and zinit (with its pinned
         plugins) into an isolated HOME before measuring, so the
-        interactive-cached metric reflects a real developer-profile
-        startup. fzf and zoxide are measured if already on PATH (install
-        them via the platform package manager before running this mode);
-        this script does not invoke a package manager itself.
+        interactive-cached metric reflects a real full-environment
+        startup. Starship, fzf, and zoxide are installed through mise.
+        This script does not invoke Apt/Homebrew.
 
 SELFISHELL_BENCHMARK_PROFILE=base|full is equivalent to --mode.
 EOF
@@ -63,6 +62,9 @@ esac
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
 TEST_DATA_HOME="$TEST_HOME/.local/share"
+export MISE_DATA_DIR="$TEST_DATA_HOME/mise"
+export MISE_CACHE_DIR="$TEST_HOME/.cache/mise"
+export MISE_STATE_DIR="$TEST_HOME/.local/state/mise"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 mkdir -p "$TEST_HOME/.cache/selfishell" "$TEST_HOME/.config/mise" \
   "$TEST_HOME/.config/selfishell/zsh" "$TEST_HOME/.local/bin" "$TEST_DATA_HOME"
@@ -92,35 +94,38 @@ date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
   exit 1
 }
 
-# Installs the pinned mise/starship/zinit into $TEST_HOME so "full" mode
-# measures a real developer-profile startup, not the runner's PATH, reusing
-# dependency_install rather than reimplementing it. fzf and zoxide are left to
-# the package manager, so provision them separately before --mode full.
-install_full_profile_integrations() {
-  local name status=0
+# Installs the pinned shell integrations into $TEST_HOME so "full" mode
+# measures a real full-environment startup, not the runner's PATH, reusing
+# the production installers.
+install_full_integrations() (
+  local name
+  export HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config"
+  export XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state"
+  export XDG_CACHE_HOME="$TEST_HOME/.cache" SELFISHELL_ROOT="$ROOT_DIR"
+  cd "$TEST_HOME"
+  source "$ROOT_DIR/lib/common.sh"
+  source "$ROOT_DIR/lib/paths.sh"
+  source "$ROOT_DIR/lib/platform.sh"
+  source "$ROOT_DIR/lib/dependencies.sh"
+  source "$ROOT_DIR/lib/installers.sh"
 
-  for name in mise starship zinit; do
-    HOME="$TEST_HOME" XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state" \
-      XDG_CACHE_HOME="$TEST_HOME/.cache" \
-      SELFISHELL_ROOT="$ROOT_DIR" \
-      bash -c '
-        source "$1/lib/common.sh"
-        source "$1/lib/paths.sh"
-        source "$1/lib/platform.sh"
-        source "$1/lib/dependencies.sh"
-        source "$1/lib/installers.sh"
-        install_direct_package required "$2" 0 "$(detect_platform)" "$(detect_architecture)"
-      ' _ "$ROOT_DIR" "$name" || status=1
+  for name in mise zinit; do
+    install_direct_package required "$name" 0 "$(detect_platform)" "$(detect_architecture)" || return
   done
 
-  ((status == 0)) || {
-    printf 'Failed to provision one or more full-profile integrations (mise/starship/zinit)\n' >&2
-    exit 1
-  }
-}
+  # Activate only shell integrations, using the release's exact pins.
+  # Do not let the runtime implicitly install the rest of the development tools.
+  awk '
+    BEGIN { print "[tools]" }
+    /^\[/ { in_tools = ($0 == "[tools]"); next }
+    in_tools && ($1 == "starship" || $1 == "fzf" || $1 == "zoxide") { print; found++ }
+    END { print "\n[settings]\nnot_found_auto_install = false"; exit(found != 3) }
+  ' "$ROOT_DIR/config/shared/mise.toml" >"$TEST_HOME/.config/mise/config.toml"
+  PATH="$TEST_HOME/.local/bin:$PATH" install_mise_tools required 0 starship fzf zoxide
+)
 
 if [[ "$PROFILE_MODE" == full ]]; then
-  install_full_profile_integrations
+  install_full_integrations
 fi
 
 case "$PROFILE_MODE" in
@@ -221,6 +226,26 @@ run_interactive_zsh() {
     /bin/zsh -d -i -c exit >/dev/null 2>&1
 }
 
+verify_full_integrations() {
+  [[ "$PROFILE_MODE" == full ]] || return 0
+  (
+    cd "$TEST_HOME"
+    HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
+      XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
+      MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
+      PATH="$INTERACTIVE_PATH" TERM=xterm-256color MISE_OFFLINE=1 \
+      /bin/zsh -d -i -c '
+        for tool in starship fzf zoxide; do
+          [[ "${commands[$tool]}" == "$MISE_DATA_DIR/installs/"* ]] || exit 1
+        done
+        (( $+functions[prompt_starship_precmd] && $+functions[fzf-file-widget] && $+functions[__zoxide_z] ))
+      ' >/dev/null 2>&1
+  ) || {
+    printf 'Pinned shell integrations did not initialize in the benchmark HOME.\n' >&2
+    return 1
+  }
+}
+
 profile_interactive_zsh() {
   local profile_status=0
 
@@ -240,7 +265,12 @@ describe_integrations() {
   local summary="Interactive integrations:"
 
   for integration in starship fzf zoxide; do
-    if PATH="$INTERACTIVE_PATH" command -v "$integration" >/dev/null 2>&1; then
+    if [[ "$PROFILE_MODE" == full ]] &&
+      HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
+        MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" \
+        "$TEST_HOME/.local/bin/mise" -C "$TEST_HOME" which "$integration" >/dev/null 2>&1; then
+      status=enabled
+    elif PATH="$INTERACTIVE_PATH" command -v "$integration" >/dev/null 2>&1; then
       status=enabled
     else
       status=absent
@@ -278,6 +308,7 @@ record_result "$common_result"
 
 # Warm the complete interactive configuration before measuring it.
 run_interactive_zsh
+verify_full_integrations
 interactive_result="$(benchmark interactive-cached "$ITERATIONS" bash -c 'run_interactive_zsh')"
 record_result "$interactive_result"
 

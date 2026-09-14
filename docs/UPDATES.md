@@ -3,7 +3,7 @@
 By default, `selfishell update` updates to the latest release and then
 synchronizes that release's managed environment. The CLI release is switched
 first; if it changed, the new CLI continues the same command so packages newly
-added to that release's profile are included. If the target release is
+added to that release's package list are included. If the target release is
 already installed, the command reports that and exits without changing
 anything. Use `--tools-only` to explicitly resynchronize the current release's
 tools and configuration regardless of whether a new release is available.
@@ -31,10 +31,10 @@ selfishell rollback --yes
 ```
 
 The tools/configuration phase synchronizes apt or Homebrew packages from the
-installed profile, installs directly managed tools at the approved versions in
+release's `packages.conf`, installs directly managed tools at the approved versions in
 `dependencies.conf`, synchronizes mise-managed developer tools, reapplies
-managed configuration, and synchronizes Neovim plugins for the developer
-profile; Tree-sitter parsers install lazily the first time their filetype is
+managed configuration, and synchronizes Neovim plugins;
+Tree-sitter parsers install lazily the first time their filetype is
 opened. Already installed operating-system packages remain
 managed by apt or Homebrew; this command does not perform a general package
 upgrade. A CLI-only update skips this phase, as does a default update
@@ -46,7 +46,7 @@ configuration for the current release.
 skips package and tool installation and applies managed configuration only,
 the same contract `selfishell install` follows.
 
-`status` reports local CLI, rollback, profile, and managed-resource state
+`status` reports local CLI, rollback, tools, and managed-resource state
 only; it never checks the network. Use `selfishell version --available` to
 check the latest published release, or rely on the automatic update notice.
 
@@ -76,14 +76,14 @@ That manifest is also the source of truth for exact Neovim plugin commits, so a
 repository `lazy-lock.json` is intentionally unnecessary. lazy.nvim may write a
 runtime lock under the Selfishell state directory, but updates cannot move a
 plugin beyond the commit approved in the release manifest.
-`profiles/developer.conf` declares mise-managed developer tool membership;
+`packages.conf` declares mise-managed developer tool membership;
 exact default versions are pinned only in `config/shared/mise.toml`, updated through
 the same review-and-release boundary. Individual project `mise.toml` files
 remain outside Selfishell's update lifecycle.
 
 Maintainers can run `scripts/update-dependencies.sh` to discover current
-upstream releases, download platform artifacts, calculate Starship and mise
-checksums, and bump mise-managed tool versions. The weekly `Dependency
+upstream releases, download mise platform artifacts, calculate their
+checksums, and bump mise-managed tool versions, including Starship. The weekly `Dependency
 updates` workflow uses the same script and opens or refreshes a review PR
 only when a tracked file changes. It never merges the PR or publishes a
 Selfishell release. Review

@@ -88,7 +88,7 @@ test_managed_resource_names_are_the_whole_name_column() {
 
 test_install_copies_configuration_and_tracks_resources() {
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Zsh startup file is not user-owned"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Zsh loader start marker is missing"
@@ -119,7 +119,7 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader state version was not recorded"
   [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == block ]] ||
     fail "Zsh loader was not recorded as a managed block"
-  [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "Minimal install created a developer mise config"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "Install omitted the user mise config"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -144,18 +144,18 @@ EOF
   [[ "$chsh_arguments" == *zsh* ]] || fail "Install did not request a Zsh login shell"
 }
 
-test_developer_install_includes_neovim_configuration() {
+test_install_includes_neovim_configuration() {
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
   cmp -s "$ROOT_DIR/config/shared/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
-    fail "Neovim init.lua was not installed for the developer profile"
+    fail "Neovim init.lua was not installed for the development environment"
   cmp -s "$ROOT_DIR/config/shared/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
-    fail "Neovim options module was not installed for the developer profile"
+    fail "Neovim options module was not installed for the development environment"
   cmp -s "$ROOT_DIR/config/shared/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
-    fail "Neovim lsp plugin was not installed for the developer profile"
+    fail "Neovim lsp plugin was not installed for the development environment"
   [[ -f "$XDG_CONFIG_HOME/mise/config.toml" && ! -L "$XDG_CONFIG_HOME/mise/config.toml" ]] ||
     fail "Developer install did not create a user-owned mise config"
   ! grep -Fqx "$XDG_CONFIG_HOME/mise/config.toml" "$SELFISHELL_RESOURCE_STATE_DIR"/*.state ||
@@ -167,7 +167,7 @@ test_macos_install_includes_ghostty_configuration() {
   mkdir -p "$XDG_CONFIG_HOME/ghostty"
   printf 'font-size = 14\n' >"$XDG_CONFIG_HOME/ghostty/config.ghostty"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ -f "$XDG_CONFIG_HOME/ghostty/config.ghostty" && ! -L "$XDG_CONFIG_HOME/ghostty/config.ghostty" ]] ||
     fail "Ghostty config is not user-owned"
@@ -190,7 +190,7 @@ test_ghostty_defaults_include_precedes_user_override_include() {
   local defaults_line
   local override_line
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   defaults_line="$(grep -nFx "config-file = $XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" "$target" | cut -d: -f1)"
   override_line="$(grep -nFx 'config-file = ?user.ghostty' "$target" | cut -d: -f1)"
@@ -207,13 +207,13 @@ test_managed_block_state_identity_mismatch_is_rejected() {
   local before_content
   local status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   before_content="$(<"$target")"
 
   # case A: state type is a different valid type (file), well-formed otherwise.
   printf '2\nfile\nactive\n%s\n-\n-\nbogus-checksum\n' "$target" >"$state_file"
   set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
   [[ "$status" -eq 1 ]] || fail "A state type mismatch should stop installation"
@@ -225,7 +225,7 @@ test_managed_block_state_identity_mismatch_is_rejected() {
   # case B: state type matches (block) but the recorded target does not.
   printf '2\nblock\nactive\n%s.other\n-\n-\nbogus-checksum\n' "$target" >"$state_file"
   set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
   [[ "$status" -eq 1 ]] || fail "A state target mismatch should stop installation"
@@ -243,7 +243,7 @@ test_outdated_ghostty_block_is_upgraded_without_changing_user_bytes() {
   local expected="$TEST_ROOT/expected-ghostty"
   local old_body_checksum
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   cat >"$target" <<EOF
 font-size = 14
@@ -266,11 +266,11 @@ EOF
   printf '2\nblock\nactive\n%s\n-\n-\n%s\n' \
     "$target" "$old_body_checksum" >"$state_file"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   cmp -s "$expected" "$target" ||
     fail "Untouched outdated Ghostty block was not upgraded in place"
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 }
 
 test_outdated_zprofile_block_is_upgraded_without_changing_user_bytes() {
@@ -280,7 +280,7 @@ test_outdated_zprofile_block_is_upgraded_without_changing_user_bytes() {
   local old_block="$TEST_ROOT/old-zprofile-block"
   local old_checksum
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   cat >"$old_block" <<'EOF'
 # >>> Selfishell mise shims >>>
@@ -307,7 +307,7 @@ EOF
   printf '2\nblock\nactive\n%s\n-\n-\n%s\n' \
     "$target" "$old_checksum" >"$state_file"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   cmp -s "$expected" "$target" ||
     fail "Untouched outdated .zprofile block was not upgraded in place"
@@ -319,7 +319,7 @@ test_modified_zprofile_block_can_be_backed_up_and_overwritten_once() {
   local modified="$TEST_ROOT/modified-zprofile"
   local backup
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   printf 'export AFTER=1\n' >>"$target"
   cp "$target" "$expected"
   sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
@@ -327,7 +327,7 @@ test_modified_zprofile_block_can_be_backed_up_and_overwritten_once() {
   cp "$modified" "$target"
 
   printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 \
-    run_selfishell install --profile minimal --skip-packages >"$TEST_ROOT/stdout"
+    run_selfishell install --skip-packages >"$TEST_ROOT/stdout"
 
   cmp -s "$expected" "$target" ||
     fail "Accepted block overwrite changed user bytes outside the block"
@@ -345,14 +345,14 @@ test_modified_zprofile_block_can_be_skipped_and_install_continues() {
   local saved_state="$TEST_ROOT/user-zprofile.state"
   local status=0
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
     "$target" >"$expected"
   cp "$expected" "$target"
   cp "$state_file" "$saved_state"
 
   printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 \
-    run_selfishell install --profile minimal --skip-packages >"$TEST_ROOT/stdout" || status=$?
+    run_selfishell install --skip-packages >"$TEST_ROOT/stdout" || status=$?
 
   [[ "$status" -eq 0 ]] || fail "Skipping a modified block stopped installation"
   cmp -s "$expected" "$target" || fail "Skipped block was changed"
@@ -370,13 +370,13 @@ test_modified_zprofile_block_is_preserved_with_yes_flag() {
   local saved_state="$TEST_ROOT/user-zprofile.state"
   local status=0
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
     "$target" >"$expected"
   cp "$expected" "$target"
   cp "$state_file" "$saved_state"
 
-  run_selfishell install --profile minimal --skip-packages --yes \
+  run_selfishell install --skip-packages --yes \
     >/dev/null 2>"$TEST_ROOT/stderr" || status=$?
 
   [[ "$status" -ne 0 ]] || fail "--yes silently overwrote a modified block"
@@ -394,7 +394,7 @@ test_modified_block_backup_failure_preserves_target_and_state() {
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
     "$target" >"$expected"
   cp "$expected" "$target"
@@ -410,7 +410,7 @@ EOF
   chmod +x "$fake_bin/cp"
 
   printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 \
-    run_selfishell install --profile minimal --skip-packages \
+    run_selfishell install --skip-packages \
     >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
 
   [[ "$status" -ne 0 ]] || fail "A failed block backup was reported as success"
@@ -428,7 +428,7 @@ test_modified_block_replace_failure_is_retryable() {
   local fake_bin="$TEST_ROOT/fakebin"
   local status=0
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   cp "$target" "$clean"
   sed 's/command mise activate zsh/command mise activate --user-edited zsh/' \
     "$target" >"$modified"
@@ -444,7 +444,7 @@ EOF
   chmod +x "$fake_bin/mv"
 
   printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 \
-    run_selfishell install --profile minimal --skip-packages \
+    run_selfishell install --skip-packages \
     >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
 
   [[ "$status" -ne 0 ]] || fail "A failed block replacement was reported as success"
@@ -456,7 +456,7 @@ EOF
   ! grep -Fq 'Updated Selfishell block:' "$TEST_ROOT/stdout" ||
     fail "A failed block replacement printed update success"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   cmp -s "$clean" "$target" || fail "Retry did not finish the block replacement"
   [[ "$(sed -n '3p' "$state_file")" == active ]] ||
     fail "Retry did not activate block state"
@@ -467,7 +467,7 @@ test_macos_install_reuses_declined_ghostty_choice() {
   mkdir -p "$XDG_STATE_HOME/selfishell"
   printf '0\n' >"$XDG_STATE_HOME/selfishell/ghostty"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ ! -e "$XDG_CONFIG_HOME/selfishell/ghostty/config.ghostty" ]] ||
     fail "A saved declined Ghostty choice was ignored"
@@ -490,13 +490,13 @@ test_user_ghostty_changes_survive_reinstall_and_uninstall_exactly() {
   printf '\ncursor-style = bar\n' >"$suffix"
   cat "$prefix" "$target" "$suffix" >"$expected"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   cat "$prefix" "$target" >"$modified"
   mv "$modified" "$target"
   cat "$suffix" >>"$target"
 
   run_selfishell update --tools-only --dry-run >/dev/null
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   run_selfishell uninstall --yes >/dev/null
 
   cmp -s "$expected" "$target" || fail "Uninstall changed user Ghostty config bytes outside the block"
@@ -514,7 +514,7 @@ test_ghostty_config_symlink_is_rejected_without_changes() {
   ln -s "$dotfiles_source" "$target"
 
   set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
 
@@ -535,7 +535,7 @@ test_ghostty_config_directory_is_rejected_without_changes() {
   mkdir -p "$target/keep"
 
   set +e
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
 
@@ -551,7 +551,7 @@ test_user_ghostty_absent_does_not_block_install() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   local user_override="$XDG_CONFIG_HOME/ghostty/user.ghostty"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ -f "$XDG_CONFIG_HOME/ghostty/config.ghostty" ]] || fail "Ghostty config.ghostty was not created"
   [[ ! -e "$user_override" ]] || fail "Selfishell must not create user.ghostty"
@@ -566,11 +566,11 @@ test_user_ghostty_regular_file_is_preserved_across_lifecycle() {
   printf 'theme = Catppuccin Mocha\nfont-size = 15\n' >"$user_override"
   checksum_before="$(fixture_sha256 "$user_override")"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   [[ "$(fixture_sha256 "$user_override")" == "$checksum_before" ]] ||
     fail "Install changed user.ghostty"
 
-  setup_fake_macos_minimal_packages
+  setup_fake_macos_packages
   run_selfishell update --tools-only --yes >/dev/null
   [[ "$(fixture_sha256 "$user_override")" == "$checksum_before" ]] ||
     fail "Update changed user.ghostty"
@@ -590,10 +590,10 @@ test_user_ghostty_symlink_is_untouched_across_lifecycle() {
   printf 'cursor-style = bar\n' >"$dotfiles_source"
   ln -s "$dotfiles_source" "$user_override"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_symlink_to "$dotfiles_source" "$user_override"
 
-  setup_fake_macos_minimal_packages
+  setup_fake_macos_packages
   run_selfishell update --tools-only --yes >/dev/null
   assert_symlink_to "$dotfiles_source" "$user_override"
 
@@ -608,7 +608,7 @@ test_status_does_not_inspect_user_ghostty() {
   local before_output before_status
   local after_output after_status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   set +e
   before_output="$(run_selfishell status)"
@@ -648,8 +648,8 @@ test_mise_shims_zprofile_survives_full_lifecycle() {
   local output
 
   printf 'export USER_ZPROFILE=kept' >"$HOME/.zprofile"
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ "$(grep -Fc '# >>> Selfishell mise shims >>>' "$HOME/.zprofile")" -eq 1 ]] ||
     fail "Install did not add exactly one mise shims block"
@@ -673,7 +673,7 @@ EOF
 test_mise_shims_zprofile_uses_selfishell_mise_outside_path() {
   local output
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   mkdir -p "$HOME/.local/bin"
   cat >"$HOME/.local/bin/mise" <<'EOF'
 #!/usr/bin/env bash
@@ -767,7 +767,7 @@ test_zshenv_user_content_survives_ubuntu_lifecycle() {
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
   printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ -f "$HOME/.zshenv" && ! -L "$HOME/.zshenv" ]] || fail "Zsh env file is not user-owned"
   grep -Fqx '# >>> Selfishell zshenv >>>' "$HOME/.zshenv" || fail "Zshenv block start marker is missing"
@@ -778,7 +778,7 @@ test_zshenv_user_content_survives_ubuntu_lifecycle() {
     fail "Zshenv block marker appears more than once"
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Zshenv resource was not recorded as a managed block"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   [[ "$(grep -Fc '# >>> Selfishell zshenv >>>' "$HOME/.zshenv")" -eq 1 ]] ||
     fail "Reinstall duplicated the Zshenv block marker"
 
@@ -821,7 +821,7 @@ test_macos_lifecycle_never_touches_existing_zshenv() {
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
   printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   run_selfishell update --tools-only --skip-packages --yes >/dev/null
   run_selfishell uninstall --yes >/dev/null
 
@@ -836,7 +836,7 @@ test_vimrc_user_content_survives_lifecycle() {
 
   printf 'set background=dark\nset nocompatible\n' >"$HOME/.vimrc"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   [[ -f "$HOME/.vimrc" && ! -L "$HOME/.vimrc" ]] || fail "Vim startup file is not user-owned"
   grep -Fqx '" >>> Selfishell vimrc >>>' "$HOME/.vimrc" || fail "Vim block start marker is missing"
@@ -846,7 +846,7 @@ test_vimrc_user_content_survives_lifecycle() {
     fail "Vim block marker appears more than once"
   [[ "$(sed -n '2p' "$state_file")" == block ]] || fail "Vim resource was not recorded as a managed block"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   [[ "$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")" -eq 1 ]] ||
     fail "Reinstall duplicated the Vim block marker"
 
@@ -879,7 +879,7 @@ test_unrelated_vimrc_symlink_is_rejected_without_changes() {
 }
 
 test_malformed_managed_file_state_variants_are_rejected_without_changes() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -911,7 +911,7 @@ test_malformed_managed_file_state_variants_are_rejected_without_changes() {
     esac
 
     set +e
-    run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
+    run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr"
     status=$?
     set -e
 
@@ -1103,19 +1103,19 @@ test_managed_file_replaced_by_same_content_symlink_is_preserved() {
   done
 }
 
-test_minimal_profile_keeps_retained_developer_configuration_visible() {
+test_status_checks_neovim_configuration_after_reinstall() {
   local target="$XDG_CONFIG_HOME/selfishell/nvim/init.lua"
   local output rc=0
 
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  assert_file_content minimal "$SELFISHELL_STATE_DIR/profile"
+  run_selfishell install --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
+  assert_file_content 1 "$SELFISHELL_STATE_DIR/configured"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
 
   printf '\n-- personal edit\n' >>"$target"
   output="$(run_selfishell status 2>&1)" || rc=$?
-  ((rc != 0)) || fail "Status ignored modified retained developer configuration"
+  ((rc != 0)) || fail "Status ignored modified Neovim configuration"
   [[ "$output" == *"[CHANGED] $target"* ]] || fail "Status omitted retained Neovim configuration: $output"
 }
 
@@ -1133,7 +1133,7 @@ test_status_uses_current_resource_list() {
 
 test_uninstall_restores_original_files() {
   printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
 
   assert_file_content 'original zshrc' "$HOME/.zshrc"
@@ -1198,7 +1198,7 @@ EOF
     fail "Failed managed file removal was not preserved"
   [[ -r "$XDG_STATE_HOME/selfishell/resources/zshrc-config.state" ]] ||
     fail "Failed managed resource state was removed"
-  assert_file_content 'developer' "$XDG_STATE_HOME/selfishell/profile"
+  assert_file_content '1' "$XDG_STATE_HOME/selfishell/configured"
 }
 
 test_uninstall_removes_ghostty_block_before_ghostty_defaults() {
@@ -1210,7 +1210,7 @@ test_uninstall_removes_ghostty_block_before_ghostty_defaults() {
   local defaults_state="$XDG_STATE_HOME/selfishell/resources/ghostty-config.state"
   local status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   [[ -f "$defaults_target" ]] || fail "Ghostty defaults were not installed"
   grep -Fqx '# >>> Selfishell ghostty >>>' "$block_target" || fail "Ghostty block was not installed"
 
@@ -1328,7 +1328,7 @@ test_install_does_not_depend_on_checkout() {
   local release_root="$TEST_ROOT/release"
 
   mkdir -p "$release_root"
-  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/config" "$release_root/"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/packages.conf" "$ROOT_DIR/config" "$release_root/"
   printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/"
 
@@ -1352,7 +1352,7 @@ test_mise_config_global_preserves_existing_types() {
   source "$ROOT_DIR/lib/common.sh"
   source "$ROOT_DIR/lib/commands/install.sh"
 
-  # Exercise the create-once boundary directly; the developer/minimal
+  # Exercise the create-once boundary directly; the configuration
   # installation tests above cover command wiring.
   mkdir -p "$XDG_CONFIG_HOME/mise"
   printf 'user_owned_data_content_bytes\n' >"$XDG_CONFIG_HOME/mise/config.toml"
@@ -1391,11 +1391,11 @@ test_mise_config_global_idempotency_and_status() {
 
   mkdir -p "$XDG_CONFIG_HOME/mise"
   printf 'pre-existing user config\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_file_content 'pre-existing user config' "$XDG_CONFIG_HOME/mise/config.toml"
   cp "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$TEST_ROOT/defaults.before"
   printf 'modified by user 123\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
 
   local status_out
@@ -1410,18 +1410,18 @@ test_mise_config_global_idempotency_and_status() {
 }
 
 test_mise_config_global_uninstall_preservation() {
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   run_selfishell uninstall --restore --yes >/dev/null
   [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "config.toml should remain after uninstall"
 }
 
 test_mise_config_global_dry_run_and_directory_error() {
-  run_selfishell install --profile developer --skip-packages --dry-run --yes >/dev/null
+  run_selfishell install --skip-packages --dry-run --yes >/dev/null
   [[ ! -e "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "dry-run created config.toml"
 
   mkdir -p "$XDG_CONFIG_HOME/mise/config.toml"
   local rc=0
-  run_selfishell install --profile developer --skip-packages --yes >/dev/null 2>&1 || rc=$?
+  run_selfishell install --skip-packages --yes >/dev/null 2>&1 || rc=$?
   ((rc != 0)) || fail "install did not return error when config.toml is a directory"
 
   [[ -d "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "invalid existing directory was changed"
@@ -1470,7 +1470,7 @@ EOF
   )" || fail "runtime created MISE_GLOBAL_CONFIG_FILE"
 }
 
-# A real `update` reaches packages_install_profile, which must not touch the
+# A real `update` reaches packages_install, which must not touch the
 # network or need root here. Faking apt-get/dpkg satisfies the apt check
 # without sudo, and pre-creating the direct dependency targets makes
 # dependency_install treat them as present. Works on either CI runner.
@@ -1493,17 +1493,20 @@ zinit() {
 EOF
   cat >"$TEST_ROOT/bin/git" <<EOF
 #!/usr/bin/env bash
-if [[ "\${1:-}" == -C && "\${3:-}" == rev-parse && "\${4:-}" == HEAD &&
-      -r "\$2/.git/selfishell-approved-revision" ]]; then
-  cat "\$2/.git/selfishell-approved-revision"
-  exit 0
+if [[ "\${1:-}" == -C && -r "\$2/.git/selfishell-approved-revision" ]]; then
+  if [[ "\${3:-}" == rev-parse && "\${4:-}" == HEAD ]]; then
+    cat "\$2/.git/selfishell-approved-revision"
+    exit 0
+  elif [[ "\${3:-}" == status ]]; then
+    exit 0
+  fi
 fi
 exec "$real_git" "\$@"
 EOF
   chmod +x "$TEST_ROOT/bin/git"
 }
 
-setup_fake_minimal_packages() {
+setup_fake_packages() {
   mkdir -p "$TEST_ROOT/bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/apt-get"
   chmod +x "$TEST_ROOT/bin/apt-get"
@@ -1516,9 +1519,33 @@ setup_fake_minimal_packages() {
   printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/starship"
   chmod +x "$HOME/.local/bin/starship"
   setup_fake_zinit
+  setup_fake_editor_tools
 }
 
-setup_fake_macos_minimal_packages() {
+setup_fake_editor_tools() {
+  local type repository revision source plugin_dir tool
+  mkdir -p "$HOME/.local/bin" "$TEST_ROOT/bin"
+  for tool in mise nvim; do
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$HOME/.local/bin/$tool"
+    chmod +x "$HOME/.local/bin/$tool"
+    ln -s "$HOME/.local/bin/$tool" "$TEST_ROOT/bin/$tool"
+  done
+  # These lifecycle tests exercise managed files; model already-synced editors
+  # without downloading tools or plugin repositories.
+  while read -r type repository revision _ _ source _; do
+    [[ "$type" == nvim-plugin ]] || continue
+    if [[ "$repository" == folke/lazy.nvim ]]; then
+      plugin_dir="$HOME/.local/share/selfishell/nvim/lazy/lazy.nvim"
+    else
+      source="${source##*/}"
+      plugin_dir="$HOME/.local/share/nvim/lazy/${source%.git}"
+    fi
+    mkdir -p "$plugin_dir/.git"
+    printf '%s\n' "$revision" >"$plugin_dir/.git/selfishell-approved-revision"
+  done <"$ROOT_DIR/dependencies.conf"
+}
+
+setup_fake_macos_packages() {
   mkdir -p "$TEST_ROOT/bin"
   cat >"$TEST_ROOT/bin/brew" <<'EOF'
 #!/usr/bin/env bash
@@ -1532,6 +1559,7 @@ EOF
   chmod +x "$TEST_ROOT/bin/brew"
 
   setup_fake_zinit
+  setup_fake_editor_tools
 }
 
 # Use a private checkout to simulate release changes without modifying the test source.
@@ -1539,7 +1567,7 @@ build_release_copy() {
   local release_root="$1"
 
   mkdir -p "$release_root"
-  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/profiles" "$ROOT_DIR/config" "$release_root/"
+  cp -R "$ROOT_DIR/bin" "$ROOT_DIR/lib" "$ROOT_DIR/packages.conf" "$ROOT_DIR/config" "$release_root/"
   printf '0.0.0-test.1\n' >"$release_root/VERSION"
   cp "$ROOT_DIR/dependencies.conf" "$release_root/dependencies.conf"
 }
@@ -1550,7 +1578,7 @@ test_reinstall_preserves_tool_caches_until_generator_configuration_changes() {
   local scenario tool
 
   build_release_copy "$release_root"
-  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
   mkdir -p "$cache_dir"
   for tool in zoxide fzf starship; do
     printf '# cached %s init\n' "$tool" >"$cache_dir/$tool-init.zsh"
@@ -1562,9 +1590,9 @@ test_reinstall_preserves_tool_caches_until_generator_configuration_changes() {
       dry-run) printf '\n# updated generator\n' >>"$release_root/config/shared/zsh/interactive.zsh" ;;
     esac
     if [[ "$scenario" == dry-run ]]; then
-      bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes --dry-run >/dev/null
+      bash "$release_root/bin/selfishell" install --skip-packages --yes --dry-run >/dev/null
     else
-      bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+      bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
     fi
     for tool in zoxide fzf starship; do
       if [[ "$scenario" == changed ]]; then
@@ -1578,7 +1606,7 @@ test_reinstall_preserves_tool_caches_until_generator_configuration_changes() {
 }
 
 test_managed_file_interactive_overwrite_yes() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   printf 'user_modified_data\n' >"$target_file"
@@ -1587,7 +1615,7 @@ test_managed_file_interactive_overwrite_yes() {
   # resource loop remaps it; the second answers the conflict prompt, read from
   # FD 3, the copy of stdin taken before that remap.
   local stdout
-  stdout="$(printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages)"
+  stdout="$(printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --skip-packages)"
 
   cmp -s "$ROOT_DIR/config/shared/vimrc" "$target_file" ||
     fail "Modified managed file was not overwritten with the default"
@@ -1604,7 +1632,7 @@ test_managed_file_interactive_overwrite_yes() {
 }
 
 test_managed_file_interactive_skip_preserves_state_and_continues() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local completion_target="$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
   local completion_state="$XDG_STATE_HOME/selfishell/resources/zsh-completion.state"
@@ -1614,7 +1642,7 @@ test_managed_file_interactive_skip_preserves_state_and_continues() {
   cp "$completion_state" "$saved_state"
 
   local rc=0
-  printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null || rc=$?
+  printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --skip-packages >/dev/null || rc=$?
 
   ((rc == 0)) || fail "Install failed after skipping a modified managed file (exit code $rc)"
   assert_file_content 'user_modified_completion' "$completion_target"
@@ -1626,7 +1654,7 @@ test_managed_file_interactive_skip_preserves_state_and_continues() {
 }
 
 test_managed_file_yes_flag_preserves_modification() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -1636,7 +1664,7 @@ test_managed_file_yes_flag_preserves_modification() {
   cp "$state_file" "$saved_state"
 
   local rc=0
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
 
   ((rc != 0)) || fail "--yes must not silently overwrite a modified managed file"
   assert_file_content 'user_modified_data' "$target_file"
@@ -1648,7 +1676,7 @@ test_managed_file_yes_flag_preserves_modification() {
 }
 
 test_managed_link_conflict_still_aborts() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local link_path="$XDG_CONFIG_HOME/starship.toml"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
@@ -1660,7 +1688,7 @@ test_managed_link_conflict_still_aborts() {
   printf 'replaced_by_user\n' >"$link_path"
 
   local rc=0
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+  run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
 
   ((rc != 0)) || fail "A replaced managed link must still abort installation"
   assert_file_content 'replaced_by_user' "$link_path"
@@ -1670,7 +1698,7 @@ test_managed_link_conflict_still_aborts() {
 }
 
 test_managed_link_creation_failure_does_not_report_success_and_is_retryable() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local link_path="$XDG_CONFIG_HOME/starship.toml"
   local state_file="$XDG_STATE_HOME/selfishell/resources/user-starship.state"
@@ -1680,7 +1708,7 @@ test_managed_link_creation_failure_does_not_report_success_and_is_retryable() {
   rm "$link_path"
   chmod 0555 "$XDG_CONFIG_HOME"
 
-  run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || rc=$?
+  run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || rc=$?
   chmod 0755 "$XDG_CONFIG_HOME"
 
   ((rc != 0)) || fail "A symlink creation failure must not be reported as success"
@@ -1689,7 +1717,7 @@ test_managed_link_creation_failure_does_not_report_success_and_is_retryable() {
   [[ "$(sed -n '3p' "$state_file")" == pending ]] ||
     fail "A failed link creation must not be recorded as active"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$link_path"
   [[ "$(sed -n '3p' "$state_file")" == active ]] ||
     fail "Retrying after a fixed permission error did not recover"
@@ -1801,7 +1829,7 @@ EOF
 }
 
 test_managed_file_overwrite_conflict_atomic_copy_failure_preserves_backup_and_state() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -1826,7 +1854,7 @@ EOF
   chmod +x "$fake_bin/cp"
 
   set +e
-  printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null 2>"$TEST_ROOT/stderr"
+  printf 'y\ny\n' | PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_TEST_TTY=1 run_selfishell install --skip-packages >/dev/null 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
 
@@ -1842,7 +1870,7 @@ EOF
   ! grep -Fq 'Installed managed file' "$TEST_ROOT/stderr" ||
     fail "A failed overwrite must not report success"
 
-  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --skip-packages >/dev/null
   cmp -s "$ROOT_DIR/config/shared/vimrc" "$target_file" ||
     fail "Retrying after removing the forced failure did not recover"
 }
@@ -1870,7 +1898,7 @@ EOF
   chmod +x "$fake_bin/ln"
 
   set +e
-  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
 
@@ -1883,7 +1911,7 @@ EOF
   ! grep -Fq "Linked: $link_path" "$TEST_ROOT/stdout" ||
     fail "A failed link creation printed a success message"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
   assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$link_path"
 }
 
@@ -1898,7 +1926,7 @@ test_ghostty_preflight_stops_before_other_resources_install() {
   ln -s "$dotfiles_source" "$target"
 
   set +e
-  run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
+  run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
   status=$?
   set -e
 
@@ -1921,7 +1949,7 @@ test_update_ghostty_preflight_stops_before_other_resources_change() {
   local before_vimrc_state
   local status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   mkdir -p "$(dirname "$dotfiles_source")"
   printf 'font-size = 14\n' >"$dotfiles_source"
@@ -1954,7 +1982,7 @@ test_update_zshenv_preflight_stops_before_other_resources_change() {
   local before_vimrc_state
   local status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   rm -f "$HOME/.zshenv"
   ln -s "$TEST_ROOT/dotfiles-zshenv" "$HOME/.zshenv"
@@ -1983,7 +2011,7 @@ test_update_ghostty_preflight_rejects_directory_before_other_resources_change() 
   local before_zshrc
   local status
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   rm -f "$target"
   mkdir -p "$target/keep"
@@ -2205,31 +2233,31 @@ test_block_remove_truncation_failure_preserves_block_and_state() {
 
 test_install_final_state_write_failure_does_not_report_success() {
   local rc=0
-  local before_profile
+  local before_configured
   local before_ghostty
   local tmp_count
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
-  before_profile="$(<"$XDG_STATE_HOME/selfishell/profile")"
+  run_selfishell install --skip-packages --yes >/dev/null
+  before_configured="$(<"$XDG_STATE_HOME/selfishell/configured")"
   before_ghostty="$(<"$XDG_STATE_HOME/selfishell/ghostty")"
 
   chmod 0555 "$XDG_STATE_HOME/selfishell"
-  run_selfishell install --profile minimal --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || rc=$?
+  run_selfishell install --skip-packages --yes >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || rc=$?
   chmod 0755 "$XDG_STATE_HOME/selfishell"
 
   ((rc != 0)) || fail "A final state write failure must not be reported as success"
   ! grep -Fq 'Selfishell configuration installed.' "$TEST_ROOT/stdout" ||
     fail "A failed install printed the success message"
-  tmp_count="$(find "$XDG_STATE_HOME/selfishell" -maxdepth 1 \( -name 'profile.tmp.*' -o -name 'ghostty.tmp.*' \) | wc -l)"
+  tmp_count="$(find "$XDG_STATE_HOME/selfishell" -maxdepth 1 \( -name 'configured.tmp.*' -o -name 'ghostty.tmp.*' \) | wc -l)"
   [[ "$tmp_count" -eq 0 ]] || fail "A failed final state write left a temporary file behind"
-  [[ "$(<"$XDG_STATE_HOME/selfishell/profile")" == "$before_profile" ]] ||
-    fail "A failed final state write must not corrupt the existing profile state"
+  [[ "$(<"$XDG_STATE_HOME/selfishell/configured")" == "$before_configured" ]] ||
+    fail "A failed final state write must not corrupt the existing configuration marker"
   [[ "$(<"$XDG_STATE_HOME/selfishell/ghostty")" == "$before_ghostty" ]] ||
     fail "A failed final state write must not corrupt the existing ghostty state"
 }
 
 test_managed_file_dry_run_conflict_changes_nothing() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -2259,7 +2287,7 @@ test_original_backup_survives_overwrite_and_uninstall_restore() {
   mkdir -p "$(dirname "$target_file")"
   printf 'original-before-install\n' >"$target_file"
 
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
   local original_backup
@@ -2268,7 +2296,7 @@ test_original_backup_survives_overwrite_and_uninstall_restore() {
   assert_file_content 'original-before-install' "$original_backup"
 
   printf 'user-modification-after-install\n' >"$target_file"
-  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --profile minimal --skip-packages >/dev/null
+  printf 'y\ny\n' | SELFISHELL_TEST_TTY=1 run_selfishell install --skip-packages >/dev/null
 
   [[ "$(sed -n '6p' "$state_file")" == "$original_backup" ]] ||
     fail "Overwriting a conflict must keep the original installation backup"
@@ -2287,9 +2315,9 @@ test_update_tools_only_overwrites_modified_managed_file() {
   local release_root="$TEST_ROOT/release"
 
   build_release_copy "$release_root"
-  setup_fake_minimal_packages
+  setup_fake_packages
 
-  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   printf 'user_modified_vimrc\n' >"$target_file"
@@ -2316,9 +2344,9 @@ test_update_tools_only_skips_modified_managed_file_and_continues() {
   local release_root="$TEST_ROOT/release"
 
   build_release_copy "$release_root"
-  setup_fake_minimal_packages
+  setup_fake_packages
 
-  bash "$release_root/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
 
   local completion_target="$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
   local completion_state="$XDG_STATE_HOME/selfishell/resources/zsh-completion.state"
@@ -2339,8 +2367,8 @@ test_update_tools_only_skips_modified_managed_file_and_continues() {
 }
 
 test_update_tools_only_yes_preserves_modified_file() {
-  setup_fake_minimal_packages
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  setup_fake_packages
+  run_selfishell install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -2362,7 +2390,7 @@ test_update_tools_only_yes_preserves_modified_file() {
 }
 
 test_tools_only_update_reports_its_own_result_without_a_version_transition() {
-  run_selfishell install --profile minimal --skip-packages --yes >/dev/null
+  run_selfishell install --skip-packages --yes >/dev/null
 
   run_selfishell update --tools-only --skip-packages --yes >"$TEST_ROOT/stdout" 2>&1
 

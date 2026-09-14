@@ -80,7 +80,7 @@ run_primary_lifecycle() {
 
   SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
     bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$prefix" \
-    --setup --yes --profile minimal --skip-packages
+    --setup --yes --skip-packages
 
   # --- clean install ---
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "install did not leave .zshrc as a regular, user-owned file"
@@ -115,7 +115,7 @@ run_primary_lifecycle() {
 
   # --- idempotent reinstall ---
   SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
-    "$prefix/bin/selfishell" install --profile minimal --skip-packages --yes >/dev/null
+    "$prefix/bin/selfishell" install --skip-packages --yes >/dev/null
   loader_count="$(grep -Fc '# >>> Selfishell initialize >>>' "$HOME/.zshrc")"
   [[ "$loader_count" == 1 ]] || fail "a second install duplicated the loader block (found $loader_count)"
   vimrc_block_count="$(grep -Fc '" >>> Selfishell vimrc >>>' "$HOME/.vimrc")"
@@ -127,8 +127,8 @@ run_primary_lifecycle() {
   # --- status ---
   local status_output
   status_output="$("$prefix/bin/selfishell" status)" || true
-  printf '%s\n' "$status_output" | grep -Fq '[INFO] Installed profile: minimal' ||
-    fail "status did not report the installed profile"
+  printf '%s\n' "$status_output" | grep -Fq '[INFO] Selfishell configuration is installed.' ||
+    fail "status did not report the installed configuration"
   assert_managed_resources_clean "$prefix" "on a clean install"
 
   # --- configuration update ---
@@ -173,7 +173,7 @@ run_ghostty_preflight_check() {
 
   SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
     bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$prefix" \
-    --setup --yes --profile minimal --skip-packages
+    --setup --yes --skip-packages
 
   [[ "$(<"$XDG_STATE_HOME/selfishell/ghostty")" == 1 ]] ||
     fail "Ghostty did not default to enabled on a clean --yes install"
@@ -200,7 +200,7 @@ run_purge_lifecycle() {
 
   SELFISHELL_RELEASE_ROOT="file://$RELEASE_ROOT" \
     bash "$ROOT_DIR/install.sh" --version "$INITIAL_VERSION" --prefix "$prefix" \
-    --setup --yes --profile minimal --skip-packages
+    --setup --yes --skip-packages
 
   [[ -e "$prefix/bin/selfishell" ]] || fail "bootstrap did not install the CLI link"
 

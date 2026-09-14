@@ -452,7 +452,7 @@ return {
       },
     },
     opts = {
-      -- The developer profile guarantees ripgrep, but not fd.
+      -- Selfishell installs ripgrep, but not fd.
       picker = {
         ui_select = false,
         sources = {

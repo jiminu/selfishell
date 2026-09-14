@@ -35,23 +35,20 @@ cannot reintroduce host tools. A normal local run therefore does not read the
 developer's mise configuration or execute or modify the developer's plugin
 checkout.
 
-### Full-profile mode
+### Full-environment mode
 
-Full mode additionally provisions the pinned mise, Starship, and Zinit -- with
+Full mode additionally provisions the pinned mise, Starship, fzf, zoxide, and Zinit -- with
 its pinned Zsh plugins -- into the benchmark's own isolated `HOME`, via the
 same code path the real installer uses, so `interactive-cached` reflects a
-real developer-profile startup rather than whatever happens to already be on
+real full-environment startup rather than whatever happens to already be on
 the runner's `PATH`. It:
 
 - uses an isolated, temporary `HOME`; the real user `HOME` is never read or
   changed;
 - uses that home as its working directory and gives mise an isolated global
   config;
-- installs the pinned mise, Starship, and Zinit (with its pinned plugins)
-  into that isolated `HOME`;
-- measures fzf and zoxide only if they are already on `PATH` -- installing
-  packages is out of scope for this script, so provision them via the
-  platform package manager first;
+- installs the pinned mise and Zinit (with its pinned plugins), plus Starship,
+  fzf, and zoxide through mise using the release's exact pins;
 - needs network access to provision those tools, so it is not part of the
   regular (network-free) unit test suite, or run in CI -- run it locally
   when needed.

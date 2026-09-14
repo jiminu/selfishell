@@ -137,7 +137,7 @@ command_uninstall() {
   fi
 
   if [[ "$dry_run" == "0" ]]; then
-    rm -f "$SELFISHELL_STATE_DIR/profile" "$SELFISHELL_STATE_DIR/ghostty"
+    rm -f "$SELFISHELL_STATE_DIR/configured" "$SELFISHELL_STATE_DIR/ghostty"
     rmdir "$SELFISHELL_CONFIG_DIR/ghostty" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/nvim/after/lsp" 2>/dev/null || true
     rmdir "$SELFISHELL_CONFIG_DIR/nvim/after" 2>/dev/null || true

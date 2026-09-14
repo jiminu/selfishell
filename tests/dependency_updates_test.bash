@@ -41,6 +41,13 @@ write_mise_toml_fixtures() {
   mkdir -p "$zsh_root/config/shared"
   cat >"$zsh_root/config/shared/mise.toml" <<'EOF'
 [tools]
+starship = "1.25.0"
+fzf = "0.74.3"
+zoxide = "0.9.8"
+ripgrep = "15.1.0"
+eza = "0.23.4"
+bat = "0.26.0"
+jq = "1.8.1"
 node = "24.18.0"
 python = "3.13.14"
 neovim = "0.12.4"
@@ -81,14 +88,14 @@ test_updates_only_matching_manifest_fields() {
   write_zsh_root_fixtures "$zsh_root"
   cat >"$manifest" <<EOF
 # type name version platform architecture source checksum target marker
-download starship 1.0.0 linux amd64 https://old/starship.tar.gz oldsum .local/bin/starship starship
+download mise 1.0.0 linux amd64 https://old/mise-amd64 oldsum .local/bin/mise raw
 download mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw
 git zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh
 nvim-plugin folke/lazy.nvim 1111111111111111111111111111111111111111 all all https://github.com/folke/lazy.nvim.git - - -
 zsh-plugin zsh-users/zsh-completions $OLD_COMPLETIONS all all https://github.com/zsh-users/zsh-completions.git - - -
 EOF
   cat >"$metadata" <<EOF
-download starship 2.0.0 linux amd64 https://new/starship.tar.gz newsum
+download mise 2.0.0 linux amd64 https://new/mise-amd64 newsum
 download mise 2.0.0 linux arm64 https://new/mise newmise
 git zinit v0.2.0
 nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222
@@ -97,9 +104,9 @@ EOF
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
-  assert_manifest_record "$manifest" "Starship metadata was not applied" \
-    download starship 2.0.0 linux amd64 \
-    https://new/starship.tar.gz newsum .local/bin/starship starship
+  assert_manifest_record "$manifest" "AMD64 mise metadata was not applied" \
+    download mise 2.0.0 linux amd64 \
+    https://new/mise-amd64 newsum .local/bin/mise raw
   assert_manifest_record "$manifest" "mise metadata was not applied" \
     download mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw
   assert_manifest_record "$manifest" "Git dependency metadata was not applied" \
@@ -323,6 +330,27 @@ test_mise_tool_update_bumps_pin_in_mise_toml_only() {
     fail "node was modified; this updater must never touch it"
   grep -Fqx 'python = "3.13.14"' "$zsh_root/config/shared/mise.toml" ||
     fail "python was modified; this updater must never touch it"
+}
+
+# Developer CLI tools use the same reviewed pin update path as the existing
+# mise-managed runtimes.
+test_mise_tool_update_bumps_moved_cli_pin() {
+  local manifest metadata zsh_root
+
+  manifest="$TEST_ROOT/dependencies.conf"
+  metadata="$TEST_ROOT/metadata"
+  zsh_root="$TEST_ROOT/zsh-root"
+  write_mise_toml_fixtures "$zsh_root"
+  : >"$manifest"
+  printf 'mise-tool fzf 0.74.4\nmise-tool starship 1.26.0\n' >"$metadata"
+
+  run_dependency_update "$manifest" "$metadata" "$zsh_root"
+
+  grep -Fqx 'fzf = "0.74.4"' "$zsh_root/config/shared/mise.toml" ||
+    fail "The moved fzf CLI pin was not updated"
+  grep -Fqx 'starship = "1.26.0"' "$zsh_root/config/shared/mise.toml" ||
+    fail "The moved Starship pin was not updated"
+  [[ ! -s "$manifest" ]] || fail "mise tool updates changed the direct dependency manifest"
 }
 
 # uv's real upstream history jumps from a 0.5.x pin to 0.12.x: a naive

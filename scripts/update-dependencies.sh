@@ -50,9 +50,9 @@ record_download() {
 }
 
 discover_metadata() {
-  local starship_tag starship_version mise_tag mise_version asset_architecture
+  local mise_tag mise_version asset_architecture
   local type name source
-  local repository tag commit asset
+  local repository tag commit
 
   command -v curl >/dev/null 2>&1 || {
     printf 'curl is required.\n' >&2
@@ -81,21 +81,6 @@ discover_metadata() {
     printf '%s %s %s\n' "$type" "$name" "$commit" >>"$metadata"
   done <"$manifest"
 
-  starship_tag="$(github_latest_tag starship/starship)"
-  starship_version="${starship_tag#v}"
-  for platform in linux macos; do
-    for architecture in amd64 arm64; do
-      case "$platform:$architecture" in
-        linux:amd64) asset=starship-x86_64-unknown-linux-gnu.tar.gz ;;
-        linux:arm64) asset=starship-aarch64-unknown-linux-musl.tar.gz ;;
-        macos:amd64) asset=starship-x86_64-apple-darwin.tar.gz ;;
-        macos:arm64) asset=starship-aarch64-apple-darwin.tar.gz ;;
-      esac
-      source="https://github.com/starship/starship/releases/download/$starship_tag/$asset"
-      record_download starship "$starship_version" "$platform" "$architecture" "$source"
-    done
-  done
-
   mise_tag="$(github_latest_tag jdx/mise)"
   mise_version="${mise_tag#v}"
   for platform in linux macos; do
@@ -107,18 +92,26 @@ discover_metadata() {
   done
 
   local tool repository candidate_tag
-  for tool in neovim tree-sitter uv gh; do
+  for tool in starship fzf zoxide ripgrep eza bat jq neovim tree-sitter uv gh; do
     repository="$(mise_tool_repository "$tool")"
     candidate_tag="$(github_latest_tag "$repository")"
-    printf 'mise-tool %s %s\n' "$tool" "${candidate_tag#v}" >>"$metadata"
+    candidate_tag="${candidate_tag#v}"
+    candidate_tag="${candidate_tag#jq-}"
+    printf 'mise-tool %s %s\n' "$tool" "$candidate_tag" >>"$metadata"
   done
 }
 
-# Maps a bumpable mise tool to its upstream repository. node and python are
-# deliberately absent -- they stay manual, and discover_metadata() never
-# queries anything unlisted.
+# Maps a bumpable mise tool to its upstream repository. node and python stay
+# manual because their release lines need a policy choice, not a latest tag.
 mise_tool_repository() {
   case "$1" in
+    starship) printf 'starship/starship\n' ;;
+    fzf) printf 'junegunn/fzf\n' ;;
+    zoxide) printf 'ajeetdsouza/zoxide\n' ;;
+    ripgrep) printf 'BurntSushi/ripgrep\n' ;;
+    eza) printf 'eza-community/eza\n' ;;
+    bat) printf 'sharkdp/bat\n' ;;
+    jq) printf 'jqlang/jq\n' ;;
     neovim) printf 'neovim/neovim\n' ;;
     tree-sitter) printf 'tree-sitter/tree-sitter\n' ;;
     uv) printf 'astral-sh/uv\n' ;;

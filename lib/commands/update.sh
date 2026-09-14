@@ -7,7 +7,7 @@ Usage:
                      [--skip-packages] [--dry-run] [--yes]
 
 By default, update to the latest Selfishell release and synchronize that
-release's profile packages, approved tools, and managed configuration. If the
+release's packages, approved tools, and managed configuration. If the
 target release is already installed, no changes are made. Use --tools-only to
 explicitly resynchronize the current release's tools and configuration, or
 --cli-only to limit the scope to the CLI release itself.
@@ -32,10 +32,10 @@ update_tools_and_configuration() {
   # 1 when command_update closes with the version transition instead, so this
   # phase leaves the final result to it.
   local defer_result="$5"
-  local profile platform ghostty_enabled=0
+  local platform ghostty_enabled=0
 
   selfishell_initialize_paths
-  if [[ ! -r "$SELFISHELL_STATE_DIR/profile" ]]; then
+  if [[ ! -r "$SELFISHELL_STATE_DIR/configured" ]]; then
     if [[ "$require_configuration" == 1 ]]; then
       cli_error "Selfishell configuration is not installed."
       return "$SELFISHELL_EXIT_ERROR"
@@ -43,10 +43,10 @@ update_tools_and_configuration() {
     printf '%sSelfishell configuration is not installed; skipping tools and configuration.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
-  profile="$(<"$SELFISHELL_STATE_DIR/profile")"
+  package_manifest_load || return
   [[ ! -r "$SELFISHELL_STATE_DIR/ghostty" ]] || ghostty_enabled="$(<"$SELFISHELL_STATE_DIR/ghostty")"
   [[ "$ghostty_enabled" == "1" ]] || ghostty_enabled=0
-  confirm_action "Synchronize $profile profile packages and configuration?" "$assume_yes" "$dry_run" || return
+  confirm_action "Synchronize Selfishell packages and configuration?" "$assume_yes" "$dry_run" || return
   platform="$(detect_platform)"
   managed_preflight_zsh_loader "$assume_yes" "$dry_run" || return
   managed_preflight_block_target user-zprofile "$HOME/.zprofile" "$assume_yes" "$dry_run" || return
@@ -62,18 +62,16 @@ update_tools_and_configuration() {
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
 
-  profile_load "$profile"
-
   if [[ "$skip_packages" == "1" ]]; then
     printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
   else
-    packages_install_profile "$platform" "$dry_run"
+    packages_install "$platform" "$dry_run"
     if [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]]; then
       homebrew_install_packages optional cask "$dry_run" ghostty
     fi
   fi
-  install_managed_configuration "$platform" "$dry_run" "$profile" "$ghostty_enabled" "$assume_yes"
-  if [[ "$skip_packages" == "0" && "$profile" == "developer" ]]; then
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled" "$assume_yes"
+  if [[ "$skip_packages" == "0" ]]; then
     install_neovim_plugins "$dry_run" || return
   fi
   if [[ "$dry_run" == 1 ]]; then
