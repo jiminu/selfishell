@@ -102,9 +102,4 @@ Review the diff and CI results, merge when ready, then publish a normal patch
 release by creating the next release tag. Use `scripts/next-patch-version.sh`
 when you want the helper to calculate that patch version.
 
-Every release asset receives signed build provenance through GitHub Artifact
-Attestations before publication. Verification requires GitHub CLI:
-
-```bash
-gh attestation verify PATH_TO_ARCHIVE --repo jiminu/selfishell
-```
+For manual archive verification, see the [security model](SECURITY.md).

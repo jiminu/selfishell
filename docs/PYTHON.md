@@ -1,20 +1,13 @@
 # Python Development with Selfishell
 
-Selfishell manages Python runtimes and packages using a modern, fast toolchain powered by **`mise`** and **`uv`**. This workflow ensures high performance, reproducibility, and clean environment isolation.
-
-## Toolchain Overview
-
-* **Runtime Manager (`mise`)**: Handles the installation of global and local Python versions.
-* **Package & Virtualenv Manager (`uv`)**: Handles dependencies, virtual environments, and project bootstrapping at near-instant speed.
-* **Auto-Activation**: When configured, entering a uv project directory (one with a `uv.lock` file) will automatically manage and activate its virtual environment.
-
----
+Selfishell uses `mise` for Python versions and `uv` for packages and virtual
+environments. Project settings can enable automatic virtualenv activation.
 
 ## Getting Started
 
 ### 1. Creating a Virtual Environment
 
-Navigate to your Python project directory and run `uv venv` to create a virtual environment. It will be created in a `.venv` folder by default.
+Create a `.venv` in your project directory:
 
 ```bash
 cd /path/to/project
@@ -29,30 +22,30 @@ uv venv --python 3.12
 
 ### 2. Auto-Activation
 
-`python.uv_venv_auto` integrates mise with uv to manage a project's virtual environment, but it applies to uv projects that have a `uv.lock` file, not simply any directory containing a `.venv`. A `uv.lock` is normally created as part of a uv project workflow, for example by `uv lock` or `uv sync`.
+`python.uv_venv_auto` requires a uv project with a `uv.lock` file, created by
+`uv lock` or `uv sync`; a `.venv` directory alone is insufficient.
 
-Add the setting to the `[settings]` section of your project's local `mise.toml` file:
+Add this setting to your project's `mise.toml`:
 
 ```toml
 [settings]
 python.uv_venv_auto = "create|source"
 ```
 
-`"source"` activates an existing virtual environment; `"create|source"` also creates one when necessary before activating it.
+`"source"` activates an existing virtual environment; `"create|source"` also
+creates one when necessary.
 
 Once configured, entering the uv project directory will activate it:
 
 ```bash
 cd /path/to/project
-# Your shell prompt (Starship) will show the active virtual environment (.venv)
-# Run which to verify
 which python
-# Should output: /path/to/project/.venv/bin/python
+# Expected: /path/to/project/.venv/bin/python
 ```
 
 ### 3. Installing Packages
 
-Use `uv pip` to install packages inside the active virtual environment at high speeds:
+Install packages in the virtual environment:
 
 ```bash
 uv pip install requests
@@ -70,11 +63,8 @@ To generate a pinned lock file from dependency specifications:
 uv pip compile pyproject.toml -o requirements.txt
 ```
 
----
-
 ## Editor Integration (Neovim)
 
-Selfishell's built-in Neovim configuration integrates with Python LSP and tools. 
-
-To ensure Neovim can resolve your project dependencies, always run `nvim` from the project root after the virtual environment has been created and packages have been installed.
-Once auto-activation is configured, `mise` will automatically activate the uv project's `.venv` when entering its directory, allowing Neovim to inherit the correct path to the local virtualenv Python interpreter.
+Create the virtual environment and install dependencies before launching
+`nvim` from the project root. With auto-activation configured, Neovim inherits
+the uv project's virtualenv Python path for its Python tooling.

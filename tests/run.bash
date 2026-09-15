@@ -22,10 +22,8 @@ run_suite() {
 }
 
 main() {
-  local suite_index=0
   local suite_jobs="${SELFISHELL_SUITE_JOBS:-4}"
-  local batch_index
-  local failures=0
+  local failures=0 result=0
   local suite
   local suite_path
   local failed_suites=()
@@ -35,9 +33,6 @@ main() {
     lifecycle_e2e_test.bash
     common_zsh_test.bash
   )
-  local batch_logs=()
-  local batch_pids=()
-  local batch_suites=()
 
   case "$suite_jobs" in
     '' | *[!0-9]* | 0)
@@ -58,31 +53,23 @@ main() {
   trap 'rm -rf "$log_root"' EXIT HUP INT TERM
   printf 'Running %d test suites (jobs: %d)\n' "${#suites[@]}" "$suite_jobs"
 
-  while ((suite_index < ${#suites[@]})); do
-    batch_logs=()
-    batch_pids=()
-    batch_suites=()
+  export ROOT_DIR log_root
+  export -f run_suite
+  # shellcheck disable=SC2016 # Expand variables in each worker.
+  printf '%s\0' "${suites[@]}" | xargs -0 -n 1 -P "$suite_jobs" bash -c '
+    status=0
+    run_suite "$1" >"$log_root/$1.log" 2>&1 || status=$?
+    printf "%s\n" "$status" >"$log_root/$1.status"
+  ' _ || result=1
 
-    for ((batch_index = 0; batch_index < suite_jobs && suite_index < ${#suites[@]}; batch_index++)); do
-      suite="${suites[$suite_index]}"
-      batch_logs+=("$log_root/$suite_index.log")
-      batch_suites+=("$suite")
-      run_suite "$suite" >"$log_root/$suite_index.log" 2>&1 &
-      batch_pids+=("$!")
-      suite_index=$((suite_index + 1))
-    done
-
-    for batch_index in "${!batch_pids[@]}"; do
-      if ! wait "${batch_pids[$batch_index]}"; then
-        failures=$((failures + 1))
-        failed_suites+=("${batch_suites[$batch_index]}")
-      fi
-      cat "${batch_logs[$batch_index]}"
-    done
+  for suite in "${suites[@]}"; do
+    [[ ! -f "$log_root/$suite.log" ]] || cat "$log_root/$suite.log"
+    if [[ ! -f "$log_root/$suite.status" || "$(<"$log_root/$suite.status")" != 0 ]]; then
+      failures=$((failures + 1))
+      failed_suites+=("$suite")
+    fi
   done
 
-  # Name the suites: every suite's output is interleaved above, so a bare count
-  # leaves the reader grepping hundreds of lines for the failure.
   if ((failures > 0)); then
     printf '%d test suite(s) failed: %s\n' "$failures" "${failed_suites[*]}" >&2
     return 1
@@ -90,6 +77,7 @@ main() {
 
   trap - EXIT HUP INT TERM
   rm -rf "$log_root"
+  return "$result"
 }
 
 main "$@"

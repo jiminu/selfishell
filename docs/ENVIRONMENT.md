@@ -4,18 +4,15 @@ Selfishell installs one development environment. `packages.conf` declares
 its packages: Zsh, Git, Vim, Starship, Zinit, Neovim, CLI tools, language
 runtimes, compiler tooling, and optional macOS terminal fonts.
 
-Selfishell installs a pinned mise binary and activates it for
-interactive Zsh. Selfishell keeps its defaults in
-`${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/selfishell.toml` (which is symlinked to `~/.config/mise/conf.d/selfishell.toml` so it is automatically loaded by `mise`); a project's
-`mise.toml` can select different tool versions.
+Selfishell installs a pinned mise binary and activates it for interactive Zsh.
+Its defaults live under `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/`,
+linked into mise's `conf.d/selfishell.toml`. Project-local `mise.toml` files
+can override these defaults.
 
-Developer tools managed by mise use exact reviewed versions pinned in
-`config/shared/mise.toml`, the single source of truth for these versions. This
-includes Starship, FZF, Zoxide, Ripgrep, Eza, Bat, jq, Neovim, Tree-sitter CLI, Node.js,
-Python, uv, and GitHub CLI on both macOS and Ubuntu. Eza and Bat remain optional;
-failure to install either does not stop setup. Projects remain free to override
-the defaults in a local `mise.toml`. Updating the defaults requires a normal
-Selfishell release and never happens during shell startup.
+`config/shared/mise.toml` pins the reviewed versions of Starship, FZF, Zoxide,
+Ripgrep, Eza, Bat, jq, Neovim, Tree-sitter CLI, Node.js, Python, uv, and GitHub
+CLI on both macOS and Ubuntu. These defaults change through Selfishell releases;
+shell startup never updates them.
 
 Mise manages the Starship executable and its version; Selfishell still manages
 `starship.toml` and prompt initialization.
@@ -43,11 +40,9 @@ Install the environment:
 selfishell install --yes
 ```
 
-`selfishell update` uses `packages.conf` to install missing Apt, Homebrew, and directly
-managed tools and synchronize mise tools before updating configuration. Apt and
-Homebrew retain responsibility for packages still declared through them.
-Copies of a tool left from an older release are not removed
-automatically; after mise activation, its pinned tool version takes precedence.
+See [Updates and rollback](UPDATES.md) for synchronization and cleanup behavior.
+Copies of tools left from older package managers are preserved; after mise
+activation, its pinned versions take precedence.
 
 Package requirements have two failure policies:
 
@@ -55,12 +50,10 @@ Package requirements have two failure policies:
 - `optional` packages are recommended and attempted automatically, but an
   unavailable package or installation failure does not stop the rest of setup.
 
-`optional` does not mean that Selfishell asks about each package. Ghostty is the
-separate interactive installation choice on macOS.
-
-On macOS, interactive installation separately asks whether to install Ghostty
-and manage its configuration. `--yes` accepts that choice automatically. The
-choice is saved and reused by `selfishell update`.
+Eza and Bat are optional. Only Ghostty has a separate installation choice:
+on macOS, interactive setup asks whether to install it and manage its
+configuration. `--yes` accepts that choice automatically. The choice is saved
+and reused by `selfishell update`.
 
 ## Neovim workflow
 

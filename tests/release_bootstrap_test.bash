@@ -491,14 +491,8 @@ test_update_preserves_non_link_previous_path_with_a_warning() {
     fail "A preserved non-symlink previous path did not warn: $output"
 }
 
-# release_installation_paths already refuses to treat a non-symlink current
-# path as a versioned installation at all, so a corrupted current can never
-# reach release_atomic_link to be silently replaced.
-#
-# Invokes the retained release's own binary, not prefix/bin/selfishell: that
-# entrypoint embeds "current" as a path component, so once current is a regular
-# file the shell fails with ENOTDIR before release_installation_paths runs --
-# and the test would pass even with that guard deleted.
+# Run the retained binary so the guard handles a non-link current path;
+# the public entrypoint would fail with ENOTDIR before reaching the guard.
 test_update_rejects_non_link_current_path() {
   local version status retained_cli
 
