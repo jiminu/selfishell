@@ -56,6 +56,79 @@ test_benchmark_base_mode_runs_without_network() {
     fail "Base-mode benchmark did not report the expected metrics: $output"
 }
 
+test_benchmark_measures_prompts_and_configured_diagnostics() {
+  local output results
+
+  setup_test_home
+  results="$TEST_ROOT/results.tsv"
+  output="$(SELFISHELL_BENCHMARK_ITERATIONS=1 SELFISHELL_BENCHMARK_RESULTS_FILE="$results" \
+    bash "$ROOT_DIR/scripts/benchmark.sh" --mode base --prompt --diagnostics)"
+
+  for metric in prompt-first-empty prompt-command-empty prompt-first-repository prompt-command-repository cli-status cli-doctor; do
+    awk -F '\t' -v metric="$metric" '$4 == metric && NF == 8 && $6 > 0 { found = 1 } END { exit !found }' "$results" ||
+      fail "Missing numeric result for $metric: $output"
+  done
+  [[ "$output" == *'Diagnostics: configured HOME'* && "$output" == *'cli-status exit='* && "$output" == *'[SUMMARY] Managed paths:'* ]] ||
+    fail "Diagnostics did not describe the measured installation: $output"
+}
+
+test_prompt_probe_validates_context_and_prompt_cycles() {
+  PYTHONDONTWRITEBYTECODE=1 python3 - "$ROOT_DIR/scripts" <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+spec = importlib.util.spec_from_file_location("probe", sys.argv[1] + "/benchmark-prompt.py")
+probe = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(probe)
+os.environ.update(WSL_DISTRO_NAME="Ubuntu", ZDOTDIR="/temporary/prompt",
+                  SELFISHELL_BENCHMARK_PLATFORM_CONFIG="/fixture/zshrc",
+                  SELFISHELL_BENCHMARK_PATH="/usr/bin:/mnt/c/Windows",
+                  MISE_DATA_DIR="/ambient/mise", VIRTUAL_ENV="/ambient/venv")
+env = probe.prompt_environment(Path("/fixture"), Path("/temporary/home"))
+assert env["WSL_DISTRO_NAME"] == "Ubuntu", "WSL startup optimization was disabled"
+assert env["MISE_DATA_DIR"] == "/temporary/home/.local/share/mise"
+assert "VIRTUAL_ENV" not in env
+reader, writer = os.pipe()
+try:
+    os.write(writer, b"__SFS_READY_1__")
+    try:
+        probe.wait_for_prompt(reader, 2, timeout=0.01)
+    except RuntimeError as error:
+        assert "timed out" in str(error)
+    else:
+        raise AssertionError("An editing redraw counted as the next prompt")
+    os.write(writer, b"__SFS_READY_2__")
+    probe.wait_for_prompt(reader, 2, timeout=0.1)
+finally:
+    os.close(writer)
+try:
+    probe.wait_for_prompt(reader, 3, timeout=0.1)
+except RuntimeError as error:
+    assert "Shell exited" in str(error)
+else:
+    raise AssertionError("A closed shell produced a successful measurement")
+finally:
+    os.close(reader)
+with tempfile.TemporaryDirectory(prefix="selfishell-prompt-test-") as directory:
+    home = Path(directory)
+    (home / ".zshrc").write_text('''
+setopt promptsubst
+typeset -gi count=0
+precmd() { (( ++count )); }
+RPROMPT='__SFS_READY_${count}__'
+zshexit() { print finished >> "$HOME/finished"; }
+[[ "$MISE_CEILING_PATHS" == "$PWD" ]] || exit 2
+''')
+    probe.measure(home.resolve(), {"HOME": directory, "ZDOTDIR": directory,
+                         "PATH": "/usr/bin:/bin", "TERM": "xterm-256color"}, 1)
+    assert (home / "finished").exists(), "Probe killed the shell before its exit hooks"
+    assert len((home / "finished").read_text().splitlines()) == 2
+PY
+}
+
 test_benchmark_rejects_missing_retained_zsh_module() {
   local checkout output status=0
 
@@ -138,6 +211,7 @@ test_benchmark_writes_opt_in_zprof_report() {
 
   [[ -s "$profile_file" ]] || fail "Benchmark did not write the requested zprof report"
   grep -Fq 'num  calls' "$profile_file" || fail "Benchmark output is not a zprof report"
+  ! grep -Fq 'no such file or directory' "$profile_file" || fail "Benchmark omitted a sourced module"
   teardown_test_home
 }
 
