@@ -19,8 +19,9 @@ SELFISHELL_BENCHMARK_PROFILE=full bash scripts/benchmark.sh
 ```
 
 Each metric reports the mean, median (`p50`), 95th percentile (`p95`), and
-maximum duration in milliseconds. `interactive-cached` starts a complete
-interactive Zsh through the platform `.zshrc`.
+maximum duration in milliseconds. `interactive-cached` loads the platform
+`.zshrc` and exits; it does not measure a visible prompt, command-to-prompt
+latency, or deferred plugin readiness. Measure those separately in a terminal.
 
 ### Base mode
 
@@ -37,21 +38,14 @@ checkout.
 
 ### Full-environment mode
 
-Full mode additionally provisions the pinned mise, Starship, fzf, zoxide, and Zinit -- with
-its pinned Zsh plugins -- into the benchmark's own isolated `HOME`, via the
-same code path the real installer uses, so `interactive-cached` reflects a
-real full-environment startup rather than whatever happens to already be on
-the runner's `PATH`. It:
+Full mode provisions pinned mise, Starship, fzf, zoxide, Zinit, and its Zsh
+plugins through the production installers into the temporary `HOME`. It uses
+the release's exact pins and an isolated mise configuration, so measurements
+include the managed shell integrations without changing the developer's tools
+or plugin checkouts. Provisioning requires network access; run it locally when
+needed, outside CI and the network-free test suite.
 
-- uses an isolated, temporary `HOME`; the real user `HOME` is never read or
-  changed;
-- uses that home as its working directory and gives mise an isolated global
-  config;
-- installs the pinned mise and Zinit (with its pinned plugins), plus Starship,
-  fzf, and zoxide through mise using the release's exact pins;
-- needs network access to provision those tools, so it is not part of the
-  regular (network-free) unit test suite, or run in CI -- run it locally
-  when needed.
+## Startup caches
 
 Interactive startup audits completion directories on first use and once daily.
 The `.zcompdump.audit` marker records the audit separately from `.zcompdump`,
@@ -89,11 +83,9 @@ SELFISHELL_BENCHMARK_ZPROF_FILE=/tmp/selfishell-startup.zprof \
   bash scripts/benchmark.sh --mode full
 ```
 
-The report ranks initialization functions by time and is intended for finding
-expensive startup paths. The benchmark loads Zsh's built-in `zsh/zprof` module
-only for this additional diagnostic startup, after every reported metric and
-budget check has completed. It adds no code or dependency to ordinary shell
-startup and does not enforce a performance threshold.
+The report ranks initialization functions by time. The profiler runs once after
+all timed measurements and budget checks; it adds no overhead to ordinary
+startup and enforces no threshold.
 
 ## Budgets
 

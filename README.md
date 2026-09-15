@@ -41,9 +41,8 @@ Ghostty, and platform notes.
 
 ## Development Environment
 
-`selfishell install` sets up one consistent environment: Zsh, Git, Vim,
-Starship, Zinit, Neovim, mise-managed runtimes, CLI tools, and build tooling.
-See [Environment](docs/ENVIRONMENT.md) for tool management and editor behavior.
+See [Environment](docs/ENVIRONMENT.md) for managed tools, prompt behavior,
+and the Neovim workflow.
 
 ## Everyday Commands
 

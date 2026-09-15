@@ -11,7 +11,8 @@ release provenance and preservation of existing files are security boundaries.
   checksums or stronger provenance when supported by the selected backend.
 - Git dependencies use an approved tag or commit.
 - Existing configuration is backed up and tracked before managed replacement.
-- Interactive shell startup performs no network update.
+- Shell startup never installs updates; release metadata can refresh in the
+  background. See [update notices](UPDATES.md#status-and-update-notices).
 - LSP servers added with `:LspInstall` are not version-approved the way the
   default servers (lua_ls, pyright, bashls, jsonls, yamlls, tombi,
   marksman) are: they install from the Mason registry, unpinned, the

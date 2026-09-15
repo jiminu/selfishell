@@ -135,6 +135,9 @@ test_mise_cleanup_preserves_current_and_project_versions_not_rollback_only() {
   done
   export SELFISHELL_ROOT="$HOME/selfishell/releases/2.0.0"
   mkdir -p "$SELFISHELL_ROOT/config/shared" "$HOME/selfishell/releases/1.0.0/config/shared" "$HOME/project with spaces"
+  # Exercise symlinked parents and repeated separators on every platform.
+  ln -s "$HOME/selfishell" "$HOME/release alias"
+  SELFISHELL_ROOT="$HOME/release alias//releases/2.0.0"
   ln -s releases/2.0.0 "$HOME/selfishell/current"
   ln -s releases/1.0.0 "$HOME/selfishell/previous"
   for version in 1.0.0 2.0.0; do

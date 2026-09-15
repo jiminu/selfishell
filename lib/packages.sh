@@ -4,6 +4,7 @@
 packages_prune_mise() (
   local platform="$1" dry_run="$2"
   local index package_platform mise_command previous version tracked ignored
+  local tracked_config config_tracked=0
   local config="$SELFISHELL_ROOT/config/shared/mise.toml" previous_config=""
   local tools=()
 
@@ -68,11 +69,14 @@ packages_prune_mise() (
   fi
   "$mise_command" -C "${config%/*}" config ls >/dev/null || return
   tracked="$("$mise_command" -C "$SELFISHELL_ROOT/config/shared" config ls --tracked-configs)" || return
-  # mise reports tracking-write failures as warnings; don't prune without pins.
-  case $'\n'"$tracked"$'\n' in
-    *$'\n'"$config"$'\n'*) ;;
-    *) return 1 ;;
-  esac
+  # Require tracked pins despite warning-only failures; mise returns canonical paths.
+  while IFS= read -r tracked_config; do
+    if [[ "$tracked_config" -ef "$config" ]]; then
+      config_tracked=1
+      break
+    fi
+  done <<<"$tracked"
+  ((config_tracked)) || return 1
   "$mise_command" -C "$SELFISHELL_ROOT/config/shared" prune --tools --yes "${tools[@]}"
 )
 

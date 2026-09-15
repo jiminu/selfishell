@@ -118,13 +118,8 @@ done <"$ROOT_DIR/dependencies.conf"
 [[ -r "$XDG_STATE_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim runtime lock is missing"
 [[ ! -e "$XDG_CONFIG_HOME/selfishell/nvim/lazy-lock.json" ]] || fail "lazy.nvim lock polluted managed configuration"
 
-# Parsers install lazily in the background on first open of a filetype, so the
-# checks below poll with vim.wait() rather than asserting presence immediately.
-#
-# config.autocmds no longer re-fires FileType after an install, which used to
-# make rainbow-delimiters retry once a parser appeared. So a first-ever open
-# proves only the install and Tree-sitter highlighting; rainbow-delimiters is
-# checked separately below against an already-installed parser.
+# Wait for first-use parser installation and highlighting. Test rainbow-delimiters
+# separately with an installed parser: installation does not re-fire FileType.
 
 printf 'terraform { required_version = ">= 1.0" }\n' >"$TEST_ROOT/main.tf"
 if ! smoke_output="$(nvim --headless "$TEST_ROOT/main.tf" \
@@ -150,15 +145,8 @@ fi
   fail "Python highlighting smoke did not complete"
 }
 
-# A second Neovim process: the Python parser is already on disk, so this is
-# the ordinary FileType flow with no in-flight install.
-#
-# start() attaches a LanguageTree but parses lazily, normally at the next
-# redraw. rainbow-delimiters attaches synchronously at FileType and reads
-# whatever tree exists then, so interactively the post-startup redraw is what
-# produces the first highlight -- and headless has no redraw. parse() here is
-# what that redraw would trigger internally, firing the same on_changedtree
-# callback that populates its marks.
+# Reopen with the installed parser. Headless Neovim has no redraw, so parse()
+# triggers the tree-change callback that populates rainbow-delimiters marks.
 if ! rainbow_smoke_output="$(nvim --headless "$TEST_ROOT/main.py" \
   '+lua local bufnr = vim.api.nvim_get_current_buf(); assert(vim.bo.filetype == "python", "unexpected filetype: " .. vim.bo.filetype); local parser_ok, parser = pcall(vim.treesitter.get_parser, bufnr, "python"); assert(parser_ok, "Python parser was not already installed for the second process"); parser:parse(); local rainbow = require("rainbow-delimiters.lib"); local attached = vim.wait(5000, function() local settings = rainbow.buffers[bufnr]; if not settings then return false end; local marks = vim.api.nvim_buf_get_extmarks(bufnr, rainbow.nsids.python, 0, -1, { details = true }); for _, mark in ipairs(marks) do local hl = mark[4].hl_group; if type(hl) == "string" and hl:find("RainbowDelimiter", 1, true) == 1 then return true end end return false end); assert(attached, "rainbow-delimiters did not highlight a Python buffer with an already-installed parser"); print("Rainbow-delimiters smoke: OK")' \
   +qa 2>&1)"; then

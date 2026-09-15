@@ -59,14 +59,18 @@ managed_write_state() {
   local backup="$6"
   local checksum="$7"
   local state_file
-  local temporary_file
+  local temporary_file state_content
 
-  mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
   state_file="$(managed_state_path "$resource")"
+  printf -v state_content '2\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$type" "$status" "$target" "$reference" "$backup" "$checksum"
+  if managed_path_is_regular_file "$state_file" && cmp -s "$state_file" <(printf '%s' "$state_content"); then
+    return 0
+  fi
+  mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
   temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
-  if ! printf '2\n%s\n%s\n%s\n%s\n%s\n%s\n' \
-    "$type" "$status" "$target" "$reference" "$backup" "$checksum" >"$temporary_file"; then
+  if ! printf '%s' "$state_content" >"$temporary_file"; then
     rm -f "$temporary_file"
     return "$SELFISHELL_EXIT_ERROR"
   fi

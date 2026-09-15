@@ -195,4 +195,42 @@ EOF
   teardown_test_home
 }
 
+# shellcheck disable=SC2016 # Fixture variables expand in child shells.
+test_suite_runner_refills_slots_and_preserves_failure_reports() {
+  local fixture output status=0
+
+  setup_test_home
+  fixture="$TEST_ROOT/fixture/tests"
+  mkdir -p "$fixture"
+  cp "$ROOT_DIR/tests/run.bash" "$fixture/run.bash"
+  cat >"$fixture/managed_install_test.bash" <<'EOF'
+for ((attempt = 0; attempt < 100; attempt++)); do
+  [[ ! -f "$HOME/released" ]] || break
+  sleep 0.1
+done
+[[ -f "$HOME/released" ]] || exit 1
+: >"$HOME/completed"
+EOF
+  printf 'exit 1\n' >"$fixture/release_bootstrap_test.bash"
+  printf ': >"$HOME/released"\n' >"$fixture/lifecycle_e2e_test.bash"
+  printf 'exit 0\n' >"$fixture/common_zsh_test.bash"
+  printf ': >"$HOME/last-suite"\n' >"$fixture/extra_test.bash"
+
+  output="$(SELFISHELL_SUITE_JOBS=2 bash "$fixture/run.bash" 2>&1)" || status=$?
+
+  [[ -f "$HOME/completed" ]] || fail "An idle suite slot waited for the whole batch"
+  [[ -f "$HOME/last-suite" ]] || fail "A failing suite prevented later suites from running"
+  [[ "$status" == 1 && "$output" == *'1 test suite(s) failed: release_bootstrap_test.bash'* ]] ||
+    fail "Suite runner lost the failing suite's name or exit status: $output"
+  [[ "$(grep -c '^SUITE:' <<<"$output")" == 5 ]] || fail "Suite runner omitted a suite log: $output"
+
+  mkdir "$TEST_ROOT/bin"
+  printf '#!/bin/sh\nexit 1\n' >"$TEST_ROOT/bin/xargs"
+  chmod +x "$TEST_ROOT/bin/xargs"
+  status=0
+  output="$(PATH="$TEST_ROOT/bin:$PATH" SELFISHELL_SUITE_JOBS=2 bash "$fixture/run.bash" 2>&1)" || status=$?
+  [[ "$status" == 1 && "$output" == *'5 test suite(s) failed:'* ]] ||
+    fail "Dispatcher failure was counted as an extra suite: $output"
+}
+
 run_discovered_tests '' teardown_test_home

@@ -114,37 +114,34 @@ test_apt_reinstalls_removed_but_not_purged_package() {
     fail "A removed-but-not-purged (rc) package was not reinstalled: got [$MOCK_INSTALLED_PACKAGES]"
 }
 
-test_apt_skips_index_update_when_packages_are_installed() {
+test_apt_leaves_installed_packages_unchanged_and_quiet() {
+  setup_test_home
   reset_package_mocks
   MOCK_DPKG_PACKAGES="first second"
 
-  apt_install_managed_packages required 0 first second
+  apt_install_managed_packages required 0 first second >"$TEST_ROOT/output"
 
   [[ "$MOCK_APT_UPDATE_COUNT" -eq 0 ]] || fail "Installed apt packages triggered an index update"
   [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed apt packages were reinstalled"
+  [[ ! -s "$TEST_ROOT/output" ]] || fail "Installed apt packages produced output"
 }
 
-test_apt_suppresses_already_installed_output() {
-  local output
-  reset_package_mocks
-  MOCK_DPKG_PACKAGES="first second"
+test_homebrew_leaves_installed_packages_unchanged_and_quiet() {
+  local manager requirement
+  setup_test_home
 
-  output="$(apt_install_managed_packages required 0 first second)"
+  for manager in formula cask; do
+    reset_package_mocks
+    MOCK_BREW_FORMULAE=$'first\nsecond'
+    MOCK_BREW_CASKS=$'first\nsecond'
 
-  [[ -z "$output" ]] || fail "Installed apt packages produced output: $output"
-}
+    requirement=optional
+    [[ "$manager" != formula ]] || requirement=required
+    homebrew_install_packages "$requirement" "$manager" 0 first second >"$TEST_ROOT/output"
 
-test_homebrew_suppresses_already_installed_output() {
-  local output
-  reset_package_mocks
-  MOCK_BREW_FORMULAE="installed"
-  MOCK_BREW_CASKS="font-one"
-
-  output="$(homebrew_install_packages required formula 0 installed)"
-  [[ -z "$output" ]] || fail "Installed Homebrew formulae produced output: $output"
-
-  output="$(homebrew_install_packages optional cask 0 font-one)"
-  [[ -z "$output" ]] || fail "Installed Homebrew casks produced output: $output"
+    [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed Homebrew $manager packages were reinstalled"
+    [[ ! -s "$TEST_ROOT/output" ]] || fail "Installed Homebrew $manager packages produced output"
+  done
 }
 
 test_apt_non_root_requires_sudo() {
@@ -215,15 +212,6 @@ test_homebrew_installs_only_missing_packages() {
   [[ "$MOCK_INSTALLED_PACKAGES" == missing ]] || fail "Homebrew did not filter installed formulae"
 }
 
-test_homebrew_skips_install_when_packages_are_installed() {
-  reset_package_mocks
-  MOCK_BREW_CASKS=$'font-one\nfont-two'
-
-  homebrew_install_packages optional cask 0 font-one font-two
-
-  [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed Homebrew casks were reinstalled"
-}
-
 test_homebrew_suppresses_duplicate_confirmation() {
   reset_package_mocks
 
@@ -242,4 +230,4 @@ test_homebrew_required_failure_fails() {
   fi
 }
 
-run_discovered_tests
+run_discovered_tests '' teardown_test_home

@@ -119,7 +119,18 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "Zsh loader state version was not recorded"
   [[ "$(sed -n '2p' "$XDG_STATE_HOME/selfishell/resources/user-zshrc.state")" == block ]] ||
     fail "Zsh loader was not recorded as a managed block"
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" ]] || fail "Install omitted the user mise config"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
+  cmp -s "$ROOT_DIR/config/shared/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
+    fail "Neovim init.lua was not installed for the development environment"
+  cmp -s "$ROOT_DIR/config/shared/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
+    fail "Neovim options module was not installed for the development environment"
+  cmp -s "$ROOT_DIR/config/shared/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
+    fail "Neovim lsp plugin was not installed for the development environment"
+  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" && ! -L "$XDG_CONFIG_HOME/mise/config.toml" ]] ||
+    fail "Developer install did not create a user-owned mise config"
+  ! grep -Fqx "$XDG_CONFIG_HOME/mise/config.toml" "$SELFISHELL_RESOURCE_STATE_DIR"/*.state ||
+    fail "User-owned mise config was recorded as a managed resource"
 }
 
 test_install_switches_login_shell_to_zsh() {
@@ -142,24 +153,6 @@ EOF
   chsh_arguments="$(<"$HOME/chsh-args")"
   [[ "$chsh_arguments" == -s* ]] || fail "Install did not request a Zsh login shell"
   [[ "$chsh_arguments" == *zsh* ]] || fail "Install did not request a Zsh login shell"
-}
-
-test_install_includes_neovim_configuration() {
-  printf 'original zshrc' >"$HOME/.zshrc"
-  run_selfishell install --skip-packages --yes >/dev/null
-
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
-  cmp -s "$ROOT_DIR/config/shared/nvim/init.lua" "$XDG_CONFIG_HOME/selfishell/nvim/init.lua" ||
-    fail "Neovim init.lua was not installed for the development environment"
-  cmp -s "$ROOT_DIR/config/shared/nvim/lua/config/options.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/config/options.lua" ||
-    fail "Neovim options module was not installed for the development environment"
-  cmp -s "$ROOT_DIR/config/shared/nvim/lua/plugins/lsp.lua" "$XDG_CONFIG_HOME/selfishell/nvim/lua/plugins/lsp.lua" ||
-    fail "Neovim lsp plugin was not installed for the development environment"
-  [[ -f "$XDG_CONFIG_HOME/mise/config.toml" && ! -L "$XDG_CONFIG_HOME/mise/config.toml" ]] ||
-    fail "Developer install did not create a user-owned mise config"
-  ! grep -Fqx "$XDG_CONFIG_HOME/mise/config.toml" "$SELFISHELL_RESOURCE_STATE_DIR"/*.state ||
-    fail "User-owned mise config was recorded as a managed resource"
 }
 
 test_macos_install_includes_ghostty_configuration() {
@@ -631,11 +624,20 @@ test_status_does_not_inspect_user_ghostty() {
 test_install_is_idempotent() {
   local first_backup_count
   local second_backup_count
+  local state_file
 
   printf 'original zshrc' >"$HOME/.zshrc"
   run_selfishell install --skip-packages --yes >/dev/null
   first_backup_count="$(find "$HOME" -name '*.backup.*' | wc -l)"
+  mkdir "$TEST_ROOT/saved-states"
+  for state_file in "$SELFISHELL_RESOURCE_STATE_DIR"/*.state; do
+    ln "$state_file" "$TEST_ROOT/saved-states/${state_file##*/}"
+  done
   run_selfishell install --skip-packages --yes >/dev/null
+  for state_file in "$SELFISHELL_RESOURCE_STATE_DIR"/*.state; do
+    [[ "$state_file" -ef "$TEST_ROOT/saved-states/${state_file##*/}" ]] ||
+      fail "A second installation rewrote unchanged state: $state_file"
+  done
   second_backup_count="$(find "$HOME" -name '*.backup.*' | wc -l)"
 
   [[ "$second_backup_count" -eq "$first_backup_count" ]] ||
@@ -1802,11 +1804,14 @@ EOF
     fail "A forced managed_write_state failure left a temporary file behind"
 }
 
-test_unchanged_block_state_refresh_failure_does_not_report_unchanged() {
+test_pending_block_state_refresh_failure_does_not_report_unchanged() {
   local fake_bin="$TEST_ROOT/bin"
   local status=0
 
   run_selfishell install --skip-packages --yes >/dev/null
+  local state_file="$SELFISHELL_RESOURCE_STATE_DIR/user-zshrc.state"
+  sed '3s/active/pending/' "$state_file" >"$TEST_ROOT/pending.state"
+  mv "$TEST_ROOT/pending.state" "$state_file"
 
   mkdir -p "$fake_bin"
   cat >"$fake_bin/mv" <<'EOF'
@@ -1825,7 +1830,7 @@ EOF
   status=$?
   set -e
 
-  ((status != 0)) || fail "A forced state-refresh failure for an unchanged block should propagate"
+  ((status != 0)) || fail "A forced state-refresh failure for a pending block should propagate"
 }
 
 test_managed_file_overwrite_conflict_atomic_copy_failure_preserves_backup_and_state() {
