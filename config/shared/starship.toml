@@ -2,11 +2,13 @@ add_newline = true
 
 format = '$directory$git_branch$git_commit$git_state$git_status$character'
 
-right_format = '$status$cmd_duration$jobs$username$hostname$python$nodejs$java$aws$kubernetes'
+right_format = '$status$cmd_duration$jobs($username$hostname )$python$nodejs$java$aws$kubernetes'
 
 [directory]
-format = '[$path]($style) '
+format = '[$path]($style)[$read_only]($read_only_style) '
 style = 'bold blue'
+read_only = ' [ro]'
+read_only_style = 'bold red'
 
 truncation_length = 2
 truncation_symbol = '.../'
@@ -65,7 +67,7 @@ show_always = false
 
 [hostname]
 ssh_only = true
-format = '[@](bright-black)[$hostname]($style) '
+format = '[@](bright-black)[$hostname]($style)'
 style = 'bold yellow'
 
 [aws]
@@ -73,8 +75,8 @@ format = '([aws:$profile]($style) )'
 style = 'bold yellow'
 
 [kubernetes]
-disabled = false
-format = '[k8s:$context]($style) '
+disabled = true
+format = '[k8s:$context(/$namespace)]($style) '
 style = 'bold cyan'
 detect_files = [
   'Chart.yaml',
@@ -93,15 +95,17 @@ context_pattern = 'arn:aws:eks:[^:]+:[^:]+:cluster/(?P<cluster>[^/]+)'
 context_alias = '$cluster'
 
 [python]
-format = '[($virtualenv )]($style)'
+format = '([py:$version(\($virtualenv\))]($style) )'
+version_format = '${major}.${minor}'
+generic_venv_names = ['.venv', 'venv']
 style = 'yellow'
 
 [nodejs]
-format = '[($version )]($style)'
-version_format = 'v${major}'
+format = '[(node:$version )]($style)'
+version_format = '${major}'
 style = 'green'
 
 [java]
-format = '[($version )]($style)'
-version_format = 'v${major}'
+format = '[(java:$version )]($style)'
+version_format = '${major}'
 style = 'yellow'
