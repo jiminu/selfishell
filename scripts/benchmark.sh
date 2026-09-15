@@ -2,16 +2,18 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ITERATIONS="${SELFISHELL_BENCHMARK_ITERATIONS:-30}"
 ENFORCE_BUDGETS="${SELFISHELL_BENCHMARK_ENFORCE:-0}"
 PROFILE_MODE="${SELFISHELL_BENCHMARK_PROFILE:-base}"
 RESULTS_FILE="${SELFISHELL_BENCHMARK_RESULTS_FILE:-}"
 ZPROF_FILE="${SELFISHELL_BENCHMARK_ZPROF_FILE:-}"
+MEASURE_PROMPT=0
+MEASURE_DIAGNOSTICS=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/benchmark.sh [--mode base|full]
+Usage: scripts/benchmark.sh [--mode base|full] [--prompt] [--diagnostics]
 
   base  Selfishell's own startup cost, independent of external integrations
         (mise/starship/zinit/fzf/zoxide are excluded). This is the default.
@@ -20,7 +22,12 @@ Usage: scripts/benchmark.sh [--mode base|full]
         plugins) into an isolated HOME before measuring, so the
         interactive-cached metric reflects a real full-environment
         startup. Starship, fzf, and zoxide are installed through mise.
-        This script does not invoke Apt/Homebrew.
+        This script does not install Apt/Homebrew packages.
+
+  --prompt       Measure first and command-to-prompt latency using a PTY
+                 in an empty directory and this repository (requires python3).
+  --diagnostics  Measure status and doctor after isolated configuration setup.
+                 Full mode includes the caller's PATH tools and package managers.
 
 SELFISHELL_BENCHMARK_PROFILE=base|full is equivalent to --mode.
 EOF
@@ -37,6 +44,8 @@ while (("$#" > 0)); do
       fi
       PROFILE_MODE="$1"
       ;;
+    --prompt) MEASURE_PROMPT=1 ;;
+    --diagnostics) MEASURE_DIAGNOSTICS=1 ;;
     --help | -h)
       usage
       exit 0
@@ -57,6 +66,11 @@ case "$PROFILE_MODE" in
     exit 2
     ;;
 esac
+
+if [[ "$MEASURE_PROMPT" == 1 ]] && ! command -v python3 >/dev/null 2>&1; then
+  printf '%s\n' '--prompt requires python3 (standard library only).' >&2
+  exit 1
+fi
 
 # Validate arguments before creating any temporary files.
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-benchmark.XXXXXX")"
@@ -82,6 +96,7 @@ fi
 
 ln -s "$ROOT_DIR/config/shared/zsh/common.zsh" "$TEST_HOME/.config/selfishell/zsh/common.zsh"
 ln -s "$ROOT_DIR/config/shared/zsh/runtime.zsh" "$TEST_HOME/.config/selfishell/zsh/runtime.zsh"
+ln -s "$ROOT_DIR/config/shared/zsh/history.zsh" "$TEST_HOME/.config/selfishell/zsh/history.zsh"
 ln -s "$ROOT_DIR/config/shared/zsh/completion.zsh" "$TEST_HOME/.config/selfishell/zsh/completion.zsh"
 ln -s "$ROOT_DIR/config/shared/zsh/interactive.zsh" "$TEST_HOME/.config/selfishell/zsh/interactive.zsh"
 ln -s "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$TEST_HOME/.config/selfishell/zsh/update-notice.zsh"
@@ -102,6 +117,7 @@ install_full_integrations() (
   export HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config"
   export XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state"
   export XDG_CACHE_HOME="$TEST_HOME/.cache" SELFISHELL_ROOT="$ROOT_DIR"
+  export MISE_CEILING_PATHS="$ROOT_DIR"
   cd "$TEST_HOME"
   source "$ROOT_DIR/lib/common.sh"
   source "$ROOT_DIR/lib/paths.sh"
@@ -206,6 +222,85 @@ record_result() {
   fi
 }
 
+run_prompt_benchmark() {
+  local prompt_results result
+
+  verify_full_integrations "$ROOT_DIR"
+  mkdir "$TEST_ROOT/prompt"
+  cat >"$TEST_ROOT/prompt/.zshrc" <<'EOF'
+source "$SELFISHELL_BENCHMARK_PLATFORM_CONFIG"
+autoload -Uz add-zsh-hook
+setopt promptsubst
+typeset -gi _selfishell_benchmark_prompt=0
+_selfishell_benchmark_precmd() { (( ++_selfishell_benchmark_prompt )); }
+add-zsh-hook precmd _selfishell_benchmark_precmd
+RPROMPT+='__SFS_READY_${_selfishell_benchmark_prompt}__'
+EOF
+  prompt_results="$(HOME="$TEST_HOME" ZDOTDIR="$TEST_ROOT/prompt" \
+    SELFISHELL_BENCHMARK_PLATFORM_CONFIG="$PLATFORM_CONFIG" \
+    SELFISHELL_BENCHMARK_PATH="$INTERACTIVE_PATH" \
+    python3 "$ROOT_DIR/scripts/benchmark-prompt.py" "$ITERATIONS" "$ROOT_DIR")" || return
+  while IFS= read -r result; do
+    record_result "$result"
+  done <<<"$prompt_results"
+}
+
+run_diagnostic_command() (
+  local diagnostic_shell
+  diagnostic_shell="$(PATH="$DIAGNOSTIC_PATH" command -v zsh)"
+  cd "$DIAGNOSTIC_HOME"
+  env -i HOME="$DIAGNOSTIC_HOME" PATH="$DIAGNOSTIC_PATH" SHELL="$diagnostic_shell" \
+    TMPDIR="$TEST_ROOT" TERM=dumb NO_COLOR=1 \
+    XDG_CONFIG_HOME="$DIAGNOSTIC_HOME/.config" XDG_DATA_HOME="$DIAGNOSTIC_HOME/.local/share" \
+    XDG_STATE_HOME="$DIAGNOSTIC_HOME/.local/state" XDG_CACHE_HOME="$DIAGNOSTIC_HOME/.cache" \
+    MISE_DATA_DIR="$TEST_DATA_HOME/mise" MISE_CACHE_DIR="$DIAGNOSTIC_HOME/.cache/mise" \
+    MISE_STATE_DIR="$DIAGNOSTIC_HOME/.local/state/mise" MISE_OFFLINE=1 MISE_CEILING_PATHS="$ROOT_DIR" \
+    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 \
+    /bin/bash "$ROOT_DIR/bin/selfishell" "$@"
+)
+
+run_diagnostic_sample() {
+  local command="$1" expected_status="$2" status=0
+  run_diagnostic_command "$command" >/dev/null 2>&1 || status=$?
+  if [[ "$status" != "$expected_status" ]]; then
+    printf 'Diagnostic %s exit changed from %s to %s.\n' "$command" "$expected_status" "$status" >&2
+    return 1
+  fi
+}
+
+run_diagnostic_benchmark() {
+  local command status output result
+  export DIAGNOSTIC_HOME="$TEST_ROOT/diagnostics-home"
+  export DIAGNOSTIC_PATH=/usr/bin:/bin
+  [[ "$PROFILE_MODE" != full ]] || DIAGNOSTIC_PATH="$TEST_HOME/.local/bin:$PATH"
+  mkdir -p "$DIAGNOSTIC_HOME/.local/share"
+  if [[ -d "$TEST_DATA_HOME/zinit" ]]; then
+    ln -s "$TEST_DATA_HOME/zinit" "$DIAGNOSTIC_HOME/.local/share/zinit"
+  fi
+  run_diagnostic_command install --skip-packages --yes >"$TEST_ROOT/diagnostics-setup.log" 2>&1 || {
+    cat "$TEST_ROOT/diagnostics-setup.log" >&2
+    return 1
+  }
+  record_result '# Diagnostics: configured HOME; no system packages installed; missing tools may yield exit 1.'
+  export -f run_diagnostic_command run_diagnostic_sample
+  for command in status doctor; do
+    status=0
+    output="$(run_diagnostic_command "$command" 2>&1)" || status=$?
+    case "$status" in
+      0 | 1) ;;
+      *)
+        printf '%s\n' "$output" >&2
+        return "$status"
+        ;;
+    esac
+    record_result "# cli-$command exit=$status"
+    printf '%s\n' "$output"
+    # shellcheck disable=SC2016 # Run the exported function in each timed child.
+    result="$(benchmark "cli-$command" "$ITERATIONS" bash -c 'run_diagnostic_sample "$@"' _ "$command" "$status")" || return
+    record_result "$result"
+  done
+}
+
 run_common_zsh() {
   # In full mode, $TEST_HOME/.local/bin holds the pinned integrations. Base
   # mode uses it only for the benchmark-only macOS brew barrier.
@@ -227,13 +322,14 @@ run_interactive_zsh() {
 }
 
 verify_full_integrations() {
+  local directory="${1:-$TEST_HOME}"
   [[ "$PROFILE_MODE" == full ]] || return 0
   (
-    cd "$TEST_HOME"
+    cd "$directory"
     HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config" \
       XDG_DATA_HOME="$TEST_DATA_HOME" XDG_CACHE_HOME="$TEST_HOME/.cache" \
       MISE_GLOBAL_CONFIG_FILE="$TEST_HOME/.config/mise/config.toml" MISE_SHELL='' \
-      PATH="$INTERACTIVE_PATH" TERM=xterm-256color MISE_OFFLINE=1 \
+      PATH="$INTERACTIVE_PATH" TERM=xterm-256color MISE_OFFLINE=1 MISE_CEILING_PATHS="$ROOT_DIR" \
       /bin/zsh -d -i -c '
         for tool in starship fzf zoxide; do
           [[ "${commands[$tool]}" == "$MISE_DATA_DIR/installs/"* ]] || exit 1
@@ -301,7 +397,7 @@ record_result "$baseline_result"
 # The first run creates the completion dump. Following measurements represent
 # the cached common configuration used during ordinary startup.
 export -f run_common_zsh run_interactive_zsh
-export ROOT_DIR TEST_HOME TEST_DATA_HOME COMMON_PATH INTERACTIVE_PATH
+export ROOT_DIR TEST_ROOT TEST_HOME TEST_DATA_HOME COMMON_PATH INTERACTIVE_PATH
 record_result "$(benchmark common-first 1 bash -c 'run_common_zsh')"
 common_result="$(benchmark common-cached "$ITERATIONS" bash -c 'run_common_zsh')"
 record_result "$common_result"
@@ -331,4 +427,11 @@ check_budget cli-help "$(printf '%s\n' "$help_result" | awk -F '\t' '{ print $4 
 
 if [[ -n "$ZPROF_FILE" ]]; then
   profile_interactive_zsh
+fi
+
+if [[ "$MEASURE_PROMPT" == 1 ]]; then
+  run_prompt_benchmark
+fi
+if [[ "$MEASURE_DIAGNOSTICS" == 1 ]]; then
+  run_diagnostic_benchmark
 fi
