@@ -1,4 +1,4 @@
-<h1><img src="img/icon-mark.png" alt="" width="48" height="48"> Selfishell</h1>
+# Selfishell
 
 Selfishell is a managed Zsh development environment for macOS, Ubuntu, and
 Ubuntu on WSL.
