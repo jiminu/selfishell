@@ -1,9 +1,9 @@
 # Selfishell
 
+![Selfishell terminal-themed banner](img/social-preview.png)
+
 Selfishell is a managed Zsh development environment for macOS, Ubuntu, and
 Ubuntu on WSL.
-
-![Selfishell shell prompt showing the current directory, Git branch, and command output](img/selfishell.png)
 
 ## Quick Start
 
@@ -29,6 +29,8 @@ non-interactive installation, configuration-only setup, uninstallation,
 Ghostty, and platform notes.
 
 ## What You Get
+
+![Selfishell shell prompt showing the current directory, Git branch, and command output](img/selfishell.png)
 
 - A consistent Zsh environment across supported macOS and Ubuntu systems.
 - A Starship prompt, useful aliases, completions, and managed shell defaults.
