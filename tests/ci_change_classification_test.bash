@@ -57,6 +57,29 @@ test_skips_runtime_for_documentation_only_changes() {
   teardown_test_home
 }
 
+test_skips_runtime_for_image_only_changes() {
+  local output
+
+  setup_classification_repo
+  mkdir -p "$TEST_REPO/img"
+  printf '%s\n' 'Preview fixture.' >"$TEST_REPO/img/social-preview.png"
+  output="$(classify_committed_change)"
+  assert_classification "$output" false false
+  teardown_test_home
+}
+
+test_runs_ubuntu_e2e_when_images_and_runtime_changes_are_mixed() {
+  local output
+
+  setup_classification_repo
+  mkdir -p "$TEST_REPO/img"
+  printf '%s\n' 'Preview fixture.' >"$TEST_REPO/img/social-preview.png"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf "updated\\n"' >"$TEST_REPO/install.sh"
+  output="$(classify_committed_change)"
+  assert_classification "$output" true true
+  teardown_test_home
+}
+
 test_skips_ubuntu_e2e_for_neovim_configuration_only_changes() {
   local output
 
