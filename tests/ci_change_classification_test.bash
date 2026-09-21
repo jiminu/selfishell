@@ -48,12 +48,38 @@ assert_classification() {
 }
 
 test_skips_runtime_for_documentation_only_changes() {
+  local output document
+
+  for document in docs/guide.md CONTRIBUTING.md SECURITY.md LICENSE; do
+    setup_classification_repo
+    printf '%s\n' 'Documentation update.' >"$TEST_REPO/$document"
+    output="$(classify_committed_change)"
+    assert_classification "$output" false false
+    teardown_test_home
+  done
+}
+
+test_skips_runtime_for_image_only_changes() {
   local output
 
   setup_classification_repo
-  printf '%s\n' 'Documentation update.' >"$TEST_REPO/docs/guide.md"
+  mkdir -p "$TEST_REPO/img"
+  printf '%s\n' 'Preview fixture.' >"$TEST_REPO/img/social-preview.png"
   output="$(classify_committed_change)"
   assert_classification "$output" false false
+  teardown_test_home
+}
+
+test_runs_ubuntu_e2e_when_documentation_images_and_runtime_changes_are_mixed() {
+  local output
+
+  setup_classification_repo
+  mkdir -p "$TEST_REPO/img"
+  printf '%s\n' 'Preview fixture.' >"$TEST_REPO/img/social-preview.png"
+  printf '%s\n' 'Contribution guide.' >"$TEST_REPO/CONTRIBUTING.md"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf "updated\\n"' >"$TEST_REPO/install.sh"
+  output="$(classify_committed_change)"
+  assert_classification "$output" true true
   teardown_test_home
 }
 
