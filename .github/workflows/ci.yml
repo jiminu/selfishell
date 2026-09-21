@@ -57,11 +57,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Keep both platforms unless the classifier explicitly reports no runtime changes.
+        os: ${{ fromJSON(needs.changes.outputs.runtime == 'false' && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest"]') }}
 
     steps:
       - name: Check out repository
-        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install shell tooling (Ubuntu)
@@ -71,11 +71,10 @@ jobs:
           sudo apt-get install -y shellcheck shfmt zsh
 
       - name: Install shell tooling (macOS)
-        if: runner.os == 'macOS' && needs.changes.outputs.runtime == 'true'
+        if: runner.os == 'macOS'
         run: brew install shellcheck shfmt
 
       - name: Run checks
-        if: needs.changes.outputs.runtime == 'true' || runner.os == 'Linux'
         run: bash scripts/check.sh
 
   ubuntu-container-e2e:
