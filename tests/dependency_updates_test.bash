@@ -53,6 +53,7 @@ python = "3.13.14"
 neovim = "0.12.4"
 tree-sitter = "0.26.11"
 uv = "0.5.21"
+lazygit = "0.65.0"
 
 [settings]
 not_found_auto_install = false
@@ -342,7 +343,7 @@ test_mise_tool_update_bumps_moved_cli_pin() {
   zsh_root="$TEST_ROOT/zsh-root"
   write_mise_toml_fixtures "$zsh_root"
   : >"$manifest"
-  printf 'mise-tool fzf 0.74.4\nmise-tool starship 1.26.0\n' >"$metadata"
+  printf 'mise-tool fzf 0.74.4\nmise-tool starship 1.26.0\nmise-tool lazygit 0.65.1\n' >"$metadata"
 
   run_dependency_update "$manifest" "$metadata" "$zsh_root"
 
@@ -350,6 +351,8 @@ test_mise_tool_update_bumps_moved_cli_pin() {
     fail "The moved fzf CLI pin was not updated"
   grep -Fqx 'starship = "1.26.0"' "$zsh_root/config/shared/mise.toml" ||
     fail "The moved Starship pin was not updated"
+  grep -Fqx 'lazygit = "0.65.1"' "$zsh_root/config/shared/mise.toml" ||
+    fail "The Lazygit pin was not updated"
   [[ ! -s "$manifest" ]] || fail "mise tool updates changed the direct dependency manifest"
 }
 

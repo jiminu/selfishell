@@ -12,6 +12,7 @@ neovim = "0.12.5"
 tree-sitter = "0.27.0"
 uv = "0.12.17"
 gh = "2.101.0"
+lazygit = "0.65.1"
 
 [settings]
 not_found_auto_install = false

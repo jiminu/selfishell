@@ -10,9 +10,9 @@ linked into mise's `conf.d/selfishell.toml`. Project-local `mise.toml` files
 can override these defaults.
 
 `config/shared/mise.toml` pins the reviewed versions of Starship, FZF, Zoxide,
-Ripgrep, Eza, Bat, jq, Neovim, Tree-sitter CLI, Node.js, Python, uv, and GitHub
-CLI on both macOS and Ubuntu. These defaults change through Selfishell releases;
-shell startup never updates them.
+Ripgrep, Eza, Bat, jq, Neovim, Tree-sitter CLI, Node.js, Python, uv, GitHub CLI,
+and Lazygit on both macOS and Ubuntu. These defaults change through Selfishell
+releases; shell startup never updates them.
 
 Mise manages the Starship executable and its version; Selfishell still manages
 `starship.toml` and prompt initialization.
@@ -62,6 +62,10 @@ is `Space`. In Normal mode, press `Space` and pause to open which-key. The popup
 shows actions available in the current context; continue typing to narrow the
 list. Every Selfishell mapping has a description, so which-key remains aligned
 with the installed configuration without a separate shortcut list.
+
+Press `Space g g` to open Lazygit for repository-wide Git operations, including
+staging, commits, and branch management. You can also run `lazygit` directly
+from a terminal. Gitsigns remains available for changes in the current buffer.
 
 Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain

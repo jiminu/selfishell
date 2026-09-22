@@ -1384,7 +1384,7 @@ test_mise_config_global_preserves_existing_types() {
 test_mise_config_global_idempotency_and_status() {
   local tool
   # Mock executable names, not mise package names.
-  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise nvim tree-sitter node python uv gh; do
+  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise nvim tree-sitter node python uv gh lazygit; do
     printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
     chmod +x "$TEST_ROOT/bin/$tool"
   done
