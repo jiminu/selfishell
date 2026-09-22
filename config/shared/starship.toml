@@ -98,7 +98,7 @@ context_alias = '$cluster'
 format = '([py:$version(\($virtualenv\))]($style) )'
 version_format = '${major}.${minor}'
 generic_venv_names = ['.venv', 'venv']
-style = 'yellow'
+style = 'blue'
 
 [nodejs]
 format = '[(node:$version )]($style)'
