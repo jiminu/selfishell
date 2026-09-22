@@ -86,4 +86,6 @@ between them, and `Space b d` to close the current buffer without closing its
 editor window.
 
 When Neovim is available, `vim` resolves to Neovim while `vi` remains the
-system editor.
+system editor. `EDITOR` defaults to `nvim` and `VISUAL` defaults to `EDITOR`,
+so external programs such as Lazygit also use Neovim. Existing nonempty values
+are preserved; an application's explicit editor setting takes precedence.
