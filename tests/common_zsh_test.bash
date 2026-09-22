@@ -1184,7 +1184,7 @@ EOF
     fail "Kubectl completion did not keep k unmapped"
 }
 
-test_editor_aliases_stay_with_neovim() {
+test_editor_aliases_and_environment_prefer_neovim() {
   local fake_bin output
 
   setup_test_home
@@ -1201,10 +1201,26 @@ EOF
       ZDOTDIR="" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
+        unset EDITOR VISUAL
         source "$1"
         alias vim
+        /bin/sh -c '\''[ "$EDITOR" = nvim ] && [ "$VISUAL" = nvim ]'\'' || exit 1
+
+        EDITOR="code --wait"
+        unset VISUAL
+        source "$1"
+        /bin/sh -c '\''[ "$EDITOR" = "code --wait" ] && [ "$VISUAL" = "code --wait" ]'\'' || exit 1
+
+        unset EDITOR
+        VISUAL="emacsclient -c"
+        source "$1"
+        /bin/sh -c '\''[ "$EDITOR" = nvim ] && [ "$VISUAL" = "emacsclient -c" ]'\'' || exit 1
+
+        EDITOR=nano
+        source "$1"
+        /bin/sh -c '\''[ "$EDITOR" = nano ] && [ "$VISUAL" = "emacsclient -c" ]'\'' || exit 1
       ' zsh "$ROOT_DIR/config/shared/zsh/aliases.zsh"
-  )"
+  )" || fail "Editor defaults were not exported or replaced the users choice"
 
   [[ "$output" == *'vim=nvim'* ]] || fail "vim was not redirected to Neovim"
   teardown_test_home
@@ -1219,10 +1235,12 @@ test_missing_neovim_keeps_system_vim() {
       ZDOTDIR="" \
       /bin/zsh -f -c '
         _selfishell_command_path() { command -v "$1"; }
+        unset EDITOR VISUAL
         source "$1"
         alias vim 2>/dev/null || true
+        [[ -z ${EDITOR+x} && -z ${VISUAL+x} ]] || exit 1
       ' zsh "$ROOT_DIR/config/shared/zsh/aliases.zsh"
-  )"
+  )" || fail "Editor defaults should not be forced without Neovim"
 
   [[ "$output" != *'nvim'* ]] || fail "Vim alias should not be forced without Neovim"
   teardown_test_home

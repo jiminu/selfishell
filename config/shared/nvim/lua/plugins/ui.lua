@@ -423,6 +423,13 @@ return {
       -- Snacks' own <leader>g prefix: these ask what changed across the
       -- repository, while gitsigns' <leader>h acts on the hunk at the cursor.
       {
+        "<leader>gg",
+        function()
+          Snacks.lazygit()
+        end,
+        desc = "Open Lazygit",
+      },
+      {
         "<leader>gs",
         function()
           Snacks.picker.git_status()

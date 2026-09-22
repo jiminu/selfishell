@@ -14,6 +14,9 @@ fi
 if _selfishell_command_path nvim >/dev/null; then
   alias vim='nvim'
   alias view='nvim -R'
+  # External programs do not inherit shell aliases.
+  export EDITOR="${EDITOR:-nvim}"
+  export VISUAL="${VISUAL:-$EDITOR}"
 fi
 
 # Git is a required dependency, so these aliases need no

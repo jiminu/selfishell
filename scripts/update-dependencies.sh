@@ -92,7 +92,7 @@ discover_metadata() {
   done
 
   local tool repository candidate_tag
-  for tool in starship fzf zoxide ripgrep eza bat jq neovim tree-sitter uv gh; do
+  for tool in starship fzf zoxide ripgrep eza bat jq neovim tree-sitter uv gh lazygit; do
     repository="$(mise_tool_repository "$tool")"
     candidate_tag="$(github_latest_tag "$repository")"
     candidate_tag="${candidate_tag#v}"
@@ -116,6 +116,7 @@ mise_tool_repository() {
     tree-sitter) printf 'tree-sitter/tree-sitter\n' ;;
     uv) printf 'astral-sh/uv\n' ;;
     gh) printf 'cli/cli\n' ;;
+    lazygit) printf 'jesseduffield/lazygit\n' ;;
     *) return 1 ;;
   esac
 }

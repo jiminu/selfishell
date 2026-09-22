@@ -75,6 +75,18 @@ for _, lhs in ipairs(snacks_picker_keys) do
   )
 end
 
+local open_lazygit = plugin_key("plugins.ui", "folke/snacks.nvim", "<leader>gg")
+assert(type(open_lazygit) == "function", "missing Lazygit mapping")
+local lazygit_opened = false
+_G.Snacks = {
+  lazygit = function()
+    lazygit_opened = true
+  end,
+}
+open_lazygit()
+assert(lazygit_opened, "Git UI mapping did not open Lazygit")
+_G.Snacks = nil
+
 local snacks = assert(plugin_spec("plugins.ui", "folke/snacks.nvim"), "Snacks spec is missing")
 local picker = assert(snacks.opts.picker, "Snacks picker must be configured")
 assert(picker.ui_select == false, "Snacks must not take over vim.ui.select")

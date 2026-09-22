@@ -78,12 +78,12 @@ test_manifest_includes_development_tools() {
   [[ -n "$actual_mise_tools" ]] || fail "Environment did not report required mise tools"
   [[ "$actual_mise_tools" == "$expected_mise_tools" ]] ||
     fail "Environment mise tools do not match config/shared/mise.toml (expected: $expected_mise_tools; got: $actual_mise_tools)"
-  [[ "$required_mise_tools" == $'fzf\ngh\njq\nneovim\nnode\npython\nripgrep\nstarship\ntree-sitter\nuv\nzoxide' ]] ||
+  [[ "$required_mise_tools" == $'fzf\ngh\njq\nlazygit\nneovim\nnode\npython\nripgrep\nstarship\ntree-sitter\nuv\nzoxide' ]] ||
     fail "Environment required mise tools are incorrect: $required_mise_tools"
   [[ "$optional_mise_tools" == $'bat\neza' ]] ||
     fail "Environment optional mise tools are incorrect: $optional_mise_tools"
   apt_plan="$(printf '%s\n' "$output" | grep 'apt packages:' || true)"
-  for tool in starship fzf zoxide ripgrep eza bat jq; do
+  for tool in starship fzf zoxide ripgrep eza bat jq lazygit; do
     ! grep -Eq "(^|[[:space:]])$tool([[:space:]]|$)" <<<"$apt_plan" ||
       fail "Developer CLI tool remained in the Apt install plan: $tool"
   done
@@ -92,8 +92,10 @@ test_manifest_includes_development_tools() {
   macos_output="$(run_package_dry_run)"
   printf '%s\n' "$macos_output" | grep -Eq '^Would sync required mise tools:.* starship([[:space:]]|$)' ||
     fail "macOS install omitted mise-managed Starship"
+  printf '%s\n' "$macos_output" | grep -Eq '^Would sync required mise tools:.* lazygit([[:space:]]|$)' ||
+    fail "macOS install omitted mise-managed Lazygit"
   homebrew_plan="$(printf '%s\n' "$macos_output" | grep 'Homebrew formula' || true)"
-  for tool in starship fzf zoxide ripgrep eza bat jq; do
+  for tool in starship fzf zoxide ripgrep eza bat jq lazygit; do
     ! grep -Eq "(^|[[:space:]])$tool([[:space:]]|$)" <<<"$homebrew_plan" ||
       fail "Developer CLI tool remained in the Homebrew install plan: $tool"
   done
