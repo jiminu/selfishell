@@ -39,9 +39,34 @@ tool_status_apt_version() {
 tool_status_brew_version() {
   local manager="$1"
   local package="$2"
-  local cache name output versions
+  local cache kind name output versions inventory
 
   TOOL_STATUS_BREW_VERSION=""
+
+  if [[ "$TOOL_STATUS_BREW_FORMULAE_READY" == 0 && "$TOOL_STATUS_BREW_CASKS_READY" == 0 ]] &&
+    have_command jq &&
+    inventory="$(brew list --versions --json 2>/dev/null)" &&
+    output="$(printf '%s\n' "$inventory" | jq -r '
+      if (.formulae | type) == "array" and (.casks | type) == "array" then
+        (.formulae[] | ["formula", .name, (.versions | join(" "))] | @tsv),
+        (.casks[] | ["cask", .token, (.versions | join(" "))] | @tsv)
+      else error("invalid Homebrew inventory") end
+    ' 2>/dev/null)"; then
+    while IFS=$'\t' read -r kind name versions; do
+      case "$kind" in
+        formula)
+          [[ -z "$TOOL_STATUS_BREW_FORMULAE" ]] || TOOL_STATUS_BREW_FORMULAE+=$'\n'
+          TOOL_STATUS_BREW_FORMULAE+="$name $versions"
+          ;;
+        cask)
+          [[ -z "$TOOL_STATUS_BREW_CASKS" ]] || TOOL_STATUS_BREW_CASKS+=$'\n'
+          TOOL_STATUS_BREW_CASKS+="$name $versions"
+          ;;
+      esac
+    done <<<"$output"
+    TOOL_STATUS_BREW_FORMULAE_READY=1
+    TOOL_STATUS_BREW_CASKS_READY=1
+  fi
 
   case "$manager" in
     formula)
