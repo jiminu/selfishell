@@ -605,10 +605,9 @@ return {
         color = "#797979",
       },
       marks = {
-        -- Keep errors distinct from Git deletions when marks share a scrollbar row.
-        Error = { text = { "!", "!" } },
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
+        GitDelete = { text = "▾" },
       },
       excluded_filetypes = {
         "cmp_docs",
