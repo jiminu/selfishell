@@ -604,6 +604,10 @@ return {
         blend = 60,
         color = "#797979",
       },
+      marks = {
+        GitAdd = { text = "│" },
+        GitChange = { text = "│" },
+      },
       excluded_filetypes = {
         "cmp_docs",
         "cmp_menu",
