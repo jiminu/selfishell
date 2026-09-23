@@ -38,16 +38,20 @@ test_detects_homebrew_formula_version() {
 }
 
 test_reuses_homebrew_inventory() {
+  local jq_command
+
+  jq_command="$(PATH="$ORIGINAL_PATH" command -v jq || true)"
+  [[ -n "$jq_command" ]] || skip 'test_reuses_homebrew_inventory (jq unavailable)'
+  ln -s "$jq_command" "$TEST_ROOT/bin/jq"
   export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
   cat >"$TEST_ROOT/bin/brew" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
 case "$*" in
-  'list --formula --versions')
-    printf 'starship 1.26.0\nfzf 0.74.0\n'
-    ;;
-  'list --cask --versions')
-    printf 'ghostty 1.3.1\nfont-meslo-lg-nerd-font 3.4.0\n'
+  'list --versions --json')
+    cat <<'JSON'
+{"formulae":[{"name":"starship","versions":["1.26.0"],"linked_version":"1.26.0","optlinked_version":"1.26.0","pinned_version":null},{"name":"fzf","versions":["0.74.0"],"linked_version":"0.74.0","optlinked_version":"0.74.0","pinned_version":null}],"casks":[{"token":"ghostty","versions":["1.3.1"],"pinned_version":null},{"token":"font-meslo-lg-nerd-font","versions":["3.4.0"],"pinned_version":null}]}
+JSON
     ;;
   *)
     exit 1
@@ -57,12 +61,104 @@ EOF
   chmod +x "$TEST_ROOT/bin/brew"
 
   tool_status_detect formula starship macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.26.0 && "$TOOL_STATUS_SOURCE" == homebrew ]] ||
+    fail "Typed Homebrew inventory did not report the first formula version"
   tool_status_detect formula fzf macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 0.74.0 && "$TOOL_STATUS_SOURCE" == homebrew ]] ||
+    fail "Typed Homebrew inventory did not report the second formula version"
   tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Typed Homebrew inventory did not report the first cask version"
   tool_status_detect cask font-meslo-lg-nerd-font macos arm64
 
-  [[ "$(wc -l <"$MOCK_BREW_LOG" | tr -d ' ')" == 2 ]] ||
-    fail "Homebrew inventory should be loaded once per package type"
+  [[ "$TOOL_STATUS_INSTALLED" == 3.4.0 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Typed Homebrew inventory did not report the cask version"
+  [[ "$(cat "$MOCK_BREW_LOG")" == 'list --versions --json' ]] ||
+    fail "Homebrew formulae and casks should use one typed inventory"
+  unset MOCK_BREW_LOG
+}
+
+test_falls_back_when_homebrew_json_is_invalid() {
+  local jq_command
+
+  jq_command="$(PATH="$ORIGINAL_PATH" command -v jq || true)"
+  [[ -n "$jq_command" ]] || skip 'test_falls_back_when_homebrew_json_is_invalid (jq unavailable)'
+  ln -s "$jq_command" "$TEST_ROOT/bin/jq"
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --versions --json') printf 'invalid JSON\n' ;;
+  'list --formula --versions') printf 'starship 1.26.0\n' ;;
+  'list --cask --versions') printf 'ghostty 1.3.1\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  tool_status_detect formula starship macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.26.0 && "$TOOL_STATUS_SOURCE" == homebrew ]] ||
+    fail "Invalid JSON prevented formula fallback"
+  tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Invalid JSON prevented cask fallback"
+  [[ "$(cat "$MOCK_BREW_LOG")" == $'list --versions --json\nlist --formula --versions\nlist --cask --versions' ]] ||
+    fail "Invalid JSON did not reuse the legacy Homebrew inventories"
+  unset MOCK_BREW_LOG
+}
+
+test_falls_back_when_homebrew_json_is_empty() {
+  local jq_command
+
+  jq_command="$(PATH="$ORIGINAL_PATH" command -v jq || true)"
+  [[ -n "$jq_command" ]] || skip 'test_falls_back_when_homebrew_json_is_empty (jq unavailable)'
+  ln -s "$jq_command" "$TEST_ROOT/bin/jq"
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --versions --json') printf ' \n' ;;
+  'list --cask --versions') printf 'ghostty 1.3.1\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Empty JSON prevented cask fallback"
+  [[ "$(cat "$MOCK_BREW_LOG")" == $'list --versions --json\nlist --cask --versions' ]] ||
+    fail "Empty JSON did not use the legacy cask inventory"
+  unset MOCK_BREW_LOG
+}
+
+test_uses_legacy_homebrew_inventory_without_jq() {
+  local bash_command
+
+  bash_command="$(PATH="$ORIGINAL_PATH" command -v bash)"
+  ln -s "$bash_command" "$TEST_ROOT/bin/bash"
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --formula --versions') printf 'starship 1.26.0\n' ;;
+  'list --cask --versions') printf 'ghostty 1.3.1\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  PATH="$TEST_ROOT/bin" tool_status_detect formula starship macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.26.0 && "$TOOL_STATUS_SOURCE" == homebrew ]] ||
+    fail "Formula was not detected without jq"
+  PATH="$TEST_ROOT/bin" tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Cask was not detected without jq"
+  [[ "$(<"$MOCK_BREW_LOG")" == $'list --formula --versions\nlist --cask --versions' ]] ||
+    fail "Homebrew JSON was attempted without jq"
   unset MOCK_BREW_LOG
 }
 
