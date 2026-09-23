@@ -46,6 +46,7 @@ tool_status_brew_version() {
   if [[ "$TOOL_STATUS_BREW_FORMULAE_READY" == 0 && "$TOOL_STATUS_BREW_CASKS_READY" == 0 ]] &&
     have_command jq &&
     inventory="$(brew list --versions --json 2>/dev/null)" &&
+    [[ "$inventory" == *[![:space:]]* ]] &&
     output="$(printf '%s\n' "$inventory" | jq -r '
       if (.formulae | type) == "array" and (.casks | type) == "array" then
         (.formulae[] | ["formula", .name, (.versions | join(" "))] | @tsv),

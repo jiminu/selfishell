@@ -108,6 +108,60 @@ EOF
   unset MOCK_BREW_LOG
 }
 
+test_falls_back_when_homebrew_json_is_empty() {
+  local jq_command
+
+  jq_command="$(PATH="$ORIGINAL_PATH" command -v jq || true)"
+  [[ -n "$jq_command" ]] || skip 'test_falls_back_when_homebrew_json_is_empty (jq unavailable)'
+  ln -s "$jq_command" "$TEST_ROOT/bin/jq"
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --versions --json') printf ' \n' ;;
+  'list --cask --versions') printf 'ghostty 1.3.1\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Empty JSON prevented cask fallback"
+  [[ "$(cat "$MOCK_BREW_LOG")" == $'list --versions --json\nlist --cask --versions' ]] ||
+    fail "Empty JSON did not use the legacy cask inventory"
+  unset MOCK_BREW_LOG
+}
+
+test_uses_legacy_homebrew_inventory_without_jq() {
+  local bash_command
+
+  bash_command="$(PATH="$ORIGINAL_PATH" command -v bash)"
+  ln -s "$bash_command" "$TEST_ROOT/bin/bash"
+  export MOCK_BREW_LOG="$TEST_ROOT/brew.log"
+  cat >"$TEST_ROOT/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$MOCK_BREW_LOG"
+case "$*" in
+  'list --formula --versions') printf 'starship 1.26.0\n' ;;
+  'list --cask --versions') printf 'ghostty 1.3.1\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$TEST_ROOT/bin/brew"
+
+  PATH="$TEST_ROOT/bin" tool_status_detect formula starship macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.26.0 && "$TOOL_STATUS_SOURCE" == homebrew ]] ||
+    fail "Formula was not detected without jq"
+  PATH="$TEST_ROOT/bin" tool_status_detect cask ghostty macos arm64
+  [[ "$TOOL_STATUS_INSTALLED" == 1.3.1 && "$TOOL_STATUS_SOURCE" == homebrew-cask ]] ||
+    fail "Cask was not detected without jq"
+  [[ "$(<"$MOCK_BREW_LOG")" == $'list --formula --versions\nlist --cask --versions' ]] ||
+    fail "Homebrew JSON was attempted without jq"
+  unset MOCK_BREW_LOG
+}
+
 test_detects_apt_package_version() {
   printf '#!/usr/bin/env bash\nprintf "git\\t2.43.0-1ubuntu7\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
   chmod +x "$TEST_ROOT/bin/dpkg-query"
