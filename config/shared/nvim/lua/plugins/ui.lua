@@ -604,6 +604,11 @@ return {
         blend = 60,
         color = "#797979",
       },
+      marks = {
+        GitAdd = { text = "│" },
+        GitChange = { text = "│" },
+        GitDelete = { text = "┄" },
+      },
       excluded_filetypes = {
         "cmp_docs",
         "cmp_menu",
@@ -613,10 +618,11 @@ return {
         "mason",
         "help",
       },
-      -- Avoid duplicate hunk redraws and a redraw on every cursor move.
+      -- Keep cursor marks disabled to avoid redraws on every cursor move.
       handlers = {
         cursor = false,
         diagnostic = true,
+        gitsigns = true,
         handle = true,
         search = false,
         ale = false,

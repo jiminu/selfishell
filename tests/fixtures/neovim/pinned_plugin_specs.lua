@@ -15,6 +15,12 @@ end
 local snacks = vim.tbl_filter(function(spec)
   return spec[1] == "folke/snacks.nvim"
 end, specs["plugins.ui"])[1]
+local scrollbar = vim.tbl_filter(function(spec)
+  return spec[1] == "petertriho/nvim-scrollbar"
+end, specs["plugins.ui"])[1]
+
+assert(scrollbar and scrollbar.opts.handlers.gitsigns == true,
+  "Scrollbar must show Git changes across the file")
 
 assert(snacks, "folke/snacks.nvim spec was not found")
 assert(snacks.lazy == false, "Snacks must load eagerly so it can attach to the first buffer's BufReadPost")
