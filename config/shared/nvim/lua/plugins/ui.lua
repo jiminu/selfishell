@@ -607,6 +607,7 @@ return {
       marks = {
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
+        GitDelete = { text = "┄" },
       },
       excluded_filetypes = {
         "cmp_docs",
