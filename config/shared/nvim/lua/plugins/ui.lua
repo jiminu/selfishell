@@ -605,9 +605,10 @@ return {
         color = "#797979",
       },
       marks = {
+        Error = { text = { "=", "=" } },
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
-        GitDelete = { text = "▾" },
+        GitDelete = { text = "-" },
       },
       excluded_filetypes = {
         "cmp_docs",
