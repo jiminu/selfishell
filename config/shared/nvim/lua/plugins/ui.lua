@@ -613,10 +613,11 @@ return {
         "mason",
         "help",
       },
-      -- Avoid duplicate hunk redraws and a redraw on every cursor move.
+      -- Keep cursor marks disabled to avoid redraws on every cursor move.
       handlers = {
         cursor = false,
         diagnostic = true,
+        gitsigns = true,
         handle = true,
         search = false,
         ale = false,
