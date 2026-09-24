@@ -34,11 +34,11 @@ run_package_dry_run() {
 assert_core_tools() {
   local output="$1"
 
-  printf '%s\n' "$output" | grep -Eq '(^|[[:space:]])zsh([[:space:]]|$)' ||
+  grep -Eq '(^|[[:space:]])zsh([[:space:]]|$)' <<<"$output" ||
     fail "Environment omitted the core Zsh environment"
-  printf '%s\n' "$output" | grep -Eq '(^|[[:space:]])vim([[:space:]]|$)' ||
+  grep -Eq '(^|[[:space:]])vim([[:space:]]|$)' <<<"$output" ||
     fail "Environment omitted Vim"
-  printf '%s\n' "$output" | grep -Eq '^Would sync required mise tools:.* starship([[:space:]]|$)' ||
+  grep -Eq '^Would sync required mise tools:.* starship([[:space:]]|$)' <<<"$output" ||
     fail "Environment omitted mise-managed Starship"
   [[ "$output" != *'direct package: starship'* ]] || fail "Starship still uses the direct installer"
   [[ "$output" == *'direct package: zinit'* ]] || fail "Environment omitted Zinit"
@@ -90,9 +90,9 @@ test_manifest_includes_development_tools() {
 
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   macos_output="$(run_package_dry_run)"
-  printf '%s\n' "$macos_output" | grep -Eq '^Would sync required mise tools:.* starship([[:space:]]|$)' ||
+  grep -Eq '^Would sync required mise tools:.* starship([[:space:]]|$)' <<<"$macos_output" ||
     fail "macOS install omitted mise-managed Starship"
-  printf '%s\n' "$macos_output" | grep -Eq '^Would sync required mise tools:.* lazygit([[:space:]]|$)' ||
+  grep -Eq '^Would sync required mise tools:.* lazygit([[:space:]]|$)' <<<"$macos_output" ||
     fail "macOS install omitted mise-managed Lazygit"
   homebrew_plan="$(printf '%s\n' "$macos_output" | grep 'Homebrew formula' || true)"
   for tool in starship fzf zoxide ripgrep eza bat jq lazygit; do
