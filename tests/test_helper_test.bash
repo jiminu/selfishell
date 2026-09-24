@@ -150,6 +150,72 @@ EOF
   teardown_test_home
 }
 
+test_runners_fail_a_test_that_exits_before_completing() {
+  local fixture output runner status
+
+  setup_test_home
+  for runner in run_discovered_tests 'run_discovered_tests_parallel 2'; do
+    fixture="$TEST_ROOT/early-exit.bash"
+    cat >"$fixture" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+source "\$SELFISHELL_TEST_HELPER"
+
+test_exits_early() {
+  exit 0
+}
+
+$runner
+EOF
+
+    set +e
+    output="$(SELFISHELL_TEST_HELPER="$ROOT_DIR/tests/test_helper.bash" bash "$fixture" 2>&1)"
+    status=$?
+    set -e
+
+    [[ "$status" -eq 1 ]] || fail "$runner accepted an early exit with status $status"
+    [[ "$output" == *'FAIL: test_exits_early (exited before completing)'* ]] ||
+      fail "$runner did not report the early exit: $output"
+    [[ "$output" != *'PASS: test_exits_early'* ]] || fail "$runner reported an early exit as passing"
+  done
+  teardown_test_home
+}
+
+# Bash 3.2 exec-replaces a backgrounded function at its first `command
+# <tool>`, which silently skipped the rest of the test.
+test_runners_continue_past_command_builtin() {
+  local fixture output runner
+
+  setup_test_home
+  for runner in run_discovered_tests 'run_discovered_tests_parallel 2'; do
+    rm -f "$TEST_ROOT/continued"
+    fixture="$TEST_ROOT/command-builtin.bash"
+    cat >"$fixture" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+source "\$SELFISHELL_TEST_HELPER"
+
+test_uses_command_builtin() {
+  command mkdir -p "\$SELFISHELL_TEST_DIRECTORY"
+  printf 'continued\n' >"\$SELFISHELL_TEST_MARKER"
+}
+
+$runner
+EOF
+
+    output="$(
+      SELFISHELL_TEST_HELPER="$ROOT_DIR/tests/test_helper.bash" \
+        SELFISHELL_TEST_DIRECTORY="$TEST_ROOT/created" \
+        SELFISHELL_TEST_MARKER="$TEST_ROOT/continued" \
+        bash "$fixture" 2>&1
+    )" || fail "$runner failed a test that uses the command builtin: $output"
+
+    assert_file_content 'continued' "$TEST_ROOT/continued"
+    [[ "$output" == *'PASS: test_uses_command_builtin'* ]] || fail "$runner did not report the test: $output"
+  done
+  teardown_test_home
+}
+
 test_parallel_runner_finishes_batch_and_reports_each_result() {
   local fixture output status
 
