@@ -143,6 +143,21 @@ EOF
     fail "Installer did not provision exactly four Zsh plugins"
 }
 
+test_missing_zinit_is_reported() {
+  local output status=0
+
+  output="$(command bash -c '
+    source "$SELFISHELL_ROOT/lib/common.sh"
+    source "$SELFISHELL_ROOT/lib/dependencies.sh"
+    source "$SELFISHELL_ROOT/lib/installers.sh"
+    install_zinit_plugins
+  ' 2>&1)" || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "Missing Zinit was not treated as a failure"
+  [[ "$output" == *"Zinit is not installed: $HOME/.local/share/zinit/zinit.git/zinit.zsh"* ]] ||
+    fail "Missing Zinit failed without explaining why: $output"
+}
+
 test_fails_when_zinit_plugin_provisioning_fails() {
   local manifest
   local status

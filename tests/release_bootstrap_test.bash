@@ -986,6 +986,25 @@ test_purge_removes_cli_releases_cache_and_state() {
   [[ -f "$HOME/.zshrc" && ! -s "$HOME/.zshrc" ]] || fail "Purge did not leave an empty user-owned .zshrc"
 }
 
+test_purge_keeps_backups_of_modified_files() {
+  local output
+
+  run_bootstrap --setup --skip-packages --yes >/dev/null
+  mkdir -p "$XDG_STATE_HOME/selfishell/backups"
+  printf 'user edit\n' >"$XDG_STATE_HOME/selfishell/backups/vimrc.backup.20260101000000"
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --dry-run)"
+  [[ "$output" == *"Would keep backups of modified files: $XDG_STATE_HOME/selfishell/backups"* ]] ||
+    fail "Purge dry run did not preview the kept backups: $output"
+
+  output="$("$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes)"
+  assert_file_content 'user edit' "$XDG_STATE_HOME/selfishell/backups/vimrc.backup.20260101000000"
+  [[ "$(find "$XDG_STATE_HOME/selfishell" -mindepth 1 -maxdepth 1)" == "$XDG_STATE_HOME/selfishell/backups" ]] ||
+    fail "Purge kept state other than backups"
+  [[ "$output" == *"Kept backups of modified files: $XDG_STATE_HOME/selfishell/backups"* ]] ||
+    fail "Purge did not report the kept backups: $output"
+}
+
 test_uninstall_without_purge_reports_cli_still_installed() {
   local output
   run_bootstrap --setup --skip-packages --yes >/dev/null

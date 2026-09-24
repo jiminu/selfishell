@@ -67,6 +67,8 @@ update_tools_and_configuration() {
     managed_preflight_block_target user-ghostty \
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
+  # Not under `||`: errexit must stay active inside to stop on a conflict.
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled" "$assume_yes" 1
 
   if [[ "$skip_packages" == "1" ]]; then
     printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"

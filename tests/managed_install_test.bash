@@ -1164,12 +1164,19 @@ test_uninstall_restores_original_files() {
 }
 
 test_uninstall_dry_run_changes_nothing() {
-  local state_count
+  local state_count output
 
+  # A backed-up original makes the dry run preview a restore onto the link it would remove.
+  mkdir -p "$XDG_CONFIG_HOME"
+  printf 'user starship\n' >"$XDG_CONFIG_HOME/starship.toml"
   run_selfishell install --skip-packages --yes >/dev/null
   state_count="$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)"
-  run_selfishell uninstall --restore --dry-run >/dev/null
+  output="$(run_selfishell uninstall --restore --dry-run)" ||
+    fail "Uninstall dry run failed with a backup to restore: $output"
 
+  [[ "$output" == *"Would restore: $XDG_CONFIG_HOME/starship.toml.backup."*" -> $XDG_CONFIG_HOME/starship.toml"* ]] ||
+    fail "Uninstall dry run did not preview the restore: $output"
+  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/starship.toml" "$XDG_CONFIG_HOME/starship.toml"
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Uninstall dry run changed .zshrc type"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Uninstall dry run removed the loader"
   [[ "$(find "$XDG_STATE_HOME/selfishell/resources" -type f -name '*.state' | wc -l)" -eq "$state_count" ]] ||
@@ -1708,12 +1715,16 @@ test_managed_link_conflict_still_aborts() {
   cp "$state_file" "$saved_state"
   rm "$link_path"
   printf 'replaced_by_user\n' >"$link_path"
+  # Listed before the link: preflight must stop before recreating it.
+  rm "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh"
 
   local rc=0
   run_selfishell install --skip-packages --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
 
   ((rc != 0)) || fail "A replaced managed link must still abort installation"
   assert_file_content 'replaced_by_user' "$link_path"
+  [[ ! -e "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ]] ||
+    fail "A link conflict still applied an earlier managed file"
   cmp -s "$saved_state" "$state_file" || fail "A replaced managed link must not change its resource state"
   grep -Fq 'Managed link was replaced; preserving it' "$TEST_ROOT/stderr" ||
     fail "Replaced link did not report a preserving error"
@@ -2391,9 +2402,35 @@ test_update_tools_only_skips_modified_managed_file_and_continues() {
     fail "update --tools-only did not continue updating later managed resources after a skip"
 }
 
-test_update_tools_only_yes_preserves_modified_file() {
+# Package installation fails here, so the conflict question appears only if it
+# is asked before packages.
+test_update_asks_managed_file_conflicts_before_packages() {
+  local release_root="$TEST_ROOT/release"
+  local output rc=0
+
+  build_release_copy "$release_root"
   setup_fake_packages
-  run_selfishell install --skip-packages --yes >/dev/null
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
+  printf 'user_modified_completion\n' >"$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
+  printf '#!/usr/bin/env bash\nexit 1\n' >"$TEST_ROOT/bin/dpkg-query"
+  printf '#!/usr/bin/env bash\nexit 1\n' >"$TEST_ROOT/bin/apt-get"
+  printf '#!/usr/bin/env bash\nexec "$@"\n' >"$TEST_ROOT/bin/sudo"
+  chmod +x "$TEST_ROOT/bin/sudo"
+
+  output="$(printf 'y\nn\n' | SELFISHELL_TEST_TTY=1 bash "$release_root/bin/selfishell" update --tools-only 2>&1)" || rc=$?
+
+  ((rc != 0)) || fail "The failing package fake did not stop the update"
+  [[ "$output" == *'Managed file was modified'* ]] ||
+    fail "The conflict question was not asked before package installation: $output"
+  assert_file_content 'user_modified_completion' "$XDG_CONFIG_HOME/selfishell/zsh/completion.zsh"
+}
+
+test_update_tools_only_yes_preserves_modified_file() {
+  local release_root="$TEST_ROOT/release"
+
+  build_release_copy "$release_root"
+  setup_fake_packages
+  bash "$release_root/bin/selfishell" install --skip-packages --yes >/dev/null
 
   local target_file="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
@@ -2401,9 +2438,16 @@ test_update_tools_only_yes_preserves_modified_file() {
 
   printf 'user_modified_data\n' >"$target_file"
   cp "$state_file" "$saved_state"
+  # runtime.zsh is applied before vimrc; a late conflict used to leave it updated.
+  printf '# a newer default runtime\n' >>"$release_root/config/shared/zsh/runtime.zsh"
+  cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$HOME/package-queries"
+printf 'install ok installed\n'
+EOF
 
   local rc=0
-  run_selfishell update --tools-only --yes </dev/null >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+  bash "$release_root/bin/selfishell" update --tools-only --yes </dev/null >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
 
   ((rc != 0)) || fail "update --tools-only --yes must not silently overwrite a modified managed file"
   assert_file_content 'user_modified_data' "$target_file"
@@ -2412,6 +2456,9 @@ test_update_tools_only_yes_preserves_modified_file() {
     fail "Non-interactive update conflict did not report a preserving error"
   [[ ! -d "$XDG_STATE_HOME/selfishell/backups" ]] ||
     fail "Non-interactive update conflict must not create a conflict backup"
+  ! cmp -s "$release_root/config/shared/zsh/runtime.zsh" "$XDG_CONFIG_HOME/selfishell/zsh/runtime.zsh" ||
+    fail "A refused conflict still applied an earlier managed file"
+  [[ ! -e "$HOME/package-queries" ]] || fail "A refused conflict still reached package installation"
 }
 
 test_tools_only_update_reports_its_own_result_without_a_version_transition() {

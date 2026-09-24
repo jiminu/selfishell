@@ -47,6 +47,7 @@ uninstall_purge() {
   local dry_run="$1"
   local prefix bin_dir
   local sfs_link=""
+  local backup_dir keep_backups=0
 
   release_installation_paths || return "$SELFISHELL_EXIT_ERROR"
   prefix="$(dirname "$(dirname "$SELFISHELL_SHARE_DIR")")"
@@ -60,6 +61,10 @@ uninstall_purge() {
       "$SELFISHELL_COLOR_YELLOW" "$bin_dir/sfs" "$SELFISHELL_COLOR_RESET"
   fi
 
+  # Conflict backups hold the user's own edits to managed files, so purge keeps them.
+  backup_dir="$SELFISHELL_STATE_DIR/backups"
+  [[ -z "$(find "$backup_dir" -mindepth 1 -print -quit 2>/dev/null)" ]] || keep_backups=1
+
   if [[ "$dry_run" == 1 ]]; then
     [[ -z "$sfs_link" ]] ||
       printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$sfs_link"
@@ -67,13 +72,22 @@ uninstall_purge() {
     printf '%sWould remove Selfishell releases:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_SHARE_DIR"
     printf '%sWould remove Selfishell cache:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_CACHE_DIR"
     printf '%sWould remove Selfishell state:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_STATE_DIR"
+    [[ "$keep_backups" == 0 ]] ||
+      printf '%sWould keep backups of modified files:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$backup_dir"
     return
   fi
 
   [[ -z "$sfs_link" ]] || rm -f "$sfs_link" || return
   rm -f "$bin_dir/selfishell" || return
-  rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
+  rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_SHARE_DIR" || return
+  if [[ "$keep_backups" == 1 ]]; then
+    find "$SELFISHELL_STATE_DIR" -mindepth 1 -maxdepth 1 ! -name backups -exec rm -rf {} + || return
+  else
+    rm -rf "$SELFISHELL_STATE_DIR" || return
+  fi
   printf '%sSelfishell configuration, CLI, releases, cache, and state removed.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
+  [[ "$keep_backups" == 0 ]] ||
+    printf '%sKept backups of modified files:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$backup_dir"
   printf '%s\n' \
     'User-owned files it created once and never manages, such as the mise config.toml, are left in place.'
 }
