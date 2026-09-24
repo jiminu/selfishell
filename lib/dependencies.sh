@@ -27,7 +27,11 @@ dependency_load() {
     DEPENDENCY_VERSION="$version"
     DEPENDENCY_SOURCE="$source"
     DEPENDENCY_CHECKSUM="$checksum"
-    DEPENDENCY_TARGET="$HOME/$target"
+    # Data targets follow XDG_DATA_HOME, where zinit's consumers look for it.
+    case "$target" in
+      .local/share/*) DEPENDENCY_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/${target#.local/share/}" ;;
+      *) DEPENDENCY_TARGET="$HOME/$target" ;;
+    esac
     DEPENDENCY_MARKER="$marker"
     return 0
   done <"$manifest"

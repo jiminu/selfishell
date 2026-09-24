@@ -12,7 +12,11 @@ install_zinit_plugins() {
   local zinit_script="$data_home/zinit/zinit.git/zinit.zsh"
 
   manifest="$(dependencies_manifest_path)"
-  [[ -r "$zinit_script" && -r "$manifest" ]] || return 1
+  if [[ ! -r "$zinit_script" ]]; then
+    cli_error "Zinit is not installed: $zinit_script"
+    return 1
+  fi
+  [[ -r "$manifest" ]] || return 1
 
   while read -r type repository revision _; do
     [[ "$type" == zsh-plugin ]] || continue

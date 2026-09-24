@@ -151,7 +151,8 @@ removing anything so that it does not overwrite your changes.
 ### Restore configuration and purge Selfishell
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and
-state:
+state. Backups of managed files you had modified stay in
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/backups`:
 
 ```sh
 selfishell uninstall --restore --purge

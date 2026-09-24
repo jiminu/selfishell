@@ -13,11 +13,14 @@ Options:
 EOF
 }
 
+# preflight=1 checks every managed file and link, asking conflict questions
+# up front, so a conflict stops the command before packages or any file change.
 install_managed_configuration() {
   local platform="$1"
   local dry_run="$2"
   local ghostty_enabled="${3:-0}"
   local assume_yes="${4:-0}"
+  local preflight="${5:-0}"
   local zsh_source
   local resource_kind resource_name resource_target resource_source
 
@@ -41,15 +44,18 @@ install_managed_configuration() {
         fi
         # Invalidate before replacing the generator so an interrupted install
         # cannot leave new configuration paired with old initialization code.
-        if [[ "$dry_run" == "0" && "$resource_name" == zsh-interactive ]] && ! cmp -s "$resource_source" "$resource_target"; then
+        if [[ "$dry_run" == "0" && "$preflight" == 0 && "$resource_name" == zsh-interactive ]] &&
+          ! cmp -s "$resource_source" "$resource_target"; then
           rm -f "$SELFISHELL_CACHE_DIR"/zoxide-init.zsh "$SELFISHELL_CACHE_DIR"/fzf-init.zsh "$SELFISHELL_CACHE_DIR"/starship-init.zsh 2>/dev/null
         fi
-        managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes"
+        managed_install_file "$resource_name" "$resource_source" "$resource_target" "$dry_run" "$assume_yes" "$preflight"
         ;;
       link)
-        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run"
+        managed_install_link "$resource_name" "$resource_target" "$resource_source" "$dry_run" "$preflight"
         ;;
       block)
+        # Blocks have their own preflight, which also runs before packages.
+        [[ "$preflight" == 0 ]] || continue
         if [[ "$resource_name" == user-ghostty ]]; then
           [[ "$platform" == "macos" && "$ghostty_enabled" == "1" ]] || continue
         fi
@@ -64,7 +70,7 @@ install_managed_configuration() {
     esac
   done < <(selfishell_managed_resources)
 
-  if [[ "$dry_run" == "0" ]]; then
+  if [[ "$dry_run" == "0" && "$preflight" == 0 ]]; then
     selfishell_mise_trust
   fi
 }
@@ -281,6 +287,8 @@ command_install() {
     managed_preflight_block_target user-ghostty \
       "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/config.ghostty" "$assume_yes" "$dry_run" || return
   fi
+  # Not under `||`: errexit must stay active inside to stop on a conflict.
+  install_managed_configuration "$platform" "$dry_run" "$ghostty_enabled" "$assume_yes" 1
 
   if [[ "$skip_packages" == "1" ]]; then
     printf '%sSkipping package and tool installation.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"

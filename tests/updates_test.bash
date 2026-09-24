@@ -319,6 +319,21 @@ EOF
     fail "Retrying after removing the forced failure did not behave as expected: $output"
 }
 
+test_data_directory_dependency_targets_follow_xdg_data_home() {
+  local payload checksum
+
+  payload="$TEST_ROOT/tool"
+  printf '#!/bin/sh\n' >"$payload"
+  checksum="$(fixture_sha256 "$payload")"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'download tool 1.0 linux amd64 file://%s %s .local/share/tool/tool raw\n' "$payload" "$checksum" \
+    >"$SELFISHELL_DEPENDENCIES_FILE"
+
+  XDG_DATA_HOME="$TEST_ROOT/data" run_dependency_install tool >/dev/null
+  [[ -x "$TEST_ROOT/data/tool/tool" ]] || fail "Data dependency ignored XDG_DATA_HOME"
+  [[ ! -e "$HOME/.local/share/tool" ]] || fail "Data dependency was installed under the default data home"
+}
+
 test_dependency_temporary_directory_creation_failure_does_not_report_success() {
   local payload checksum output status
   local fake_bin="$TEST_ROOT/fakebin"

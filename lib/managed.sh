@@ -2,6 +2,8 @@
 
 MANAGED_BLOCK_OVERWRITE_RESOURCES=""
 MANAGED_BLOCK_SKIP_RESOURCES=""
+MANAGED_FILE_OVERWRITE_RESOURCES=""
+MANAGED_FILE_SKIP_RESOURCES=""
 
 # A link to an unchanged regular file is still a user-replaced path.
 managed_path_is_regular_file() {
@@ -144,6 +146,41 @@ managed_block_overwrite_selected() {
 
 managed_block_skip_selected() {
   [[ " $MANAGED_BLOCK_SKIP_RESOURCES " == *" $1 "* ]]
+}
+
+managed_file_overwrite_selected() {
+  [[ " $MANAGED_FILE_OVERWRITE_RESOURCES " == *" $1 "* ]]
+}
+
+managed_file_skip_selected() {
+  [[ " $MANAGED_FILE_SKIP_RESOURCES " == *" $1 "* ]]
+}
+
+managed_select_file_conflict_action() {
+  local resource="$1"
+  local target_file="$2"
+  local assume_yes="$3"
+  local answer=""
+
+  if managed_file_overwrite_selected "$resource" || managed_file_skip_selected "$resource"; then
+    return 0
+  fi
+  if [[ "$assume_yes" == "1" ]] || ! managed_conflict_is_interactive; then
+    cli_error "Managed file was modified; preserving it: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+
+  printf '%sManaged file was modified:%s %s. Overwrite with default config? [y/N] ' \
+    "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
+  if ! answer="$(managed_read_conflict_answer)"; then
+    cli_error "Managed file was modified; preserving it: $target_file"
+    return "$SELFISHELL_EXIT_ERROR"
+  fi
+  if selfishell_answer_is_yes "$answer"; then
+    MANAGED_FILE_OVERWRITE_RESOURCES="$MANAGED_FILE_OVERWRITE_RESOURCES $resource"
+  else
+    MANAGED_FILE_SKIP_RESOURCES="$MANAGED_FILE_SKIP_RESOURCES $resource"
+  fi
 }
 
 managed_select_block_conflict_action() {
@@ -539,17 +576,19 @@ managed_remove_block() {
   managed_splice_block "$target_file"
 }
 
+# With preflight=1, runs every check and asks any conflict question, then
+# returns before changing anything; the apply pass reuses the recorded answer.
 managed_install_file() {
   local resource="$1"
   local source_file="$2"
   local target_file="$3"
   local dry_run="$4"
   local assume_yes="${5:-0}"
+  local preflight="${6:-0}"
   local source_checksum
   local current_checksum=""
   local original_backup="-"
   local conflict_backup=""
-  local answer=""
   # Updated requires a managed file that actually existed on disk just before
   # this run: an "active" prior state alone isn't enough, since the target may
   # have been deleted since and this run recreates it. "pending" (an
@@ -570,24 +609,16 @@ managed_install_file() {
       if [[ "$current_checksum" != "$MANAGED_STATE_CHECKSUM" && "$current_checksum" != "$source_checksum" ]]; then
         if [[ "$MANAGED_STATE_STATUS" == "active" || "$original_backup" == "-" || -e "$original_backup" || -L "$original_backup" ]]; then
           if [[ "$dry_run" == "1" ]]; then
+            [[ "$preflight" == 0 ]] || return 0
             printf '%sConflict: modified managed file:%s %s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
             printf '%sWould require an overwrite or skip decision.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
             return 0
           fi
 
-          if [[ "$assume_yes" == "1" ]] || ! managed_conflict_is_interactive; then
-            cli_error "Managed file was modified; preserving it: $target_file"
-            return "$SELFISHELL_EXIT_ERROR"
-          fi
+          managed_select_file_conflict_action "$resource" "$target_file" "$assume_yes" || return
+          [[ "$preflight" == 0 ]] || return 0
 
-          printf '%sManaged file was modified:%s %s. Overwrite with default config? [y/N] ' \
-            "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$target_file"
-          if ! answer="$(managed_read_conflict_answer)"; then
-            cli_error "Managed file was modified; preserving it: $target_file"
-            return "$SELFISHELL_EXIT_ERROR"
-          fi
-
-          if selfishell_answer_is_yes "$answer"; then
+          if managed_file_overwrite_selected "$resource"; then
             conflict_backup="$(managed_unique_backup_path "$SELFISHELL_STATE_DIR/backups/$resource")"
             mkdir -p "$(dirname "$conflict_backup")" || return "$SELFISHELL_EXIT_ERROR"
             cp -p "$target_file" "$conflict_backup" || return "$SELFISHELL_EXIT_ERROR"
@@ -617,6 +648,7 @@ managed_install_file() {
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     original_backup="$(managed_unique_backup_path "$target_file")"
   fi
+  [[ "$preflight" == 0 ]] || return 0
 
   if [[ "$current_checksum" == "$source_checksum" ]]; then
     if [[ "$dry_run" == "0" ]]; then
@@ -654,6 +686,7 @@ managed_install_link() {
   local target_file="$2"
   local source_file="$3"
   local dry_run="$4"
+  local preflight="${5:-0}"
   local backup="-"
   local moved_to_backup=0
 
@@ -665,6 +698,7 @@ managed_install_link() {
     backup="$MANAGED_STATE_BACKUP"
 
     if [[ -L "$target_file" && "$(readlink "$target_file")" == "$source_file" ]]; then
+      [[ "$preflight" == 0 ]] || return 0
       if [[ "$dry_run" == "0" ]]; then
         managed_write_state "$resource" link active "$target_file" "$source_file" "$backup" - || return "$SELFISHELL_EXIT_ERROR"
       fi
@@ -682,6 +716,7 @@ managed_install_link() {
   elif [[ -e "$target_file" || -L "$target_file" ]]; then
     backup="$(managed_unique_backup_path "$target_file")"
   fi
+  [[ "$preflight" == 0 ]] || return 0
 
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould link:%s %s -> %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$target_file" "$source_file"
@@ -719,6 +754,8 @@ managed_uninstall_resource() {
   local restore="$2"
   local dry_run="$3"
   local current_checksum
+  # Dry-run leaves the managed path in place, so its restore check must treat it as removed.
+  local would_remove=0
 
   if ! managed_read_state "$resource"; then
     managed_state_exists "$resource" || return 0
@@ -738,6 +775,7 @@ managed_uninstall_resource() {
       if [[ -L "$MANAGED_STATE_TARGET" && "$(readlink "$MANAGED_STATE_TARGET")" == "$MANAGED_STATE_REFERENCE" ]]; then
         if [[ "$dry_run" == "1" ]]; then
           printf '%sWould remove managed link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
+          would_remove=1
         else
           rm "$MANAGED_STATE_TARGET" || return
         fi
@@ -755,6 +793,7 @@ managed_uninstall_resource() {
         fi
         if [[ "$dry_run" == "1" ]]; then
           printf '%sWould remove managed file:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$MANAGED_STATE_TARGET"
+          would_remove=1
         else
           rm "$MANAGED_STATE_TARGET" || return
         fi
@@ -766,7 +805,7 @@ managed_uninstall_resource() {
   esac
 
   if [[ "$restore" == "1" && "$MANAGED_STATE_BACKUP" != "-" && (-e "$MANAGED_STATE_BACKUP" || -L "$MANAGED_STATE_BACKUP") ]]; then
-    if [[ -e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET" ]]; then
+    if [[ "$would_remove" == 0 && (-e "$MANAGED_STATE_TARGET" || -L "$MANAGED_STATE_TARGET") ]]; then
       cli_error "Restore target is occupied; preserving backup: $MANAGED_STATE_BACKUP"
       return "$SELFISHELL_EXIT_ERROR"
     fi

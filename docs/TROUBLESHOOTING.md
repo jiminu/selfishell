@@ -47,7 +47,9 @@ For a modified managed file or marked block, an interactive install or update
 offers to overwrite or skip it. Overwrite first saves the full file under
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/backups`; skip preserves the
 file and continues. `--yes` and non-interactive runs never overwrite a detected
-modification and stop instead.
+modification and stop instead. These checks run before any package or file
+change, so a stop leaves everything as it was. `uninstall --purge` keeps these
+backups.
 
 Untouched marked blocks from an older Selfishell release are upgraded
 automatically. Bytes outside the block markers remain unchanged. Uninstall
