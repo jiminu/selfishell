@@ -56,7 +56,7 @@ doctor_report_zinit_plugins() {
       missing+=("$repository")
     elif [[ -n "$(git -C "$plugin_dir" status --porcelain 2>/dev/null)" ]]; then
       dirty+=("$repository")
-    elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" || [[ "$current_revision" != "$revision" ]]; then
+    elif ! current_revision="$(selfishell_git_head "$plugin_dir")" || [[ "$current_revision" != "$revision" ]]; then
       drifted+=("$repository")
     fi
   done <"$manifest"

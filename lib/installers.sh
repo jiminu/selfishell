@@ -35,7 +35,7 @@ install_zinit_plugins() {
     # so anything but an exact match with the approved revision is
     # reprovisioned from scratch rather than recovered case by case.
     if [[ -d "$plugin_dir/.git" ]] &&
-      current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" &&
+      current_revision="$(selfishell_git_head "$plugin_dir")" &&
       [[ "$current_revision" == "$revision" ]] &&
       current_status="$(git -C "$plugin_dir" status --porcelain 2>/dev/null)" &&
       [[ -z "$current_status" ]]; then
@@ -60,7 +60,7 @@ install_zinit_plugins() {
       failure_message="Could not provision Zinit plugin: $repository"
     elif [[ ! -d "$plugin_dir/.git" ]]; then
       failure_message="Zinit plugin checkout is missing after provisioning: $repository"
-    elif ! current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)"; then
+    elif ! current_revision="$(selfishell_git_head "$plugin_dir")"; then
       failure_message="Could not inspect Zinit plugin after provisioning: $repository"
     elif [[ "$current_revision" != "$revision" ]]; then
       failure_message="Zinit plugin revision does not match after provisioning: $repository"
@@ -143,7 +143,8 @@ install_mise_tools() {
   selfishell_mise_trust
 
   # The release config must win over any mise.toml in the caller's project.
-  if MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
+  # Pins are exact versions, so the installed check needs no remote lookup.
+  if MISE_OFFLINE=1 MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
     "$mise_command" -C "$SELFISHELL_ROOT/config/shared" -q install --dry-run-code "$@" >/dev/null 2>&1; then
     return 0
   fi
@@ -212,7 +213,7 @@ install_lazy_nvim() {
       cli_error "lazy.nvim checkout was modified; preserving it: $lazypath"
       return 1
     fi
-    current_revision="$(git -C "$lazypath" rev-parse HEAD)"
+    current_revision="$(selfishell_git_head "$lazypath")"
     [[ "$current_revision" != "$revision" ]] || return 0
     previously_installed=1
   elif [[ -e "$lazypath" || -L "$lazypath" ]]; then
@@ -246,11 +247,45 @@ install_lazy_nvim() {
   fi
 }
 
+neovim_plugin_dir() {
+  local data_home="$1"
+  local repository="$2"
+  local source="$3"
+  local plugin_name
+
+  if [[ "$repository" == "folke/lazy.nvim" ]]; then
+    printf '%s\n' "$data_home/selfishell/nvim/lazy/lazy.nvim"
+    return
+  fi
+  plugin_name="${source##*/}"
+  printf '%s\n' "$data_home/nvim/lazy/${plugin_name%.git}"
+}
+
+# `Lazy! sync` fetches every plugin even when nothing changed. The pins come
+# from the spec, so checkouts at their pins with no extra plugin need no sync.
+neovim_plugins_are_synced() {
+  local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local manifest type repository revision source plugin_dir entry
+  local declared=" "
+
+  manifest="$(dependencies_manifest_path)"
+  while read -r type repository revision _ _ source _; do
+    [[ "$type" == "nvim-plugin" ]] || continue
+    plugin_dir="$(neovim_plugin_dir "$data_home" "$repository" "$source")"
+    [[ -d "$plugin_dir/.git" && "$(selfishell_git_head "$plugin_dir")" == "$revision" ]] || return 1
+    declared="$declared${plugin_dir##*/} "
+  done <"$manifest"
+
+  for entry in "$data_home/nvim/lazy"/*; do
+    [[ -e "$entry" ]] || continue
+    [[ "$declared" == *" ${entry##*/} "* ]] || return 1
+  done
+}
+
 verify_neovim_plugins() {
   local data_home
   local manifest
   local plugin_dir
-  local plugin_name
   local repository
   local revision
   local source
@@ -263,19 +298,13 @@ verify_neovim_plugins() {
   while read -r type repository revision _ _ source _; do
     [[ "$type" == "nvim-plugin" ]] || continue
 
-    if [[ "$repository" == "folke/lazy.nvim" ]]; then
-      plugin_dir="$data_home/selfishell/nvim/lazy/lazy.nvim"
-    else
-      plugin_name="${source##*/}"
-      plugin_name="${plugin_name%.git}"
-      plugin_dir="$data_home/nvim/lazy/$plugin_name"
-    fi
+    plugin_dir="$(neovim_plugin_dir "$data_home" "$repository" "$source")"
 
     if [[ ! -d "$plugin_dir/.git" ]]; then
       cli_error "Neovim plugin checkout is missing after sync: $repository"
       return 1
     fi
-    current_revision="$(git -C "$plugin_dir" rev-parse HEAD 2>/dev/null)" || {
+    current_revision="$(selfishell_git_head "$plugin_dir")" || {
       cli_error "Could not inspect Neovim plugin after sync: $repository"
       return 1
     }
@@ -297,6 +326,7 @@ install_neovim_plugins() {
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould sync declared Neovim plugins.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     printf '%sWould sync lazy.nvim bootstrap repository.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
+    printf '%sWould update installed Tree-sitter parsers.%s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET"
     return
   fi
 
@@ -308,18 +338,29 @@ install_neovim_plugins() {
   install_lazy_nvim "$lazypath" || return
   log_file="$(mktemp "${TMPDIR:-/tmp}/selfishell-nvim.XXXXXX")" || return 1
 
+  if ! neovim_plugins_are_synced; then
+    if ! selfishell_run_nvim "$nvim_command" --headless \
+      '+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
+      +qa >"$log_file" 2>&1; then
+      cat "$log_file" >&2
+      rm -f "$log_file"
+      cli_error "Could not install Neovim plugins."
+      return 1
+    fi
+    if ! verify_neovim_plugins; then
+      cat "$log_file" >&2
+      rm -f "$log_file"
+      return 1
+    fi
+  fi
+
+  # The plugin's `:TSUpdate` build hook is async; headless +qa exits before it
+  # finishes. Parsers are optional, so a failure only warns.
   if ! selfishell_run_nvim "$nvim_command" --headless \
-    '+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end' \
+    '+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end' \
     +qa >"$log_file" 2>&1; then
     cat "$log_file" >&2
-    rm -f "$log_file"
-    cli_error "Could not install Neovim plugins."
-    return 1
-  fi
-  if ! verify_neovim_plugins; then
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    return 1
+    cli_warn "Could not update Tree-sitter parsers; run :TSUpdate in Neovim to retry."
   fi
   rm -f "$log_file"
 }

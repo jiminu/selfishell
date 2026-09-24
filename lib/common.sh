@@ -69,6 +69,39 @@ selfishell_export_git_speed_limits() {
   export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-$time}"
 }
 
+# A checkout's HEAD commit without starting git: a detached SHA, a loose ref,
+# or a packed ref. Anything else (a .git file, say) falls back to git.
+selfishell_git_head() {
+  local repository="$1"
+  local head="" ref sha name
+
+  if [[ -f "$repository/.git/HEAD" ]]; then
+    IFS= read -r head <"$repository/.git/HEAD" || true
+    if [[ "$head" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+      printf '%s\n' "$head"
+      return 0
+    fi
+    if [[ "$head" == "ref: refs/"* ]]; then
+      ref="${head#ref: }"
+      if [[ -f "$repository/.git/$ref" ]]; then
+        IFS= read -r sha <"$repository/.git/$ref" || true
+        if [[ "$sha" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+          printf '%s\n' "$sha"
+          return 0
+        fi
+      elif [[ -f "$repository/.git/packed-refs" ]]; then
+        while IFS=' ' read -r sha name; do
+          if [[ "$name" == "$ref" && "$sha" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+            printf '%s\n' "$sha"
+            return 0
+          fi
+        done <"$repository/.git/packed-refs"
+      fi
+    fi
+  fi
+  git -C "$repository" rev-parse HEAD 2>/dev/null
+}
+
 cli_warn() {
   printf '%sselfishell: warning:%s %s\n' "$SELFISHELL_COLOR_YELLOW_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
