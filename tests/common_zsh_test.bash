@@ -237,6 +237,8 @@ test_completion_audits_the_dump_once_a_day() {
     fail "A completed daily audit was repeated on the next startup"
 
   # A newly installed tool's completion must not wait for the next daily audit.
+  # Backdate the dump so the new file's directory is newer at 1 s resolution.
+  touch -t 202001010000 "$HOME/.zcompdump" "$HOME/.zcompdump.zwc"
   printf '#compdef zzselfishell\n' >"$HOME/completion-functions/_zzselfishell"
   [[ "$(count_startup_audits)" -gt 0 ]] || fail "A new completion file did not rebuild the dump"
   grep -q '_zzselfishell' "$HOME/.zcompdump" || fail "The rebuilt dump omitted the new completion"
