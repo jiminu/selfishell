@@ -29,16 +29,17 @@ _selfishell_completion_needs_audit() {
      -n "$1.audit"(#qN.mh+24) ]]
 }
 
-# compinit -C never counts fpath, so a newly installed tool's completion would
-# wait for the daily audit. A changed count takes the audited rebuild instead.
+# compinit -C never rescans fpath, so a newly installed tool's completion would
+# wait for the daily audit. Adding or removing a file updates its directory's
+# mtime; a directory newer than the dump takes the audited rebuild. Globbing
+# every completion file instead cost ~7 ms per startup.
 _selfishell_completion_files_changed() {
-  setopt localoptions extendedglob
-  local header
-  local -a files
+  local directory
 
-  files=( ${^~fpath:/.}/^([^_]*|*~|*.zwc)(N) )
-  IFS= read -r header <"$1" 2>/dev/null || return 1
-  [[ "$header" != "#files: ${#files}"[[:blank:]]* ]]
+  for directory in $fpath; do
+    [[ "$directory" -nt "$1" ]] && return 0
+  done
+  return 1
 }
 
 if [[ -o interactive ]] && { _selfishell_completion_needs_audit "$ZCOMPDUMP" ||

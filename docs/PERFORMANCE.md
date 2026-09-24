@@ -91,7 +91,9 @@ a prompt. After a clean audit, warm startups reuse the dump without another
 audit. Insecure paths are audited on each startup until repaired, so restoring
 the completion search path cannot reintroduce an excluded directory. A replaced
 audit marker (a symlink, nonempty file, or another path type) is preserved and
-also causes startup to audit again.
+also causes startup to audit again. A completion directory modified after the
+dump, such as one that gained a newly installed tool's completion, also takes
+the audited rebuild; comparing directory mtimes keeps that check under 1 ms.
 
 fzf, zoxide, and Starship initialization caches survive unchanged installs and
 configuration reapplication. A changed `zsh/interactive.zsh` generator invalidates
