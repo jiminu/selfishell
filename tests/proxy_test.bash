@@ -75,4 +75,17 @@ test_invalid_curl_policy_is_rejected_before_network_access() {
   [[ ! -e "$HOME/proxy-observed" ]] || fail "Invalid curl policy still invoked curl"
 }
 
+test_git_transfers_use_curl_speed_limits() {
+  # shellcheck disable=SC2016 # Expanded by the child shell.
+  local show='source "$1/lib/common.sh"; selfishell_export_git_speed_limits; printf "%s %s" "$GIT_HTTP_LOW_SPEED_LIMIT" "$GIT_HTTP_LOW_SPEED_TIME"'
+
+  [[ "$(env -u GIT_HTTP_LOW_SPEED_LIMIT -u GIT_HTTP_LOW_SPEED_TIME bash -c "$show" _ "$ROOT_DIR")" == '1024 30' ]] ||
+    fail "git did not get the default low-speed limit"
+  [[ "$(SELFISHELL_CURL_LOW_SPEED_LIMIT=256 SELFISHELL_CURL_LOW_SPEED_TIME=120 \
+    env -u GIT_HTTP_LOW_SPEED_LIMIT -u GIT_HTTP_LOW_SPEED_TIME bash -c "$show" _ "$ROOT_DIR")" == '256 120' ]] ||
+    fail "git did not follow the configured curl low-speed limit"
+  [[ "$(GIT_HTTP_LOW_SPEED_LIMIT=5 env -u GIT_HTTP_LOW_SPEED_TIME bash -c "$show" _ "$ROOT_DIR")" == '5 30' ]] ||
+    fail "A user's own git low-speed limit was replaced"
+}
+
 run_discovered_tests setup_proxy_test teardown_test_home

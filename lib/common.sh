@@ -58,6 +58,17 @@ cli_error() {
   printf '%sselfishell:%s %s\n' "$SELFISHELL_COLOR_RED_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }
 
+# git has no stall limit of its own; match selfishell_curl's low-speed abort
+# for clones and plugin syncs. Values the user already set win.
+selfishell_export_git_speed_limits() {
+  local limit="${SELFISHELL_CURL_LOW_SPEED_LIMIT:-1024}"
+  local time="${SELFISHELL_CURL_LOW_SPEED_TIME:-30}"
+
+  [[ "$limit" =~ ^[1-9][0-9]*$ && "$time" =~ ^[1-9][0-9]*$ ]] || return 0
+  export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-$limit}"
+  export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-$time}"
+}
+
 cli_warn() {
   printf '%sselfishell: warning:%s %s\n' "$SELFISHELL_COLOR_YELLOW_STDERR" "$SELFISHELL_COLOR_RESET_STDERR" "$*" >&2
 }

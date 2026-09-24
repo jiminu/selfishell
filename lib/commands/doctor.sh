@@ -143,7 +143,13 @@ command_doctor() {
 
   if [[ -r "$SELFISHELL_STATE_DIR/configured" ]] && platform_is_supported "$platform"; then
     tool_status_reset_cache
-    if have_command gcc; then
+    # Without Command Line Tools, macOS /usr/bin/gcc is a stub that opens an installer.
+    if [[ "$platform" == "macos" ]] && ! xcode-select -p >/dev/null 2>&1; then
+      doctor_error "C compiler: Xcode Command Line Tools are not installed (required for compiling Tree-sitter parsers)"
+      printf "        Install them by running: %sxcode-select --install%s\n" \
+        "$SELFISHELL_COLOR_BOLD" "$SELFISHELL_COLOR_RESET"
+      result="$SELFISHELL_EXIT_ERROR"
+    elif have_command gcc; then
       doctor_ok "C compiler: gcc ($(gcc --version | head -n 1))"
     elif have_command clang; then
       doctor_ok "C compiler: clang ($(clang --version | head -n 1))"

@@ -17,23 +17,21 @@ tool_status_reset_cache() {
 
 tool_status_apt_version() {
   local package="$1"
-  local name version
 
   TOOL_STATUS_APT_VERSION=""
   if [[ "$TOOL_STATUS_APT_PACKAGES_READY" == 0 ]]; then
-    TOOL_STATUS_APT_PACKAGES="$(dpkg-query -W -f='${binary:Package}\t${Version}\n' 2>/dev/null)" ||
+    TOOL_STATUS_APT_PACKAGES="$(dpkg-query -W -f='${binary:Package}\t${db:Status-Abbrev}\t${Version}\n' 2>/dev/null)" ||
       TOOL_STATUS_APT_PACKAGES=""
     TOOL_STATUS_APT_PACKAGES_READY=1
   fi
 
-  while IFS=$'\t' read -r name version; do
-    name="${name%%:*}"
-    if [[ "$name" == "$package" && -n "$version" ]]; then
-      TOOL_STATUS_APT_VERSION="$version"
-      return
-    fi
-  done <<<"$TOOL_STATUS_APT_PACKAGES"
-  return 1
+  # awk instead of a Bash loop over the whole inventory for each package.
+  # Only "ii" is installed: removed but unpurged packages ("rc") stay listed.
+  TOOL_STATUS_APT_VERSION="$(awk -F'\t' -v package="$package" '
+    { name = $1; sub(/:.*/, "", name) }
+    name == package && $2 ~ /^ii/ && $3 != "" { print $3; exit }
+  ' <<<"$TOOL_STATUS_APT_PACKAGES")"
+  [[ -n "$TOOL_STATUS_APT_VERSION" ]]
 }
 
 tool_status_brew_version() {
@@ -116,7 +114,7 @@ tool_status_executable() {
 
 tool_status_mise_version() {
   local tool="$1"
-  local mise_command="" name versions extra
+  local mise_command="" name versions extra error_file mise_error=""
 
   TOOL_STATUS_MISE_VERSION=""
   TOOL_STATUS_APPROVED=""
@@ -137,9 +135,15 @@ tool_status_mise_version() {
     if [[ -n "$mise_command" ]]; then
       # `current` also lists configured but uninstalled versions. Query one
       # installed-only inventory, independent of the caller's project config.
-      TOOL_STATUS_MISE_VERSIONS="$(NO_COLOR=1 MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
-        "$mise_command" -C "$SELFISHELL_ROOT/config/shared" ls --current --installed --no-header --no-truncate 2>/dev/null)" ||
+      # Without the reason (an untrusted config, say), every mise tool just reads as missing.
+      error_file="$(mktemp "${TMPDIR:-/tmp}/selfishell-mise.XXXXXX")" || error_file=/dev/null
+      if ! TOOL_STATUS_MISE_VERSIONS="$(NO_COLOR=1 MISE_GLOBAL_CONFIG_FILE="$SELFISHELL_ROOT/config/shared/mise.toml" \
+        "$mise_command" -C "$SELFISHELL_ROOT/config/shared" ls --current --installed --no-header --no-truncate 2>"$error_file")"; then
         TOOL_STATUS_MISE_VERSIONS=""
+        [[ ! -r "$error_file" ]] || IFS= read -r mise_error <"$error_file" || true
+        cli_warn "mise could not list installed tools${mise_error:+: $mise_error}"
+      fi
+      [[ "$error_file" == /dev/null ]] || rm -f "$error_file"
     fi
     TOOL_STATUS_MISE_READY=1
   fi

@@ -63,6 +63,7 @@ source "$SELFISHELL_ROOT/lib/commands/install.sh"
 source "$SELFISHELL_ROOT/lib/commands/status.sh"
 source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
 source "$SELFISHELL_ROOT/lib/releases.sh"
+selfishell_export_git_speed_limits
 source "$SELFISHELL_ROOT/lib/commands/update.sh"
 source "$SELFISHELL_ROOT/lib/commands/rollback.sh"
 
