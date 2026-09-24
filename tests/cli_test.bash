@@ -193,6 +193,23 @@ test_doctor_checks_compiler_for_installed_environment() {
   set -e
 
   [[ "$output" == *'C compiler:'* ]] || fail "Installed environment should check for a C compiler"
+
+  # Without Command Line Tools, macOS gcc is a stub that must not count as a compiler.
+  printf '#!/usr/bin/env bash\nexit 2\n' >"$TEST_ROOT/bin/xcode-select"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/gcc"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/brew"
+  chmod +x "$TEST_ROOT/bin/xcode-select" "$TEST_ROOT/bin/gcc" "$TEST_ROOT/bin/brew"
+  set +e
+  output="$(
+    PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
+      SELFISHELL_TEST_SYSTEM_NAME=Darwin \
+      SELFISHELL_TEST_MACHINE_ARCH=arm64 \
+      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+  )"
+  set -e
+  [[ "$output" == *'C compiler: Xcode Command Line Tools are not installed'* ]] ||
+    fail "Doctor accepted the gcc stub without Command Line Tools: $output"
+  [[ "$output" != *'[OK] C compiler'* ]] || fail "Doctor reported the gcc stub as a compiler"
   teardown_test_home
 }
 

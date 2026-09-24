@@ -27,7 +27,9 @@ Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
 Use `--skip-packages` for configuration-only setup.
 
 Release and direct-tool downloads stop when they cannot connect or remain below
-the minimum transfer rate. Metadata checks also have a short total deadline.
+the minimum transfer rate. Git clones and Neovim plugin syncs use the same
+low-speed limit unless `GIT_HTTP_LOW_SPEED_LIMIT` or `GIT_HTTP_LOW_SPEED_TIME`
+is already set. Metadata checks also have a short total deadline.
 Slow or high-latency networks can tune the positive-integer values, in seconds
 or bytes per second as appropriate:
 

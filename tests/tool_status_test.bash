@@ -136,13 +136,20 @@ EOF
 }
 
 test_detects_apt_package_version() {
-  printf '#!/usr/bin/env bash\nprintf "git\\t2.43.0-1ubuntu7\\n"\n' >"$TEST_ROOT/bin/dpkg-query"
+  cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
+#!/usr/bin/env bash
+printf 'git:amd64\tii \t2.43.0-1ubuntu7\nvim\trc \t2:9.1.0016-1ubuntu7\n'
+EOF
   chmod +x "$TEST_ROOT/bin/dpkg-query"
 
   tool_status_detect apt git linux amd64
 
   [[ "$TOOL_STATUS_INSTALLED" == 2.43.0-1ubuntu7 ]] || fail "Apt version was not detected"
   [[ "$TOOL_STATUS_SOURCE" == apt ]] || fail "Apt source was not reported"
+
+  # Removed but unpurged: dpkg still lists it, but its binaries are gone.
+  tool_status_detect apt vim linux amd64
+  [[ "$TOOL_STATUS_SOURCE" != apt ]] || fail "A removed (rc) apt package was reported as installed"
 }
 
 test_reuses_apt_inventory() {
@@ -150,7 +157,7 @@ test_reuses_apt_inventory() {
   cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
 #!/usr/bin/env bash
 printf 'query\n' >>"$MOCK_DPKG_LOG"
-printf 'git\t2.43.0\ncurl\t8.5.0\n'
+printf 'git\tii \t2.43.0\ncurl\tii \t8.5.0\n'
 EOF
   chmod +x "$TEST_ROOT/bin/dpkg-query"
 
@@ -225,7 +232,10 @@ elif [[ "$*" != "-C $SELFISHELL_ROOT/config/shared ls --current --installed --no
 fi
 [[ "$MISE_GLOBAL_CONFIG_FILE" == "$SELFISHELL_ROOT/config/shared/mise.toml" ]] || exit 1
 cat "$HOME/mise-inventory"
-[[ ! -f "$HOME/mise-fail" ]]
+if [[ -f "$HOME/mise-fail" ]]; then
+  printf 'mise ERROR Config files are not trusted\n' >&2
+  exit 1
+fi
 EOF
   chmod +x "$TEST_ROOT/bin/mise"
   export SELFISHELL_CONFIG_DIR
@@ -319,9 +329,11 @@ test_mise_inventory_missing_and_failed_queries_use_executable_fallback() {
   touch "$HOME/mise-fail"
   printf 'uv 0.12.13\ngh 2.100.0\n' >"$HOME/mise-inventory"
   tool_status_reset_cache
-  tool_status_detect mise uv linux amd64
+  tool_status_detect mise uv linux amd64 2>"$TEST_ROOT/mise-stderr"
   [[ "$TOOL_STATUS_INSTALLED" == detected && "$TOOL_STATUS_SOURCE" == external ]] ||
     fail "Failed mise query did not discard partial output and use executable fallback"
+  grep -Fq 'mise could not list installed tools: mise ERROR Config files are not trusted' "$TEST_ROOT/mise-stderr" ||
+    fail "Failed mise query did not report its cause: $(<"$TEST_ROOT/mise-stderr")"
   tool_status_detect mise gh linux amd64
   [[ "$TOOL_STATUS_INSTALLED" == missing && "$TOOL_STATUS_SOURCE" == none && "$TOOL_STATUS_APPROVED" == 2.100.0 ]] ||
     fail "Failed mise query did not preserve missing status and approved version"
