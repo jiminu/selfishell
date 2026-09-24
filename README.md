@@ -57,7 +57,8 @@ and the Neovim workflow.
 | `selfishell rollback` | Return to the previous retained release offline. |
 | `selfishell uninstall --restore --dry-run` | Preview restoring backed-up configuration. |
 
-`sfs` is the optional short alias for `selfishell`. See
+`sfs` is the optional short alias for `selfishell`; an existing `sfs` from
+another program is left in place. See
 [Updates and rollback](docs/UPDATES.md) for update modes and recovery behavior.
 
 ## Safety

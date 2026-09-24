@@ -220,7 +220,7 @@ test_bootstrap_rejects_invalid_curl_policy() {
 test_bootstrap_rejects_invalid_semantic_versions() {
   local output status version
 
-  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01; do
+  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01 '' v; do
     set +e
     output="$(run_bootstrap --version "$version" 2>&1)"
     status=$?
@@ -579,7 +579,7 @@ test_rollback_rejects_invalid_semver() {
   version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
-  for bad_version in 'not-a-version' '1.2'; do
+  for bad_version in 'not-a-version' '1.2' '' v; do
     set +e
     "$TEST_ROOT/prefix/bin/selfishell" rollback "$bad_version" --yes \
       >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr"
@@ -1016,19 +1016,59 @@ test_uninstall_purge_reports_final_state_only() {
 test_purge_refuses_non_managed_cli_path_before_uninstall() {
   local status
   run_bootstrap --setup --skip-packages --yes >/dev/null
-  rm "$TEST_ROOT/prefix/bin/sfs"
-  printf 'user command\n' >"$TEST_ROOT/prefix/bin/sfs"
+  rm "$TEST_ROOT/prefix/bin/selfishell"
+  ln -s /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
 
   set +e
-  "$TEST_ROOT/prefix/bin/selfishell" uninstall --restore --purge --yes >/dev/null 2>&1
+  bash "$TEST_ROOT/prefix/share/selfishell/current/bin/selfishell" uninstall --restore --purge --yes >/dev/null 2>&1
   status=$?
   set -e
 
   [[ "$status" -eq 1 ]] || fail "Purge should reject a non-managed CLI path"
-  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Rejected purge removed the CLI"
+  assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
   [[ -f "$HOME/.zshrc" && ! -L "$HOME/.zshrc" ]] || fail "Rejected purge changed .zshrc"
   grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" || fail "Rejected purge removed the loader"
+}
+
+# sfs is optional: bootstrap leaves another program's sfs alone, so purge must
+# not fail on one either.
+test_foreign_sfs_is_left_in_place_by_bootstrap_and_purge() {
+  local output
+
+  mkdir -p "$TEST_ROOT/prefix/bin"
+  printf 'user command\n' >"$TEST_ROOT/prefix/bin/sfs"
+  output="$(run_bootstrap --version "$RELEASE_FIXTURE_VERSION")"
+  [[ "$output" == *"Leaving $TEST_ROOT/prefix/bin/sfs in place"* ]] ||
+    fail "Bootstrap did not report the foreign sfs: $output"
   assert_file_content 'user command' "$TEST_ROOT/prefix/bin/sfs"
+  [[ -x "$TEST_ROOT/prefix/bin/selfishell" ]] || fail "Foreign sfs blocked the CLI installation"
+
+  rm "$TEST_ROOT/prefix/bin/sfs"
+  ln -s /usr/bin/true "$TEST_ROOT/prefix/bin/sfs"
+  run_bootstrap --version 0.2.3 >/dev/null
+  assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/sfs"
+
+  "$TEST_ROOT/prefix/bin/selfishell" uninstall --purge --yes >/dev/null ||
+    fail "Purge failed on a foreign sfs"
+  assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/sfs"
+  [[ ! -e "$TEST_ROOT/prefix/bin/selfishell" && ! -L "$TEST_ROOT/prefix/bin/selfishell" ]] ||
+    fail "Purge left the Selfishell CLI link"
+}
+
+test_bootstrap_refuses_foreign_cli_link() {
+  local status
+
+  mkdir -p "$TEST_ROOT/prefix/bin"
+  ln -s /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
+  set +e
+  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 1 ]] || fail "A foreign CLI link should block installation"
+  assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+    fail "Foreign CLI link preflight changed the active release"
 }
 
 test_refuses_to_replace_non_link_cli_path() {
@@ -1045,6 +1085,124 @@ test_refuses_to_replace_non_link_cli_path() {
   assert_file_content 'user file' "$TEST_ROOT/prefix/bin/selfishell"
   [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
     fail "Link preflight failure changed the active release"
+}
+
+test_update_rejects_empty_version() {
+  local status version
+
+  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
+  for version in '' v; do
+    set +e
+    "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version "$version" --yes \
+      >/dev/null 2>"$TEST_ROOT/stderr"
+    status=$?
+    set -e
+    [[ "$status" -eq 2 ]] || fail "Empty update version '$version' exited $status instead of 2"
+    grep -Fq 'Invalid semantic version' "$TEST_ROOT/stderr" ||
+      fail "Empty update version '$version' was not reported"
+    assert_symlink_to "releases/$RELEASE_FIXTURE_VERSION" "$TEST_ROOT/prefix/share/selfishell/current"
+  done
+}
+
+test_update_does_not_move_back_to_an_older_latest() {
+  local output
+
+  run_bootstrap --version 0.3.0-beta.2 >/dev/null
+  output="$("$TEST_ROOT/prefix/bin/selfishell" update --cli-only --yes)"
+  [[ "$output" == *'Selfishell 0.3.0-beta.2 is newer than the latest release 0.2.3.'* ]] ||
+    fail "Update did not explain keeping the newer release: $output"
+  assert_symlink_to 'releases/0.3.0-beta.2' "$TEST_ROOT/prefix/share/selfishell/current"
+
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+  assert_symlink_to 'releases/0.2.3' "$TEST_ROOT/prefix/share/selfishell/current"
+}
+
+test_bootstrap_stops_on_termination() {
+  local fake_bin="$TEST_ROOT/fakebin"
+  local status
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+kill -TERM "$PPID"
+EOF
+  chmod +x "$fake_bin/curl"
+  set +e
+  PATH="$fake_bin:$PATH" run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 143 ]] || fail "Terminated bootstrap exited $status instead of 143"
+  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] || fail "Terminated bootstrap activated a release"
+}
+
+# A tar wrapper that, after extracting, publishes the same release as a
+# concurrent update would, so this update's staging lands inside it.
+write_concurrent_release_tar() {
+  local fake_bin="$1"
+  local switch_links="$2"
+
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/tar" <<EOF
+#!/usr/bin/env bash
+/usr/bin/tar "\$@" || exit
+while ((\$# > 0)); do
+  [[ "\$1" == -C ]] && staging="\$2"
+  shift
+done
+releases="\${staging%/*}"
+version="\${staging##*/.}"
+version="\${version%%.tmp.*}"
+cp -R "\$staging" "\$releases/\$version"
+if [[ "$switch_links" == 1 ]]; then
+  share="\${releases%/*}"
+  previous="\$(readlink "\$share/current")"
+  rm -f "\$share/current" "\$share/previous"
+  ln -s "releases/\$version" "\$share/current"
+  ln -s "\$previous" "\$share/previous"
+fi
+EOF
+  chmod +x "$fake_bin/tar"
+}
+
+test_concurrent_update_keeps_rollback_release() {
+  local share="$TEST_ROOT/prefix/share/selfishell"
+
+  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
+  write_concurrent_release_tar "$TEST_ROOT/fakebin" 1
+  PATH="$TEST_ROOT/fakebin:$PATH" "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+
+  assert_symlink_to 'releases/0.2.3' "$share/current"
+  assert_symlink_to "releases/$RELEASE_FIXTURE_VERSION" "$share/previous"
+  [[ -d "$share/releases/$RELEASE_FIXTURE_VERSION" ]] || fail "Concurrent update pruned the rollback release"
+  [[ -z "$(find "$share/releases/0.2.3" -name '.*.tmp.*')" ]] ||
+    fail "Concurrent update left its staging inside the release"
+}
+
+test_concurrent_bootstrap_discards_nested_staging() {
+  write_concurrent_release_tar "$TEST_ROOT/fakebin" 0
+  PATH="$TEST_ROOT/fakebin:$PATH" run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
+
+  assert_symlink_to "releases/$RELEASE_FIXTURE_VERSION" "$TEST_ROOT/prefix/share/selfishell/current"
+  [[ -z "$(find "$TEST_ROOT/prefix/share/selfishell/releases/$RELEASE_FIXTURE_VERSION" -name '.*.tmp.*')" ]] ||
+    fail "Concurrent bootstrap left its staging inside the release"
+}
+
+test_day_old_staging_is_pruned() {
+  local releases="$TEST_ROOT/prefix/share/selfishell/releases"
+
+  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
+  mkdir "$releases/.9.9.9.tmp.stale" "$releases/.9.9.9.tmp.fresh"
+  touch -t 202001010000 "$releases/.9.9.9.tmp.stale"
+  "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version 0.2.3 --yes >/dev/null
+  [[ ! -e "$releases/.9.9.9.tmp.stale" ]] || fail "Update kept a day-old staging directory"
+  [[ -d "$releases/.9.9.9.tmp.fresh" ]] || fail "Update removed a staging directory that may be in use"
+
+  mkdir "$releases/.9.9.9.tmp.stale"
+  touch -t 202001010000 "$releases/.9.9.9.tmp.stale"
+  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
+  [[ ! -e "$releases/.9.9.9.tmp.stale" ]] || fail "Bootstrap kept a day-old staging directory"
+  [[ -d "$releases/.9.9.9.tmp.fresh" ]] || fail "Bootstrap removed a staging directory that may be in use"
 }
 
 main() {

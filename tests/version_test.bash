@@ -39,6 +39,17 @@ test_semantic_version_validation() {
   done
 }
 
+test_version_precedence_matches_update_notice_vectors() {
+  local candidate current expected actual
+
+  while read -r candidate current expected; do
+    actual=0
+    selfishell_version_is_newer "$candidate" "$current" && actual=1
+    [[ "$actual" == "$expected" ]] ||
+      fail "Wrong version comparison: $candidate > $current (expected $expected, got $actual)"
+  done <"$ROOT_DIR/tests/fixtures/version-precedence.txt"
+}
+
 test_release_scripts_share_version_validation() {
   local output status
   setup_test_home
