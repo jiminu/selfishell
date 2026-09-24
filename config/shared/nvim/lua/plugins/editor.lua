@@ -22,6 +22,12 @@ return {
     event = { "BufReadPre", "BufNewFile" },
     init = function()
       vim.g.rainbow_delimiters = {
+        -- The global strategy marks every delimiter: seconds of freeze on a
+        -- large file, minutes on a minified one. ~10 ms per 1,000 delimiters.
+        condition = function(bufnr)
+          local lines = vim.api.nvim_buf_line_count(bufnr)
+          return lines <= 5000 and vim.api.nvim_buf_get_offset(bufnr, lines) / lines <= 500
+        end,
         strategy = {
           [""] = "rainbow-delimiters.strategy.global",
         },

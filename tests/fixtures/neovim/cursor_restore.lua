@@ -77,6 +77,27 @@ local ok, err = pcall(function()
     special_cursor[1] == 1 and special_cursor[2] == 0,
     "a special buffer moved the cursor: " .. vim.inspect(special_cursor)
   )
+
+  -- A new commit message reuses the path, so its old mark would skip past
+  -- the empty first line. Filetype detection has not run yet here.
+  local buf_commit = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_name(buf_commit, vim.fn.tempname() .. "/.git/COMMIT_EDITMSG")
+  vim.api.nvim_buf_set_lines(buf_commit, 0, -1, false, { "", "# comment", "# comment", "# comment" })
+  vim.api.nvim_buf_set_mark(buf_commit, '"', 3, 0, {})
+  local win_commit = vim.api.nvim_open_win(buf_commit, false, {
+    relative = "editor",
+    width = 10,
+    height = 5,
+    row = 0,
+    col = 60,
+  })
+  vim.api.nvim_win_set_cursor(win_commit, { 1, 0 })
+  vim.api.nvim_exec_autocmds("BufReadPost", { buffer = buf_commit })
+  local commit_cursor = vim.api.nvim_win_get_cursor(win_commit)
+  assert(
+    commit_cursor[1] == 1,
+    "a commit message restored its previous cursor: " .. vim.inspect(commit_cursor)
+  )
 end)
 
 for _, buf in ipairs(vim.api.nvim_list_bufs()) do

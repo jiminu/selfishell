@@ -14,7 +14,7 @@ opt.signcolumn = "yes"
 opt.cursorline = true
 opt.wrap = false
 opt.list = true
-opt.listchars = { extends = "▸", precedes = "◂" }
+opt.listchars = { tab = "  ", nbsp = "␣", extends = "▸", precedes = "◂" }
 opt.scrolloff = 4
 opt.splitbelow = true
 opt.splitright = true
@@ -37,7 +37,31 @@ opt.inccommand = "split"
 -- Integration
 opt.mouse = "a"
 opt.clipboard = "unnamedplus"
-opt.fileencodings = { "utf-8", "euc-kr" }
+opt.fileencodings = { "ucs-bom", "utf-8", "euc-kr" }
+
+-- Over SSH, pbcopy or xclip would fill the remote clipboard; OSC 52 reaches
+-- the local terminal. Paste stays local: an OSC 52 read prompts or waits up to 10s.
+if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
+  local osc52 = require("vim.ui.clipboard.osc52")
+  local copied = { ["+"] = { {}, "v" }, ["*"] = { {}, "v" } }
+  local function copy(register)
+    local send = osc52.copy(register)
+    return function(lines, regtype)
+      copied[register] = { lines, regtype }
+      send(lines)
+    end
+  end
+  local function paste(register)
+    return function()
+      return copied[register]
+    end
+  end
+  vim.g.clipboard = {
+    name = "OSC 52 copy",
+    copy = { ["+"] = copy("+"), ["*"] = copy("*") },
+    paste = { ["+"] = paste("+"), ["*"] = paste("*") },
+  }
+end
 
 -- Completion menu behavior
 opt.completeopt = { "menu", "menuone", "noselect" }

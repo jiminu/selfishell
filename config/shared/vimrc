@@ -21,7 +21,7 @@ set smartcase
 set smarttab
 set smartindent
 set ruler
-set fileencodings=utf8,euc-kr
+set fileencodings=ucs-bom,utf8,euc-kr
 set completeopt=menu,menuone,noselect
 set wmnu
 
@@ -33,7 +33,12 @@ if has("clipboard")
 	set clipboard=unnamedplus
 endif
 
-au BufReadPost *
-\ if line("'\"") > 0 && line("'\"") <= line("$") |
-\ exe "norm g`\"" |
-\ endif
+" Skip commit and rebase messages, xxd dumps, and diff mode (:h last-position-jump).
+augroup SelfishellRestoreCursor
+  autocmd!
+  autocmd BufReadPost *
+        \ if line("'\"") >= 1 && line("'\"") <= line("$") && &filetype !~# 'commit'
+        \   && index(['xxd', 'gitrebase'], &filetype) == -1 && !&diff |
+        \   execute "normal! g`\"" |
+        \ endif
+augroup END

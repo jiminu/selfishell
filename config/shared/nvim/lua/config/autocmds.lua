@@ -98,11 +98,20 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
--- Restore the last cursor position when reopening a regular file.
+-- Restore the last cursor position when reopening a regular file, but not in
+-- commit or rebase messages, xxd dumps, or diff mode (:h restore-cursor).
+-- Filetype detection runs after init.lua's autocmds, so match it here.
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = group,
   callback = function(args)
-    if vim.bo[args.buf].buftype ~= "" then
+    if vim.bo[args.buf].buftype ~= "" or vim.wo.diff then
+      return
+    end
+    local filetype = vim.bo[args.buf].filetype
+    if filetype == "" then
+      filetype = vim.filetype.match({ buf = args.buf }) or ""
+    end
+    if filetype:find("commit", 1, true) or filetype == "gitrebase" or filetype == "xxd" then
       return
     end
 

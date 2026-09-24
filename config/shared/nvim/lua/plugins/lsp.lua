@@ -15,10 +15,10 @@ return {
   }),
 
   plugin("mason-org/mason-lspconfig.nvim", {
-    -- Not `ft`-gated: a user-installed server (`:LspInstall`) outside
-    -- Selfishell's default filetype list still needs this plugin's setup()
-    -- to run and auto-enable it on a fresh Neovim process.
-    event = { "BufReadPre", "BufNewFile" },
+    -- VeryLazy, not `ft`: an :LspInstall server outside the default filetypes
+    -- still needs setup() on a fresh process, and vim.lsp.enable() re-fires
+    -- FileType for buffers opened before it loads.
+    event = "VeryLazy",
     cmd = {
       "LspInstall",
       "LspUninstall",

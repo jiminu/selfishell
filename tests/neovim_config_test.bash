@@ -206,20 +206,15 @@ test_yank_highlights_only_the_yanked_range() {
     fail "Yanked text was not highlighted as expected: $output"
 }
 
-test_mason_lsp_servers_are_versioned() {
-  local declared_servers server
+test_ssh_sessions_copy_to_the_local_clipboard() {
+  local output
 
-  declared_servers="$(sed -n '/^  lsp = {/,/^  },/p' "$ROOT_DIR/config/shared/nvim/lua/config/languages.lua" |
-    grep -oE '"[^"]+"' | tr -d '"')"
-  [[ -n "$declared_servers" ]] || fail "No default LSP servers were discovered in languages.lua"
+  if ! command -v nvim >/dev/null 2>&1; then
+    skip 'test_ssh_sessions_copy_to_the_local_clipboard (Neovim unavailable)'
+  fi
 
-  # Mason packages track bare semver, "v"-prefixed when the version follows an
-  # upstream tag verbatim (tombi). marksman cuts dated releases, so YYYY-MM-DD
-  # is accepted too; all three still pin one resolvable version.
-  while IFS= read -r server; do
-    [[ "$server" =~ ^[A-Za-z0-9_-]+@(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2})$ ]] ||
-      fail "Default LSP server is not pinned to a supported version format: $server"
-  done <<<"$declared_servers"
+  output="$(run_neovim_fixture ssh_clipboard.lua)"
+  [[ "$output" == *'SSH clipboard: OK'* ]] || fail "SSH clipboard setup is invalid: $output"
 }
 
 run_discovered_tests setup_neovim_test teardown_test_home

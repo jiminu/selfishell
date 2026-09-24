@@ -163,11 +163,6 @@ return {
           style = "underline",
         },
         show_close_icon = false,
-        hover = {
-          enabled = true,
-          delay = 150,
-          reveal = { "close" },
-        },
         max_name_length = 24,
         tab_size = 16,
         offsets = {
