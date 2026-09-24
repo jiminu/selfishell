@@ -236,6 +236,12 @@ test_completion_audits_the_dump_once_a_day() {
   [[ "$audits_after_refresh" -eq 0 ]] ||
     fail "A completed daily audit was repeated on the next startup"
 
+  # A newly installed tool's completion must not wait for the next daily audit.
+  printf '#compdef zzselfishell\n' >"$HOME/completion-functions/_zzselfishell"
+  [[ "$(count_startup_audits)" -gt 0 ]] || fail "A new completion file did not rebuild the dump"
+  grep -q '_zzselfishell' "$HOME/.zcompdump" || fail "The rebuilt dump omitted the new completion"
+  [[ "$(count_startup_audits)" -eq 0 ]] || fail "An unchanged completion set was rebuilt again"
+
   for marker_type in file symlink empty-symlink dangling directory; do
     setup_foreign_completion_audit_marker "$marker_type"
     rm -f "$HOME/.zcompdump"
@@ -504,7 +510,7 @@ test_update_notice_defers_current_version_lookup_until_available_version_exists(
         [[ ! -e "$current_calls" ]] || exit 1
 
         print -r -- 1.1.0 >"$cache_dir/available-version"
-        notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice)"
+        notice="$(SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice 2>&1)"
         [[ "$notice" == "[Selfishell] 1.1.0 is available. Run: selfishell update" ]] || exit 1
         [[ "$(wc -l <"$current_calls")" -eq 1 ]] || exit 1
 
@@ -566,7 +572,7 @@ test_update_notice_uses_cache_and_refreshes_in_background() {
         _selfishell_command_path() { command -v "$1"; }
         source "$1"
         _selfishell_update_notice
-        [[ -z "$(SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice)" ]] || exit 1
+        [[ -z "$(SELFISHELL_UPDATE_NOTICE=0 _selfishell_update_notice 2>&1)" ]] || exit 1
         command rm -f "$2/available-version" "$2/update-checked-at"
         _selfishell_update_notice_refresh "$2" 12345
         [[ "$(<"$2/available-version")" == 1.1.0 ]] || exit 1
@@ -579,11 +585,13 @@ test_update_notice_uses_cache_and_refreshes_in_background() {
         done
         [[ -r "$2/available-version" && "$(<"$2/available-version")" == 1.1.0 ]] || exit 1
         [[ -s "$2/update-checked-at" && ! -e "$2/update-check.lock" ]] || exit 1
-      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir"
+      ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" "$cache_dir" 2>&1 >"$TEST_ROOT/notice-stdout"
   )" || fail "Update notice cache or background refresh failed"
 
+  # stderr, so `zsh -i -c` output captured by a script stays clean.
   [[ "$output" == *'1.1.0'* && "$output" == *'selfishell update'* ]] ||
-    fail "Update notice did not offer the cached version: $output"
+    fail "Update notice did not offer the cached version on stderr: $output"
+  [[ ! -s "$TEST_ROOT/notice-stdout" ]] || fail "Update notice wrote to stdout: $(<"$TEST_ROOT/notice-stdout")"
   teardown_test_home
 }
 
@@ -828,6 +836,58 @@ EOF
 
   [[ "$output" == *'regenerated'* ]] ||
     fail "Cache was not regenerated when the tool binary is newer than the cache: $output"
+  teardown_test_home
+}
+
+# Re-sourcing ~/.zshrc must not re-run starship's init: its keymap wrapper
+# then calls itself until zsh's nesting limit.
+test_starship_init_runs_once_per_shell() {
+  local fake_bin output
+
+  setup_test_home
+  fake_bin="$TEST_ROOT/bin"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/starship" <<'EOF'
+#!/usr/bin/env bash
+printf 'prompt_starship_precmd() { :; }\n(( ++starship_inits ))\n'
+EOF
+  chmod +x "$fake_bin/starship"
+
+  output="$(
+    ZDOTDIR="" PATH="$fake_bin:/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
+      XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
+      /bin/zsh -f -c '_selfishell_command_path() { command -v "$1"; }; typeset -gi starship_inits=0
+        source "$1"; source "$1"; print -r -- "inits=$starship_inits"' \
+      zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" 2>/dev/null
+  )"
+
+  [[ "$output" == *'inits=1'* ]] || fail "Starship init ran again when the configuration was sourced twice: $output"
+  teardown_test_home
+}
+
+# Suggestions bind once, after syntax highlighting wraps the widgets; binding
+# before every prompt cost 6-7 ms, and before the first command none showed.
+test_autosuggestions_bind_once_after_syntax_highlighting() {
+  local output
+
+  setup_test_home
+  output="$(
+    ZDOTDIR="" PATH="/usr/bin:/bin" SELFISHELL_COMMON_DIR="$ROOT_DIR/config/shared/zsh" \
+      XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" \
+      /bin/zsh -f -c '
+        _selfishell_command_path() { command -v "$1"; }
+        _selfishell_zinit_plugin_ready() { return 0; }
+        zinit() { [[ "$1" == ice ]] && print -r -- "ice: ${(j: :)@[2,-1]}"; [[ "$1" == light ]] && print -r -- "light: $2"; }
+        source "$1"
+        print -r -- "manual=${+ZSH_AUTOSUGGEST_MANUAL_REBIND}"
+      ' zsh "$ROOT_DIR/config/shared/zsh/interactive.zsh" 2>/dev/null
+  )"
+
+  [[ "$output" == *'manual=1'* ]] || fail "Autosuggestions still rebind widgets before every prompt: $output"
+  [[ "$output" == *'ver4672ad5dd9ad68a7effc1476d65afb7c584ce2b3 atload'*'|| _zsh_autosuggest_bind_widgets'* ]] ||
+    fail "Syntax highlighting does not bind suggestions after loading: $output"
+  [[ "$output" == *$'light: zsh-users/zsh-autosuggestions\n'*'light: zdharma-continuum/fast-syntax-highlighting'* ]] ||
+    fail "Syntax highlighting no longer loads after autosuggestions: $output"
   teardown_test_home
 }
 

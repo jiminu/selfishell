@@ -182,17 +182,22 @@ if (($+functions[zinit])); then
     zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --color=16 --preview-window=down:4:wrap
   fi
 
+  # Rebinding ~700 widgets before every prompt cost 6-7 ms; bind once, after
+  # syntax highlighting wraps them, so suggestions work from the first prompt.
+  ZSH_AUTOSUGGEST_MANUAL_REBIND=1
   if _selfishell_zinit_plugin_ready zsh-users/zsh-autosuggestions; then
     zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
     zinit light zsh-users/zsh-autosuggestions
   fi
   if _selfishell_zinit_plugin_ready zdharma-continuum/fast-syntax-highlighting; then
-    zinit ice wait'0' lucid ver'4672ad5dd9ad68a7effc1476d65afb7c584ce2b3'
+    zinit ice wait'0' lucid ver'4672ad5dd9ad68a7effc1476d65afb7c584ce2b3' \
+      atload'(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets'
     zinit light zdharma-continuum/fast-syntax-highlighting
   fi
 fi
 
-if _selfishell_starship_bin="$(command -v starship)"; then
+# Sourcing starship's init twice makes its keymap wrapper call itself.
+if (( ! $+functions[prompt_starship_precmd] )) && _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
   if ! _selfishell_zsh_cache_current "$_selfishell_starship_cache" "$_selfishell_starship_bin"; then
     _selfishell_generate_zsh_cache "$_selfishell_starship_cache" starship init zsh

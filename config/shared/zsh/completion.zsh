@@ -29,7 +29,20 @@ _selfishell_completion_needs_audit() {
      -n "$1.audit"(#qN.mh+24) ]]
 }
 
-if [[ -o interactive ]] && _selfishell_completion_needs_audit "$ZCOMPDUMP"; then
+# compinit -C never counts fpath, so a newly installed tool's completion would
+# wait for the daily audit. A changed count takes the audited rebuild instead.
+_selfishell_completion_files_changed() {
+  setopt localoptions extendedglob
+  local header
+  local -a files
+
+  files=( ${^~fpath:/.}/^([^_]*|*~|*.zwc)(N) )
+  IFS= read -r header <"$1" 2>/dev/null || return 1
+  [[ "$header" != "#files: ${#files}"[[:blank:]]* ]]
+}
+
+if [[ -o interactive ]] && { _selfishell_completion_needs_audit "$ZCOMPDUMP" ||
+     _selfishell_completion_files_changed "$ZCOMPDUMP"; }; then
   # -i excludes insecure entries; -D rebuilds even when an unaudited dump has
   # the same file count. Recompile immediately to replace same-age bytecode.
   unset _comp_secure
@@ -53,7 +66,7 @@ if [[ -o interactive ]] && _selfishell_completion_needs_audit "$ZCOMPDUMP"; then
 else
   compinit -C -d "$ZCOMPDUMP"
 fi
-unfunction _selfishell_completion_needs_audit
+unfunction _selfishell_completion_needs_audit _selfishell_completion_files_changed
 
 if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
   zcompile "$ZCOMPDUMP"
