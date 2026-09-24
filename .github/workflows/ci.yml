@@ -91,6 +91,9 @@ jobs:
     steps:
       - name: Install container prerequisites
         run: |
+          # Use the hosted runners' Azure mirror: some security.ubuntu.com backends
+          # have served an index before its packages, failing installs with 404.
+          sed -i -E 's#http://(archive|security)\.ubuntu\.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#' /etc/apt/sources.list.d/ubuntu.sources
           apt-get update
           apt-get install -y ca-certificates curl
 
