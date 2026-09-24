@@ -49,8 +49,10 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --setup --yes
 ```
 
-The managed install step can also offer to set the current user's login shell to
-Zsh when Zsh is installed and the session is interactive.
+When the login shell is not already Zsh, the managed install step offers to
+change it to the Zsh listed in `/etc/shells`; `--yes` accepts the offer.
+`chsh` then asks for your password on the terminal. Without a terminal, the
+install prints the `chsh -s` command to run yourself.
 
 ### Install an exact release
 
