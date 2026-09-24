@@ -13,10 +13,10 @@ release provenance and preservation of existing files are security boundaries.
 - Existing configuration is backed up and tracked before managed replacement.
 - Shell startup never installs updates; release metadata can refresh in the
   background. See [update notices](UPDATES.md#status-and-update-notices).
-- LSP servers added with `:LspInstall` are not version-approved the way the
-  default servers (lua_ls, pyright, bashls, jsonls, yamlls, tombi,
-  marksman) are: they install from the Mason registry, unpinned, the
-  standard mason-lspconfig way.
+- LSP servers, including the defaults (lua_ls, pyright, bashls, jsonls,
+  yamlls, tombi, marksman), are not version-approved: they install from the
+  Mason registry at its current version on first use, the standard
+  mason-lspconfig way, and `:Mason` manages their updates.
 - Selfishell files are installed without root privileges. Apt may request `sudo`
   for system packages, and Homebrew follows its own privilege model.
 

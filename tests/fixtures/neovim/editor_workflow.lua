@@ -151,4 +151,23 @@ assert(
   "rainbow-delimiters loads after the initial FileType event"
 )
 
+rainbow.init()
+local rainbow_enabled = vim.g.rainbow_delimiters.condition
+local function scratch(lines)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  return buf
+end
+local long_file = {}
+for index = 1, 5001 do
+  long_file[index] = "x = f(a[" .. index .. "])"
+end
+assert(rainbow_enabled(scratch({ "local x = { f(1) }" })), "rainbow-delimiters is off for an ordinary file")
+assert(not rainbow_enabled(scratch(long_file)), "rainbow-delimiters stays on beyond 5,000 lines")
+assert(not rainbow_enabled(scratch({ string.rep("[1,{}],", 100) })), "rainbow-delimiters stays on for minified text")
+
+local listchars = vim.opt.listchars:get()
+assert(listchars.tab == "  " and listchars.nbsp == "␣", "tabs or non-breaking spaces are not listed: " .. vim.inspect(listchars))
+assert(vim.opt.fileencodings:get()[1] == "ucs-bom", "byte order marks are not detected first")
+
 print("editor workflows: OK")

@@ -11,12 +11,10 @@ assert(target, "mason-lspconfig spec is missing")
 
 -- A user-installed server (:LspInstall) outside Selfishell's default LSP
 -- list still needs this plugin's setup() to run and auto-enable it on a
--- fresh Neovim process, so loading must not be limited by filetype.
+-- fresh Neovim process, so loading must not be limited by filetype. VeryLazy
+-- keeps its registry work off the first screen.
 assert(target.ft == nil, "mason-lspconfig plugin loading must not be limited to default LSP filetypes")
-assert(
-  vim.deep_equal(target.event, { "BufReadPre", "BufNewFile" }),
-  "mason-lspconfig must load on BufReadPre/BufNewFile"
-)
+assert(target.event == "VeryLazy", "mason-lspconfig must load on VeryLazy: " .. vim.inspect(target.event))
 
 package.preload["cmp_nvim_lsp"] = function()
   return {
