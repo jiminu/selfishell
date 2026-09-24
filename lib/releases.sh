@@ -61,10 +61,8 @@ release_directory_is_valid() {
   [[ -x "$dir/bin/selfishell" && -r "$dir/VERSION" && "$(<"$dir/VERSION")" == "$version" ]]
 }
 
-# Rejects what a release archive should never hold (FIFOs, device nodes,
-# sockets) and any symlink that isn't a plain existing sibling, as the build
-# packages "bin/sfs -> selfishell": absolute, traversal-shaped, or dangling
-# targets could smuggle a link outside the release directory.
+# Rejects FIFOs, devices, sockets, and any symlink but an existing sibling (the
+# build ships bin/sfs -> selfishell); other targets could escape the release.
 release_validate_extracted_members() {
   local staging="$1"
   local unexpected link target

@@ -114,10 +114,9 @@ dependency_install_download() {
     rm -rf "$temporary_dir"
     return 1
   }
-  # A pre-existing target (a directory, a tampered install) makes `mv` nest
-  # $extracted inside it rather than replace it, leaving the approved binary
-  # unreachable while reporting success. Move it aside so mv only ever renames
-  # onto an absent path and a failed activation can be restored.
+  # mv onto an existing target (a directory, a tampered install) nests
+  # $extracted inside it and still succeeds. Move the target aside first so
+  # mv renames onto an absent path and a failed activation can be restored.
   if [[ -e "$DEPENDENCY_TARGET" || -L "$DEPENDENCY_TARGET" ]]; then
     previous_target="$(selfishell_unique_path "${DEPENDENCY_TARGET}.previous.$$")"
     mv "$DEPENDENCY_TARGET" "$previous_target" || {
