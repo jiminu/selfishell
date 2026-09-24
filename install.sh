@@ -212,6 +212,24 @@ bootstrap_validate_link_path() {
   fi
 }
 
+# The CLI link is replaced only when it already points at this installation.
+bootstrap_validate_cli_link() {
+  local link_path="$1"
+  local expected_target="$2"
+
+  bootstrap_validate_link_path "$link_path" || return 1
+  if [[ -L "$link_path" && "$(readlink "$link_path")" != "$expected_target" ]]; then
+    bootstrap_error "Refusing to replace $link_path, which points to $(readlink "$link_path"); remove it to install."
+    return 1
+  fi
+}
+
+# sfs is optional, so another program's sfs is left alone rather than failing.
+bootstrap_sfs_link_is_ours() {
+  [[ ! -e "$1" && ! -L "$1" ]] && return 0
+  [[ -L "$1" && "$(readlink "$1")" == selfishell ]]
+}
+
 # Rejects what a release archive should never hold (FIFOs, device nodes,
 # sockets) and any symlink that isn't a plain existing sibling, as the build
 # packages "bin/sfs -> selfishell": absolute, traversal-shaped, or dangling
@@ -249,6 +267,9 @@ bootstrap_prune_releases() {
 
   current_target="${current_target##*/}"
   previous_target="${previous_target##*/}"
+  # Staging left by an interrupted install; a day-old one belongs to no running install.
+  find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.*.tmp.*' -mmin +1440 \
+    -exec rm -rf {} + 2>/dev/null || true
   for release_dir in "$releases_dir"/*; do
     [[ -d "$release_dir" && ! -L "$release_dir" ]] || continue
     release_name="${release_dir##*/}"
@@ -294,6 +315,8 @@ main() {
   local current_target=""
   local current_version=""
   local previous_target=""
+  local install_sfs=1
+  local nested_staging
 
   while (("$#" > 0)); do
     case "$1" in
@@ -304,6 +327,10 @@ main() {
           return 2
         }
         version="${1#v}"
+        [[ -n "$version" ]] || {
+          bootstrap_error "Invalid semantic version: $1"
+          return 2
+        }
         ;;
       --prefix)
         shift
@@ -347,7 +374,11 @@ main() {
   release_url="$SELFISHELL_RELEASE_ROOT/download/v${version}"
   archive_name="selfishell-${version}-${platform}-${architecture}.tar.gz"
   SELFISHELL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-install.XXXXXX")"
-  trap bootstrap_cleanup EXIT HUP INT TERM
+  # A signal must stop the install, not only clean up: continuing could still activate.
+  trap bootstrap_cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   archive_file="$SELFISHELL_TEMP_DIR/$archive_name"
   checksum_file="$SELFISHELL_TEMP_DIR/SHA256SUMS"
 
@@ -373,8 +404,12 @@ main() {
   bin_dir="$prefix/bin"
   bootstrap_validate_link_path "$share_dir/current"
   bootstrap_validate_link_path "$share_dir/previous"
-  bootstrap_validate_link_path "$bin_dir/selfishell"
-  bootstrap_validate_link_path "$bin_dir/sfs"
+  bootstrap_validate_cli_link "$bin_dir/selfishell" "$share_dir/current/bin/selfishell"
+  if ! bootstrap_sfs_link_is_ours "$bin_dir/sfs"; then
+    printf '%sLeaving %s in place; it is not the Selfishell sfs link.%s\n' \
+      "$SELFISHELL_COLOR_YELLOW" "$bin_dir/sfs" "$SELFISHELL_COLOR_RESET"
+    install_sfs=0
+  fi
   mkdir -p "$releases_dir" "$bin_dir"
 
   if [[ -e "$release_dir" || -L "$release_dir" ]]; then
@@ -398,6 +433,9 @@ main() {
     fi
     mv "$staging_dir" "$release_dir"
     SELFISHELL_STAGING_DIR=""
+    # A concurrent install that created the release first receives this staging inside it.
+    nested_staging="$release_dir/${staging_dir##*/}"
+    [[ ! -d "$nested_staging" ]] || rm -rf "$nested_staging"
   fi
 
   [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
@@ -409,7 +447,7 @@ main() {
   fi
   bootstrap_atomic_link "releases/$version" "$share_dir/current"
   bootstrap_atomic_link "$share_dir/current/bin/selfishell" "$bin_dir/selfishell"
-  bootstrap_atomic_link selfishell "$bin_dir/sfs"
+  [[ "$install_sfs" == 0 ]] || bootstrap_atomic_link selfishell "$bin_dir/sfs"
   bootstrap_prune_releases "$releases_dir" "releases/$version" "$previous_target"
 
   printf '%sInstalled Selfishell %s%s\n' "$SELFISHELL_COLOR_GREEN" "$version" "$SELFISHELL_COLOR_RESET"

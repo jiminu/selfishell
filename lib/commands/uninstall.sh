@@ -46,15 +46,23 @@ uninstall_prepare_purge() {
 uninstall_purge() {
   local dry_run="$1"
   local prefix bin_dir
+  local sfs_link=""
 
   release_installation_paths || return "$SELFISHELL_EXIT_ERROR"
   prefix="$(dirname "$(dirname "$SELFISHELL_SHARE_DIR")")"
   bin_dir="$prefix/bin"
   uninstall_prepare_purge "$bin_dir/selfishell" "$SELFISHELL_SHARE_DIR/current/bin/selfishell" || return
-  uninstall_prepare_purge "$bin_dir/sfs" selfishell || return
+  # Bootstrap leaves another program's sfs in place, so purge does too.
+  if uninstall_prepare_purge "$bin_dir/sfs" selfishell 2>/dev/null; then
+    sfs_link="$bin_dir/sfs"
+  else
+    printf '%sLeaving %s in place; it is not the Selfishell sfs link.%s\n' \
+      "$SELFISHELL_COLOR_YELLOW" "$bin_dir/sfs" "$SELFISHELL_COLOR_RESET"
+  fi
 
   if [[ "$dry_run" == 1 ]]; then
-    printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$bin_dir/sfs"
+    [[ -z "$sfs_link" ]] ||
+      printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$sfs_link"
     printf '%sWould remove Selfishell CLI link:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$bin_dir/selfishell"
     printf '%sWould remove Selfishell releases:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_SHARE_DIR"
     printf '%sWould remove Selfishell cache:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$SELFISHELL_CACHE_DIR"
@@ -62,7 +70,8 @@ uninstall_purge() {
     return
   fi
 
-  rm -f "$bin_dir/sfs" "$bin_dir/selfishell" || return
+  [[ -z "$sfs_link" ]] || rm -f "$sfs_link" || return
+  rm -f "$bin_dir/selfishell" || return
   rm -rf "$SELFISHELL_CACHE_DIR" "$SELFISHELL_STATE_DIR" "$SELFISHELL_SHARE_DIR" || return
   printf '%sSelfishell configuration, CLI, releases, cache, and state removed.%s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET"
   printf '%s\n' \
@@ -103,7 +112,6 @@ command_uninstall() {
     release_installation_paths || return "$SELFISHELL_EXIT_ERROR"
     prefix="$(dirname "$(dirname "$SELFISHELL_SHARE_DIR")")"
     uninstall_prepare_purge "$prefix/bin/selfishell" "$SELFISHELL_SHARE_DIR/current/bin/selfishell" || return
-    uninstall_prepare_purge "$prefix/bin/sfs" selfishell || return
   fi
   if [[ "$purge" == 1 ]]; then
     confirm_action "Uninstall and purge Selfishell?" "$assume_yes" "$dry_run" || return

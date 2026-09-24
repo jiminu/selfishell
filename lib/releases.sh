@@ -124,6 +124,9 @@ release_prune_inactive() {
     previous_version="${previous_version##*/}"
   fi
 
+  # Staging left by an interrupted update; a day-old one belongs to no running update.
+  find "$SELFISHELL_RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d -name '.*.tmp.*' -mmin +1440 \
+    -exec rm -rf {} + 2>/dev/null || true
   for release_dir in "$SELFISHELL_RELEASES_DIR"/*; do
     [[ -d "$release_dir" && ! -L "$release_dir" ]] || continue
     release_version="${release_dir##*/}"
@@ -135,6 +138,7 @@ release_prune_inactive() {
 release_install() {
   local version="$1"
   local platform architecture archive_name release_url temporary_dir archive checksum_file expected actual staging
+  local current_target nested_staging
 
   release_installation_paths || return
   platform="$(release_platform)"
@@ -191,12 +195,18 @@ release_install() {
       rm -rf "$temporary_dir" "$staging"
       return 1
     }
+    # A concurrent update that created the release first receives this staging inside it.
+    nested_staging="$SELFISHELL_RELEASES_DIR/$version/${staging##*/}"
+    [[ ! -d "$nested_staging" ]] || rm -rf "$nested_staging"
   fi
   rm -rf "$temporary_dir"
 
+  current_target="$(readlink "$SELFISHELL_SHARE_DIR/current")"
   # A failure here only loses the rollback link, not the update itself, so
-  # warn and continue rather than aborting an otherwise-successful update.
-  if ! release_atomic_link "$(readlink "$SELFISHELL_SHARE_DIR/current")" "$SELFISHELL_SHARE_DIR/previous"; then
+  # warn and continue. A concurrent update may already have activated this
+  # version; its current release is not a rollback target.
+  if [[ "$current_target" != "releases/$version" ]] &&
+    ! release_atomic_link "$current_target" "$SELFISHELL_SHARE_DIR/previous"; then
     cli_warn "Failed to update the previous release link; continuing."
   fi
   release_atomic_link "releases/$version" "$SELFISHELL_SHARE_DIR/current" || {

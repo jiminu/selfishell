@@ -22,6 +22,10 @@ command_rollback() {
           return "$SELFISHELL_EXIT_USAGE"
         }
         requested="${1#v}"
+        [[ -n "$requested" ]] || {
+          cli_error "Invalid semantic version: $1"
+          return "$SELFISHELL_EXIT_USAGE"
+        }
         ;;
     esac
     shift

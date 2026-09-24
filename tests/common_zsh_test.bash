@@ -547,24 +547,8 @@ test_update_notice_compares_semantic_versions() {
         exit 1
       }
     done
-  ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" <<'VERSIONS' || fail "Semantic version comparison failed"
-0.1.0-beta.9 0.1.0-beta.12 0
-0.1.0-beta.13 0.1.0-beta.12 1
-0.1.0 0.1.0-beta.12 1
-0.1.0-beta.12 0.1.0 0
-0.1.0-beta.1 0.1.0-alpha.9 1
-0.1.0-alpha.1 0.1.0-alpha 1
-0.1.0-alpha 0.1.0-alpha.1 0
-0.1.0-alpha.beta 0.1.0-alpha.1 1
-0.1.0-alpha.1 0.1.0-alpha.beta 0
-0.1.0-rc.1.2 0.1.0-rc.1.1 1
-0.1.0-alpha.01 0.1.0-alpha.1 0
-01.1.0 1.0.0 0
-1.0.0 1.0.0 0
-2.0.0 1.9.9 1
-1.10.0 1.9.0 1
-1.0.10 1.0.9 1
-VERSIONS
+  ' zsh "$ROOT_DIR/config/shared/zsh/update-notice.zsh" <"$ROOT_DIR/tests/fixtures/version-precedence.txt" ||
+    fail "Semantic version comparison failed"
   teardown_test_home
 }
 

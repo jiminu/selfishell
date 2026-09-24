@@ -94,8 +94,10 @@ update_cli_release() {
   local assume_yes="$2"
   local dry_run="$3"
   local active=""
+  local discovered=0
 
   if [[ -z "$version" ]]; then
+    discovered=1
     version="$(release_latest_version)" || {
       cli_error "Unable to determine the latest Selfishell release. Use --version VERSION to select one."
       return "$SELFISHELL_EXIT_ERROR"
@@ -111,6 +113,14 @@ update_cli_release() {
   if [[ "$active" == "$version" ]]; then
     SELFISHELL_CLI_UP_TO_DATE=1
     SELFISHELL_CLI_TARGET_VERSION="$version"
+    return
+  fi
+  # Only an explicit --version may move backwards, e.g. from a prerelease.
+  if [[ "$discovered" == 1 ]] && selfishell_version_is_newer "$active" "$version"; then
+    printf '%sSelfishell %s is newer than the latest release %s.%s\n' \
+      "$SELFISHELL_COLOR_CYAN" "$active" "$version" "$SELFISHELL_COLOR_RESET"
+    SELFISHELL_CLI_UP_TO_DATE=1
+    SELFISHELL_CLI_TARGET_VERSION="$active"
     return
   fi
   if [[ "$dry_run" == 1 ]]; then
@@ -196,6 +206,10 @@ command_update() {
           return "$SELFISHELL_EXIT_USAGE"
         }
         version="${1#v}"
+        [[ -n "$version" ]] || {
+          cli_error "Invalid semantic version: $1"
+          return "$SELFISHELL_EXIT_USAGE"
+        }
         ;;
       --skip-packages) skip_packages=1 ;;
       --dry-run) dry_run=1 ;;

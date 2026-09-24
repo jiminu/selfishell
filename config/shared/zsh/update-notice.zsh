@@ -113,6 +113,7 @@ _selfishell_version_is_valid() {
   done
 }
 
+# Bash twin: selfishell_version_is_newer; both read tests/fixtures/version-precedence.txt.
 _selfishell_version_is_newer() {
   local LC_ALL=C
   local candidate="$1"

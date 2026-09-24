@@ -99,6 +99,63 @@ selfishell_version_is_valid() {
   done
 }
 
+# Numeric identifiers without leading zeroes: a longer one is larger, and
+# equal lengths compare as strings, which cannot overflow arithmetic.
+selfishell_numeric_identifier_compare() {
+  if ((${#1} != ${#2})); then
+    ((${#1} > ${#2})) && return 0
+    return 1
+  fi
+  [[ "$1" > "$2" ]]
+}
+
+# SemVer precedence, kept equal to update-notice.zsh's
+# _selfishell_version_is_newer by tests/fixtures/version-precedence.txt.
+selfishell_version_is_newer() {
+  local LC_ALL=C
+  local candidate="$1" current="$2"
+  local candidate_prerelease="" current_prerelease=""
+  local candidate_parts=() current_parts=()
+  local index=0 candidate_identifier current_identifier
+
+  if ! selfishell_version_is_valid "$candidate" || ! selfishell_version_is_valid "$current"; then
+    return 1
+  fi
+  [[ "$candidate" != *-* ]] || candidate_prerelease="${candidate#*-}"
+  [[ "$current" != *-* ]] || current_prerelease="${current#*-}"
+
+  IFS=. read -r -a candidate_parts <<<"${candidate%%-*}"
+  IFS=. read -r -a current_parts <<<"${current%%-*}"
+  for index in 0 1 2; do
+    [[ "${candidate_parts[index]}" == "${current_parts[index]}" ]] && continue
+    selfishell_numeric_identifier_compare "${candidate_parts[index]}" "${current_parts[index]}"
+    return
+  done
+
+  [[ -z "$candidate_prerelease" && -n "$current_prerelease" ]] && return 0
+  [[ -n "$candidate_prerelease" ]] || return 1
+  [[ -n "$current_prerelease" ]] || return 1
+
+  IFS=. read -r -a candidate_parts <<<"$candidate_prerelease"
+  IFS=. read -r -a current_parts <<<"$current_prerelease"
+  for ((index = 0; ; index++)); do
+    ((index < ${#candidate_parts[@]})) || return 1
+    ((index < ${#current_parts[@]})) || return 0
+    candidate_identifier="${candidate_parts[index]}"
+    current_identifier="${current_parts[index]}"
+    [[ "$candidate_identifier" == "$current_identifier" ]] && continue
+
+    if [[ "$candidate_identifier" =~ ^[0-9]+$ && "$current_identifier" =~ ^[0-9]+$ ]]; then
+      selfishell_numeric_identifier_compare "$candidate_identifier" "$current_identifier"
+      return
+    fi
+    [[ "$candidate_identifier" =~ ^[0-9]+$ ]] && return 1
+    [[ "$current_identifier" =~ ^[0-9]+$ ]] && return 0
+    [[ "$candidate_identifier" > "$current_identifier" ]]
+    return
+  done
+}
+
 selfishell_curl() {
   local mode="$1"
   local connect_timeout="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"

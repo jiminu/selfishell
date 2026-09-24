@@ -18,7 +18,8 @@ resynchronize the current environment.
 Add `--yes` for non-interactive confirmation or `--dry-run` to preview the
 selected phases without changing tools, configuration, or the active release.
 Use `--version VERSION` to select an exact release; it cannot be combined with
-`--tools-only`.
+`--tools-only`. Without it, update never moves to an older release: an active
+release newer than the latest one, such as a prerelease, is kept.
 
 A successful update reports the version transition, such as
 `Selfishell updated: 1.2.10 -> 1.2.14`; release notes are on GitHub.
