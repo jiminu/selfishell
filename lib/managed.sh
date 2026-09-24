@@ -4,14 +4,40 @@ MANAGED_BLOCK_OVERWRITE_RESOURCES=""
 MANAGED_BLOCK_SKIP_RESOURCES=""
 MANAGED_FILE_OVERWRITE_RESOURCES=""
 MANAGED_FILE_SKIP_RESOURCES=""
+MANAGED_SOURCE_PATHS=()
+MANAGED_SOURCE_CHECKSUMS=()
 
 # A link to an unchanged regular file is still a user-replaced path.
 managed_path_is_regular_file() {
   [[ -f "$1" && ! -L "$1" ]]
 }
 
+# Formats cksum's "CRC SIZE" as a state checksum without starting awk.
+managed_format_checksum() {
+  local crc size
+
+  read -r crc size _ || return 1
+  printf '%s:%s\n' "$crc" "$size"
+}
+
 managed_checksum() {
-  cksum <"$1" | awk '{print $1 ":" $2}'
+  cksum <"$1" | managed_format_checksum
+}
+
+# Release sources do not change during a command, so the apply pass reuses
+# the preflight's checksums instead of reading every source twice.
+managed_source_checksum() {
+  local index
+
+  for ((index = 0; index < ${#MANAGED_SOURCE_PATHS[@]}; index++)); do
+    if [[ "${MANAGED_SOURCE_PATHS[index]}" == "$1" ]]; then
+      MANAGED_SOURCE_CHECKSUM="${MANAGED_SOURCE_CHECKSUMS[index]}"
+      return 0
+    fi
+  done
+  MANAGED_SOURCE_CHECKSUM="$(managed_checksum "$1")" || return
+  MANAGED_SOURCE_PATHS+=("$1")
+  MANAGED_SOURCE_CHECKSUMS+=("$MANAGED_SOURCE_CHECKSUM")
 }
 
 managed_state_path() {
@@ -19,8 +45,7 @@ managed_state_path() {
 }
 
 managed_state_exists() {
-  local state_file
-  state_file="$(managed_state_path "$1")"
+  local state_file="$SELFISHELL_RESOURCE_STATE_DIR/$1.state"
 
   [[ -e "$state_file" || -L "$state_file" ]]
 }
@@ -29,8 +54,7 @@ managed_state_exists() {
 # tell them apart -- so corruption isn't mistaken for a fresh install -- check
 # managed_state_exists() after this returns false.
 managed_read_state() {
-  local state_file
-  state_file="$(managed_state_path "$1")"
+  local state_file="$SELFISHELL_RESOURCE_STATE_DIR/$1.state"
 
   [[ -r "$state_file" && ! -L "$state_file" ]] || return 1
 
@@ -60,16 +84,16 @@ managed_write_state() {
   local reference="$5"
   local backup="$6"
   local checksum="$7"
-  local state_file
-  local temporary_file state_content
+  local state_file="$SELFISHELL_RESOURCE_STATE_DIR/$resource.state"
+  local temporary_file state_content current_content=""
 
-  state_file="$(managed_state_path "$resource")"
   printf -v state_content '2\n%s\n%s\n%s\n%s\n%s\n%s\n' \
     "$type" "$status" "$target" "$reference" "$backup" "$checksum"
-  if managed_path_is_regular_file "$state_file" && cmp -s "$state_file" <(printf '%s' "$state_content"); then
-    return 0
+  if managed_path_is_regular_file "$state_file"; then
+    IFS= read -r -d '' current_content <"$state_file" || true
+    [[ "$current_content" != "$state_content" ]] || return 0
   fi
-  mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
+  [[ -d "$SELFISHELL_RESOURCE_STATE_DIR" ]] || mkdir -p "$SELFISHELL_RESOURCE_STATE_DIR" || return "$SELFISHELL_EXIT_ERROR"
   temporary_file="$(mktemp "${state_file}.tmp.XXXXXX")" || return "$SELFISHELL_EXIT_ERROR"
 
   if ! printf '%s' "$state_content" >"$temporary_file"; then
@@ -84,7 +108,7 @@ managed_write_state() {
 }
 
 managed_remove_state() {
-  rm -f "$(managed_state_path "$1")"
+  rm -f "$SELFISHELL_RESOURCE_STATE_DIR/$1.state"
 }
 
 managed_unique_backup_path() {
@@ -334,7 +358,7 @@ managed_inspect_block() {
 
   MANAGED_BLOCK_START="$start"
   MANAGED_BLOCK_LENGTH=$((finish - start))
-  MANAGED_BLOCK_CHECKSUM="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_BLOCK_LENGTH" 2>/dev/null | cksum | awk '{print $1 ":" $2}')"
+  MANAGED_BLOCK_CHECKSUM="$(dd if="$target_file" bs=1 skip="$start" count="$MANAGED_BLOCK_LENGTH" 2>/dev/null | cksum | managed_format_checksum)"
   MANAGED_BLOCK_STATUS=intact
 }
 
@@ -361,7 +385,7 @@ managed_preflight_zsh_loader() {
   local target_file="$HOME/.zshrc"
   local state_file
 
-  state_file="$(managed_state_path user-zshrc)"
+  state_file="$SELFISHELL_RESOURCE_STATE_DIR/user-zshrc.state"
 
   if [[ -L "$target_file" ]]; then
     cli_error "Refusing to modify symbolic link: $target_file"
@@ -457,7 +481,7 @@ managed_install_block() {
     return "$SELFISHELL_EXIT_ERROR"
   fi
 
-  expected_checksum="$(managed_block_content "$resource" | cksum | awk '{print $1 ":" $2}')"
+  expected_checksum="$(managed_block_content "$resource" | cksum | managed_format_checksum)"
   managed_inspect_block "$resource" "$target_file" || return
 
   if managed_read_state "$resource"; then
@@ -595,7 +619,8 @@ managed_install_file() {
   # interrupted install) is likewise a fresh Installed.
   local previously_active_file=0
 
-  source_checksum="$(managed_checksum "$source_file")"
+  managed_source_checksum "$source_file" || return "$SELFISHELL_EXIT_ERROR"
+  source_checksum="$MANAGED_SOURCE_CHECKSUM"
   if managed_read_state "$resource"; then
     if [[ "$MANAGED_STATE_TYPE" != "file" || "$MANAGED_STATE_TARGET" != "$target_file" ]]; then
       cli_error "State conflict for managed file: $resource"

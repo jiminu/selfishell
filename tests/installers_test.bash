@@ -11,6 +11,7 @@ source "$ROOT_DIR/lib/installers.sh"
 NVIM_ARGUMENTS=""
 MISE_ARGUMENTS=""
 MISE_CALLS=()
+MISE_OFFLINE_VALUES=()
 MISE_CONFIG=""
 MISE_WORKDIR=""
 GIT_ARGUMENTS=""
@@ -23,6 +24,7 @@ MOCK_MISE_DRY_RUN_CODE_EXIT=1
 nvim() {
   NVIM_ARGUMENTS="$*"
   NVIM_CALLS+=("$*")
+  [[ -z "${SELFISHELL_TEST_FAIL_TREESITTER:-}" || "$*" != *nvim-treesitter* ]]
 }
 
 mise() {
@@ -33,6 +35,7 @@ mise() {
   fi
   MISE_ARGUMENTS="$*"
   MISE_CALLS+=("$*")
+  MISE_OFFLINE_VALUES+=("${MISE_OFFLINE:-unset}")
   MISE_CONFIG="$MISE_GLOBAL_CONFIG_FILE"
   if [[ "$1" == "which" && "$2" == "nvim" ]]; then
     [[ "$MISE_WORKDIR" == "$SELFISHELL_ROOT/config/shared" ]] || return 1
@@ -72,11 +75,14 @@ test_installs_declared_mise_tools_with_managed_config() {
   # shellcheck disable=SC2034 # Read by install_mise_tools in the sourced module.
   SELFISHELL_SKIPPED_OPTIONAL_PACKAGES=()
   MISE_CALLS=()
+  MISE_OFFLINE_VALUES=()
   MOCK_MISE_DRY_RUN_CODE_EXIT=1
   install_mise_tools required 0 node@24.18.0 python@3.13.14
 
   ((${#MISE_CALLS[@]} == 2)) ||
     fail "Expected preflight check followed by install, got: ${MISE_CALLS[*]}"
+  [[ "${MISE_OFFLINE_VALUES[*]}" == '1 unset' ]] ||
+    fail "Only the installed check may run offline: ${MISE_OFFLINE_VALUES[*]}"
   [[ "${MISE_CALLS[0]}" == '-q install --dry-run-code node@24.18.0 python@3.13.14' ]] ||
     fail "mise preflight check was not called first: ${MISE_CALLS[0]}"
   [[ "${MISE_CALLS[1]}" == 'install node@24.18.0 python@3.13.14' ]] ||
@@ -373,8 +379,71 @@ test_installs_declared_neovim_plugins() {
   install_neovim_plugins 0
   [[ "${NVIM_CALLS[0]}" == *'pcall(vim.cmd, "Lazy! sync")'* ]] ||
     fail "Neovim plugin installation was not invoked"
-  [[ "${#NVIM_CALLS[@]}" == "1" ]] || fail "Neovim was invoked more times than expected: ${NVIM_CALLS[*]}"
+  [[ "${NVIM_CALLS[1]}" == *'require("nvim-treesitter").update():wait('* ]] ||
+    fail "Installed Tree-sitter parsers were not updated synchronously: ${NVIM_CALLS[*]}"
+  [[ "${#NVIM_CALLS[@]}" == "2" ]] || fail "Neovim was invoked more times than expected: ${NVIM_CALLS[*]}"
   [[ "$NVIM_PLUGINS_VERIFIED" == "1" ]] || fail "Installed Neovim plugin revisions were not verified"
+}
+
+# Checkouts already at their pins: only the parser update runs, unless an
+# undeclared plugin directory still needs lazy's clean.
+test_skips_neovim_plugin_sync_when_checkouts_match_pins() {
+  local type repository revision source plugin_dir
+
+  while read -r type repository revision _ _ source _; do
+    [[ "$type" == nvim-plugin ]] || continue
+    plugin_dir="$(neovim_plugin_dir "$HOME/.local/share" "$repository" "$source")"
+    mkdir -p "$plugin_dir/.git"
+    printf '%s\n' "$revision" >"$plugin_dir/.git/HEAD"
+  done <"$ROOT_DIR/dependencies.conf"
+
+  NVIM_CALLS=()
+  install_neovim_plugins 0 >/dev/null
+  [[ "${#NVIM_CALLS[@]}" == 1 && "${NVIM_CALLS[0]}" == *nvim-treesitter* ]] ||
+    fail "Synced plugins were synced again: ${NVIM_CALLS[*]}"
+
+  mkdir -p "$HOME/.local/share/nvim/lazy/removed-plugin/.git"
+  NVIM_CALLS=()
+  install_neovim_plugins 0 >/dev/null
+  [[ "${NVIM_CALLS[0]}" == *'Lazy! sync'* ]] || fail "An undeclared plugin directory did not trigger a sync"
+}
+
+test_parser_update_failure_only_warns() {
+  local output
+
+  NVIM_CALLS=()
+  output="$(SELFISHELL_TEST_FAIL_TREESITTER=1 install_neovim_plugins 0 2>&1)" ||
+    fail "A failed parser update failed the plugin installation: $output"
+  [[ "$output" == *'Could not update Tree-sitter parsers; run :TSUpdate in Neovim to retry.'* ]] ||
+    fail "A failed parser update was not reported: $output"
+}
+
+test_reads_git_head_without_git() {
+  local repository sha=0123456789abcdef0123456789abcdef01234567
+
+  repository="$TEST_ROOT/detached"
+  mkdir -p "$repository/.git"
+  printf '%s\n' "$sha" >"$repository/.git/HEAD"
+  [[ "$(selfishell_git_head "$repository")" == "$sha" ]] || fail "Detached HEAD was not read"
+
+  repository="$TEST_ROOT/loose"
+  mkdir -p "$repository/.git/refs/heads"
+  printf 'ref: refs/heads/main\n' >"$repository/.git/HEAD"
+  printf '%s\n' "$sha" >"$repository/.git/refs/heads/main"
+  [[ "$(selfishell_git_head "$repository")" == "$sha" ]] || fail "Loose branch ref was not read"
+
+  repository="$TEST_ROOT/packed"
+  mkdir -p "$repository/.git"
+  printf 'ref: refs/heads/main\n' >"$repository/.git/HEAD"
+  printf '# pack-refs with: peeled fully-peeled sorted\n%s refs/heads/main\n^%s\n' "$sha" "$sha" \
+    >"$repository/.git/packed-refs"
+  [[ "$(selfishell_git_head "$repository")" == "$sha" ]] || fail "Packed branch ref was not read"
+
+  GIT_CALLS=()
+  repository="$TEST_ROOT/worktree"
+  mkdir -p "$repository/.git"
+  printf 'unexpected\n' >"$repository/.git/selfishell-approved-revision"
+  [[ "$(selfishell_git_head "$repository")" == unexpected ]] || fail "Unknown layout did not fall back to git"
 }
 
 test_runs_neovim_inside_mise_environment() {
