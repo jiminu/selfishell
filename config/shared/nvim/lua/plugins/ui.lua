@@ -605,6 +605,7 @@ return {
         color = "#797979",
       },
       marks = {
+        -- Diagnostic marks must be lists; a string like the Git marks fails to render.
         Error = { text = { "•", "•" } },
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
