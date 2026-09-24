@@ -39,9 +39,10 @@ opt.mouse = "a"
 opt.clipboard = "unnamedplus"
 opt.fileencodings = { "ucs-bom", "utf-8", "euc-kr" }
 
--- Over SSH, pbcopy or xclip would fill the remote clipboard; OSC 52 reaches
--- the local terminal. Paste stays local: an OSC 52 read prompts or waits up to 10s.
-if vim.env.SSH_TTY or vim.env.SSH_CONNECTION then
+-- Over SSH, pbcopy or xclip would fill the remote clipboard, and WSL has no
+-- provider; OSC 52 reaches the local terminal. Paste stays local: an OSC 52
+-- read prompts or waits up to 10s.
+if vim.env.SSH_TTY or vim.env.SSH_CONNECTION or vim.fn.has("wsl") == 1 then
   local osc52 = require("vim.ui.clipboard.osc52")
   local copied = { ["+"] = { {}, "v" }, ["*"] = { {}, "v" } }
   local function copy(register)
