@@ -1514,10 +1514,8 @@ EOF
   )" || fail "runtime created MISE_GLOBAL_CONFIG_FILE"
 }
 
-# A real `update` reaches packages_install, which must not touch the
-# network or need root here. Faking apt-get/dpkg satisfies the apt check
-# without sudo, and pre-creating the direct dependency targets makes
-# dependency_install treat them as present. Works on either CI runner.
+# A real `update` reaches packages_install: fake apt-get/dpkg pass the apt
+# check without sudo or network, and pre-created direct targets read as present.
 setup_fake_zinit() {
   local real_git
 

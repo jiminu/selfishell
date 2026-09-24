@@ -253,10 +253,8 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
   [[ "$output" == *'zsh-users/zsh-autosuggestions'* ]] ||
     fail "Doctor did not name the unprovisioned plugins: $output"
 
-  # Doctor compares HEAD against the manifest's pinned revision, so each
-  # fixture must be a real repository the manifest pins. Upstream hashes
-  # can't be reproduced locally, so the zsh-plugin lines are rewritten to the
-  # fixture's own commits; other entries stay as-is.
+  # Doctor compares each plugin HEAD with the manifest, so the fixtures are
+  # real repositories and the zsh-plugin lines are rewritten to their commits.
   grep -v '^zsh-plugin ' "$ROOT_DIR/dependencies.conf" >"$manifest"
   while read -r _ repository _; do
     plugin_dir="$plugins_dir/${repository//\//---}"

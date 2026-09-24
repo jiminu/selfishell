@@ -613,10 +613,8 @@ managed_install_file() {
   local current_checksum=""
   local original_backup="-"
   local conflict_backup=""
-  # Updated requires a managed file that actually existed on disk just before
-  # this run: an "active" prior state alone isn't enough, since the target may
-  # have been deleted since and this run recreates it. "pending" (an
-  # interrupted install) is likewise a fresh Installed.
+  # "Updated" only when an active managed file was on disk before this run; a
+  # deleted target or a pending (interrupted) install is reported as Installed.
   local previously_active_file=0
 
   managed_source_checksum "$source_file" || return "$SELFISHELL_EXIT_ERROR"

@@ -1114,10 +1114,9 @@ EOF
   teardown_test_home
 }
 
-# The cp-from-system-docs fallback only fires when fzf is unreachable, so PATH
-# is rebuilt from individually symlinked tools: /usr/bin and /bin are the same
-# merged directory on most Linux systems and can't hide an installed fzf.
-# Skipped where the fallback path doesn't exist at all.
+# The system-docs copy fallback runs only when fzf is unreachable. PATH holds
+# symlinked tools because a merged /usr/bin and /bin can't hide fzf. Skipped
+# where the fallback path doesn't exist.
 test_fzf_cache_copy_fallback_success_and_failure() {
   local restricted_bin cache_dir output tool
 

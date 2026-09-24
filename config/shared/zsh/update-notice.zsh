@@ -1,7 +1,6 @@
-# Prints when a lock went stale: its created_at, else the directory's mtime
-# (an older Selfishell, or a writer that died before writing metadata).
-# Fails if the lock isn't stale or its age is unknowable -- the caller must
-# then leave it alone. zsh/stat, not `stat`: the flags differ across BSD.
+# Prints a stale lock's created_at, else its directory mtime (older writers).
+# Fails when the lock is fresh or undatable, so the caller leaves it alone.
+# zsh/stat, not `stat`: BSD and GNU flags differ.
 _selfishell_update_lock_stale_since() {
   local lock_dir="$1"
   local lock_ttl="$2"
@@ -47,10 +46,8 @@ _selfishell_update_notice_refresh() {
     now="${EPOCHSECONDS:-$(command date +%s)}"
 
     lock_created_at="$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" || return
-    # Re-check before reclaiming: a changed signature means a concurrent
-    # refresh renewed it. This narrows, but does not close, the race between
-    # two reclaimers -- a slip means redundant checks, not corruption, since
-    # the writes below are atomic.
+    # Re-check before reclaiming: a changed signature means a concurrent refresh
+    # renewed it. A lost race only repeats a check; the writes below are atomic.
     [[ "$(_selfishell_update_lock_stale_since "$lock_dir" "$lock_ttl" "$now")" == "$lock_created_at" ]] || return
     command rm -rf "$lock_dir" 2>/dev/null
     command mkdir "$lock_dir" 2>/dev/null || return
