@@ -94,10 +94,14 @@ command_doctor() {
 
   platform="$(detect_platform)"
   architecture="$(detect_architecture)"
+  selfishell_initialize_paths
 
   printf 'Selfishell doctor\n\n'
 
   if platform_is_supported "$platform"; then
+    if [[ -r "$SELFISHELL_STATE_DIR/configured" ]]; then
+      doctor_info "Selfishell configuration is installed."
+    fi
     doctor_ok "Platform: $(platform_label "$platform")"
   else
     doctor_error "Platform: $(platform_label "$platform")"
@@ -137,10 +141,8 @@ command_doctor() {
     result="$SELFISHELL_EXIT_ERROR"
   fi
 
-  selfishell_initialize_paths
   if [[ -r "$SELFISHELL_STATE_DIR/configured" ]] && platform_is_supported "$platform"; then
     tool_status_reset_cache
-    doctor_info "Selfishell configuration is installed."
     if have_command gcc; then
       doctor_ok "C compiler: gcc ($(gcc --version | head -n 1))"
     elif have_command clang; then
