@@ -42,9 +42,9 @@ apt_install_managed_packages() {
 
   for package in "$@"; do
     # dpkg -s exits 0 for anything dpkg still records, including removed but
-    # unpurged ("rc": config files remain, binaries gone), which would skip
-    # reinstalling it. The Status field distinguishes that from a real "ii".
-    if ! dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
+    # unpurged ("rc") packages. Match the state, not the selection: a held
+    # package reports "hold ok installed".
+    if ! dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q ' ok installed$'; then
       missing_packages+=("$package")
     fi
   done

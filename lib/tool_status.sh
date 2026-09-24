@@ -26,10 +26,11 @@ tool_status_apt_version() {
   fi
 
   # awk instead of a Bash loop over the whole inventory for each package.
-  # Only "ii" is installed: removed but unpurged packages ("rc") stay listed.
+  # The first letter is only the selection ("hi " is held); installed means
+  # state "i" and no error flag, so "rc " and reinstall-required "iiR" are not.
   TOOL_STATUS_APT_VERSION="$(awk -F'\t' -v package="$package" '
     { name = $1; sub(/:.*/, "", name) }
-    name == package && $2 ~ /^ii/ && $3 != "" { print $3; exit }
+    name == package && $2 ~ /^.i $/ && $3 != "" { print $3; exit }
   ' <<<"$TOOL_STATUS_APT_PACKAGES")"
   [[ -n "$TOOL_STATUS_APT_VERSION" ]]
 }
