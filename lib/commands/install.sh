@@ -69,35 +69,69 @@ install_managed_configuration() {
   fi
 }
 
+# chsh refuses unlisted shells for non-root users, so a PATH zsh such as
+# Homebrew's is not a valid target.
+install_listed_zsh() {
+  local shells_file="${SELFISHELL_TEST_SHELLS_FILE:-/etc/shells}"
+  local entry
+
+  [[ -r "$shells_file" ]] || return 1
+  while IFS= read -r entry; do
+    if [[ "$entry" == /* && "${entry##*/}" == zsh && -x "$entry" ]]; then
+      printf '%s\n' "$entry"
+      return 0
+    fi
+  done <"$shells_file"
+  return 1
+}
+
+# chsh prompts for a password on the terminal; without one it would wait on
+# an invisible prompt. A piped `install.sh --setup --yes` still has /dev/tty.
+install_login_shell_terminal() {
+  local terminal="${SELFISHELL_TEST_TERMINAL:-/dev/tty}"
+
+  { : <"$terminal"; } 2>/dev/null || return 1
+  printf '%s\n' "$terminal"
+}
+
 install_default_shell() {
   local dry_run="$1"
   local assume_yes="$2"
   local zsh_path
-  local current_shell
-  local answer
+  local terminal
+  local answer=""
   local current_user
 
-  zsh_path="$(command -v zsh 2>/dev/null)" || return 0
-  current_shell="${SHELL:-}"
-  [[ "$current_shell" == "$zsh_path" ]] && return 0
+  # Any zsh counts: Homebrew's zsh ahead of /bin/zsh on PATH is no reason to switch.
+  [[ "${SHELL##*/}" == zsh ]] && return 0
+  if ! zsh_path="$(install_listed_zsh)"; then
+    if have_command zsh; then
+      printf '%sZsh is not listed in /etc/shells; the login shell was not changed.%s\n' \
+        "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
+    fi
+    return 0
+  fi
 
   if [[ "$dry_run" == "1" ]]; then
     printf '%sWould set login shell to:%s %s\n' "$SELFISHELL_COLOR_CYAN" "$SELFISHELL_COLOR_RESET" "$zsh_path"
     return
   fi
 
-  if [[ "$assume_yes" == "1" ]]; then
-    :
-  elif [[ -t 0 ]]; then
+  if [[ "$assume_yes" != "1" ]]; then
+    selfishell_is_interactive || return 0
     printf 'Set login shell to Zsh? [Y/n] '
-    IFS= read -r answer
+    IFS= read -r answer <&3 || answer=""
     selfishell_answer_is_no "$answer" && return 0
-  else
+  fi
+
+  if ! terminal="$(install_login_shell_terminal)"; then
+    printf '%sTo use Zsh as your login shell, run:%s chsh -s %s\n' \
+      "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET" "$zsh_path"
     return 0
   fi
 
   current_user="$(id -un)"
-  if chsh -s "$zsh_path" "$current_user" >/dev/null 2>&1; then
+  if chsh -s "$zsh_path" "$current_user" <"$terminal"; then
     printf '%sSet login shell to:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$zsh_path"
   else
     printf '%sCould not set login shell to Zsh.%s\n' "$SELFISHELL_COLOR_YELLOW" "$SELFISHELL_COLOR_RESET"
