@@ -37,7 +37,8 @@ for file in "${zsh_files[@]}"; do
 done
 
 printf 'Running ShellCheck\n'
-shellcheck -x "${bash_files[@]}"
+# One process was a quarter of the gate; xargs exits nonzero if any batch fails.
+printf '%s\0' "${bash_files[@]}" | xargs -0 -n 4 -P 4 shellcheck -x
 
 printf 'Checking shell formatting\n'
 shfmt -d -i 2 -ci "${bash_files[@]}"
