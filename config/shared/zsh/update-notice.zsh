@@ -221,12 +221,13 @@ _selfishell_update_notice() {
     if [[ -n "$available" ]]; then
       current="$(_selfishell_current_version)" || return
       if _selfishell_version_is_newer "$available" "$current"; then
-        if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+        if [[ -t 2 && -z "${NO_COLOR:-}" ]]; then
           color_cyan=$'\033[36m'
           color_bold=$'\033[1m'
           color_reset=$'\033[0m'
         fi
-        print -r -- "${color_cyan}[Selfishell]${color_reset} $available is available. Run: ${color_bold}selfishell update${color_reset}"
+        # stderr: `zsh -i -c` output captured by a script must not include it.
+        print -u2 -r -- "${color_cyan}[Selfishell]${color_reset} $available is available. Run: ${color_bold}selfishell update${color_reset}"
       else
         command rm -f "$available_file"
       fi
