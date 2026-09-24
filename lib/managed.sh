@@ -847,7 +847,19 @@ managed_uninstall_resource() {
   fi
 }
 
+# An interrupted install leaves its resource pending, which reads as modified
+# or replaced here; re-running install completes it.
 managed_validate_uninstall_resource() {
+  local status=0
+
+  managed_validate_uninstall_state "$1" || status=$?
+  if ((status != 0)) && managed_read_state "$1" && [[ "$MANAGED_STATE_STATUS" == pending ]]; then
+    cli_error "An interrupted install left this unfinished; run 'selfishell install', then uninstall again."
+  fi
+  return "$status"
+}
+
+managed_validate_uninstall_state() {
   local resource="$1"
   local current_checksum
 

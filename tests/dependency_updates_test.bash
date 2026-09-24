@@ -98,7 +98,7 @@ EOF
   cat >"$metadata" <<EOF
 download mise 2.0.0 linux amd64 https://new/mise-amd64 newsum
 download mise 2.0.0 linux arm64 https://new/mise newmise
-git zinit v0.2.0
+git zinit v0.2.0 3333333333333333333333333333333333333333
 nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222
 zsh-plugin zsh-users/zsh-completions $NEW_COMPLETIONS
 EOF
@@ -111,8 +111,8 @@ EOF
   assert_manifest_record "$manifest" "mise metadata was not applied" \
     download mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw
   assert_manifest_record "$manifest" "Git dependency metadata was not applied" \
-    git zinit v0.2.0 all all \
-    https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh
+    git zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git \
+    3333333333333333333333333333333333333333 .local/share/zinit/zinit.git zinit.zsh
   assert_manifest_record "$manifest" "Neovim plugin metadata was not applied" \
     nvim-plugin folke/lazy.nvim 2222222222222222222222222222222222222222 \
     all all https://github.com/folke/lazy.nvim.git - - -

@@ -715,4 +715,48 @@ test_git_checkout_failure_preserves_existing_managed_tool() {
   assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
 }
 
+# A tag can be moved after approval; the commit in the checksum column is what
+# install verifies, and a checkout that drifts from it is reprovisioned.
+test_git_dependency_is_pinned_to_its_commit() {
+  local repo="$TEST_ROOT/repo" approved output status
+
+  awk '$1 == "git" && $2 == "zinit" { exit ($7 ~ /^[0-9a-f]{40}$/ ? 0 : 1) }' "$ROOT_DIR/dependencies.conf" ||
+    fail "The shipped zinit record does not pin a commit"
+
+  mkdir -p "$repo"
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name test
+  printf 'marker\n' >"$repo/marker"
+  git -C "$repo" add marker
+  git -C "$repo" commit --quiet -m initial
+  git -C "$repo" tag v1.0
+  approved="$(git -C "$repo" rev-parse HEAD)"
+  export SELFISHELL_DEPENDENCIES_FILE="$TEST_ROOT/dependencies.conf"
+  printf 'git testgit v1.0 linux amd64 %s %s .local/share/testgit marker\n' "$repo" "$approved" >"$SELFISHELL_DEPENDENCIES_FILE"
+
+  run_dependency_install testgit >/dev/null
+  [[ "$(git -C "$HOME/.local/share/testgit" rev-parse HEAD)" == "$approved" ]] ||
+    fail "The pinned dependency was not checked out at its approved commit"
+
+  git -C "$HOME/.local/share/testgit" -c user.email=test@example.com -c user.name=test \
+    commit --quiet --allow-empty -m drift
+  output="$(run_dependency_install testgit)"
+  [[ "$output" == *'Installed approved dependency: testgit v1.0'* &&
+    "$(git -C "$HOME/.local/share/testgit" rev-parse HEAD)" == "$approved" ]] ||
+    fail "A checkout that drifted from its approved commit was not reprovisioned: $output"
+
+  git -C "$repo" commit --quiet --allow-empty -m moved
+  git -C "$repo" tag -f v1.0 >/dev/null
+  rm -rf "$HOME/.local/share/testgit" "$XDG_STATE_HOME/selfishell/dependencies/testgit"
+  set +e
+  output="$(run_dependency_install testgit 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "A moved tag was installed"
+  [[ "$output" == *"testgit v1.0 no longer points to its approved commit $approved"* ]] ||
+    fail "A moved tag was not explained: $output"
+  [[ ! -e "$HOME/.local/share/testgit" ]] || fail "A moved tag left a checkout behind"
+}
+
 run_discovered_tests setup_update_home teardown_update_home

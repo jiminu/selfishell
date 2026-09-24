@@ -1183,6 +1183,21 @@ test_uninstall_dry_run_changes_nothing() {
     fail "Uninstall dry run changed state"
 }
 
+test_uninstall_explains_an_interrupted_install() {
+  local state_file="$XDG_STATE_HOME/selfishell/resources/user-vimrc.state"
+  local rc=0
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  # An install interrupted after recording pending state, before adding the block.
+  sed -i.bak '3s/.*/pending/' "$state_file" && rm -f "$state_file.bak"
+  printf 'user vimrc\n' >"$HOME/.vimrc"
+
+  run_selfishell uninstall --yes >/dev/null 2>"$TEST_ROOT/stderr" || rc=$?
+  ((rc != 0)) || fail "Uninstall removed resources around an unfinished install"
+  grep -Fq "An interrupted install left this unfinished; run 'selfishell install', then uninstall again." \
+    "$TEST_ROOT/stderr" || fail "Uninstall did not explain the interrupted install: $(<"$TEST_ROOT/stderr")"
+}
+
 test_uninstall_preserves_user_modifications() {
   local status
 

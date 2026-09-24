@@ -69,7 +69,14 @@ discover_metadata() {
   name=zinit
   repository=zdharma-continuum/zinit
   tag="$(github_latest_tag "$repository")"
-  printf 'git %s %s\n' "$name" "$tag" >>"$metadata"
+  # The peeled ^{} line is the commit of an annotated tag; a lightweight tag has only the plain ref.
+  commit="$(git ls-remote "https://github.com/$repository.git" "refs/tags/$tag" "refs/tags/$tag^{}" |
+    awk '{ commit[$2] = $1 } END { print (commit[ref "^{}"] != "" ? commit[ref "^{}"] : commit[ref]) }' ref="refs/tags/$tag")"
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'Invalid commit for %s %s: %s\n' "$name" "$tag" "$commit" >&2
+    return 1
+  }
+  printf 'git %s %s %s\n' "$name" "$tag" "$commit" >>"$metadata"
 
   while read -r type name _ _ _ source _; do
     case "$type" in nvim-plugin | zsh-plugin) ;; *) continue ;; esac
@@ -225,6 +232,7 @@ build_manifest() {
     NR == FNR {
       if ($1 == "git") {
         git_version[$2] = $3
+        git_commit[$2] = $4
         expected_git[$2] = 1
       } else if ($1 == "nvim-plugin") {
         nvim_plugin_version[$2] = $3
@@ -250,6 +258,7 @@ build_manifest() {
     /^#/ || NF == 0 { print; next }
     $1 == "git" && ($2 in git_version) {
       $3 = git_version[$2]
+      if (git_commit[$2] != "") $7 = git_commit[$2]
       matched_git[$2] = 1
     }
     $1 == "nvim-plugin" && ($2 in nvim_plugin_version) {
