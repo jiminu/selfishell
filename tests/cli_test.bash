@@ -119,7 +119,8 @@ test_update_validates_semantic_versions() {
   [[ "$output" == *'Would update Selfishell CLI to 1.2.3-alpha.1.x-7'* ]] ||
     fail "CLI update rejected a valid prerelease"
 
-  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01; do
+  # An empty value must not fall back to the latest release.
+  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01 '' v; do
     set +e
     output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only \
       --version "$version" --dry-run 2>&1)"

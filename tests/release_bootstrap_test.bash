@@ -1074,52 +1074,31 @@ test_foreign_sfs_is_left_in_place_by_bootstrap_and_purge() {
     fail "Purge left the Selfishell CLI link"
 }
 
-test_bootstrap_refuses_foreign_cli_link() {
-  local status
+# A regular file or another program's link at the CLI path is user data.
+test_refuses_to_replace_foreign_cli_path() {
+  local kind status
 
   mkdir -p "$TEST_ROOT/prefix/bin"
-  ln -s /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
-  set +e
-  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "A foreign CLI link should block installation"
-  assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
-  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
-    fail "Foreign CLI link preflight changed the active release"
-}
-
-test_refuses_to_replace_non_link_cli_path() {
-  local status
-
-  mkdir -p "$TEST_ROOT/prefix/bin"
-  printf 'user file' >"$TEST_ROOT/prefix/bin/selfishell"
-  set +e
-  run_bootstrap >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "Non-link CLI path should block installation"
-  assert_file_content 'user file' "$TEST_ROOT/prefix/bin/selfishell"
-  [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
-    fail "Link preflight failure changed the active release"
-}
-
-test_update_rejects_empty_version() {
-  local status version
-
-  run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null
-  for version in '' v; do
+  for kind in file link; do
+    rm -f "$TEST_ROOT/prefix/bin/selfishell"
+    if [[ "$kind" == file ]]; then
+      printf 'user file' >"$TEST_ROOT/prefix/bin/selfishell"
+    else
+      ln -s /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
+    fi
     set +e
-    "$TEST_ROOT/prefix/bin/selfishell" update --cli-only --version "$version" --yes \
-      >/dev/null 2>"$TEST_ROOT/stderr"
+    run_bootstrap --version "$RELEASE_FIXTURE_VERSION" >/dev/null 2>&1
     status=$?
     set -e
-    [[ "$status" -eq 2 ]] || fail "Empty update version '$version' exited $status instead of 2"
-    grep -Fq 'Invalid semantic version' "$TEST_ROOT/stderr" ||
-      fail "Empty update version '$version' was not reported"
-    assert_symlink_to "releases/$RELEASE_FIXTURE_VERSION" "$TEST_ROOT/prefix/share/selfishell/current"
+
+    [[ "$status" -eq 1 ]] || fail "A foreign CLI $kind should block installation"
+    if [[ "$kind" == file ]]; then
+      assert_file_content 'user file' "$TEST_ROOT/prefix/bin/selfishell"
+    else
+      assert_symlink_to /usr/bin/true "$TEST_ROOT/prefix/bin/selfishell"
+    fi
+    [[ ! -e "$TEST_ROOT/prefix/share/selfishell/current" ]] ||
+      fail "A foreign CLI $kind changed the active release"
   done
 }
 
