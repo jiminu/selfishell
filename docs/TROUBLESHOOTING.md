@@ -43,14 +43,14 @@ export SELFISHELL_CURL_METADATA_MAX_TIME=30
 Archive downloads deliberately have no fixed total deadline, so a slow but
 progressing download can finish.
 
-## Clipboard over SSH
+## Clipboard over SSH and on WSL
 
-Over SSH, Neovim copies with OSC 52, so a yank reaches your local clipboard
-instead of the remote host's. The local terminal must allow it: Ghostty and
-Windows Terminal do by default, iTerm2 needs "Applications in terminal may
-access clipboard", and tmux needs `set -g set-clipboard on`. Paste local
-clipboard text with the terminal's paste shortcut; `p` pastes the last Neovim
-yank.
+Over SSH and on WSL, Neovim copies with OSC 52, so a yank reaches your local
+or Windows clipboard; WSL has no clipboard tool Neovim can use by default. The
+terminal must allow it: Ghostty and Windows Terminal do by default, iTerm2
+needs "Applications in terminal may access clipboard", and tmux needs
+`set -g set-clipboard on`. Paste local clipboard text with the terminal's paste
+shortcut; `p` pastes the last Neovim yank.
 
 ## Modified Managed File
 

@@ -206,11 +206,11 @@ test_yank_highlights_only_the_yanked_range() {
     fail "Yanked text was not highlighted as expected: $output"
 }
 
-test_ssh_sessions_copy_to_the_local_clipboard() {
+test_ssh_and_wsl_sessions_copy_to_the_local_clipboard() {
   local output
 
   if ! command -v nvim >/dev/null 2>&1; then
-    skip 'test_ssh_sessions_copy_to_the_local_clipboard (Neovim unavailable)'
+    skip 'test_ssh_and_wsl_sessions_copy_to_the_local_clipboard (Neovim unavailable)'
   fi
 
   output="$(run_neovim_fixture ssh_clipboard.lua)"
