@@ -153,6 +153,12 @@ dependency_install_git() {
     rm -rf "$temporary_target"
     return 1
   }
+  # A tag can be moved; the approved commit in the checksum column cannot.
+  if [[ "$DEPENDENCY_CHECKSUM" != - && "$(selfishell_git_head "$temporary_target")" != "$DEPENDENCY_CHECKSUM" ]]; then
+    cli_error "$DEPENDENCY_NAME $DEPENDENCY_VERSION no longer points to its approved commit $DEPENDENCY_CHECKSUM."
+    rm -rf "$temporary_target"
+    return 1
+  fi
   [[ -e "$temporary_target/$DEPENDENCY_MARKER" ]] || {
     cli_error "Expected marker missing from $DEPENDENCY_NAME checkout."
     rm -rf "$temporary_target"
@@ -193,7 +199,9 @@ dependency_managed_target_is_valid() {
       ;;
     git)
       [[ -d "$DEPENDENCY_TARGET" && ! -L "$DEPENDENCY_TARGET" &&
-        -e "$DEPENDENCY_TARGET/.git" && -e "$DEPENDENCY_TARGET/$DEPENDENCY_MARKER" ]]
+        -e "$DEPENDENCY_TARGET/.git" && -e "$DEPENDENCY_TARGET/$DEPENDENCY_MARKER" ]] || return 1
+      # A checkout moved off its commit (zinit self-update, say) is reprovisioned.
+      [[ "$DEPENDENCY_CHECKSUM" == - || "$(selfishell_git_head "$DEPENDENCY_TARGET")" == "$DEPENDENCY_CHECKSUM" ]]
       ;;
     *)
       return 1
