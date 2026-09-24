@@ -138,7 +138,7 @@ EOF
 test_detects_apt_package_version() {
   cat >"$TEST_ROOT/bin/dpkg-query" <<'EOF'
 #!/usr/bin/env bash
-printf 'git:amd64\tii \t2.43.0-1ubuntu7\nvim\trc \t2:9.1.0016-1ubuntu7\n'
+printf 'git:amd64\tii \t2.43.0-1ubuntu7\nvim\trc \t2:9.1.0016-1ubuntu7\nmake\thi \t4.3-4.1build2\nless\tiiR\t590-2ubuntu2\n'
 EOF
   chmod +x "$TEST_ROOT/bin/dpkg-query"
 
@@ -150,6 +150,11 @@ EOF
   # Removed but unpurged: dpkg still lists it, but its binaries are gone.
   tool_status_detect apt vim linux amd64
   [[ "$TOOL_STATUS_SOURCE" != apt ]] || fail "A removed (rc) apt package was reported as installed"
+
+  tool_status_detect apt make linux amd64
+  [[ "$TOOL_STATUS_INSTALLED" == 4.3-4.1build2 ]] || fail "A held (hi) apt package was not detected"
+  tool_status_detect apt less linux amd64
+  [[ "$TOOL_STATUS_SOURCE" != apt ]] || fail "A reinstall-required (iiR) apt package was reported as installed"
 }
 
 test_reuses_apt_inventory() {

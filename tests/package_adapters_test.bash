@@ -21,6 +21,7 @@ MOCK_BREW_CASKS=""
 MOCK_APT_UPDATE_COUNT=0
 MOCK_DPKG_PACKAGES=""
 MOCK_DPKG_RC_PACKAGES=""
+MOCK_DPKG_HELD_PACKAGES=""
 
 have_command() {
   [[ "$1" != "sudo" || "$MOCK_HAVE_SUDO" == "1" ]]
@@ -40,6 +41,10 @@ dpkg-query() {
   fi
   if [[ " $MOCK_DPKG_RC_PACKAGES " == *" $package "* ]]; then
     printf 'deinstall ok config-files\n'
+    return 0
+  fi
+  if [[ " $MOCK_DPKG_HELD_PACKAGES " == *" $package "* ]]; then
+    printf 'hold ok installed\n'
     return 0
   fi
   return 1
@@ -96,6 +101,7 @@ reset_package_mocks() {
   MOCK_APT_UPDATE_COUNT=0
   MOCK_DPKG_PACKAGES=""
   MOCK_DPKG_RC_PACKAGES=""
+  MOCK_DPKG_HELD_PACKAGES=""
   SELFISHELL_BREW_FORMULAE=""
   SELFISHELL_BREW_CASKS=""
   SELFISHELL_BREW_FORMULAE_READY=0
@@ -118,8 +124,9 @@ test_apt_leaves_installed_packages_unchanged_and_quiet() {
   setup_test_home
   reset_package_mocks
   MOCK_DPKG_PACKAGES="first second"
+  MOCK_DPKG_HELD_PACKAGES="held"
 
-  apt_install_managed_packages required 0 first second >"$TEST_ROOT/output"
+  apt_install_managed_packages required 0 first second held >"$TEST_ROOT/output"
 
   [[ "$MOCK_APT_UPDATE_COUNT" -eq 0 ]] || fail "Installed apt packages triggered an index update"
   [[ -z "$MOCK_INSTALLED_PACKAGES" ]] || fail "Installed apt packages were reinstalled"
