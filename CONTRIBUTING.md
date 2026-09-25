@@ -28,9 +28,10 @@ bash scripts/check-go.sh        # fmt, vet, tests, builds and native comparisons
 .build/selfishell help
 ```
 
-The Go candidate currently implements help/local version and their argument
-errors. Other commands, including `version --available`, return an explicit
-not-implemented error. Use `bin/selfishell` for production behavior during the
+The Go candidate implements help/local version, configuration-only
+`install --skip-packages`, and `uninstall` (including restore and purge).
+Commands such as update, status, doctor, rollback, and `version --available`
+remain incomplete. Use `bin/selfishell` for production behavior during the
 migration; the complete integration suite is not yet supported by the candidate.
 The Go gate compares the native binary against the fixed reference at identical
 paths, including generated VERSION files, symlinks, stderr terminals and
@@ -45,17 +46,25 @@ its shebang selects the interpreter. Some tests still invoke the Bash CLI or a
 copied release payload explicitly; this does not make the full suite candidate
 compatible.
 
-The compatibility baseline requires Python 3 (standard library only) and the
-repository's full Git history. It never fetches during a test run. For a shallow
+The compatibility tests require the repository's full Git history. They never
+fetch during a test run. For a shallow
 checkout, run `git fetch --unshallow` before testing. CI checkouts that run the
 gate use `fetch-depth: 0`.
 
 ```bash
-bash tests/go_migration_test.bash --phase baseline
+go test ./tests/migration -run '^TestBaseline$' -count=1
+go test ./tests/migration -run '^TestFoundation$' -count=1
+go test ./tests/migration -run '^TestConfig' -count=1
 ```
 
-This phase compares the fixed Bash reference with itself and tests the actual
-legacy release; `SELFISHELL_TEST_CLI` does not replace those reference runs.
+The baseline compares the fixed Bash reference with itself and tests the actual
+legacy release. Config tests compare the fixed reference with the Go candidate
+at the same temporary paths. `SELFISHELL_TEST_CLI` may name an absolute native
+candidate for Go migration tests; it does not replace fixed reference runs.
+The remaining Bash feature suites still use `tests/run.bash`,
+`tests/test_helper.bash`, and `tests/cli_runner.bash`. Go compatibility tests
+retain the `cksum.bash` and `state_bridge.bash` fixtures, while migration tests
+retain `date.bash` only as a fixed external backup clock.
 See [CLI compatibility](docs/CLI_COMPATIBILITY.md) for the pinned references,
 comparison boundaries and native-platform verification requirements.
 

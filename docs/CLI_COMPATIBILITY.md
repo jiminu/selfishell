@@ -48,7 +48,7 @@ the installed CLI, configuration lifecycle and purge.
 
 ## Comparison method
 
-`bash tests/go_migration_test.bash --phase baseline` runs the fixed reference
+`go test ./tests/migration -run '^TestBaseline$' -count=1` runs the fixed reference
 twice, using empty and existing user-data fixtures. The scenario captures
 stdout, stderr, exit status and the complete HOME tree after help/version,
 invalid arguments, configuration dry-run, install, reinstall, configuration
@@ -59,13 +59,12 @@ links are not followed and special files are not opened.
 Each repetition uses the same HOME and release paths. A fixture fixes only the
 backup-name clock so timestamp differences cannot obscure backup identity or
 collision suffixes. No captured content, path or checksum is rewritten. The
-snapshot helper disables Python bytecode writes so observation does not modify
-the fixture. A restricted command PATH and an empty inherited environment keep
+Go snapshot code reads without modifying the fixture. A restricted command PATH and an empty inherited environment keep
 caller configuration, package managers and network tools out of the reference
 scenario.
 
 The baseline proves the comparator and fixtures. The separate
-`bash tests/go_migration_test.bash --phase config` runs the actual native Go
+`go test ./tests/migration -run '^TestConfig' -count=1` runs the actual native Go
 binary and fixed Bash CLI from the same temporary release path. It compares
 command output, exit status, and complete HOME bytes, permissions, links, state,
 and backups for empty, existing, custom XDG, changed-resource, pending-recovery,
@@ -76,10 +75,20 @@ invariance are asserted independently of the Bash/Go comparison. The candidate
 checks malformed dependency records before mutation; this is an intentional
 parser boundary beyond the reference's lazy dependency selection.
 
-`scripts/check-go.sh` runs the config phase on each native CI host. Simulated
+`scripts/check-go.sh` runs the config tests and compares both the native
+development binary and native cross-build artifact through `TestFoundation`
+on each CI host. Four cross-builds are produced; only native artifacts execute.
+Simulated
 platform selection checks resource choice and lifecycle logic; it does not
 constitute runtime verification on another OS or CPU. Bash-specific failure
 injection remains in its existing integration suites.
+
+The old Bash/Python migration driver and scenario scripts have been replaced
+by Go tests. Remaining Bash feature suites still use `tests/run.bash`,
+`tests/test_helper.bash`, and `tests/cli_runner.bash`. Go compatibility tests
+retain `cksum.bash` and `state_bridge.bash`; `date.bash` remains solely as the
+external fixed-clock fixture for backup naming. Python 3 is still required by
+other feature suites and benchmark tooling in the full developer gate.
 
 ## Verification reporting
 
