@@ -11,11 +11,14 @@ import (
 )
 
 type managed struct {
-	c         CLI
-	paths     Paths
-	dry, yes  bool
-	unchanged int
-	actions   map[string]string
+	c                CLI
+	paths            Paths
+	dry, yes         bool
+	unchanged        int
+	actions          map[string]string
+	removeState      func(string) error
+	beforeBackupMove func(string, string)
+	createLink       func(string, string) error
 }
 
 func exists(path string) (os.FileInfo, bool, error) {
@@ -181,7 +184,10 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 			if err = makeRawDir(rawParent(backup)); err != nil {
 				return err
 			}
-			if err = os.Rename(r.Target, backup); err != nil {
+			if m.beforeBackupMove != nil {
+				m.beforeBackupMove(r.Target, backup)
+			}
+			if err = moveBackupNoReplace(r.Target, backup); err != nil {
 				return err
 			}
 		}
@@ -204,7 +210,7 @@ func copyPreserve(source, target string) error {
 	if e != nil {
 		return e
 	}
-	return writeAtomic(target, data, i.Mode().Perm())
+	return createRawExclusive(target, data, i.Mode().Perm())
 }
 func (m *managed) installLink(r Resource, preflight bool) error {
 	s, has, err := m.state(r)
@@ -232,6 +238,17 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 		if dest == r.Source {
 			if !preflight {
 				if !m.dry {
+					info, present, err = exists(r.Target)
+					if err != nil {
+						return err
+					}
+					if !present || info.Mode()&os.ModeSymlink == 0 {
+						return fmt.Errorf("Failed to install managed link: %s", r.Target)
+					}
+					dest, err := os.Readlink(r.Target)
+					if err != nil || dest != r.Source {
+						return fmt.Errorf("Failed to install managed link: %s", r.Target)
+					}
 					if err = m.save(r, State{"link", "active", r.Target, r.Source, backup, "-"}); err != nil {
 						return err
 					}
@@ -261,7 +278,10 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 	if backup != "-" && present {
 		_, b, _ := exists(backup)
 		if !b {
-			if err = os.Rename(r.Target, backup); err != nil {
+			if m.beforeBackupMove != nil {
+				m.beforeBackupMove(r.Target, backup)
+			}
+			if err = moveBackupNoReplace(r.Target, backup); err != nil {
 				return err
 			}
 			moved = true
@@ -269,13 +289,35 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 	}
 	_, present, _ = exists(r.Target)
 	if !present {
-		if err = os.Symlink(r.Source, r.Target); err != nil {
+		create := m.createLink
+		if create == nil {
+			create = os.Symlink
+		}
+		if err = create(r.Source, r.Target); err != nil {
 			if moved {
-				os.Rename(backup, r.Target)
-				os.Remove(m.statePath(r))
+				if restoreErr := moveBackupNoReplace(backup, r.Target); restoreErr == nil {
+					remove := m.removeState
+					if remove == nil {
+						remove = os.Remove
+					}
+					if removeErr := remove(m.statePath(r)); removeErr != nil {
+						return removeErr
+					}
+				}
 			}
 			return err
 		}
+	}
+	info, present, err = exists(r.Target)
+	if err != nil {
+		return err
+	}
+	if !present || info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("Failed to install managed link: %s", r.Target)
+	}
+	dest, err := os.Readlink(r.Target)
+	if err != nil || dest != r.Source {
+		return fmt.Errorf("Failed to install managed link: %s", r.Target)
 	}
 	if err = m.save(r, State{"link", "active", r.Target, r.Source, backup, "-"}); err != nil {
 		return err

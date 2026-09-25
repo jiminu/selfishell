@@ -108,3 +108,26 @@ func createRawOnce(path string, data []byte) error {
 	}
 	return err
 }
+
+func createRawExclusive(path string, data []byte, mode os.FileMode) error {
+	if err := makeRawDir(rawParent(path)); err != nil {
+		return err
+	}
+	f, err := createRawTemp(path)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err = f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Link(f.Name(), path)
+}

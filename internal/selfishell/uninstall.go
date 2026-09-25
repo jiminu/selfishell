@@ -17,6 +17,9 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 		if err = preflightPurge(c.Root); err != nil {
 			return err
 		}
+		if _, err = backupInventory(paths); err != nil {
+			return err
+		}
 	}
 	resources, err := ManagedResources(c.Root)
 	if err != nil {
@@ -150,6 +153,11 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			if e != nil {
 				return e
 			}
+			pending := s
+			pending.Status = "pending"
+			if err = m.save(r, pending); err != nil {
+				return err
+			}
 			if err = writeAtomic(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
 				return err
 			}
@@ -180,13 +188,16 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 				if err = makeRawDir(rawParent(s.Target)); err != nil {
 					return err
 				}
-				if err = os.Rename(s.Backup, s.Target); err != nil {
+				if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	if !m.dry {
+		if m.removeState != nil {
+			return m.removeState(m.statePath(r))
+		}
 		return os.Remove(m.statePath(r))
 	}
 	return nil
@@ -228,6 +239,10 @@ func purgeFiles(c CLI, paths Paths) error {
 	if err := preflightPurge(c.Root); err != nil {
 		return err
 	}
+	keepBackups, err := backupInventory(paths)
+	if err != nil {
+		return err
+	}
 	share := filepath.Dir(filepath.Dir(c.Root))
 	bin := filepath.Dir(filepath.Dir(share)) + "/bin"
 	ownedSfs := false
@@ -255,29 +270,26 @@ func purgeFiles(c CLI, paths Paths) error {
 		return err
 	}
 	backups := paths.State + "/backups"
-	entries, readErr := os.ReadDir(backups)
-	if readErr != nil && !os.IsNotExist(readErr) {
-		return readErr
-	}
-	if len(entries) == 0 {
+	if !keepBackups {
 		if err := os.RemoveAll(paths.State); err != nil {
 			return err
 		}
 	} else {
-		entries, readErr = os.ReadDir(paths.State)
-		if readErr != nil {
-			return readErr
+		entries, err := os.ReadDir(paths.State)
+		if err != nil {
+			return err
 		}
-		for _, e := range entries {
-			if e.Name() != "backups" {
-				if err := os.RemoveAll(paths.State + "/" + e.Name()); err != nil {
+		for _, entry := range entries {
+			if entry.Name() != "backups" {
+				if err := os.RemoveAll(paths.State + "/" + entry.Name()); err != nil {
 					return err
 				}
 			}
 		}
 	}
+
 	fmt.Fprintln(c.Out, "Selfishell configuration, CLI, releases, cache, and state removed.")
-	if len(entries) > 0 {
+	if keepBackups {
 		fmt.Fprintf(c.Out, "Kept backups of modified files: %s\n", backups)
 	}
 	fmt.Fprintln(c.Out, "User-owned files it created once and never manages, such as the mise config.toml, are left in place.")
@@ -328,4 +340,28 @@ func purgeDry(c CLI, paths Paths) {
 	if len(entries) > 0 {
 		fmt.Fprintf(c.Out, "Would keep backups of modified files: %s\n", paths.State+"/backups")
 	}
+}
+
+func backupInventory(paths Paths) (bool, error) {
+	path := paths.State + "/backups"
+	info, present, err := exists(path)
+	if err != nil {
+		return false, err
+	}
+	if !present {
+		return false, nil
+	}
+	if !info.IsDir() || info.Mode().Perm()&0400 == 0 {
+		return false, fmt.Errorf("Cannot read Selfishell backups: %s", path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, err
+	}
+	if len(entries) > 0 {
+		if _, err := os.ReadDir(paths.State); err != nil {
+			return false, err
+		}
+	}
+	return len(entries) > 0, nil
 }
