@@ -16,5 +16,13 @@ suite-specific runner.
 bash scripts/check.sh
 ```
 
+Set `SELFISHELL_TEST_CLI` to an absolute executable path to run the ordinary
+CLI integration calls in `cli_test.bash`, `managed_install_test.bash`,
+`package_manifest_test.bash`, and `updates_test.bash` against another candidate.
+Without it, they run `bin/selfishell`. The override is executed directly, so
+its shebang selects the interpreter. Some tests still invoke the Bash CLI or a
+copied release payload explicitly; this does not make the full suite candidate
+compatible.
+
 See [AGENTS.md](AGENTS.md) for repository implementation constraints and
 [docs/RELEASING.md](docs/RELEASING.md) for maintainer release procedures.

@@ -5,10 +5,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/tests/test_helper.bash"
+source "$ROOT_DIR/tests/cli_runner.bash"
 
 test_help_is_default_command() {
   local output
-  output="$(bash "$ROOT_DIR/bin/selfishell")"
+  output="$(run_selfishell)"
 
   [[ "$output" == *'Usage:'* ]] || fail "Default command should show help"
   [[ "$output" == *'selfishell <command>'* ]] || fail "Help should use the canonical command"
@@ -40,7 +41,7 @@ test_version_available_reads_release_metadata() {
   mkdir -p "$release_root/latest/download"
   printf '1.2.3\n' >"$release_root/latest/download/VERSION"
 
-  output="$(SELFISHELL_RELEASE_ROOT="file://$release_root" bash "$ROOT_DIR/bin/selfishell" version --available)"
+  output="$(SELFISHELL_RELEASE_ROOT="file://$release_root" run_selfishell version --available)"
 
   [[ "$output" == 1.2.3 ]] || fail "Available release version was not reported"
   teardown_test_home
@@ -73,7 +74,7 @@ test_unknown_command_returns_usage_error() {
   local status
 
   set +e
-  output="$(bash "$ROOT_DIR/bin/selfishell" unknown 2>&1)"
+  output="$(run_selfishell unknown 2>&1)"
   status=$?
   set -e
 
@@ -84,7 +85,7 @@ test_unknown_command_returns_usage_error() {
 test_update_help_explains_package_upgrade_policy() {
   local output
 
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --help)"
+  output="$(run_selfishell update --help)"
   [[ "$output" == *'left at their current version'* ]] ||
     fail "update --help does not explain that apt/Homebrew packages are not upgraded: $output"
 }
@@ -93,7 +94,7 @@ test_update_rejects_conflicting_scopes() {
   local status
 
   set +e
-  bash "$ROOT_DIR/bin/selfishell" update --cli-only --tools-only >/dev/null 2>&1
+  run_selfishell update --cli-only --tools-only >/dev/null 2>&1
   status=$?
   set -e
 
@@ -104,7 +105,7 @@ test_update_rejects_version_for_tools_only() {
   local status
 
   set +e
-  bash "$ROOT_DIR/bin/selfishell" update --tools-only --version 0.2.0 >/dev/null 2>&1
+  run_selfishell update --tools-only --version 0.2.0 >/dev/null 2>&1
   status=$?
   set -e
 
@@ -114,7 +115,7 @@ test_update_rejects_version_for_tools_only() {
 test_update_validates_semantic_versions() {
   local output status version
 
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only \
+  output="$(run_selfishell update --cli-only \
     --version 1.2.3-alpha.1.x-7 --dry-run)"
   [[ "$output" == *'Would update Selfishell CLI to 1.2.3-alpha.1.x-7'* ]] ||
     fail "CLI update rejected a valid prerelease"
@@ -122,7 +123,7 @@ test_update_validates_semantic_versions() {
   # An empty value must not fall back to the latest release.
   for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01 '' v; do
     set +e
-    output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only \
+    output="$(run_selfishell update --cli-only \
       --version "$version" --dry-run 2>&1)"
     status=$?
     set -e
@@ -137,7 +138,7 @@ test_update_propagates_cli_install_failure() {
   local status
 
   set +e
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --cli-only --version 9.9.9 --yes 2>&1)"
+  output="$(run_selfishell update --cli-only --version 9.9.9 --yes 2>&1)"
   status=$?
   set -e
 
@@ -160,7 +161,7 @@ test_doctor_rejects_unsupported_platform() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
   )"
   status=$?
   set -e
@@ -189,7 +190,7 @@ test_doctor_checks_compiler_for_installed_environment() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
   )"
   set -e
 
@@ -205,7 +206,7 @@ test_doctor_checks_compiler_for_installed_environment() {
     PATH="$TEST_ROOT/bin:/usr/bin:/bin" \
       SELFISHELL_TEST_SYSTEM_NAME=Darwin \
       SELFISHELL_TEST_MACHINE_ARCH=arm64 \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
   )"
   set -e
   [[ "$output" == *'C compiler: Xcode Command Line Tools are not installed'* ]] ||
@@ -243,7 +244,7 @@ test_doctor_reports_unprovisioned_zsh_plugins() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
     set -e
   }
 
@@ -308,7 +309,7 @@ test_doctor_reports_zinit_plugin_revision_drift() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
     set -e
   }
 
@@ -359,7 +360,7 @@ test_doctor_reports_dirty_zinit_plugin_checkout() {
       SELFISHELL_TEST_MACHINE_ARCH=x86_64 \
       SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
       SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version" \
-      bash "$ROOT_DIR/bin/selfishell" doctor 2>&1
+      run_selfishell doctor 2>&1
     set -e
   }
 
@@ -397,7 +398,7 @@ test_commands_reject_extra_arguments() {
   local status
 
   set +e
-  bash "$ROOT_DIR/bin/selfishell" version extra >/dev/null 2>&1
+  run_selfishell version extra >/dev/null 2>&1
   status=$?
   set -e
 
