@@ -102,3 +102,41 @@ cancelled; it does not promise process-tree cancellation. Downloads keep curl's
 proxy and `file://` behavior, connection/stall policy and metadata timeout.
 Verification and atomic activation of downloaded files belong to their lifecycle
 consumers. No shell command is constructed from an argument string.
+
+## Managed-state interoperability
+
+The Go state primitives keep v2's seven newline-terminated fields in order:
+version, kind, status, target, reference, backup, checksum. Reads preserve field
+bytes and empty optional fields. As with the retained Bash reader, trailing lines
+after the seventh field are ignored; a write emits exactly seven lines. Invalid
+version/kind/status, an empty target, a missing field terminator, or NUL bytes
+are rejected. Writers reject embedded line breaks and NUL rather than producing
+a record whose fields cannot be represented faithfully.
+
+A missing record is distinct from a malformed record and from an I/O failure.
+State symlinks, directories and special files are rejected. Writes validate
+before creating directories, create a private temporary file beside the state,
+finish writing, syncing and closing it, then rename it atomically. A failed
+pre-commit step preserves the previous record and removes its temporary file;
+an interrupted process may leave a temporary file, which subsequent reads ignore.
+Identical writes retain the existing state inode and timestamps. This does not
+introduce a concurrent-installer or power-loss durability guarantee.
+
+Checksums retain POSIX `cksum`'s `CRC:SIZE` representation, without text
+normalization. The Go helper uses the existing `cksum` executable on a regular
+file and propagates input, process and output errors. It does not follow a
+managed-path symlink as though it were an unchanged file.
+
+Resource declarations retain their Bash order. Installation selection chooses
+the platform Zsh entrypoint, the saved macOS Ghostty choice, and Ubuntu/WSL's
+zshenv block. Uninstall must use the complete declaration set, including resources
+left from another platform. State collection returns no partial list on an error;
+lifecycle consumers must still validate every managed target before removing any.
+The primitives perform no target removal, backup replacement, or restoration.
+
+Interoperability tests use the fixed Bash reference and v1.3.1's own native
+release payload after removing its source export. Both generate pending file,
+link and block records, consume Go-written records, finish interrupted setup,
+retain original backups through reinstalls, and restore user bytes. These tests
+prove the state boundary; Go installation and uninstallation are implemented in
+the subsequent configuration lifecycle stage.
