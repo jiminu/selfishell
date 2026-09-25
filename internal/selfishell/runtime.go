@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -17,9 +16,10 @@ func UserPaths() (Paths, error) {
 	if home == "" {
 		return Paths{}, fmt.Errorf("HOME must be set")
 	}
-	config := filepath.Join(envDefault("XDG_CONFIG_HOME", home+"/.config"), "selfishell")
-	state := filepath.Join(envDefault("XDG_STATE_HOME", home+"/.local/state"), "selfishell")
-	return Paths{Config: config, State: state, Resources: filepath.Join(state, "resources"), Cache: filepath.Join(envDefault("XDG_CACHE_HOME", home+"/.cache"), "selfishell"), Data: filepath.Join(envDefault("XDG_DATA_HOME", home+"/.local/share"), "selfishell")}, nil
+	// Keep the caller's spelling: cleaning symlink/.. can select another directory.
+	config := envDefault("XDG_CONFIG_HOME", home+"/.config") + "/selfishell"
+	state := envDefault("XDG_STATE_HOME", home+"/.local/state") + "/selfishell"
+	return Paths{Config: config, State: state, Resources: state + "/resources", Cache: envDefault("XDG_CACHE_HOME", home+"/.cache") + "/selfishell", Data: envDefault("XDG_DATA_HOME", home+"/.local/share") + "/selfishell"}, nil
 }
 
 func envDefault(key, fallback string) string {
