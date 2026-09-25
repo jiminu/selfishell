@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/tests/test_helper.bash"
+source "$ROOT_DIR/tests/cli_runner.bash"
 
 setup_package_home() {
   setup_test_home
@@ -27,7 +28,7 @@ teardown_package_home() {
 
 run_package_dry_run() {
   local output
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
+  output="$(run_selfishell install --dry-run)"
   printf '%s\n' "$output" | awk '/^Would (install .* (apt packages|Homebrew)|sync .* (direct package|mise tools))/'
 }
 
@@ -46,7 +47,7 @@ assert_core_tools() {
 
 test_install_includes_mise_and_neovim() {
   local output
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
+  output="$(run_selfishell install --dry-run)"
 
   [[ "$output" == *'direct package: mise'* && "$output" == *'required mise tools:'* ]] ||
     fail "Install omitted mise-managed tools"
@@ -59,7 +60,7 @@ test_manifest_includes_development_tools() {
   local expected_mise_tools actual_mise_tools required_mise_tools optional_mise_tools
 
   output="$(run_package_dry_run)"
-  full_output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
+  full_output="$(run_selfishell install --dry-run)"
   # Compare membership against the independently parsed mise.toml; order is irrelevant.
   expected_mise_tools="$(awk '
     /^\[/ { in_tools = ($0 == "[tools]"); next }
@@ -105,7 +106,7 @@ test_manifest_includes_development_tools() {
 test_macos_includes_fonts_and_opt_in_ghostty() {
   local output
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  output="$(bash "$ROOT_DIR/bin/selfishell" install --dry-run)"
+  output="$(run_selfishell install --dry-run)"
 
   [[ "$output" == *'optional Homebrew cask:'* && "$output" == *'font-'* ]] ||
     fail "macOS environment omitted optional fonts"

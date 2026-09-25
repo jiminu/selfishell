@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/tests/test_helper.bash"
+source "$ROOT_DIR/tests/cli_runner.bash"
 source "$ROOT_DIR/lib/common.sh"
 source "$ROOT_DIR/lib/paths.sh"
 source "$ROOT_DIR/lib/dependencies.sh"
@@ -43,7 +44,7 @@ test_tools_update_synchronizes_packages() {
   mkdir -p "$XDG_STATE_HOME/selfishell"
   printf '1\n' >"$XDG_STATE_HOME/selfishell/configured"
 
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --dry-run)"
+  output="$(run_selfishell update --tools-only --dry-run)"
   [[ "$output" == *'Would install required apt packages:'* ]] ||
     fail "Tools update did not synchronize package-manager packages"
   [[ "$output" == *'git'* ]] || fail "Tools update did not include the environment packages"
@@ -57,7 +58,7 @@ test_tools_update_skip_packages_avoids_package_operations() {
   mkdir -p "$XDG_STATE_HOME/selfishell"
   printf '1\n' >"$XDG_STATE_HOME/selfishell/configured"
 
-  output="$(bash "$ROOT_DIR/bin/selfishell" update --tools-only --skip-packages --dry-run)"
+  output="$(run_selfishell update --tools-only --skip-packages --dry-run)"
   [[ "$output" == *'Skipping package and tool installation.'* ]] ||
     fail "--skip-packages did not report skipping package and tool installation: $output"
   [[ "$output" != *'apt packages'* ]] ||

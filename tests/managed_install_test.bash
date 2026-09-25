@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$ROOT_DIR/tests/test_helper.bash"
+source "$ROOT_DIR/tests/cli_runner.bash"
 
 setup_managed_home() {
   setup_test_home
@@ -42,10 +43,6 @@ teardown_managed_home() {
   unset SELFISHELL_TEST_OS_RELEASE_FILE SELFISHELL_TEST_PROC_VERSION_FILE
   unset SELFISHELL_CONFIG_DIR SELFISHELL_STATE_DIR SELFISHELL_CACHE_DIR SELFISHELL_RESOURCE_STATE_DIR
   teardown_test_home
-}
-
-run_selfishell() {
-  bash "$ROOT_DIR/bin/selfishell" "$@"
 }
 
 test_every_neovim_configuration_file_is_managed() {

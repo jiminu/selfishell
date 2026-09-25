@@ -9,6 +9,21 @@ source "$ROOT_DIR/tests/test_helper.bash"
 RELEASE_FIXTURE_ROOT=""
 RELEASE_FIXTURE_VERSION=0.2.2
 
+native_release_archive_name() {
+  local platform architecture
+  case "$(uname -s)" in
+    Darwin) platform=macos ;;
+    Linux) platform=linux ;;
+    *) fail 'Native release tests require Linux or macOS' ;;
+  esac
+  case "$(uname -m)" in
+    arm64 | aarch64) architecture=arm64 ;;
+    x86_64 | amd64) architecture=amd64 ;;
+    *) fail 'Native release tests require AMD64 or ARM64' ;;
+  esac
+  printf 'selfishell-%s-%s-%s.tar.gz\n' "$1" "$platform" "$architecture"
+}
+
 setup_release_fixture() {
   local version
   local next_version=0.2.3
@@ -41,12 +56,14 @@ setup_release_home() {
   setup_test_home
   version="$RELEASE_FIXTURE_VERSION"
   export SELFISHELL_RELEASE_ROOT="file://$TEST_ROOT/releases"
-  export SELFISHELL_BOOTSTRAP_OS=Linux
-  export SELFISHELL_BOOTSTRAP_ARCH=x86_64
+  # Execute host-native archives; configuration detection below remains simulated.
+  SELFISHELL_BOOTSTRAP_OS="$(uname -s)"
+  SELFISHELL_BOOTSTRAP_ARCH="$(uname -m)"
+  export SELFISHELL_BOOTSTRAP_OS SELFISHELL_BOOTSTRAP_ARCH
   export XDG_CONFIG_HOME="$HOME/.config"
   export XDG_STATE_HOME="$HOME/.local/state"
   export SELFISHELL_TEST_SYSTEM_NAME=Linux
-  export SELFISHELL_TEST_MACHINE_ARCH=x86_64
+  export SELFISHELL_TEST_MACHINE_ARCH="$SELFISHELL_BOOTSTRAP_ARCH"
   export SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release"
   export SELFISHELL_TEST_PROC_VERSION_FILE="$TEST_ROOT/proc-version"
   printf 'ID=ubuntu\n' >"$SELFISHELL_TEST_OS_RELEASE_FILE"
@@ -129,8 +146,21 @@ test_release_artifacts_are_reproducible() {
 }
 
 test_installs_exact_version_and_cli_links() {
-  local version
+  local version platform architecture artifact
   version="$RELEASE_FIXTURE_VERSION"
+  case "$(uname -s)" in
+    Darwin) platform=macos ;;
+    Linux) platform=linux ;;
+  esac
+  case "$(uname -m)" in
+    arm64 | aarch64) architecture=arm64 ;;
+    x86_64 | amd64) architecture=amd64 ;;
+  esac
+  # Only the executable host archive is available; cross-platform payloads
+  # must not be selected merely because today's Bash payloads are identical.
+  for artifact in "$TEST_ROOT/releases/download/v$version/"*.tar.gz; do
+    [[ "${artifact##*/}" == "selfishell-$version-$platform-$architecture.tar.gz" ]] || rm "$artifact"
+  done
 
   run_bootstrap --version "$version" >/dev/null
 
@@ -525,7 +555,7 @@ test_update_tolerates_duplicate_identical_checksum_entry() {
   # release_install (used by `update`) resolves its platform from the real
   # `uname -s` rather than the SELFISHELL_TEST_SYSTEM_NAME override, so the
   # archive it actually fetches must be named after the real host platform.
-  archive_name="selfishell-0.2.3-$([[ "$(uname -s)" == Darwin ]] && printf macos || printf linux)-amd64.tar.gz"
+  archive_name="$(native_release_archive_name 0.2.3)"
   checksum_file="$TEST_ROOT/releases/download/v0.2.3/SHA256SUMS"
   line="$(awk -v name="$archive_name" '$2 == name' "$checksum_file")"
   printf '%s\n' "$line" >>"$checksum_file"
@@ -539,7 +569,7 @@ test_update_rejects_conflicting_duplicate_checksum_entry() {
   version="$RELEASE_FIXTURE_VERSION"
   run_bootstrap --version "$version" >/dev/null
 
-  archive_name="selfishell-0.2.3-$([[ "$(uname -s)" == Darwin ]] && printf macos || printf linux)-amd64.tar.gz"
+  archive_name="$(native_release_archive_name 0.2.3)"
   checksum_file="$TEST_ROOT/releases/download/v0.2.3/SHA256SUMS"
   printf '%064d  %s\n' 0 "$archive_name" >>"$checksum_file"
 
@@ -870,7 +900,7 @@ test_checksum_mismatch_preserves_active_release() {
   local status
 
   version="$RELEASE_FIXTURE_VERSION"
-  archive="$TEST_ROOT/releases/download/v$version/selfishell-$version-linux-amd64.tar.gz"
+  archive="$TEST_ROOT/releases/download/v$version/$(native_release_archive_name "$version")"
   run_bootstrap --version "$version" >/dev/null
   active_before="$(readlink "$TEST_ROOT/prefix/share/selfishell/current")"
   printf 'corruption' >>"$archive"
