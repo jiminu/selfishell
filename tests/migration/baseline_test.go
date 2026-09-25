@@ -17,11 +17,11 @@ func baselineScenario(t *testing.T, home, cli, tools, scenario string) map[strin
 		t.Fatal(err)
 	}
 	if scenario == "existing" {
-		os.MkdirAll(filepath.Join(home, ".config/nvim"), 0700)
-		os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600)
-		os.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600)
-		os.WriteFile(filepath.Join(home, ".config/nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600)
-		os.WriteFile(filepath.Join(home, ".config/starship.toml"), nil, 0600)
+		mustFS(t, os.MkdirAll(filepath.Join(home, ".config/nvim"), 0700))
+		mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600))
+		mustFS(t, os.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600))
+		mustFS(t, os.WriteFile(filepath.Join(home, ".config/nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600))
+		mustFS(t, os.WriteFile(filepath.Join(home, ".config/starship.toml"), nil, 0600))
 	}
 	env := []string{"PATH=" + tools}
 	initial := mustSnapshot(t, home)
@@ -73,14 +73,14 @@ func TestBaseline(t *testing.T) {
 		if err := exportCommit(repoRoot(), referenceCommit, release); err != nil {
 			t.Fatal(err)
 		}
-		os.Mkdir(filepath.Join(release, ".git"), 0700)
+		mustFS(t, os.Mkdir(filepath.Join(release, ".git"), 0700))
 		tools := fixtureTools(t, root)
 		cli := filepath.Join(release, "bin/selfishell")
 		for _, scenario := range []string{"empty", "existing"} {
 			var first map[string]capture
 			for pass := 0; pass < 2; pass++ {
 				home := filepath.Join(root, "home")
-				os.RemoveAll(home)
+				mustFS(t, os.RemoveAll(home))
 				got := baselineScenario(t, home, cli, tools, scenario)
 				if pass == 0 {
 					first = got
@@ -141,14 +141,17 @@ func TestBaseline(t *testing.T) {
 			t.Fatal(err)
 		}
 		home := filepath.Join(root, "home")
-		os.MkdirAll(home, 0700)
+		mustFS(t, os.MkdirAll(home, 0700))
 		prefix := filepath.Join(home, ".local")
 		install := []string{"/bin/bash", filepath.Join(source, "install.sh"), "--version", "1.3.1", "--prefix", prefix}
 		got, err := runCommand(home, install, nil, []string{"SELFISHELL_RELEASE_ROOT=file://" + filepath.Join(root, "releases")}, 120*time.Second)
 		if err != nil || got.Status != 0 {
 			t.Fatalf("legacy install: %v %+v", err, got)
 		}
-		os.RemoveAll(source)
+		mustFS(t, os.RemoveAll(source))
+		if _, err := os.Lstat(source); !os.IsNotExist(err) {
+			t.Fatalf("legacy source still present: %v", err)
+		}
 		cli := filepath.Join(prefix, "bin/selfishell")
 		got, err = captureCommand(home, cli, []string{"version"}, nil)
 		if err != nil || got.Status != 0 || !bytes.Equal(got.Stdout, []byte("selfishell 1.3.1\n")) {

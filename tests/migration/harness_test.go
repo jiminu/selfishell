@@ -390,6 +390,11 @@ func fixtureTools(t *testing.T, root string) string {
 }
 
 func capturePTY(home, executable string, args []string, extraEnv []string) (capture, error) {
+	tmp, err := os.MkdirTemp("", "selfishell-pty-")
+	if err != nil {
+		return capture{}, err
+	}
+	defer os.RemoveAll(tmp)
 	master, slave, err := openPTY()
 	if err != nil {
 		return capture{}, err
@@ -399,7 +404,7 @@ func capturePTY(home, executable string, args []string, extraEnv []string) (capt
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.Dir = home
-	cmd.Env = withEnv(baseEnv(home, os.TempDir()), extraEnv...)
+	cmd.Env = withEnv(baseEnv(home, tmp), extraEnv...)
 	cmd.Stdin = bytes.NewReader(nil)
 	cmd.Stderr = slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -416,15 +421,25 @@ func capturePTY(home, executable string, args []string, extraEnv []string) (capt
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	err = cmd.Run()
+	if cmd.Process != nil {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	slave.Close()
 	select {
 	case <-readDone:
 	case <-time.After(time.Second):
 		master.Close()
-		<-readDone
+		select {
+		case <-readDone:
+		case <-time.After(time.Second):
+			return capture{}, fmt.Errorf("PTY reader did not exit after close")
+		}
 	}
 	if ctx.Err() != nil {
 		return capture{}, ctx.Err()
+	}
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		err = nil
 	}
 	result := capture{Stdout: out.Bytes(), Stderr: stderr.Bytes()}
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,22 +29,32 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	}
 	before := mustSnapshot(t, root)
 	changes := []func(){
-		func() { os.WriteFile(file, []byte{'a', '\n', 0, 'b'}, 0600) },
-		func() { os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b', '\n'}, 0600) },
-		func() { os.Chmod(file, 0640) },
-		func() { os.Remove(filepath.Join(root, "link")); os.Symlink("missing", filepath.Join(root, "link")) },
-		func() { os.Remove(filepath.Join(root, "link")); os.WriteFile(filepath.Join(root, "link"), nil, 0600) },
-		func() { os.Remove(filepath.Join(root, "link")) },
+		func() { mustFS(t, os.WriteFile(file, []byte{'a', '\n', 0, 'b'}, 0600)) },
+		func() { mustFS(t, os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b', '\n'}, 0600)) },
+		func() { mustFS(t, os.Chmod(file, 0640)) },
+		func() {
+			mustFS(t, os.Remove(filepath.Join(root, "link")))
+			mustFS(t, os.Symlink("missing", filepath.Join(root, "link")))
+		},
+		func() {
+			mustFS(t, os.Remove(filepath.Join(root, "link")))
+			mustFS(t, os.WriteFile(filepath.Join(root, "link"), nil, 0600))
+		},
+		func() { mustFS(t, os.Remove(filepath.Join(root, "link"))) },
 	}
 	for i, change := range changes {
 		change()
 		if bytes.Equal(before, mustSnapshot(t, root)) {
 			t.Fatalf("change %d hidden", i)
 		}
-		os.Remove(file)
-		os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600)
-		os.Remove(filepath.Join(root, "link"))
-		os.Symlink("file", filepath.Join(root, "link"))
+		mustFS(t, os.Remove(file))
+		mustFS(t, os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600))
+		if _, err := os.Lstat(filepath.Join(root, "link")); err == nil {
+			mustFS(t, os.Remove(filepath.Join(root, "link")))
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		mustFS(t, os.Symlink("file", filepath.Join(root, "link")))
 	}
 	if err := os.Chmod(file, 0600|os.ModeSetuid); err != nil {
 		t.Fatal(err)
@@ -51,12 +62,12 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	if bytes.Equal(before, mustSnapshot(t, root)) {
 		t.Fatal("setuid permission hidden")
 	}
-	os.Chmod(file, 0600)
+	mustFS(t, os.Chmod(file, 0600))
 	outside := t.TempDir()
-	os.WriteFile(filepath.Join(outside, "value"), []byte("before"), 0600)
-	os.Symlink(outside, filepath.Join(root, "outside"))
+	mustFS(t, os.WriteFile(filepath.Join(outside, "value"), []byte("before"), 0600))
+	mustFS(t, os.Symlink(outside, filepath.Join(root, "outside")))
 	unchanged := mustSnapshot(t, root)
-	os.WriteFile(filepath.Join(outside, "value"), []byte("after"), 0600)
+	mustFS(t, os.WriteFile(filepath.Join(outside, "value"), []byte("after"), 0600))
 	if !bytes.Equal(unchanged, mustSnapshot(t, root)) {
 		t.Fatal("followed symlink")
 	}
@@ -65,7 +76,7 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	invalidBefore := mustSnapshot(t, root)
-	os.Remove(invalid)
+	mustFS(t, os.Remove(invalid))
 	if err := os.Symlink(string([]byte{0xfe}), invalid); err != nil {
 		t.Fatal(err)
 	}
@@ -93,15 +104,15 @@ func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(stateDir, "file.state")
-	os.WriteFile(state, []byte("2\nfile\nactive\n/target\n/source\n-\n123:4\n"), 0600)
+	mustFS(t, os.WriteFile(state, []byte("2\nfile\nactive\n/target\n/source\n-\n123:4\n"), 0600))
 	before := mustSnapshot(t, root)
 	backup := filepath.Join(stateDir, "backups/file.backup.20000101000000")
-	os.WriteFile(backup, []byte("original\n"), 0600)
+	mustFS(t, os.WriteFile(backup, []byte("original\n"), 0600))
 	if bytes.Equal(before, mustSnapshot(t, root)) {
 		t.Fatal("backup hidden")
 	}
-	os.Remove(backup)
-	os.WriteFile(state, []byte("2\nfile\npending\n/target\n/source\n-\n123:4\n"), 0600)
+	mustFS(t, os.Remove(backup))
+	mustFS(t, os.WriteFile(state, []byte("2\nfile\npending\n/target\n/source\n-\n123:4\n"), 0600))
 	if bytes.Equal(before, mustSnapshot(t, root)) {
 		t.Fatal("state change hidden")
 	}
@@ -113,7 +124,7 @@ func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "script")
-	os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700)
+	mustFS(t, os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
 	got, err := runCommand(root, []string{"/bin/sh", script, "", "two words"}, []byte("input\x00bytes"), nil, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +143,10 @@ func TestInvalidCandidateOverrideFails(t *testing.T) {
 
 func TestMissingHistoryDoesNotCreateExport(t *testing.T) {
 	root := t.TempDir()
-	runCommand(root, []string{"git", "init", "-q", root}, nil, nil, 5*time.Second)
+	got, runErr := runCommand(root, []string{"git", "init", "-q", root}, nil, nil, 5*time.Second)
+	if runErr != nil || got.Status != 0 {
+		t.Fatalf("git init: %v %+v", runErr, got)
+	}
 	dest := filepath.Join(root, "export")
 	err := exportCommit(root, "3bbbfa0346ee74eb47f31a81ec666340a5ef6018", dest)
 	if err == nil || !strings.Contains(err.Error(), "fetch-depth: 0") {
@@ -147,7 +161,10 @@ func TestRunCleansDescendantAfterLeaderExits(t *testing.T) {
 	home := t.TempDir()
 	marker := filepath.Join(home, "escaped")
 	start := time.Now()
-	_, _ = runCommand(home, []string{"/bin/sh", "-c", "(/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker}, nil, nil, 3*time.Second)
+	got, err := runCommand(home, []string{"/bin/sh", "-c", "(/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker}, nil, nil, 3*time.Second)
+	if got.Status != 0 || err != nil && !errors.Is(err, exec.ErrWaitDelay) {
+		t.Fatalf("leader execution: %+v %v", got, err)
+	}
 	if time.Since(start) > 2*time.Second {
 		t.Fatal("inherited pipe blocked cleanup")
 	}
@@ -174,6 +191,33 @@ func TestRunTimeoutKillsChildAndReturns(t *testing.T) {
 	}
 }
 
+func TestPTYUsesPrivateTempAndCleansDescendant(t *testing.T) {
+	home := t.TempDir()
+	marker := filepath.Join(home, "escaped")
+	start := time.Now()
+	got, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != 0 {
+		t.Fatalf("status %d stderr %q", got.Status, got.Stderr)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatal("PTY reader blocked by descendant")
+	}
+	tmp := strings.TrimSpace(string(got.Stdout))
+	if tmp == "" || tmp == os.TempDir() || strings.HasPrefix(tmp, home+string(os.PathSeparator)) {
+		t.Fatalf("TMPDIR not private: %q", tmp)
+	}
+	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
+		t.Fatalf("PTY temporary directory retained: %v", err)
+	}
+	time.Sleep(2200 * time.Millisecond)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("PTY descendant survived: %v", err)
+	}
+}
+
 func mustSnapshot(t *testing.T, root string) []byte {
 	t.Helper()
 	b, e := snapshot(root)
@@ -181,4 +225,11 @@ func mustSnapshot(t *testing.T, root string) []byte {
 		t.Fatal(e)
 	}
 	return b
+}
+
+func mustFS(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
 }

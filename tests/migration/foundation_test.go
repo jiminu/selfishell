@@ -27,13 +27,13 @@ func TestFoundation(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := filepath.Join(root, "home")
-	os.MkdirAll(filepath.Join(home, "tmp"), 0700)
+	mustFS(t, os.MkdirAll(home, 0700))
 	before := mustSnapshot(t, home)
-	os.WriteFile(filepath.Join(release, ".git"), nil, 0600)
+	mustFS(t, os.WriteFile(filepath.Join(release, ".git"), nil, 0600))
 	direct := filepath.Join(root, "direct")
 	chained := filepath.Join(root, "sfs")
-	os.Symlink(entry, direct)
-	os.Symlink("direct", chained)
+	mustFS(t, os.Symlink(entry, direct))
+	mustFS(t, os.Symlink("direct", chained))
 	env := []string{"SELFISHELL_ROOT=/wrong/root", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
 	arguments := [][]string{{}, {""}, {"help"}, {"--help"}, {"-h"}, {"help", ""}, {"help", "extra"}, {"unknown"}, {" unknown "}, {"version"}, {"--version"}, {"-v"}, {"version", ""}, {"version", "", "extra"}, {"version", "extra"}, {"version", "help", "extra"}, {"version", "--help"}, {"version", "-h"}, {"version", "--available", "extra"}}
 	compare := func(name, exe string, args []string, env []string, pty bool) {
@@ -67,14 +67,14 @@ func TestFoundation(t *testing.T) {
 	for i, args := range arguments {
 		compare(fmt.Sprintf("argument-%02d-%q", i, args), chained, args, env, false)
 	}
-	os.Remove(filepath.Join(release, ".git"))
+	mustFS(t, os.Remove(filepath.Join(release, ".git")))
 	versions := [][]byte{[]byte("1.2.3\n"), []byte("1.2.3\n\n"), []byte(" v1 \r\n"), {}, nil}
 	for i, version := range versions {
 		path := filepath.Join(release, "VERSION")
 		if version == nil {
-			os.Remove(path)
+			mustFS(t, os.Remove(path))
 		} else {
-			os.WriteFile(path, version, 0600)
+			mustFS(t, os.WriteFile(path, version, 0600))
 		}
 		compare(fmt.Sprintf("version-%d", i), entry, []string{"version"}, env, false)
 	}
@@ -90,7 +90,7 @@ func TestFoundation(t *testing.T) {
 		if len(want.Stderr) == 0 || bytes.Contains(want.Stderr, []byte("\x1b[31m")) != (noColor == "") {
 			t.Fatalf("reference PTY color NO_COLOR=%q: status=%d stdout=%q stderr=%q", noColor, want.Status, want.Stdout, want.Stderr)
 		}
-		copyFile(candidate, entry)
+		mustFS(t, copyFile(candidate, entry))
 		got, e := capturePTY(home, entry, []string{"unknown"}, ptyEnv)
 		if e != nil {
 			t.Fatal(e)
