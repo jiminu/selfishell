@@ -100,6 +100,7 @@ command_uninstall() {
   local prefix
   local resource
   local result="$SELFISHELL_EXIT_OK"
+  local resource_names
   local resources=()
   local index
 
@@ -133,9 +134,18 @@ command_uninstall() {
     confirm_action "Uninstall Selfishell configuration?" "$assume_yes" "$dry_run" || return
   fi
 
+  # Collected once and checked, since process substitution hides a failing producer.
+  resource_names="$(selfishell_managed_resource_names)" || {
+    cli_error "Uninstall cancelled because the managed resources could not be listed."
+    return "$SELFISHELL_EXIT_ERROR"
+  }
   while IFS= read -r resource; do
+    resources+=("$resource")
+  done <<<"$resource_names"
+
+  for resource in "${resources[@]}"; do
     managed_validate_uninstall_resource "$resource" || result="$SELFISHELL_EXIT_ERROR"
-  done < <(selfishell_managed_resource_names)
+  done
 
   if [[ "$result" != "$SELFISHELL_EXIT_OK" ]]; then
     cli_error "Uninstall cancelled because managed resources were changed."
@@ -145,10 +155,6 @@ command_uninstall() {
   # Reverse declaration order, so user-facing entrypoints come off before the
   # internal targets they point at (resources.sh declares internal files
   # first). Validation above still runs in declaration order.
-  while IFS= read -r resource; do
-    resources+=("$resource")
-  done < <(selfishell_managed_resource_names)
-
   for ((index = ${#resources[@]} - 1; index >= 0; index--)); do
     managed_uninstall_resource "${resources[index]}" "$restore" "$dry_run" || result="$SELFISHELL_EXIT_ERROR"
   done

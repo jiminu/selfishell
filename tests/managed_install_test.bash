@@ -1245,6 +1245,33 @@ EOF
   assert_file_content '1' "$XDG_STATE_HOME/selfishell/configured"
 }
 
+test_uninstall_stops_when_the_resource_list_fails() {
+  local fake_bin="$TEST_ROOT/bin"
+  local status
+
+  run_selfishell install --skip-packages --yes >/dev/null
+  mkdir -p "$fake_bin"
+  # The list's producer emits one name, then fails.
+  cat >"$fake_bin/cut" <<'EOF'
+#!/usr/bin/env bash
+/usr/bin/cut "$@" | head -n 1
+exit 42
+EOF
+  chmod +x "$fake_bin/cut"
+
+  set +e
+  PATH="$fake_bin:/usr/bin:/bin" run_selfishell uninstall --yes >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -ne 0 ]] || fail "Uninstall succeeded on a partial resource list"
+  [[ -r "$XDG_CONFIG_HOME/selfishell/zsh/zshrc" ]] ||
+    fail "Uninstall removed a resource from a partial list"
+  grep -Fqx '# >>> Selfishell initialize >>>' "$HOME/.zshrc" ||
+    fail "Uninstall removed the loader from a partial list"
+  assert_file_content '1' "$XDG_STATE_HOME/selfishell/configured"
+}
+
 test_uninstall_removes_ghostty_block_before_ghostty_defaults() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   local fake_bin="$TEST_ROOT/bin"
