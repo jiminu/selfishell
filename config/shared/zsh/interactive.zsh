@@ -154,11 +154,15 @@ if (($+functions[zinit])); then
     zstyle ':fzf-tab:complete:(cat|bat|batcat|less|nano|vim|nvim|view):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
     unset _selfishell_fzf_tab_path_preview
 
-    # _git completes this under `git-switch`. Remote branches arrive without their
-    # remote, which `git log` can't resolve, so show-ref maps them to a hash;
-    # the $word fallback keeps raw commits and HEAD working.
+    # _git completes this under `git-switch`. A local branch wins, as in git switch;
+    # a bare remote branch name, which `git log` can't resolve, maps to its hash
+    # only when one remote has it, since git switch refuses an ambiguous name.
     zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
-      ref="$(git show-ref --hash "$word" 2>/dev/null | head -n 1)"
+      if ! ref="$(git show-ref --verify --hash "refs/heads/$word" 2>/dev/null)" &&
+        ! git rev-parse --verify --quiet "$word^{commit}" >/dev/null 2>&1; then
+        ref="$(git for-each-ref --format="%(objectname)" "refs/remotes/*/$word" 2>/dev/null)"
+        [[ "$ref" != *[[:space:]]* ]] || ref=""
+      fi
       git log --oneline --decorate --color=always -10 "${ref:-$word}" 2>/dev/null
     '
 
