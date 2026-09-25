@@ -217,21 +217,65 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		return captures
 	}
 	run("restore", 0, "uninstall", "--restore", "--yes")
-	if scenario != "empty" {
-		for path, want := range map[string][]byte{filepath.Join(home, ".zshrc"): []byte("export PERSONAL=kept\r\n"), filepath.Join(home, ".vimrc"): []byte("set number"), filepath.Join(config, "nvim/init.lua"): []byte("personal editor\x00bytes\n"), filepath.Join(config, "starship.toml"): nil} {
-			got, err := os.ReadFile(path)
-			if err != nil || !bytes.Equal(got, want) {
-				t.Fatalf("personal %s: %v %q", path, err, got)
-			}
-		}
-		for _, p := range []string{filepath.Join(home, ".zshrc"), filepath.Join(home, ".vimrc")} {
-			info, err := os.Stat(p)
-			if err != nil || info.Mode().Perm() != 0600 {
-				t.Fatalf("personal mode %s: %v %v", p, info, err)
-			}
-		}
+	if scenario == "empty" {
+		assertEmptyConfigRestored(t, home, config, state)
+	} else {
+		assertPersonalFilesRestored(t, home, config)
 	}
 	return captures
+}
+
+func assertPersonalFilesRestored(t *testing.T, home, config string) {
+	t.Helper()
+	for path, want := range map[string][]byte{
+		filepath.Join(home, ".zshrc"):          []byte("export PERSONAL=kept\r\n"),
+		filepath.Join(home, ".vimrc"):          []byte("set number"),
+		filepath.Join(config, "nvim/init.lua"): []byte("personal editor\x00bytes\n"),
+		filepath.Join(config, "starship.toml"): nil,
+	} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("personal %s: %v %q", path, err, got)
+		}
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+			t.Fatalf("personal mode %s: %v %v", path, info, err)
+		}
+	}
+}
+
+func assertEmptyConfigRestored(t *testing.T, home, config, state string) {
+	t.Helper()
+	for _, path := range []string{
+		filepath.Join(state, "selfishell/configured"),
+		filepath.Join(state, "selfishell/ghostty"),
+		filepath.Join(config, "nvim"),
+		filepath.Join(config, "starship.toml"),
+		filepath.Join(config, "mise/conf.d/selfishell.toml"),
+	} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("managed path remains after restore: %s: %v", path, err)
+		}
+	}
+	for _, dir := range []string{filepath.Join(state, "selfishell/resources"), filepath.Join(config, "selfishell")} {
+		entries, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("managed directory remains populated: %s: %v %v", dir, entries, err)
+		}
+	}
+	for _, path := range []string{".zshrc", ".zprofile", ".zshenv", ".vimrc"} {
+		file := filepath.Join(home, path)
+		data, err := os.ReadFile(file)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil || len(data) != 0 {
+			t.Fatalf("loader remains after restore: %s: %v %q", file, err, data)
+		}
+	}
 }
 
 func TestConfig(t *testing.T) { configScenarios(t) }
@@ -428,11 +472,6 @@ func runPurgeScenario(t *testing.T, home, cli, prefix string, env []string) map[
 	purged := result["purge"]
 	purged.Home = append(purged.Home, prefixAfter...)
 	result["purge"] = purged
-	for p, want := range map[string][]byte{filepath.Join(home, ".zshrc"): []byte("export PERSONAL=kept\r\n"), filepath.Join(home, ".vimrc"): []byte("set number"), filepath.Join(config, "nvim/init.lua"): []byte("personal editor\x00bytes\n"), filepath.Join(config, "starship.toml"): nil} {
-		got, err := os.ReadFile(p)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("purge restored %s: %v %q", p, err, got)
-		}
-	}
+	assertPersonalFilesRestored(t, home, config)
 	return result
 }
