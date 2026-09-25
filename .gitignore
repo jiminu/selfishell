@@ -3,3 +3,4 @@
 # Planning artifacts are working notes for a single change, not repository
 # content; see the working process in AGENTS.md.
 /docs/superpowers/
+/.build/
