@@ -97,6 +97,18 @@ func TestComparisonRejectsEachDifference(t *testing.T) {
 	}
 }
 
+func TestChecksumRecordsRequireCompleteUniqueLines(t *testing.T) {
+	records, err := checksumRecords([]byte("abc  first.tar.gz\ndef  second.tar.gz\n"))
+	if err != nil || len(records) != 2 || records["first.tar.gz"] != "abc" || records["second.tar.gz"] != "def" {
+		t.Fatalf("valid records: %v %v", records, err)
+	}
+	for _, input := range []string{"abc  first.tar.gz extra\n", "abc  first.tar.gz\ndef  first.tar.gz\n", "abc  first.tar.gz\nnot-a-record\n"} {
+		if _, err := checksumRecords([]byte(input)); err == nil {
+			t.Fatalf("accepted malformed records: %q", input)
+		}
+	}
+}
+
 func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 	root := t.TempDir()
 	stateDir := filepath.Join(root, ".local/state/selfishell")

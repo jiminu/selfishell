@@ -372,20 +372,38 @@ func fixtureTools(t *testing.T, root string) string {
 	if err := os.MkdirAll(tools, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range strings.Fields("bash env cat chmod cp mv rm mkdir ln readlink dirname basename find sed awk grep cut sort head tail tr cksum cmp dd uname touch mktemp rmdir wc date tar gzip shasum sha256sum") {
+	for _, name := range strings.Fields("bash env cat chmod cp mv rm mkdir ln readlink dirname basename find sed awk grep cut sort head tail tr cksum cmp dd uname touch mktemp rmdir wc date tar gzip") {
 		path, err := resolveCommand(name, baseEnv(root, os.TempDir()))
 		if err != nil {
-			continue
+			t.Fatalf("required fixture tool %s: %v", name, err)
 		}
 		if err = os.Symlink(path, filepath.Join(tools, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	os.Remove(filepath.Join(tools, "date"))
+	checksumTools := 0
+	for _, name := range []string{"shasum", "sha256sum"} {
+		path, err := resolveCommand(name, baseEnv(root, os.TempDir()))
+		if err != nil {
+			continue
+		}
+		if err := os.Symlink(path, filepath.Join(tools, name)); err != nil {
+			t.Fatal(err)
+		}
+		checksumTools++
+	}
+	if checksumTools == 0 {
+		t.Fatal("required fixture checksum tool: need shasum or sha256sum")
+	}
+	if err := os.Remove(filepath.Join(tools, "date")); err != nil {
+		t.Fatal(err)
+	}
 	if err := copyFile(filepath.Join(repoRoot(), "tests/fixtures/go_migration/date.bash"), filepath.Join(tools, "date")); err != nil {
 		t.Fatal(err)
 	}
-	os.Chmod(filepath.Join(tools, "date"), 0755)
+	if err := os.Chmod(filepath.Join(tools, "date"), 0755); err != nil {
+		t.Fatal(err)
+	}
 	return tools
 }
 

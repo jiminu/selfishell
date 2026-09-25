@@ -11,6 +11,21 @@ import (
 	"time"
 )
 
+func checksumRecords(data []byte) (map[string]string, error) {
+	records := make(map[string]string)
+	for lineNo, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("SHA256SUMS line %d: expected hash and archive name", lineNo+1)
+		}
+		if _, exists := records[fields[1]]; exists {
+			return nil, fmt.Errorf("SHA256SUMS line %d: duplicate archive %s", lineNo+1, fields[1])
+		}
+		records[fields[1]] = fields[0]
+	}
+	return records, nil
+}
+
 func baselineScenario(t *testing.T, home, cli, tools, scenario string) map[string]capture {
 	t.Helper()
 	if err := os.MkdirAll(home, 0700); err != nil {
@@ -124,6 +139,13 @@ func TestBaseline(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		records, err := checksumRecords(sums)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(records) != 4 {
+			t.Fatalf("SHA256SUMS has %d records, expected 4", len(records))
+		}
 		for _, platform := range []string{"linux", "macos"} {
 			for _, arch := range []string{"amd64", "arm64"} {
 				name := fmt.Sprintf("selfishell-1.3.1-%s-%s.tar.gz", platform, arch)
@@ -131,7 +153,7 @@ func TestBaseline(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !strings.Contains(string(sums), hash+"  "+name) && !strings.Contains(string(sums), hash+" "+name) {
+				if records[name] != hash {
 					t.Fatalf("missing valid checksum for %s", name)
 				}
 			}
