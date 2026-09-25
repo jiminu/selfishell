@@ -16,6 +16,27 @@ suite-specific runner.
 bash scripts/check.sh
 ```
 
+The developer gate requires Go **1.27.1** on `PATH` (pinned in `go.mod`),
+Python 3, Zsh, ShellCheck and shfmt. Go belongs to development and CI only;
+it is not added to the installed environment. The build uses `GOTOOLCHAIN=local`
+and fails on a different version instead of downloading another toolchain.
+
+```bash
+bash scripts/build-cli.sh       # Native candidate: .build/selfishell
+bash scripts/build-cli.sh --all # macOS/Linux × AMD64/ARM64
+bash scripts/check-go.sh        # fmt, vet, tests, builds and native comparisons
+.build/selfishell help
+```
+
+The Go candidate currently implements help/local version and their argument
+errors. Other commands, including `version --available`, return an explicit
+not-implemented error. Use `bin/selfishell` for production behavior during the
+migration; the complete integration suite is not yet supported by the candidate.
+The Go gate compares the native binary against the fixed reference at identical
+paths, including generated VERSION files, symlinks, stderr terminals and
+`NO_COLOR`, and runs help/version with no tools on PATH. Cross-built binaries
+are not reported as executed on platforms other than the actual test host.
+
 Set `SELFISHELL_TEST_CLI` to an absolute executable path to run the ordinary
 CLI integration calls in `cli_test.bash`, `managed_install_test.bash`,
 `package_manifest_test.bash`, and `updates_test.bash` against another candidate.

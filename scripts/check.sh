@@ -43,5 +43,8 @@ printf '%s\0' "${bash_files[@]}" | xargs -0 -n 4 -P 4 shellcheck -x
 printf 'Checking shell formatting\n'
 shfmt -d -i 2 -ci "${bash_files[@]}"
 
+printf 'Checking Go candidate\n'
+bash scripts/check-go.sh
+
 printf 'Running tests\n'
 bash tests/run.bash

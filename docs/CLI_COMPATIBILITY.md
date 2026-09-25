@@ -77,3 +77,28 @@ that OS/CPU. Release tests select the real host archive; simulated platform
 detection remains a separate behavior test. Preserve this distinction in
 performance comparisons as well: measure matched fixtures on the same host,
 and do not present Linux timings as macOS results.
+
+## Development execution foundation
+
+`go.mod` pins the development and CI toolchain. `scripts/build-cli.sh` builds
+`.build/selfishell` with CGO disabled and baseline CPU settings; `--all` also
+builds the four targets under `.build/targets`. `scripts/check-go.sh` runs Go
+formatting, vet, tests, builds and native reference comparisons as part of the
+repository gate. CI uses the same pin on Linux and macOS. Production entrypoints
+and release payloads remain Bash until the migration cutover.
+
+The candidate implements help and local version, their aliases and usage
+errors, and unknown-command errors. Known unported commands and
+`version --available` return exit 1 with an explicit explanation. Their command
+options and behavior are implemented alongside their later migration stages.
+Release location follows the resolved executable (including chained symlinks),
+not the caller's working directory or `SELFISHELL_ROOT`. Generated VERSION files
+remain the installed version source; `.git` marks source development builds.
+
+The execution helper passes argument arrays, environment and standard streams
+directly to `os/exec`. It retains foreground terminal membership, preserves child
+exit/signal statuses, and cancels and reaps its direct child when its context is
+cancelled; it does not promise process-tree cancellation. Downloads keep curl's
+proxy and `file://` behavior, connection/stall policy and metadata timeout.
+Verification and atomic activation of downloaded files belong to their lifecycle
+consumers. No shell command is constructed from an argument string.
