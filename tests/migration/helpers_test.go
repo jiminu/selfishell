@@ -193,19 +193,21 @@ func TestRunTimeoutKillsChildAndReturns(t *testing.T) {
 
 func TestPTYUsesPrivateTempAndCleansDescendant(t *testing.T) {
 	home := t.TempDir()
+	tmpRecord := filepath.Join(home, "private-tmpdir")
 	marker := filepath.Join(home, "escaped")
 	start := time.Now()
-	got, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != 0 {
-		t.Fatalf("status %d stderr %q", got.Status, got.Stderr)
+	_, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\" > \"$1\"; (/bin/sleep 2; /usr/bin/touch \"$2\") & exit 0", "sh", tmpRecord, marker}, nil)
+	if !errors.Is(err, exec.ErrWaitDelay) {
+		t.Fatalf("expected incomplete inherited pipe capture: %v", err)
 	}
 	if time.Since(start) > 2*time.Second {
 		t.Fatal("PTY reader blocked by descendant")
 	}
-	tmp := strings.TrimSpace(string(got.Stdout))
+	tmpBytes, err := os.ReadFile(tmpRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := strings.TrimSpace(string(tmpBytes))
 	if tmp == "" || tmp == os.TempDir() || strings.HasPrefix(tmp, home+string(os.PathSeparator)) {
 		t.Fatalf("TMPDIR not private: %q", tmp)
 	}

@@ -438,9 +438,6 @@ func capturePTY(home, executable string, args []string, extraEnv []string) (capt
 	if ctx.Err() != nil {
 		return capture{}, ctx.Err()
 	}
-	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
-		err = nil
-	}
 	result := capture{Stdout: out.Bytes(), Stderr: stderr.Bytes()}
 	if err != nil {
 		var exit *exec.ExitError
