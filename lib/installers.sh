@@ -282,6 +282,29 @@ neovim_plugins_are_synced() {
   done
 }
 
+# Lazy! sync only logs local edits and skips checking that plugin out, so stop
+# before syncing. Lazy regenerates doc/tags itself.
+neovim_plugins_are_unmodified() {
+  local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local manifest type repository source plugin_dir changes
+
+  manifest="$(dependencies_manifest_path)"
+  while read -r type repository _ _ _ source _; do
+    [[ "$type" == "nvim-plugin" ]] || continue
+    plugin_dir="$(neovim_plugin_dir "$data_home" "$repository" "$source")"
+    [[ -d "$plugin_dir/.git" ]] || continue
+    if ! changes="$(selfishell_git_tracked_changes "$plugin_dir" ':(exclude)doc/tags')"; then
+      cli_error "Could not inspect Neovim plugin checkout: $plugin_dir"
+      return 1
+    fi
+    if [[ -n "$changes" ]]; then
+      cli_error "Neovim plugin checkout was modified; preserving it: $plugin_dir"
+      cli_error "Remove it, then retry to restore the approved revision."
+      return 1
+    fi
+  done <"$manifest"
+}
+
 verify_neovim_plugins() {
   local data_home
   local manifest
@@ -336,6 +359,7 @@ install_neovim_plugins() {
   fi
 
   install_lazy_nvim "$lazypath" || return
+  neovim_plugins_are_unmodified || return
   log_file="$(mktemp "${TMPDIR:-/tmp}/selfishell-nvim.XXXXXX")" || return 1
 
   if ! neovim_plugins_are_synced; then

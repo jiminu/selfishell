@@ -1539,7 +1539,7 @@ if [[ "\${1:-}" == -C && -r "\$2/.git/selfishell-approved-revision" ]]; then
   if [[ "\${3:-}" == rev-parse && "\${4:-}" == HEAD ]]; then
     cat "\$2/.git/selfishell-approved-revision"
     exit 0
-  elif [[ "\${3:-}" == status ]]; then
+  elif [[ "\${3:-}" == status || "\${3:-}" == ls-files ]]; then
     exit 0
   fi
 fi

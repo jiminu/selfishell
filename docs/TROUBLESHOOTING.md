@@ -66,6 +66,11 @@ Untouched marked blocks from an older Selfishell release are upgraded
 automatically. Bytes outside the block markers remain unchanged. Uninstall
 still refuses to remove a block that was modified after installation.
 
+Install and update reprovision a Zinit checkout whose tracked files were
+edited. An edited Neovim plugin checkout stops them instead, because lazy.nvim
+will not check out over local changes: remove that plugin's directory under
+`${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy`, then retry.
+
 ## Failed CLI Update
 
 A failed download or checksum validation leaves `current` unchanged. After a
