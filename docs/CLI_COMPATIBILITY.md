@@ -107,6 +107,13 @@ status, and `version --available` remain unavailable in the Go candidate and
 return an explicit error. The production CLI and installer remain Bash.
 Configuration dry-run makes no filesystem changes, and user-owned targets are
 preflighted before install or uninstall changes begin.
+The Go candidate deliberately corrects one inherited Bash behavior: when an
+existing user file already has the same bytes as a managed default, install
+still saves the original before adopting that path. This preserves its original
+permissions and lets `uninstall --restore` return it. The immutable Bash
+reference skips that backup and can delete the preexisting file on uninstall.
+The candidate-only configuration lifecycle test covers this safety correction;
+the fixed-reference comparisons and their existing snapshots remain intact.
 Release location follows the resolved executable (including chained symlinks),
 not the caller's working directory or `SELFISHELL_ROOT`. Generated VERSION files
 remain the installed version source; `.git` marks source development builds.

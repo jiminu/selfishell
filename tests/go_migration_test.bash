@@ -304,11 +304,46 @@ config_test_invalid_dependencies_fail_before_mutation() {
     fail 'Malformed dependency was not reported'
 }
 
+config_test_candidate_preserves_identical_existing_file() {
+  local cli source target state backup
+  [[ -x "$ROOT_DIR/.build/selfishell" ]] || fail 'Build the native Go candidate before the config phase'
+  archive_migration_source "$REFERENCE_COMMIT" "$TEST_ROOT/release"
+  mkdir "$TEST_ROOT/release/.git"
+  cp "$ROOT_DIR/.build/selfishell" "$TEST_ROOT/release/bin/selfishell"
+  prepare_migration_tools
+  cli="$TEST_ROOT/release/bin/selfishell"
+  source="$TEST_ROOT/release/config/shared/zsh/history.zsh"
+  target="$HOME/.config/selfishell/zsh/history.zsh"
+  state="$HOME/.local/state/selfishell/resources/zsh-history.state"
+  mkdir -p "${target%/*}"
+  cp "$source" "$target"
+  chmod 0600 "$target"
+
+  candidate_config() {
+    env -i HOME="$HOME" XDG_CONFIG_HOME="$HOME/.config" \
+      XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state" \
+      XDG_CACHE_HOME="$HOME/.cache" PATH="$TEST_ROOT/tools" \
+      SHELL=/bin/zsh TMPDIR="$TEST_ROOT/tmp" LC_ALL=C TZ=UTC \
+      SELFISHELL_TEST_SYSTEM_NAME=Darwin "$cli" "$@"
+  }
+  candidate_config install --skip-packages --yes >"$TEST_ROOT/install.stdout"
+  backup="$(sed -n '6p' "$state")"
+  [[ "$backup" != - && -f "$backup" ]] || fail 'Identical original was not backed up'
+  cmp "$source" "$backup" || fail 'Backup differs from original'
+  candidate_config install --skip-packages --yes >"$TEST_ROOT/reinstall.stdout"
+  [[ "$(sed -n '6p' "$state")" == "$backup" ]] || fail 'Reinstall lost original backup path'
+  candidate_config uninstall --restore --yes >"$TEST_ROOT/uninstall.stdout"
+  cmp "$source" "$target" || fail 'Restore lost identical original'
+  python3 -B -c 'import os, sys; assert os.stat(sys.argv[1]).st_mode & 0o777 == 0o600' "$target" ||
+    fail 'Restore lost original file permissions'
+}
+
 if [[ "$PHASE" == baseline ]]; then
   run_discovered_tests setup_test_home teardown_test_home
 else
   run_test_isolated config_test_rejects_unsupported_phase setup_test_home teardown_test_home
   run_test_isolated config_test_invalid_dependencies_fail_before_mutation setup_test_home teardown_test_home
+  run_test_isolated config_test_candidate_preserves_identical_existing_file setup_test_home teardown_test_home
   run_test_isolated config_test_candidate_matches_fixed_reference setup_test_home teardown_test_home
   run_test_isolated config_test_purge_matches_fixed_reference setup_test_home teardown_test_home
 fi

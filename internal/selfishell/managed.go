@@ -11,14 +11,15 @@ import (
 )
 
 type managed struct {
-	c                CLI
-	paths            Paths
-	dry, yes         bool
-	unchanged        int
-	actions          map[string]string
-	removeState      func(string) error
-	beforeBackupMove func(string, string)
-	createLink       func(string, string) error
+	c                 CLI
+	paths             Paths
+	dry, yes          bool
+	unchanged         int
+	actions           map[string]string
+	removeState       func(string) error
+	beforeBackupMove  func(string, string)
+	afterBackupChoice func(string)
+	createLink        func(string, string) error
 }
 
 func blockConflictError(r Resource) error {
@@ -103,7 +104,18 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		if err != nil {
 			return err
 		}
+		if m.afterBackupChoice != nil {
+			m.afterBackupChoice(backup)
+		}
 	}
+	backupPresent := false
+	if backup != "-" {
+		_, backupPresent, err = exists(backup)
+		if err != nil {
+			return err
+		}
+	}
+	preserveOriginal := backup != "-" && present && (!has || !backupPresent)
 	current := ""
 	if present && info.Mode().IsRegular() {
 		current, err = Checksum(context.Background(), r.Target)
@@ -112,11 +124,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		}
 	}
 	if has && current != "" && current != s.Checksum && current != sourceChecksum {
-		backupExists := false
-		if backup != "-" {
-			_, backupExists, _ = exists(backup)
-		}
-		if s.Status == "active" || backup == "-" || backupExists {
+		if s.Status == "active" || backup == "-" || backupPresent {
 			if m.dry {
 				if !preflight {
 					m.say("Conflict: modified managed file: %s", r.Target)
@@ -161,7 +169,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	if preflight {
 		return nil
 	}
-	if current == sourceChecksum {
+	if current == sourceChecksum && !preserveOriginal {
 		if !m.dry {
 			if err = m.save(r, State{"file", "active", r.Target, "-", backup, sourceChecksum}); err != nil {
 				return err
@@ -183,8 +191,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		return err
 	}
 	if backup != "-" {
-		_, backupPresent, _ := exists(backup)
-		if !backupPresent && present {
+		if preserveOriginal {
 			if err = makeRawDir(rawParent(backup)); err != nil {
 				return err
 			}
