@@ -55,6 +55,7 @@ git() {
     [[ -r "$2/.git/selfishell-approved-revision" ]] || return 1
     command cat "$2/.git/selfishell-approved-revision"
   elif [[ "$1" == "-C" && "$3" == "status" && "$4" == "--porcelain" ]]; then
+    printf '%s\n' "$*" >>"$TEST_ROOT/git-status.log"
     printf '%s' "${SELFISHELL_TEST_GIT_STATUS:-}"
   elif [[ "$1" == "clone" ]]; then
     mkdir -p "${@: -1}"
@@ -406,6 +407,62 @@ test_skips_neovim_plugin_sync_when_checkouts_match_pins() {
   NVIM_CALLS=()
   install_neovim_plugins 0 >/dev/null
   [[ "${NVIM_CALLS[0]}" == *'Lazy! sync'* ]] || fail "An undeclared plugin directory did not trigger a sync"
+}
+
+test_modified_neovim_plugin_stops_before_sync() {
+  local repository source plugin_dir status=0
+
+  read -r repository source < <(awk '$1 == "nvim-plugin" && $2 != "folke/lazy.nvim" { print $2, $6; exit }' "$ROOT_DIR/dependencies.conf")
+  plugin_dir="$(neovim_plugin_dir "$HOME/.local/share" "$repository" "$source")"
+  mkdir -p "$plugin_dir/.git"
+
+  NVIM_CALLS=()
+  SELFISHELL_TEST_GIT_STATUS=' M lua/init.lua' install_neovim_plugins 0 >/dev/null 2>"$TEST_ROOT/error" || status=$?
+
+  [[ "$status" -ne 0 ]] || fail "A modified plugin checkout did not stop the install"
+  [[ "$(<"$TEST_ROOT/error")" == *"Neovim plugin checkout was modified; preserving it: $plugin_dir"* ]] ||
+    fail "The modified plugin checkout was not reported: $(<"$TEST_ROOT/error")"
+  ((${#NVIM_CALLS[@]} == 0)) || fail "Neovim ran despite a modified plugin: ${NVIM_CALLS[*]}"
+  [[ "$(<"$TEST_ROOT/git-status.log")" == *"-C $plugin_dir status --porcelain --untracked-files=no -- :(exclude)doc/tags"* ]] ||
+    fail "Lazy's generated doc/tags was not excluded: $(<"$TEST_ROOT/git-status.log")"
+  [[ -d "$plugin_dir/.git" ]] || fail "The modified plugin checkout was not preserved"
+}
+
+test_lists_only_tracked_changes() {
+  local repository="$TEST_ROOT/checkout" change
+
+  unset -f git
+  mkdir -p "$repository/doc"
+  git -C "$repository" init --quiet
+  printf 'a\n' >"$repository/a"
+  printf 'tags\n' >"$repository/doc/tags"
+  git -C "$repository" add a doc/tags
+  git -C "$repository" -c user.email=test@example.com -c user.name=test commit --quiet -m initial
+
+  touch "$repository/a"
+  printf 'cache\n' >"$repository/untracked"
+  [[ -z "$(selfishell_git_tracked_changes "$repository")" ]] || fail "A touched or untracked file counted as a change"
+  printf 'edited\n' >"$repository/doc/tags"
+  [[ "$(selfishell_git_tracked_changes "$repository")" == *doc/tags ]] || fail "An edited tracked file was not reported"
+  git -C "$repository" add doc/tags
+  [[ -z "$(selfishell_git_tracked_changes "$repository" ':(exclude)doc/tags')" ]] || fail "An excluded path counted as a change"
+  git -C "$repository" reset --quiet --hard
+
+  # A staged change or a lost index matches the index but not HEAD.
+  for change in 'staged edit' deletion 'staged deletion' 'staged new file' 'missing index'; do
+    case "$change" in
+      'staged edit') printf 'edited\n' >"$repository/a" && git -C "$repository" add a ;;
+      deletion) rm "$repository/a" ;;
+      'staged deletion') git -C "$repository" rm --quiet a ;;
+      'staged new file') printf 'new\n' >"$repository/new" && git -C "$repository" add new ;;
+      'missing index') rm "$repository/.git/index" ;;
+    esac
+    [[ -n "$(selfishell_git_tracked_changes "$repository")" ]] || fail "A $change was not reported"
+    git -C "$repository" reset --quiet --hard
+  done
+
+  mkdir -p "$repository/broken/.git"
+  ! selfishell_git_tracked_changes "$repository/broken" >/dev/null || fail "A broken checkout fell back to its parent repository"
 }
 
 test_parser_update_failure_only_warns() {

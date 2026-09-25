@@ -192,6 +192,8 @@ dependency_install_git() {
 # state exists). Strict on purpose: Selfishell owns this path, so a directory,
 # non-executable, or symlink is corruption to repair, not a shape to tolerate.
 dependency_managed_target_is_valid() {
+  local changes
+
   case "$DEPENDENCY_TYPE" in
     download)
       [[ -f "$DEPENDENCY_TARGET" && ! -L "$DEPENDENCY_TARGET" && -x "$DEPENDENCY_TARGET" ]]
@@ -199,8 +201,10 @@ dependency_managed_target_is_valid() {
     git)
       [[ -d "$DEPENDENCY_TARGET" && ! -L "$DEPENDENCY_TARGET" &&
         -e "$DEPENDENCY_TARGET/.git" && -e "$DEPENDENCY_TARGET/$DEPENDENCY_MARKER" ]] || return 1
-      # A checkout moved off its commit (zinit self-update, say) is reprovisioned.
-      [[ "$DEPENDENCY_CHECKSUM" == - || "$(selfishell_git_head "$DEPENDENCY_TARGET")" == "$DEPENDENCY_CHECKSUM" ]]
+      # A checkout moved off its commit (zinit self-update, say) or with edited
+      # tracked files is reprovisioned.
+      [[ "$DEPENDENCY_CHECKSUM" == - || "$(selfishell_git_head "$DEPENDENCY_TARGET")" == "$DEPENDENCY_CHECKSUM" ]] || return 1
+      changes="$(selfishell_git_tracked_changes "$DEPENDENCY_TARGET")" && [[ -z "$changes" ]]
       ;;
     *)
       return 1

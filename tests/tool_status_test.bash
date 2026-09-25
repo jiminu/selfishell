@@ -177,7 +177,8 @@ EOF
 
 test_detects_selfishell_managed_direct_dependency() {
   printf 'git zinit v3.15.0 all all file:///unused - .local/share/zinit/zinit.git zinit.zsh\n' >"$SELFISHELL_DEPENDENCIES_FILE"
-  mkdir -p "$HOME/.local/share/zinit/zinit.git/.git" "$SELFISHELL_STATE_DIR/dependencies"
+  mkdir -p "$HOME/.local/share/zinit/zinit.git" "$SELFISHELL_STATE_DIR/dependencies"
+  git -C "$HOME/.local/share/zinit/zinit.git" init --quiet
   printf ':\n' >"$HOME/.local/share/zinit/zinit.git/zinit.zsh"
   printf 'v3.15.0\n' >"$SELFISHELL_STATE_DIR/dependencies/zinit"
 

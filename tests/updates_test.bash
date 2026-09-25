@@ -716,7 +716,8 @@ test_git_checkout_failure_preserves_existing_managed_tool() {
 }
 
 # A tag can be moved after approval; the commit in the checksum column is what
-# install verifies, and a checkout that drifts from it is reprovisioned.
+# install verifies; a checkout that drifts from it or edits a tracked file is
+# reprovisioned.
 test_git_dependency_is_pinned_to_its_commit() {
   local repo="$TEST_ROOT/repo" approved output status
 
@@ -745,6 +746,15 @@ test_git_dependency_is_pinned_to_its_commit() {
   [[ "$output" == *'Installed approved dependency: testgit v1.0'* &&
     "$(git -C "$HOME/.local/share/testgit" rev-parse HEAD)" == "$approved" ]] ||
     fail "A checkout that drifted from its approved commit was not reprovisioned: $output"
+
+  printf 'cache\n' >"$HOME/.local/share/testgit/cache"
+  output="$(run_dependency_install testgit)"
+  [[ -z "$output" && -e "$HOME/.local/share/testgit/cache" ]] || fail "An untracked file caused a reprovision: $output"
+  printf 'edited\n' >"$HOME/.local/share/testgit/marker"
+  output="$(run_dependency_install testgit)"
+  [[ "$output" == *'Installed approved dependency: testgit v1.0'* ]] ||
+    fail "A checkout with an edited tracked file was not reprovisioned: $output"
+  assert_file_content 'marker' "$HOME/.local/share/testgit/marker"
 
   git -C "$repo" commit --quiet --allow-empty -m moved
   git -C "$repo" tag -f v1.0 >/dev/null
