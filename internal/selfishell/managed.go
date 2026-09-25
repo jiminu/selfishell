@@ -21,6 +21,10 @@ type managed struct {
 	createLink       func(string, string) error
 }
 
+func blockConflictError(r Resource) error {
+	return fmt.Errorf("Cannot manage the Selfishell %s block in: %s\nselfishell: Preserving the file. Remove conflicting Selfishell markers and retry.", r.Name, r.Target)
+}
+
 func exists(path string) (os.FileInfo, bool, error) {
 	i, e := os.Lstat(path)
 	if errors.Is(e, fs.ErrNotExist) {
@@ -363,7 +367,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		return fmt.Errorf("State conflict for managed block: %s", r.Name)
 	}
 	if !has && view.status != "absent" {
-		return fmt.Errorf("Cannot manage the Selfishell %s block in: %s", r.Name, r.Target)
+		return blockConflictError(r)
 	}
 	if has && view.status == "intact" && view.checksum == expected {
 		if !preflight {
@@ -414,7 +418,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		m.say("Backed up modified managed block: %s -> %s", r.Target, conflict)
 	}
 	if has && view.status != "intact" && (s.Status != "pending" || view.status != "absent") {
-		return fmt.Errorf("Cannot manage the Selfishell %s block in: %s", r.Name, r.Target)
+		return blockConflictError(r)
 	}
 	if preflight {
 		return nil

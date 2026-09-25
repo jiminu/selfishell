@@ -20,3 +20,4 @@ go vet ./...
 go test ./... -count=1
 python3 -B tests/fixtures/go_migration/foundation.py "$ROOT_DIR/.build/selfishell"
 python3 -B tests/fixtures/go_migration/foundation.py "$ROOT_DIR/.build/targets/$GOOS-$GOARCH/bin/selfishell"
+bash tests/go_migration_test.bash --phase config

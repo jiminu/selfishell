@@ -6,9 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 source "$ROOT_DIR/tests/test_helper.bash"
 
 case "${*:-}" in
-  '' | '--phase baseline') ;;
+  '' | '--phase baseline') PHASE=baseline ;;
+  '--phase config') PHASE=config ;;
   *)
-    printf 'Usage: bash tests/go_migration_test.bash [--phase baseline]\n' >&2
+    printf 'Usage: bash tests/go_migration_test.bash [--phase baseline|config]\n' >&2
     exit 2
     ;;
 esac
@@ -51,8 +52,40 @@ run_migration_scenario() {
     "$executable" "$scenario" "$captures" "$python" "$SNAPSHOT_SCRIPT"
 }
 
+run_config_scenario() {
+  local executable="$1" scenario="$2" captures="$3" platform="$4" system proc python
+  python="$(command -v python3)"
+  system=Darwin
+  if [[ "$platform" != macos ]]; then
+    system=Linux
+  fi
+  proc="$TEST_ROOT/proc-version"
+  if [[ "$platform" == ubuntu-wsl ]]; then
+    proc="$TEST_ROOT/proc-version-wsl"
+  fi
+  env -i HOME="$HOME" XDG_CONFIG_HOME="$HOME/.config" \
+    XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state" \
+    XDG_CACHE_HOME="$HOME/.cache" PATH="$TEST_ROOT/tools" \
+    SHELL=/bin/zsh TMPDIR="$TEST_ROOT/tmp" LC_ALL=C TZ=UTC \
+    SELFISHELL_TEST_SYSTEM_NAME="$system" \
+    SELFISHELL_TEST_OS_RELEASE_FILE="$TEST_ROOT/os-release" \
+    SELFISHELL_TEST_PROC_VERSION_FILE="$proc" \
+    /bin/bash "$ROOT_DIR/tests/fixtures/go_migration/config_scenario.bash" \
+    "$executable" "$scenario" "$captures" "$python" "$SNAPSHOT_SCRIPT"
+}
+
 compare_migration_captures() {
-  diff -qr "$1" "$2"
+  local expected actual
+  if ! diff -qr "$1" "$2"; then
+    for expected in "$1"/*.stderr "$1"/*.stdout; do
+      [[ -f "$expected" ]] || continue
+      actual="$2/${expected##*/}"
+      if [[ -f "$actual" ]] && ! cmp -s "$expected" "$actual"; then
+        diff -u "$expected" "$actual" || true
+      fi
+    done
+    return 1
+  fi
 }
 
 snapshot_home() {
@@ -193,4 +226,89 @@ test_legacy_release_is_reproducible_and_runs_on_native_host() {
   printf 'Native legacy archive executed: %s/%s\n' "$(uname -s)" "$(uname -m)"
 }
 
-run_discovered_tests setup_test_home teardown_test_home
+config_test_candidate_matches_fixed_reference() {
+  local scenario implementation platform
+  [[ -x "$ROOT_DIR/.build/selfishell" ]] || fail 'Build the native Go candidate before the config phase'
+  archive_migration_source "$REFERENCE_COMMIT" "$TEST_ROOT/release"
+  mkdir "$TEST_ROOT/release/.git"
+  cp "$TEST_ROOT/release/bin/selfishell" "$TEST_ROOT/reference-cli"
+  cp "$TEST_ROOT/release/packages.conf" "$TEST_ROOT/reference-packages"
+  cp "$TEST_ROOT/release/dependencies.conf" "$TEST_ROOT/reference-dependencies"
+  prepare_migration_tools
+  printf 'ID=ubuntu\n' >"$TEST_ROOT/os-release"
+  printf 'Linux\n' >"$TEST_ROOT/proc-version"
+  printf 'Linux microsoft WSL2\n' >"$TEST_ROOT/proc-version-wsl"
+  for platform in macos ubuntu ubuntu-wsl; do
+    for scenario in empty existing custom changed-file changed-link changed-block pending late-preflight malformed-package; do
+      for implementation in bash go; do
+        rm -rf "$HOME"
+        mkdir -p "$HOME" "$TEST_ROOT/$platform-$scenario-$implementation"
+        cp "$TEST_ROOT/reference-packages" "$TEST_ROOT/release/packages.conf"
+        cp "$TEST_ROOT/reference-dependencies" "$TEST_ROOT/release/dependencies.conf"
+        if [[ "$implementation" == bash ]]; then
+          cp "$TEST_ROOT/reference-cli" "$TEST_ROOT/release/bin/selfishell"
+        else
+          cp "$ROOT_DIR/.build/selfishell" "$TEST_ROOT/release/bin/selfishell"
+        fi
+        chmod +x "$TEST_ROOT/release/bin/selfishell"
+        run_config_scenario "$TEST_ROOT/release/bin/selfishell" "$scenario" \
+          "$TEST_ROOT/$platform-$scenario-$implementation" "$platform"
+      done
+      compare_migration_captures "$TEST_ROOT/$platform-$scenario-bash" \
+        "$TEST_ROOT/$platform-$scenario-go"
+    done
+  done
+}
+
+config_test_purge_matches_fixed_reference() {
+  local implementation prefix="$TEST_ROOT/prefix" release
+  prepare_migration_tools
+  for implementation in bash go; do
+    rm -rf "$HOME" "$prefix" "$TEST_ROOT/purge-export"
+    mkdir -p "$HOME" "$prefix/bin" "$prefix/share/selfishell/releases" \
+      "$TEST_ROOT/purge-$implementation"
+    archive_migration_source "$REFERENCE_COMMIT" "$TEST_ROOT/purge-export"
+    release="$prefix/share/selfishell/releases/1.0"
+    cp -R "$TEST_ROOT/purge-export" "$release"
+    rm -rf "$TEST_ROOT/purge-export"
+    mkdir "$release/.git"
+    if [[ "$implementation" == go ]]; then
+      cp "$ROOT_DIR/.build/selfishell" "$release/bin/selfishell"
+    fi
+    ln -s releases/1.0 "$prefix/share/selfishell/current"
+    ln -s ../share/selfishell/current/bin/selfishell "$prefix/bin/selfishell"
+    ln -s selfishell "$prefix/bin/sfs"
+    run_config_scenario "$prefix/bin/selfishell" purge \
+      "$TEST_ROOT/purge-$implementation" macos
+  done
+  compare_migration_captures "$TEST_ROOT/purge-bash" "$TEST_ROOT/purge-go"
+}
+
+config_test_rejects_unsupported_phase() {
+  local rc=0
+  bash "$ROOT_DIR/tests/go_migration_test.bash" --phase unsupported \
+    >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || rc=$?
+  [[ "$rc" == 2 && ! -s "$TEST_ROOT/stdout" ]] || fail 'Unsupported phase was accepted'
+  grep -Fq '[--phase baseline|config]' "$TEST_ROOT/stderr" ||
+    fail 'Unsupported phase usage did not name supported phases'
+}
+
+config_test_invalid_dependencies_fail_before_mutation() {
+  archive_migration_source "$REFERENCE_COMMIT" "$TEST_ROOT/release"
+  mkdir "$TEST_ROOT/release/.git" "$TEST_ROOT/captures"
+  cp "$ROOT_DIR/.build/selfishell" "$TEST_ROOT/release/bin/selfishell"
+  prepare_migration_tools
+  run_config_scenario "$TEST_ROOT/release/bin/selfishell" malformed-dependency \
+    "$TEST_ROOT/captures" macos
+  grep -Fq 'invalid manifest record' "$TEST_ROOT/captures/malformed-install.stderr" ||
+    fail 'Malformed dependency was not reported'
+}
+
+if [[ "$PHASE" == baseline ]]; then
+  run_discovered_tests setup_test_home teardown_test_home
+else
+  run_test_isolated config_test_rejects_unsupported_phase setup_test_home teardown_test_home
+  run_test_isolated config_test_invalid_dependencies_fail_before_mutation setup_test_home teardown_test_home
+  run_test_isolated config_test_candidate_matches_fixed_reference setup_test_home teardown_test_home
+  run_test_isolated config_test_purge_matches_fixed_reference setup_test_home teardown_test_home
+fi

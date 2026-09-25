@@ -153,6 +153,22 @@ func TestUninstallPreflightPreservesAllResources(t *testing.T) {
 		t.Fatal("earlier user entrypoint removed", e)
 	}
 }
+
+func TestUninstallMalformedBlockExplainsPreservation(t *testing.T) {
+	root := testRelease(t)
+	home := t.TempDir()
+	if code, _, err := testCLI(t, root, home, "install", "--skip-packages", "--yes"); code != 0 {
+		t.Fatalf("install: %s", err)
+	}
+	os.WriteFile(filepath.Join(home, ".zshrc"), []byte("user changed shell config\n"), 0600)
+	code, _, err := testCLI(t, root, home, "uninstall", "--restore", "--yes")
+	want := "selfishell: Cannot manage the Selfishell user-zshrc block in: " + home + "/.zshrc\n" +
+		"selfishell: Preserving the file. Remove conflicting Selfishell markers and retry.\n" +
+		"selfishell: Uninstall cancelled because managed resources were changed.\n"
+	if code != 1 || err != want {
+		t.Fatalf("uninstall code %d, stderr %q; want %q", code, err, want)
+	}
+}
 func TestLiteralHomePathThroughSymlinkDotDot(t *testing.T) {
 	root := testRelease(t)
 	base := t.TempDir()

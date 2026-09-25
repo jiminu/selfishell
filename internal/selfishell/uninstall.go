@@ -115,7 +115,7 @@ func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 			return e
 		}
 		if view.status != "intact" || view.checksum != s.Checksum {
-			return fmt.Errorf("Cannot manage the Selfishell %s block in: %s", r.Name, s.Target)
+			return blockConflictError(r)
 		}
 	}
 	if restore && s.Backup != "-" {
