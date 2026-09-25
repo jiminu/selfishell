@@ -102,12 +102,14 @@ selfishell_git_head() {
   git -C "$repository" rev-parse HEAD 2>/dev/null
 }
 
-# Tracked files edited or deleted in a checkout; untracked output is ignored.
-# The explicit git dir keeps a broken .git from falling back to a parent repo.
+# Tracked changes from HEAD, staged or not; untracked output is ignored. The
+# explicit git dir stops a broken .git from reaching a parent repo, and no
+# optional locks keeps status from rewriting the index.
 selfishell_git_tracked_changes() {
   local repository="$1"
   shift
-  GIT_DIR=.git GIT_WORK_TREE=. git -C "$repository" ls-files --deleted --modified -- "$@" 2>/dev/null
+  GIT_DIR=.git GIT_WORK_TREE=. GIT_OPTIONAL_LOCKS=0 \
+    git -C "$repository" status --porcelain --untracked-files=no -- "$@" 2>/dev/null
 }
 
 cli_warn() {
