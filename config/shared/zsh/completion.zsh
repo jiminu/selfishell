@@ -29,9 +29,9 @@ _selfishell_completion_needs_audit() {
      -n "$1.audit"(#qN.mh+24) ]]
 }
 
-# compinit -C never rescans fpath. A completion added or removed updates its
-# directory's mtime, so a directory newer than the dump takes the audited
-# rebuild; globbing every file instead cost ~7 ms per startup.
+# compinit -C skips rescanning; directory mtimes avoid ~7 ms of file globbing.
+# An older directory newly added to fpath may wait for the daily audit.
+# That bounded delay is an accepted tradeoff for fast startup.
 _selfishell_completion_files_changed() {
   local directory
 
