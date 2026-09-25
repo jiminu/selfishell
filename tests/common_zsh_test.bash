@@ -1488,11 +1488,15 @@ test_fzf_tab_git_previews_read_the_repository() {
   git -C "$repository" add -A
   git -C "$repository" commit -q -m 'record the first revision'
   git -C "$repository" branch feature/login
+  git -C "$repository" branch feature/main
   # A remote-tracking ref with no local branch, which is how a branch someone
   # else pushed reaches the candidate list: zsh offers it stripped of its
   # remote, and `git log release-2` cannot resolve that.
   git -C "$repository" update-ref refs/remotes/origin/release-2 HEAD
+  git -C "$repository" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/release-2
+  git -C "$repository" update-ref refs/remotes/origin/release-3 HEAD
   git -C "$repository" commit -q --allow-empty -m 'drop the unused flag'
+  git -C "$repository" update-ref refs/remotes/upstream/release-3 HEAD
 
   output="$(run_fzf_tab_preview branch "$repository" feature/login '')"
   [[ "$output" == *'record the first revision'* ]] ||
@@ -1502,6 +1506,16 @@ test_fzf_tab_git_previews_read_the_repository() {
   output="$(run_fzf_tab_preview branch "$repository" release-2 '')"
   [[ "$output" == *'record the first revision'* ]] ||
     fail "The branch preview did not resolve a remote branch by its bare name: $output"
+  # Suffix matches such as feature/main and origin/HEAD must not stand in for the candidate.
+  output="$(run_fzf_tab_preview branch "$repository" main '')"
+  [[ "$output" == *'drop the unused flag'* ]] ||
+    fail "The branch preview showed another branch ending in the same name: $output"
+  output="$(run_fzf_tab_preview branch "$repository" HEAD '')"
+  [[ "$output" == *'drop the unused flag'* ]] ||
+    fail "The HEAD preview showed a remote's HEAD: $output"
+  # git switch refuses a name several remotes share, so the preview picks none.
+  output="$(run_fzf_tab_preview branch "$repository" release-3 '')"
+  [[ -z "$output" ]] || fail "The branch preview picked one of several remotes: $output"
 
   # One file changed in the index alone, one in the working tree alone. In a
   # single file the staged line would sit inside the unstaged hunk as context
