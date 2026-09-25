@@ -64,10 +64,22 @@ the fixture. A restricted command PATH and an empty inherited environment keep
 caller configuration, package managers and network tools out of the reference
 scenario.
 
-The baseline proves the comparator and fixtures. It does not by itself prove
-Go compatibility. Candidate phases must compare the candidate against these
-references, and the existing integration suites still cover Bash-specific
-failure injection until equivalent candidate coverage exists.
+The baseline proves the comparator and fixtures. The separate
+`bash tests/go_migration_test.bash --phase config` runs the actual native Go
+binary and fixed Bash CLI from the same temporary release path. It compares
+command output, exit status, and complete HOME bytes, permissions, links, state,
+and backups for empty, existing, custom XDG, changed-resource, pending-recovery,
+late-preflight, and malformed-package cases on simulated macOS, Ubuntu, and
+Ubuntu/WSL. A versioned temporary prefix also exercises dry-run and real purge
+after removing the source export. Expected failure statuses and dry-run
+invariance are asserted independently of the Bash/Go comparison. The candidate
+checks malformed dependency records before mutation; this is an intentional
+parser boundary beyond the reference's lazy dependency selection.
+
+`scripts/check-go.sh` runs the config phase on each native CI host. Simulated
+platform selection checks resource choice and lifecycle logic; it does not
+constitute runtime verification on another OS or CPU. Bash-specific failure
+injection remains in its existing integration suites.
 
 ## Verification reporting
 
@@ -87,10 +99,21 @@ formatting, vet, tests, builds and native reference comparisons as part of the
 repository gate. CI uses the same pin on Linux and macOS. Production entrypoints
 and release payloads remain Bash until the migration cutover.
 
-The candidate implements help and local version, their aliases and usage
-errors, and unknown-command errors. Known unported commands and
-`version --available` return exit 1 with an explicit explanation. Their command
-options and behavior are implemented alongside their later migration stages.
+The candidate implements help, local version, configuration-only
+`install --skip-packages`, and `uninstall` (including `--restore` and explicit
+`--purge`). Install without `--skip-packages` fails before mutation because
+package and tool installation remains in Bash. Update, rollback, doctor,
+status, and `version --available` remain unavailable in the Go candidate and
+return an explicit error. The production CLI and installer remain Bash.
+Configuration dry-run makes no filesystem changes, and user-owned targets are
+preflighted before install or uninstall changes begin.
+The Go candidate deliberately corrects one inherited Bash behavior: when an
+existing user file already has the same bytes as a managed default, install
+still saves the original before adopting that path. This preserves its original
+permissions and lets `uninstall --restore` return it. The immutable Bash
+reference skips that backup and can delete the preexisting file on uninstall.
+The candidate-only configuration lifecycle test covers this safety correction;
+the fixed-reference comparisons and their existing snapshots remain intact.
 Release location follows the resolved executable (including chained symlinks),
 not the caller's working directory or `SELFISHELL_ROOT`. Generated VERSION files
 remain the installed version source; `.git` marks source development builds.
@@ -138,5 +161,4 @@ Interoperability tests use the fixed Bash reference and v1.3.1's own native
 release payload after removing its source export. Both generate pending file,
 link and block records, consume Go-written records, finish interrupted setup,
 retain original backups through reinstalls, and restore user bytes. These tests
-prove the state boundary; Go installation and uninstallation are implemented in
-the subsequent configuration lifecycle stage.
+prove the state boundary used by the configuration lifecycle comparison above.
