@@ -103,9 +103,11 @@ with tempfile.TemporaryDirectory(prefix="selfishell-go-foundation.") as tmp:
         assert expected[2] and (b"\x1b[31m" in expected[2]) == (not no_color)
         assert actual == expected, ("terminal", no_color, actual, expected)
         count += 1
-    for command in ("install", "status", "doctor", "update", "rollback", "uninstall"):
+    for command in ("status", "doctor", "update", "rollback"):
         code, out, error = capture(entry, [command], env, home)
         assert code == 1 and not out and b"not implemented in the Go candidate" in error
+    for command in ("install", "uninstall"):
+        assert capture(entry, [command, "--help"], env, home)[0] == 0
     assert snapshot(home) == before, "foundation commands modified HOME"
     # A generated VERSION beside bin/ is sufficient: neither Go nor the source
     # checkout is required by an installed executable.

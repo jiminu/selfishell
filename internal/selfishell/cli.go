@@ -72,7 +72,11 @@ func (c CLI) Run(args []string) int {
 		}
 		fmt.Fprintln(c.Out, "selfishell "+version)
 		return 0
-	case "doctor", "install", "status", "update", "rollback", "uninstall":
+	case "install":
+		return c.install(args)
+	case "uninstall":
+		return c.uninstall(args)
+	case "doctor", "status", "update", "rollback":
 		return c.incomplete(command)
 	default:
 		c.error("Unknown command: " + command)

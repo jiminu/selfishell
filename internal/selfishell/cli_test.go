@@ -35,7 +35,7 @@ func TestCLI(t *testing.T) {
 			}
 		})
 	}
-	for _, command := range []string{"doctor", "install", "status", "update", "rollback", "uninstall", "version"} {
+	for _, command := range []string{"doctor", "status", "update", "rollback", "version"} {
 		args := []string{command}
 		if command == "version" {
 			args = append(args, "--available")
