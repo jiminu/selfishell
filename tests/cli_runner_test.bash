@@ -26,22 +26,20 @@ test_invalid_override_does_not_fall_back() {
   done
 }
 
-test_runner_executes_override_with_its_shebang_and_preserves_io() {
+test_runner_executes_override_directly_and_preserves_io() {
   local candidate="$TEST_ROOT/other shell"
   local status
-  cat >"$candidate" <<'EOF'
-#!/bin/sh
-if [ -n "${BASH_VERSION+set}" ]; then exit 88; fi
-printf 'arg=%s\n' "$1"
-IFS= read -r input
-printf 'input=%s\n' "$input"
-printf 'error=%s\n' "$2" >&2
-exit 23
-EOF
-  chmod +x "$candidate"
+  ln -s /bin/sh "$candidate"
 
   status=0
-  printf 'stdin with spaces\n' | SELFISHELL_TEST_CLI="$candidate" run_selfishell 'arg with spaces' 'stderr with spaces' >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
+  # shellcheck disable=SC2016 # Expand arguments in the invoked /bin/sh.
+  printf 'stdin with spaces\n' | SELFISHELL_TEST_CLI="$candidate" run_selfishell -c '
+    printf "arg=%s\n" "$1"
+    IFS= read -r input
+    printf "input=%s\n" "$input"
+    printf "error=%s\n" "$2" >&2
+    exit 23
+  ' selfishell-test 'arg with spaces' 'stderr with spaces' >"$TEST_ROOT/stdout" 2>"$TEST_ROOT/stderr" || status=$?
   [[ "$status" -eq 23 ]] || fail "Runner did not preserve exit status: $status"
   assert_file_content $'arg=arg with spaces\ninput=stdin with spaces' "$TEST_ROOT/stdout"
   assert_file_content 'error=stderr with spaces' "$TEST_ROOT/stderr"
