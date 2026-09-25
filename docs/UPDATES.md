@@ -81,6 +81,12 @@ only the CLI, leaving configuration and tools unchanged. Reapplying an older
 environment may require downloading tool versions removed by cleanup. Select
 an exact retained version with `selfishell rollback VERSION`.
 
+Release changes do not take a lock, so run one `selfishell update`,
+`selfishell rollback`, or bootstrap `install.sh` at a time. Overlapping runs can
+prune a release that another run activates, leaving the `selfishell` link
+broken; shell startup is unaffected, and rerunning the bootstrap installer
+repairs the CLI.
+
 ## Approved versions
 
 Direct-tool and Git dependency versions, including exact Neovim plugin commits,
