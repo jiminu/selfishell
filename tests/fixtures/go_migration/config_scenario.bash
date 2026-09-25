@@ -37,6 +37,12 @@ capture() {
   "$python" -B "$snapshot" "$HOME" >"$captures/$name.home.json"
 }
 
+capture_failed_uninstall_unchanged() {
+  "$python" -B "$snapshot" "$HOME" >"$captures/before-changed-uninstall.home.json"
+  capture changed-uninstall 1 uninstall --restore --yes
+  cmp "$captures/before-changed-uninstall.home.json" "$captures/changed-uninstall.home.json"
+}
+
 "$python" -B "$snapshot" "$HOME" >"$captures/initial.home.json"
 capture help 0 help
 capture version 0 version
@@ -84,18 +90,18 @@ fi
 case "$scenario" in
   changed-file)
     printf 'user changed managed content\n' >"$XDG_CONFIG_HOME/selfishell/zsh/history.zsh"
-    capture changed-uninstall 1 uninstall --restore --yes
+    capture_failed_uninstall_unchanged
     exit 0
     ;;
   changed-link)
     rm "$XDG_CONFIG_HOME/nvim"
     ln -s "$XDG_CONFIG_HOME/starship.toml" "$XDG_CONFIG_HOME/nvim"
-    capture changed-uninstall 1 uninstall --restore --yes
+    capture_failed_uninstall_unchanged
     exit 0
     ;;
   changed-block)
     printf 'user changed shell config\n' >"$HOME/.zshrc"
-    capture changed-uninstall 1 uninstall --restore --yes
+    capture_failed_uninstall_unchanged
     exit 0
     ;;
   pending)
