@@ -261,8 +261,8 @@ neovim_plugin_dir() {
   printf '%s\n' "$data_home/nvim/lazy/${plugin_name%.git}"
 }
 
-# `Lazy! sync` fetches every plugin even when nothing changed. The pins come
-# from the spec, so checkouts at their pins with no extra plugin need no sync.
+# Skip network-heavy `Lazy! sync` when pins and plugin membership match.
+# neovim_plugins_are_unmodified checks tracked-file changes before this runs.
 neovim_plugins_are_synced() {
   local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
   local manifest type repository revision source plugin_dir entry
