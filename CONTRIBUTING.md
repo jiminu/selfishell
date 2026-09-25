@@ -24,5 +24,19 @@ its shebang selects the interpreter. Some tests still invoke the Bash CLI or a
 copied release payload explicitly; this does not make the full suite candidate
 compatible.
 
+The compatibility baseline requires Python 3 (standard library only) and the
+repository's full Git history. It never fetches during a test run. For a shallow
+checkout, run `git fetch --unshallow` before testing. CI checkouts that run the
+gate use `fetch-depth: 0`.
+
+```bash
+bash tests/go_migration_test.bash --phase baseline
+```
+
+This phase compares the fixed Bash reference with itself and tests the actual
+legacy release; `SELFISHELL_TEST_CLI` does not replace those reference runs.
+See [CLI compatibility](docs/CLI_COMPATIBILITY.md) for the pinned references,
+comparison boundaries and native-platform verification requirements.
+
 See [AGENTS.md](AGENTS.md) for repository implementation constraints and
 [docs/RELEASING.md](docs/RELEASING.md) for maintainer release procedures.
