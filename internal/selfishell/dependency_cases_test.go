@@ -189,6 +189,11 @@ func TestDirectDownloadExternalTargets(t *testing.T) {
 					t.Fatalf("link changed: %v %v", info, err)
 				}
 			}
+			if shape == "dangling_symlink" {
+				if destination, err := os.Readlink(target); err != nil || destination != home+"/missing" {
+					t.Fatalf("dangling link destination changed: %q %v", destination, err)
+				}
+			}
 			assertNoPath(t, paths.State+"/dependencies/tool")
 		})
 	}
@@ -476,6 +481,9 @@ func TestDirectGitBrokenTargetsAndCheckoutFailure(t *testing.T) {
 			}
 			if shape == "stale_previous" && readTestFile(t, target+".previous.stale/marker") != "stale" {
 				t.Fatal("stale previous path changed")
+			}
+			if shape == "stale_previous" && readTestFile(t, state) != "v1.0\n" {
+				t.Fatal("stale previous install did not record the approved version")
 			}
 		})
 	}
