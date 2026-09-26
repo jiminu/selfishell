@@ -107,10 +107,12 @@ func TestNativeAutosuggestionsOrderAndPin(t *testing.T) {
 	home := nativeHome(t)
 	r := nativeRun(t, home, `_selfishell_command_path() { command -v "$1"; }; _selfishell_zinit_plugin_ready() { return 0; }; zinit() { [[ "$1" == ice ]] && print -r -- "ice: ${(j: :)@[2,-1]}"; [[ "$1" == light ]] && print -r -- "light: $2"; }; source "$SELFISHELL_SOURCE"; print -r -- "manual=$ZSH_AUTOSUGGEST_MANUAL_REBIND"`, "SELFISHELL_SOURCE="+interactiveSource(), "SELFISHELL_COMMON_DIR="+filepath.Join(repoRoot(), "config/shared/zsh"))
 	out := string(r.Stdout)
-	for _, s := range []string{"manual=1", "ver4672ad5dd9ad68a7effc1476d65afb7c584ce2b3 atload", "|| _zsh_autosuggest_bind_widgets"} {
-		if !strings.Contains(out, s) {
-			t.Fatalf("missing %q: %q", s, out)
-		}
+	if !strings.Contains(out, "manual=1\n") {
+		t.Fatalf("manual rebind flag: %q", out)
+	}
+	wantIce := "ice: wait0 lucid ver4672ad5dd9ad68a7effc1476d65afb7c584ce2b3 atload(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets"
+	if !strings.Contains("\n"+out, "\n"+wantIce+"\n") {
+		t.Fatalf("syntax-highlighting ice: want %q in %q", wantIce, out)
 	}
 	a := strings.Index(out, "light: zsh-users/zsh-autosuggestions\n")
 	b := strings.Index(out, "light: zdharma-continuum/fast-syntax-highlighting")
