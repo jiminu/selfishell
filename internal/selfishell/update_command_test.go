@@ -82,25 +82,34 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 	}
 }
 
-func TestUpdateContinuationRejectsBadConfiguredMarker(t *testing.T) {
-	for _, kind := range []string{"directory", "malformed"} {
-		t.Run(kind, func(t *testing.T) {
+func TestUpdateContinuationRejectsUnreadableConfiguredMarker(t *testing.T) {
+	home := isolatedUpdateHome(t)
+	root := testRelease(t)
+	path := home + "/.local/state/selfishell/configured"
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	code, out, stderr := commandResult(root, "update", "--continue-after-cli-update", "--skip-packages", "--dry-run", "--yes")
+	if code != 1 || strings.Contains(out, "skipping tools") || strings.Contains(out, "Selfishell updated") || !strings.Contains(stderr, "configured marker") {
+		t.Fatalf("directory marker: %d %q %q", code, out, stderr)
+	}
+}
+
+func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
+	for _, content := range []string{"", "legacy-marker\n"} {
+		t.Run("bytes-"+strconv.Itoa(len(content)), func(t *testing.T) {
 			home := isolatedUpdateHome(t)
 			root := testRelease(t)
 			path := home + "/.local/state/selfishell/configured"
 			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if kind == "directory" {
-				if err := os.Mkdir(path, 0700); err != nil {
-					t.Fatal(err)
-				}
-			} else if err := os.WriteFile(path, []byte("invalid\n"), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 				t.Fatal(err)
 			}
-			code, out, stderr := commandResult(root, "update", "--continue-after-cli-update", "--skip-packages", "--dry-run", "--yes")
-			if code != 1 || strings.Contains(out, "skipping tools") || strings.Contains(out, "Selfishell updated") || !strings.Contains(stderr, "configured marker") {
-				t.Fatalf("%s marker: %d %q %q", kind, code, out, stderr)
+			code, out, stderr := commandResult(root, "update", "--tools-only", "--skip-packages", "--dry-run", "--yes")
+			if code != 0 || strings.Contains(out, "configuration is not installed") || !strings.Contains(out, "Tool/configuration dry run complete") {
+				t.Fatalf("readable marker: %d %q %q", code, out, stderr)
 			}
 		})
 	}

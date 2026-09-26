@@ -217,7 +217,7 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.error(err.Error())
 		return 1
 	}
-	marker, err := os.ReadFile(paths.State + "/configured")
+	_, err = os.ReadFile(paths.State + "/configured")
 	if os.IsNotExist(err) {
 		if o.mode == "tools" && !o.continuation {
 			c.error("Selfishell configuration is not installed.")
@@ -228,10 +228,6 @@ func (c CLI) updateTools(o updateOptions) int {
 	}
 	if err != nil {
 		c.error("Could not read Selfishell configured marker: " + err.Error())
-		return 1
-	}
-	if string(marker) != "1\n" {
-		c.error("Invalid Selfishell configured marker.")
 		return 1
 	}
 	packages, err := ReadPackages(c.Root + "/packages.conf")
