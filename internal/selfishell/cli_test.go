@@ -35,11 +35,8 @@ func TestCLI(t *testing.T) {
 			}
 		})
 	}
-	for _, command := range []string{"update", "rollback", "version"} {
+	for _, command := range []string{"update", "rollback"} {
 		args := []string{command}
-		if command == "version" {
-			args = append(args, "--available")
-		}
 		var out, stderr bytes.Buffer
 		c := CLI{Root: root, Out: &out, Err: &stderr}
 		if c.Run(args) != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "not implemented in the Go candidate") {

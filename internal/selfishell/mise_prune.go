@@ -51,27 +51,9 @@ func ValidRetainedRelease(root string) (string, string, error) {
 	if !ValidReleaseVersion(version) || (link != "releases/"+version && link != releases+"/"+version && link != rawReleases+"/"+version) {
 		return "", "", fmt.Errorf("invalid previous release link: %s", link)
 	}
-	dir := releases + "/" + version
-	info, err := os.Lstat(dir)
+	dir, err := validReleaseDirectory(releases, version)
 	if err != nil {
 		return "", "", err
-	}
-	if !info.IsDir() {
-		return "", "", fmt.Errorf("invalid retained release directory: %s", dir)
-	}
-	bin, err := os.Stat(dir + "/bin/selfishell")
-	if err != nil {
-		return "", "", err
-	}
-	if !bin.Mode().IsRegular() || bin.Mode()&0111 == 0 {
-		return "", "", fmt.Errorf("invalid retained release executable: %s", dir)
-	}
-	data, err := os.ReadFile(dir + "/VERSION")
-	if err != nil {
-		return "", "", err
-	}
-	if strings.TrimSuffix(string(data), "\n") != version {
-		return "", "", fmt.Errorf("retained release version mismatch: %s", dir)
 	}
 	return version, dir, nil
 }

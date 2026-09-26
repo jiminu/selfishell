@@ -1,0 +1,163 @@
+package selfishell
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"strings"
+)
+
+type releaseMember struct {
+	kind   byte
+	target string
+}
+
+func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	members := map[string]releaseMember{}
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		name := strings.TrimPrefix(h.Name, "./")
+		if name == "." || name == "" {
+			if h.Typeflag == tar.TypeDir {
+				continue
+			}
+			return nil, fmt.Errorf("unsafe release archive root")
+		}
+		if strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
+			return nil, fmt.Errorf("unsafe release archive path: %s", name)
+		}
+		for _, part := range strings.Split(name, "/") {
+			if part == ".." {
+				return nil, fmt.Errorf("unsafe release archive path: %s", name)
+			}
+		}
+		clean := path.Clean(name)
+		if clean == ".." || strings.HasPrefix(clean, "../") || clean == "." {
+			return nil, fmt.Errorf("unsafe release archive path: %s", name)
+		}
+		if _, exists := members[clean]; exists {
+			return nil, fmt.Errorf("duplicate release archive member: %s", clean)
+		}
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir && h.Typeflag != tar.TypeSymlink {
+			return nil, fmt.Errorf("unsupported release archive member: %s", clean)
+		}
+		if h.Typeflag == tar.TypeSymlink && (path.IsAbs(h.Linkname) || strings.Contains(h.Linkname, "\\") || h.Linkname == "") {
+			return nil, fmt.Errorf("unsafe release archive link: %s", clean)
+		}
+		members[clean] = releaseMember{h.Typeflag, h.Linkname}
+	}
+	for name, m := range members {
+		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+			if item, ok := members[parent]; ok && item.kind != tar.TypeDir {
+				return nil, fmt.Errorf("release archive path collision: %s", name)
+			}
+		}
+		if m.kind != tar.TypeSymlink {
+			continue
+		}
+		seen := map[string]bool{name: true}
+		target := path.Clean(path.Join(path.Dir(name), m.target))
+		for {
+			if target == ".." || strings.HasPrefix(target, "../") || path.IsAbs(target) {
+				return nil, fmt.Errorf("escaping release archive link: %s", name)
+			}
+			item, ok := members[target]
+			if !ok {
+				return nil, fmt.Errorf("dangling release archive link: %s", name)
+			}
+			if item.kind != tar.TypeSymlink {
+				break
+			}
+			if seen[target] {
+				return nil, fmt.Errorf("cyclic release archive link: %s", name)
+			}
+			seen[target] = true
+			target = path.Clean(path.Join(path.Dir(target), item.target))
+		}
+	}
+	return members, nil
+}
+
+// extractReleaseArchive completes archive validation before creating staging.
+func extractReleaseArchive(filename, staging string) error {
+	if _, err := scanReleaseArchive(filename); err != nil {
+		return err
+	}
+	if err := os.Mkdir(staging, 0700); err != nil {
+		return err
+	}
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := strings.TrimPrefix(h.Name, "./")
+		if name == "." || name == "" {
+			continue
+		}
+		target := staging + "/" + path.Clean(name)
+		if err := os.MkdirAll(path.Dir(target), 0700); err != nil {
+			return err
+		}
+		switch h.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0700); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+			if err != nil {
+				return err
+			}
+			_, copyErr := io.Copy(file, tr)
+			closeErr := file.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+			if err := os.Chmod(target, os.FileMode(h.Mode)&0777); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			if err := os.Symlink(h.Linkname, target); err != nil {
+				return err
+			}
+		}
+	}
+}

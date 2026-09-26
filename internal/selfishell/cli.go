@@ -59,7 +59,13 @@ func (c CLI) Run(args []string) int {
 				return 0
 			case "--available":
 				if len(args) == 1 {
-					return c.incomplete("version --available")
+					version, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(c.invocationContext())
+					if err != nil {
+						c.error("Unable to determine the latest Selfishell release.")
+						return 1
+					}
+					fmt.Fprintln(c.Out, version)
+					return 0
 				}
 				fallthrough
 			default:
