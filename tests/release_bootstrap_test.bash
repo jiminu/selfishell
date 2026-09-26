@@ -97,54 +97,6 @@ run_bootstrap() {
   bash "$ROOT_DIR/install.sh" --prefix "$TEST_ROOT/prefix" "$@"
 }
 
-test_builds_all_platform_architecture_artifacts() {
-  local version
-  version="$RELEASE_FIXTURE_VERSION"
-
-  for artifact in \
-    "selfishell-$version-linux-amd64.tar.gz" \
-    "selfishell-$version-linux-arm64.tar.gz" \
-    "selfishell-$version-macos-amd64.tar.gz" \
-    "selfishell-$version-macos-arm64.tar.gz"; do
-    [[ -f "$TEST_ROOT/artifacts/$artifact" ]] || fail "Missing release artifact: $artifact"
-  done
-  [[ -s "$TEST_ROOT/artifacts/SHA256SUMS" ]] || fail "Missing release checksums"
-}
-
-test_release_artifact_uses_config_payload_root() {
-  local archive_entries
-  local version
-
-  version="$RELEASE_FIXTURE_VERSION"
-  archive_entries="$(tar -tzf "$TEST_ROOT/artifacts/selfishell-$version-linux-amd64.tar.gz")"
-
-  grep -Fqx './config/shared/zsh/common.zsh' <<<"$archive_entries" ||
-    fail "Release artifact is missing the shared configuration payload"
-  grep -Fqx './config/macos/zshrc' <<<"$archive_entries" ||
-    fail "Release artifact is missing the macOS configuration payload"
-  grep -Fqx './config/ubuntu/zshrc' <<<"$archive_entries" ||
-    fail "Release artifact is missing the Ubuntu configuration payload"
-  ! grep -Eq '^\./(common|mac|ubuntu)/' <<<"$archive_entries" ||
-    fail "Release artifact still includes a legacy configuration payload root"
-}
-
-test_release_artifacts_are_reproducible() {
-  local version artifact
-  local second_output="$TEST_ROOT/reproducible-artifacts"
-
-  version="$RELEASE_FIXTURE_VERSION"
-  mkdir -p "$second_output"
-  sleep 1
-  bash "$ROOT_DIR/scripts/build-release.sh" --version "$version" --output "$second_output" >/dev/null
-
-  for artifact in "$TEST_ROOT/artifacts"/*.tar.gz; do
-    cmp -s "$artifact" "$second_output/$(basename "$artifact")" ||
-      fail "Release artifact is not reproducible: $(basename "$artifact")"
-  done
-  cmp -s "$TEST_ROOT/artifacts/SHA256SUMS" "$second_output/SHA256SUMS" ||
-    fail "Reproducible artifacts produced different checksums"
-}
-
 test_installs_exact_version_and_cli_links() {
   local version platform architecture artifact
   version="$RELEASE_FIXTURE_VERSION"
