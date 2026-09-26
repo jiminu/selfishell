@@ -10,11 +10,20 @@ import (
 )
 
 func TestFullInstallRequiredPackageFailureBeforeConfiguration(t *testing.T) {
-	root, home := testRelease(t), t.TempDir()
+	root, home := t.TempDir(), t.TempDir()
+	for _, name := range []string{"config", "dependencies.conf"} {
+		if err := os.Symlink(filepath.Join(testRelease(t), name), filepath.Join(root, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "packages.conf"), []byte("package ubuntu required apt fixture-required-unavailable\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	bin := t.TempDir()
 	for name, body := range map[string]string{
-		"apt-get":    "#!/bin/sh\nexit 1\n",
+		"apt-get":    "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/package-calls\"\nexit 1\n",
 		"dpkg-query": "#!/bin/sh\nexit 1\n",
+		"sudo":       "#!/bin/sh\nexec \"$@\"\n",
 	} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0700); err != nil {
 			t.Fatal(err)
@@ -27,8 +36,11 @@ func TestFullInstallRequiredPackageFailureBeforeConfiguration(t *testing.T) {
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
 	var out, stderr bytes.Buffer
 	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
-	if code != 1 || strings.Contains(stderr.String(), "--skip-packages") {
+	if code != 1 || !strings.Contains(stderr.String(), "Could not update apt package indexes") {
 		t.Fatalf("full install did not reach package phase: code=%d stderr=%q", code, stderr.String())
+	}
+	if data, err := os.ReadFile(home + "/package-calls"); err != nil || string(data) != "update\n" {
+		t.Fatalf("fixture apt call: %q %v", data, err)
 	}
 	if _, err := os.Lstat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
 		t.Fatalf("required package failure changed configuration: %v", err)
@@ -211,7 +223,10 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 	if err := os.WriteFile(bin+"/dpkg-query", []byte("#!/bin/sh\ncase \"$*\" in *optional-example*) exit 1;; esac\nprintf 'install ok installed\\n'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin+"/apt-get", []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/apt-calls\"\nexit 1\n"), 0700); err != nil {
+	if err := os.WriteFile(bin+"/apt-get", []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/apt-calls\"\ncase \"$1\" in update) exit 0;; *) exit 1;; esac\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin+"/sudo", []byte("#!/bin/sh\nexec \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(bin+"/apt-cache", []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
@@ -244,8 +259,8 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 	if data, err := os.ReadFile(home + "/state/selfishell/ghostty"); err != nil || string(data) != "0\n" {
 		t.Fatalf("Ghostty marker: %q %v", data, err)
 	}
-	if _, err := os.Lstat(home + "/apt-calls"); !os.IsNotExist(err) {
-		t.Fatalf("optional unavailable apt attempted install: %v", err)
+	if data, err := os.ReadFile(home + "/apt-calls"); err != nil || string(data) != "update\n" {
+		t.Fatalf("optional unavailable apt attempted install: %q %v", data, err)
 	}
 	out.Reset()
 	stderr.Reset()

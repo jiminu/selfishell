@@ -26,7 +26,26 @@ esac
 }
 
 func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
+	outer := t.TempDir()
+	writeTestFile(t, outer+"/mise/conf.d/selfishell.toml", "[tools]\n", 0600)
+	t.Setenv("HOME", outer)
+	t.Setenv("XDG_CONFIG_HOME", outer)
+	t.Setenv("XDG_DATA_HOME", outer)
+	t.Setenv("XDG_STATE_HOME", outer)
+	t.Setenv("XDG_CACHE_HOME", outer)
+	t.Setenv("MISE_DATA_DIR", outer)
+	t.Setenv("MISE_STATE_DIR", outer)
+	t.Setenv("MISE_CACHE_DIR", outer)
+	t.Setenv("MISE_CONFIG_DIR", outer)
 	op, paths, root, home := miseFixture(t)
+	if paths.Config != home+"/.config/selfishell" || paths.Data != home+"/data/selfishell" || paths.State != home+"/state/selfishell" || paths.Cache != home+"/cache/selfishell" {
+		t.Fatalf("fixture used inherited XDG paths: %+v", paths)
+	}
+	for _, key := range []string{"MISE_DATA_DIR", "MISE_STATE_DIR", "MISE_CACHE_DIR", "MISE_CONFIG_DIR"} {
+		if value := os.Getenv(key); !strings.HasPrefix(value, home+"/") {
+			t.Fatalf("fixture used inherited %s: %s", key, value)
+		}
+	}
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node@24.18.0", "python@3.13.14"); err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +53,9 @@ func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("mise calls: %s", data)
+	}
+	if data, err := os.ReadFile(outer + "/mise/conf.d/selfishell.toml"); err != nil || string(data) != "[tools]\n" {
+		t.Fatalf("inherited config was changed: %q %v", data, err)
 	}
 	for _, line := range lines {
 		if !strings.Contains(line, "|"+root+"/config/shared/mise.toml|") || !strings.HasSuffix(strings.Split(line, "|")[0], "/release/config/shared") {
