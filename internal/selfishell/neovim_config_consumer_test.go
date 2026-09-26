@@ -13,11 +13,73 @@ import (
 
 func TestNeovimConfigFixtures(t *testing.T) {
 	root := testRelease(t)
-	nvim, err := (Process{}).lookPath("nvim")
+	pins, err := approvedMisePins(root+"/config/shared/mise.toml", []string{"neovim"})
 	if err != nil {
-		t.Skip("Neovim executable unavailable for offline native Lua fixtures")
+		t.Fatal(err)
 	}
-	runNeovimConfigFixtures(t, root, Process{Env: os.Environ()}, nvim, "")
+	data := envDefault("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
+	nvim := data + "/installs/neovim/" + strings.TrimPrefix(pins[0], "neovim@") + "/bin/nvim"
+	info, err := os.Stat(nvim)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		if err != nil {
+			t.Skip("Pinned Neovim executable unavailable for offline native Lua fixtures")
+		}
+		t.Skip("Pinned Neovim executable is not executable")
+	}
+	runNeovimConfigFixtures(t, root, standaloneNeovimProcess(t, nvim), nvim, "")
+}
+
+func standaloneNeovimProcess(t *testing.T, nvim string) Process {
+	t.Helper()
+	root := t.TempDir()
+	home := root + "/home"
+	if err := os.MkdirAll(home+"/tmp", 0700); err != nil {
+		t.Fatal(err)
+	}
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "MISE_") {
+			env = append(env, entry)
+		}
+	}
+	return withEnvironment(Process{Env: env}, map[string]string{
+		"HOME": home, "PATH": filepath.Dir(nvim) + ":/usr/bin:/bin",
+		"XDG_CONFIG_HOME": home + "/.config", "XDG_DATA_HOME": home + "/.local/share",
+		"XDG_STATE_HOME": home + "/.local/state", "XDG_CACHE_HOME": home + "/.cache", "TMPDIR": home + "/tmp",
+		"MISE_CONFIG_DIR": home + "/mise/config", "MISE_DATA_DIR": home + "/mise/data",
+		"MISE_STATE_DIR": home + "/mise/state", "MISE_CACHE_DIR": home + "/mise/cache", "MISE_OFFLINE": "1",
+	})
+}
+
+func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
+	root := t.TempDir()
+	bin := root + "/bin"
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	nvim := bin + "/nvim"
+	if err := os.WriteFile(nvim, []byte("#!/bin/sh\nprintf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' \"$HOME\" \"$MISE_GLOBAL_CONFIG_FILE\" \"$MISE_CONFIG_DIR\" \"$MISE_DATA_DIR\" \"$MISE_CACHE_DIR\" \"$MISE_STATE_DIR\" \"$MISE_OFFLINE\" \"$MISE_OVERRIDE_CONFIG_FILENAMES\" \"$PATH\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(root+"/ambient", 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", root+"/ambient")
+	t.Setenv("MISE_GLOBAL_CONFIG_FILE", "ambient-sentinel")
+	t.Setenv("MISE_CONFIG_DIR", "ambient-sentinel")
+	t.Setenv("MISE_OVERRIDE_CONFIG_FILENAMES", "ambient-sentinel")
+	var out bytes.Buffer
+	p := standaloneNeovimProcess(t, nvim)
+	p.Out, p.Err = &out, &out
+	code, err := p.Run(context.Background(), nvim)
+	if err != nil || code != 0 {
+		t.Fatalf("fake Neovim: %d %v", code, err)
+	}
+	home := envValue(p.Env, "HOME")
+	want := strings.Join([]string{home, "", home + "/mise/config", home + "/mise/data", home + "/mise/cache", home + "/mise/state", "1", "", bin + ":/usr/bin:/bin"}, "\n") + "\n"
+	if home == root+"/ambient" || !strings.HasSuffix(home, "/home") || out.String() != want {
+		t.Fatalf("ambient mise or HOME reached Neovim: %q", out.String())
+	}
 }
 
 // These remain native Lua behavior probes; Go owns isolation, process execution,

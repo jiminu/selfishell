@@ -232,8 +232,7 @@ func (c CLI) updateTools(o updateOptions) int {
 	}
 	packages, err := ReadPackages(c.Root + "/packages.conf")
 	if err != nil {
-		c.error(err.Error())
-		return 1
+		return c.diagnosticError(err)
 	}
 	if _, err := ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")); err != nil {
 		c.error(err.Error())

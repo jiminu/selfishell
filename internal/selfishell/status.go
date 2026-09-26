@@ -26,7 +26,14 @@ func (c CLI) bold(value string) string {
 	}
 	return value
 }
-func (c CLI) diagnosticError(err error) int { c.error(err.Error()); return 1 }
+func (c CLI) diagnosticError(err error) int {
+	c.error(err.Error())
+	var invalid invalidPackageNameError
+	if errors.As(err, &invalid) {
+		return 2
+	}
+	return 1
+}
 
 func diagnosticPackages(root, platform string) ([]Package, error) {
 	all, err := ReadPackages(filepath.Join(root, "packages.conf"))

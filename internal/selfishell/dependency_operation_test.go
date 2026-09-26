@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -57,6 +58,36 @@ func TestDirectDownloadChecksumAndState(t *testing.T) {
 	}
 	if !strings.Contains(op.Process.Out.(*bytes.Buffer).String(), "Installed approved dependency: tool 1.0") {
 		t.Fatal("missing success report")
+	}
+}
+
+func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
+	op, paths, manifest, home := dependencyFixture(t)
+	t.Setenv("TMPDIR", t.TempDir())
+	bin := home + "/fake-bin"
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin+"/curl", []byte("#!/bin/sh\nprintf '%s' \"$HTTPS_PROXY\" >\"$HOME/proxy-observed\"\nprintf '%s\\n' \"$@\" >\"$HOME/curl-arguments\"\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("HTTPS_PROXY", "http://proxy.example:8443")
+	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
+	if err := installTool(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTestFile(t, home+"/proxy-observed"); got != "http://proxy.example:8443" {
+		t.Fatal(got)
+	}
+	args := strings.Split(strings.TrimSpace(readTestFile(t, home+"/curl-arguments")), "\n")
+	for _, flag := range []string{"--connect-timeout", "--speed-limit", "--speed-time"} {
+		if !slices.Contains(args, flag) {
+			t.Fatalf("missing %s: %q", flag, args)
+		}
+	}
+	if slices.Contains(args, "--max-time") {
+		t.Fatalf("transfer has total timeout: %q", args)
 	}
 }
 

@@ -147,9 +147,35 @@ func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
 }
 
 func TestInvalidCandidateOverrideFails(t *testing.T) {
-	t.Setenv("SELFISHELL_TEST_CLI", filepath.Join(t.TempDir(), "missing"))
-	if _, err := candidateCLI(t); err == nil {
-		t.Fatal("accepted missing override")
+	root := t.TempDir()
+	file := filepath.Join(root, "not-executable")
+	mustFS(t, os.WriteFile(file, []byte("#!/bin/sh\nexit 0\n"), 0600))
+	for _, tc := range []struct{ path, diagnostic string }{
+		{"relative/path", "must be absolute"},
+		{filepath.Join(root, "missing"), "invalid SELFISHELL_TEST_CLI"},
+		{root, "is not executable"},
+		{file, "is not executable"},
+	} {
+		t.Setenv("SELFISHELL_TEST_CLI", tc.path)
+		if _, err := candidateCLI(t); err == nil || !strings.Contains(err.Error(), tc.diagnostic) {
+			t.Fatalf("override %q: %v", tc.path, err)
+		}
+	}
+}
+
+func TestCandidateOverrideExecutableSymlinkPreservesIO(t *testing.T) {
+	root := t.TempDir()
+	target, link := filepath.Join(root, "target"), filepath.Join(root, "candidate")
+	mustFS(t, os.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
+	mustFS(t, os.Symlink(target, link))
+	t.Setenv("SELFISHELL_TEST_CLI", link)
+	selected, err := candidateCLI(t)
+	if err != nil || selected != link {
+		t.Fatalf("selected %q: %v", selected, err)
+	}
+	got, err := runCommand(root, []string{selected, "", "two words"}, []byte("input\x00bytes"), []string{"PATH=/usr/bin:/bin"}, 5*time.Second)
+	if err != nil || got.Status != 7 || !bytes.Equal(got.Stdout, []byte("\ntwo words\ninput\x00bytes")) || !bytes.Equal(got.Stderr, []byte("error\n")) {
+		t.Fatalf("capture %+v: %v", got, err)
 	}
 }
 
