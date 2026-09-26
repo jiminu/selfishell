@@ -299,7 +299,11 @@ exec /bin/rm "$@"
 func TestNativeNoticeMoveFailureCleansTemp(t *testing.T) {
 	home := nativeHome(t)
 	bin, cache := nativeNoticeCLI(t, home)
-	nativeWrite(t, filepath.Join(bin, "mv"), "#!/bin/sh\nexit 1\n", 0700)
-	nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache)
+	moves := filepath.Join(filepath.Dir(home), "move-calls")
+	nativeWrite(t, filepath.Join(bin, "mv"), "#!/bin/sh\nprintf '%s\\n' \"$3\" >>\"$SELFISHELL_MOVE_LOG\"\nexit 1\n", 0700)
+	nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_MOVE_LOG="+moves)
+	if got, want := nativeRead(t, moves), filepath.Join(cache, "available-version")+"\n"+filepath.Join(cache, "update-checked-at")+"\n"; got != want {
+		t.Fatalf("failed move calls: got %q want %q", got, want)
+	}
 	nativeAssertNoTemp(t, cache)
 }
