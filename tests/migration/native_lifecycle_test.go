@@ -1,16 +1,11 @@
 package migration_test
 
 import (
-	"archive/tar"
 	"bytes"
-	"debug/buildinfo"
-	"debug/elf"
-	"debug/macho"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -21,112 +16,12 @@ func inspectPrebuiltHost(t *testing.T, dir, version string) {
 	for _, platform := range []string{"linux", "macos"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			name := fmt.Sprintf("selfishell-%s-%s-%s.tar.gz", version, platform, arch)
-			members := readReleaseArchive(t, filepath.Join(dir, name), true)
-			if string(members["VERSION"].data) != version+"\n" {
-				t.Fatalf("%s VERSION %q", name, members["VERSION"].data)
-			}
-			binary := members["bin/selfishell"]
-			if binary.kind != tar.TypeReg || binary.mode != 0755 {
-				t.Fatalf("%s binary kind/mode %d/%o", name, binary.kind, binary.mode)
-			}
-			path := filepath.Join(t.TempDir(), "selfishell")
-			mustFS(t, os.WriteFile(path, binary.data, 0755))
-			if platform == "linux" {
-				f, e := elf.Open(path)
-				mustFS(t, e)
-				want := elf.EM_X86_64
-				if arch == "arm64" {
-					want = elf.EM_AARCH64
-				}
-				if f.Machine != want {
-					t.Fatalf("%s ELF machine %v want %v", name, f.Machine, want)
-				}
-				mustFS(t, f.Close())
-			} else {
-				f, e := macho.Open(path)
-				mustFS(t, e)
-				want := macho.CpuAmd64
-				if arch == "arm64" {
-					want = macho.CpuArm64
-				}
-				if f.Cpu != want {
-					t.Fatalf("%s Mach-O CPU %v want %v", name, f.Cpu, want)
-				}
-				mustFS(t, f.Close())
-			}
-			info, e := buildinfo.ReadFile(path)
-			mustFS(t, e)
-			settings := map[string]string{}
-			for _, item := range info.Settings {
-				settings[item.Key] = item.Value
-			}
-			goos := platform
-			if goos == "macos" {
-				goos = "darwin"
-			}
-			if settings["GOOS"] != goos || settings["GOARCH"] != arch || settings["CGO_ENABLED"] != "0" {
-				t.Fatalf("%s build settings: %+v", name, settings)
-			}
+			members := assertConfigPayload(t, filepath.Join(dir, name), version, true)
+			inspectNativeBinary(t, platform, arch, version, members["bin/selfishell"].data, false)
 		}
 	}
-
-	path := filepath.Join(dir, hostArchive(version))
-	members := readReleaseArchive(t, path, true)
-	for _, name := range []string{"VERSION", "bin/selfishell", "bin/sfs", "packages.conf", "dependencies.conf", "config/shared/zsh/common.zsh", "config/macos/zshrc", "config/ubuntu/zshrc"} {
-		if _, ok := members[name]; !ok {
-			t.Fatalf("prebuilt archive missing %s", name)
-		}
-	}
-	if string(members["VERSION"].data) != version+"\n" {
-		t.Fatalf("prebuilt VERSION %q", members["VERSION"].data)
-	}
-	if m := members["bin/sfs"]; m.kind != tar.TypeSymlink || m.link != "selfishell" {
-		t.Fatalf("prebuilt sfs: %+v", m)
-	}
-	if m := members["bin/selfishell"]; m.kind != tar.TypeReg || m.mode != 0755 {
-		t.Fatalf("prebuilt executable: kind=%d mode=%o", m.kind, m.mode)
-	}
-	for name := range members {
-		if strings.HasPrefix(name, "lib/") || strings.HasPrefix(name, "cmd/") || strings.HasPrefix(name, "internal/") {
-			t.Fatalf("prebuilt archive carries source/runtime engine: %s", name)
-		}
-	}
-	bin := filepath.Join(t.TempDir(), "selfishell")
-	mustFS(t, os.WriteFile(bin, members["bin/selfishell"].data, 0755))
-	switch runtime.GOOS {
-	case "darwin":
-		f, e := macho.Open(bin)
-		mustFS(t, e)
-		want := macho.CpuAmd64
-		if runtime.GOARCH == "arm64" {
-			want = macho.CpuArm64
-		}
-		if f.Cpu != want {
-			t.Errorf("Mach-O CPU %v want %v", f.Cpu, want)
-		}
-		mustFS(t, f.Close())
-	case "linux":
-		f, e := elf.Open(bin)
-		mustFS(t, e)
-		want := elf.EM_X86_64
-		if runtime.GOARCH == "arm64" {
-			want = elf.EM_AARCH64
-		}
-		if f.Machine != want {
-			t.Errorf("ELF CPU %v want %v", f.Machine, want)
-		}
-		mustFS(t, f.Close())
-	default:
-		t.Fatalf("unsupported runtime host %s", runtime.GOOS)
-	}
-	info, e := buildinfo.ReadFile(bin)
-	mustFS(t, e)
-	settings := map[string]string{}
-	for _, s := range info.Settings {
-		settings[s.Key] = s.Value
-	}
-	if settings["GOOS"] != runtime.GOOS || settings["GOARCH"] != runtime.GOARCH || settings["CGO_ENABLED"] != "0" {
-		t.Fatalf("prebuilt host settings: %+v", settings)
+	if t.Failed() {
+		t.FailNow()
 	}
 }
 
@@ -171,6 +66,16 @@ func assertRestoredOriginal(t *testing.T, f *bootstrapFixture, original []byte, 
 	}
 	requireAbsent(t, filepath.Join(f.home, ".config/selfishell/zsh/zshrc"))
 }
+func minimalDoctorDiagnosis(got capture) error {
+	if got.Status != 1 {
+		return fmt.Errorf("doctor status %d want 1: stdout %q stderr %q", got.Status, got.Stdout, got.Stderr)
+	}
+	if !bytes.Contains(got.Stdout, []byte("[ERROR] Tool: mise is missing (direct)")) {
+		return fmt.Errorf("doctor omitted missing mise diagnosis: %q", got.Stdout)
+	}
+	return nil
+}
+
 func setupAndCheck(t *testing.T, f *bootstrapFixture, version string, original []byte) string {
 	t.Helper()
 	user := filepath.Join(f.home, ".zshrc")
@@ -196,8 +101,8 @@ func setupAndCheck(t *testing.T, f *bootstrapFixture, version string, original [
 	}
 	requireContains(t, status.Stdout, "Current: "+version)
 	doctor := f.cliRun(t, "doctor")
-	if doctor.Status != 0 && doctor.Status != 1 {
-		t.Fatalf("doctor status %d stderr %q", doctor.Status, doctor.Stderr)
+	if err := minimalDoctorDiagnosis(doctor); err != nil {
+		t.Fatal(err)
 	}
 	assertNoSourceLinks(t, f.home, "")
 	return user

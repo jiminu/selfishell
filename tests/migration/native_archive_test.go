@@ -143,7 +143,7 @@ func assertAssetSet(t *testing.T, dir, version string) {
 		t.Fatalf("SHA256SUMS mismatch: %q", sums)
 	}
 }
-func assertConfigPayload(t *testing.T, archive string, native bool) map[string]archiveMember {
+func assertConfigPayload(t *testing.T, archive, version string, native bool) map[string]archiveMember {
 	t.Helper()
 	m := readReleaseArchive(t, archive, native)
 	for _, name := range []string{"config/shared/zsh/common.zsh", "config/macos/zshrc", "config/ubuntu/zshrc"} {
@@ -185,10 +185,10 @@ func assertConfigPayload(t *testing.T, archive string, native bool) map[string]a
 			t.Errorf("unexpected payload %s", name)
 		}
 	}
-	if string(m["VERSION"].data) != nativeArchiveVersion+"\n" {
-		t.Errorf("archive VERSION %q", m["VERSION"].data)
+	if v := m["VERSION"]; v.kind != tar.TypeReg || v.mode != 0644 || string(v.data) != version+"\n" {
+		t.Errorf("archive VERSION type/mode/data %+v", v)
 	}
-	if s := m["bin/sfs"]; s.kind != tar.TypeSymlink || s.link != "selfishell" {
+	if s := m["bin/sfs"]; s.kind != tar.TypeSymlink || s.mode != 0777 || s.link != "selfishell" {
 		t.Errorf("sfs link %+v", s)
 	}
 	if b := m["bin/selfishell"]; b.kind != tar.TypeReg || b.mode != 0755 {
@@ -226,11 +226,11 @@ func assertConfigPayload(t *testing.T, archive string, native bool) map[string]a
 	}
 	return m
 }
-func inspectNativeBinary(t *testing.T, platform, arch string, b []byte) {
+func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte, executeHost bool) {
 	t.Helper()
 	releaseRoot := t.TempDir()
 	mustFS(t, os.MkdirAll(filepath.Join(releaseRoot, "bin"), 0755))
-	mustFS(t, os.WriteFile(filepath.Join(releaseRoot, "VERSION"), []byte(nativeArchiveVersion+"\n"), 0644))
+	mustFS(t, os.WriteFile(filepath.Join(releaseRoot, "VERSION"), []byte(version+"\n"), 0644))
 	path := filepath.Join(releaseRoot, "bin", "selfishell")
 	mustFS(t, os.WriteFile(path, b, 0755))
 	switch platform {
@@ -278,11 +278,11 @@ func inspectNativeBinary(t *testing.T, platform, arch string, b []byte) {
 	if arch == "arm64" && settings["GOARM64"] != "v8.0" {
 		t.Errorf("GOARM64 %q", settings["GOARM64"])
 	}
-	if platform == runtime.GOOS || platform == "macos" && runtime.GOOS == "darwin" {
+	if executeHost && (platform == runtime.GOOS || platform == "macos" && runtime.GOOS == "darwin") {
 		if arch == runtime.GOARCH {
 			cmd := exec.Command(path, "version")
 			out, e := cmd.CombinedOutput()
-			if e != nil || string(out) != "selfishell "+nativeArchiveVersion+"\n" {
+			if e != nil || string(out) != "selfishell "+version+"\n" {
 				t.Errorf("native version: %q %v", out, e)
 			}
 			cmd = exec.Command(path, "help")
@@ -299,8 +299,8 @@ func TestNativeReleaseArtifacts(t *testing.T) {
 	for _, platform := range []string{"linux", "macos"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			name := fmt.Sprintf("selfishell-%s-%s-%s.tar.gz", nativeArchiveVersion, platform, arch)
-			m := assertConfigPayload(t, filepath.Join(dir, name), true)
-			inspectNativeBinary(t, platform, arch, m["bin/selfishell"].data)
+			m := assertConfigPayload(t, filepath.Join(dir, name), nativeArchiveVersion, true)
+			inspectNativeBinary(t, platform, arch, nativeArchiveVersion, m["bin/selfishell"].data, true)
 		}
 	}
 }
@@ -352,7 +352,7 @@ func TestProductionBashBuilderContract(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Error("Bash checksums differ")
 	}
-	assertConfigPayload(t, filepath.Join(first, "selfishell-0.2.2-linux-amd64.tar.gz"), false)
+	assertConfigPayload(t, filepath.Join(first, "selfishell-0.2.2-linux-amd64.tar.gz"), "0.2.2", false)
 }
 func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
 	privateNativeHome(t)
