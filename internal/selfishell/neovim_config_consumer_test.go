@@ -13,20 +13,114 @@ import (
 
 func TestNeovimConfigFixtures(t *testing.T) {
 	root := testRelease(t)
+	nvim, ok := standaloneNeovimExecutable(t, root)
+	if !ok {
+		t.Skip("No physical Neovim matching the current mise pin on PATH or in the mise install directory")
+	}
+	runNeovimConfigFixtures(t, root, standaloneNeovimProcess(t, nvim), nvim, "")
+}
+
+func standaloneNeovimExecutable(t *testing.T, root string) (string, bool) {
+	t.Helper()
 	pins, err := approvedMisePins(root+"/config/shared/mise.toml", []string{"neovim"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	version := strings.TrimPrefix(pins[0], "neovim@")
 	data := envDefault("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
-	nvim := data + "/installs/neovim/" + strings.TrimPrefix(pins[0], "neovim@") + "/bin/nvim"
-	info, err := os.Stat(nvim)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		if err != nil {
-			t.Skip("Pinned Neovim executable unavailable for offline native Lua fixtures")
+	candidates := filepath.SplitList(os.Getenv("PATH"))
+	candidates = append(candidates, data+"/installs/neovim/"+version+"/bin")
+	for _, dir := range candidates {
+		if dir == "" {
+			continue
 		}
-		t.Skip("Pinned Neovim executable is not executable")
+		candidate, err := filepath.Abs(filepath.Join(dir, "nvim"))
+		if err != nil || strings.Contains(candidate, "/shims/") {
+			continue
+		}
+		physical, err := filepath.EvalSymlinks(candidate)
+		if err != nil || strings.Contains(physical, "/shims/") {
+			continue
+		}
+		info, err := os.Stat(physical)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		var out, stderr bytes.Buffer
+		probe := standaloneNeovimProcess(t, physical)
+		probe.Out, probe.Err = &out, &stderr
+		code, err := probe.Run(ctx, physical, "--version")
+		cancel()
+		if err != nil || code != 0 {
+			t.Fatalf("Neovim version probe %s: code=%d err=%v stderr=%q", physical, code, err, stderr.String())
+		}
+		first, _, _ := strings.Cut(out.String(), "\n")
+		if first == "NVIM v"+version {
+			return physical, true
+		}
 	}
-	runNeovimConfigFixtures(t, root, standaloneNeovimProcess(t, nvim), nvim, "")
+	return "", false
+}
+
+func TestStandaloneNeovimSelectsPinnedPhysicalPathWithPrivateOuterHome(t *testing.T) {
+	root := testRelease(t)
+	pins, err := approvedMisePins(root+"/config/shared/mise.toml", []string{"neovim"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := strings.TrimPrefix(pins[0], "neovim@")
+	fixture := t.TempDir()
+	home := fixture + "/outer-home"
+	shimDir := fixture + "/shims"
+	wrongDir := fixture + "/wrong-version"
+	physical := fixture + "/installs/neovim/" + version + "/bin/nvim"
+	for _, dir := range []string{home, shimDir, wrongDir, filepath.Dir(physical)} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	shimCalled := fixture + "/shim-called"
+	if err := os.WriteFile(shimDir+"/nvim", []byte("#!/bin/sh\nprintf called >\"$SELFISHELL_NVIM_SELECTION_SHIM_LOG\"\nexit 99\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(wrongDir+"/nvim", []byte("#!/bin/sh\nprintf 'NVIM v0.0.0\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	probeLog := fixture + "/probe-log"
+	if err := os.WriteFile(physical, []byte("#!/bin/sh\nprintf '%s\\n%s\\n' \"$HOME\" \"$MISE_DATA_DIR\" >\"$SELFISHELL_NVIM_SELECTION_PROBE_LOG\"\nprintf 'NVIM v"+version+"\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("MISE_DATA_DIR", fixture+"/unused-mise-data")
+	t.Setenv("MISE_CONFIG_DIR", fixture+"/unused-mise-config")
+	t.Setenv("MISE_STATE_DIR", fixture+"/unused-mise-state")
+	t.Setenv("MISE_CACHE_DIR", fixture+"/unused-mise-cache")
+	t.Setenv("TMPDIR", t.TempDir())
+	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
+		t.Setenv(key, fixture+"/outer-"+key)
+	}
+	t.Setenv("PATH", shimDir+":"+wrongDir+":"+filepath.Dir(physical)+":/usr/bin:/bin")
+	t.Setenv("SELFISHELL_NVIM_SELECTION_SHIM_LOG", shimCalled)
+	t.Setenv("SELFISHELL_NVIM_SELECTION_PROBE_LOG", probeLog)
+	if _, err := os.Stat(home + "/.local/share/mise/installs/neovim/" + version + "/bin/nvim"); !os.IsNotExist(err) {
+		t.Fatalf("old HOME-based selection unexpectedly available: %v", err)
+	}
+	nvim, ok := standaloneNeovimExecutable(t, root)
+	physicalResolved, err := filepath.EvalSymlinks(physical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || nvim != physicalResolved {
+		t.Fatalf("selected %q want physical %q (found=%t)", nvim, physicalResolved, ok)
+	}
+	if _, err := os.Lstat(shimCalled); !os.IsNotExist(err) {
+		t.Fatalf("ambient shim invoked: %v", err)
+	}
+	data, err := os.ReadFile(probeLog)
+	if err != nil || strings.Contains(string(data), home) || !strings.Contains(string(data), "/mise/data\n") {
+		t.Fatalf("version probe used ambient environment: %q %v", data, err)
+	}
 }
 
 func standaloneNeovimProcess(t *testing.T, nvim string) Process {
