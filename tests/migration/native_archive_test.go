@@ -381,6 +381,16 @@ func TestUnavailableNativeToolchain(t *testing.T) {
 
 func TestNativeBuilderCLIOptions(t *testing.T) {
 	home := t.TempDir()
+	noGo := "/usr/bin:/bin"
+	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
+		cmd := exec.Command("/bin/bash", append([]string{filepath.Join(repoRoot(), "scripts/build-native-release.sh")}, args...)...)
+		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+noGo)
+		b, e := cmd.CombinedOutput()
+		var exit *exec.ExitError
+		if !errors.As(e, &exit) || exit.ExitCode() != 2 {
+			t.Errorf("without Go args %q: status %v output %s", args, e, b)
+		}
+	}
 	script := filepath.Join(repoRoot(), "scripts/build-native-release.sh")
 	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
 		cmd := exec.Command("bash", append([]string{script}, args...)...)
@@ -392,7 +402,10 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 			t.Errorf("args %q: status %v output %s", args, e, b)
 		}
 	}
-	out := "relative output with spaces"
+	ownedOut, err := os.MkdirTemp(repoRoot(), "native-option-output-")
+	mustFS(t, err)
+	t.Cleanup(func() { os.RemoveAll(ownedOut) })
+	out := filepath.Base(ownedOut)
 	cmd := exec.Command("bash", script, "--version", nativeArchiveVersion, "--output", out)
 	cmd.Dir = home
 	cmd.Env = append(baseEnv(home, t.TempDir()), "PATH=/tmp/selfishell-go-foundation/toolchain/go/bin:/usr/bin:/bin", "GOTOOLCHAIN=local")
@@ -400,8 +413,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 	if e != nil {
 		t.Fatalf("relative output: %v %s", e, b)
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(repoRoot(), out)) })
-	assertAssetSet(t, filepath.Join(repoRoot(), out), nativeArchiveVersion)
+	assertAssetSet(t, ownedOut, nativeArchiveVersion)
 }
 
 func TestWrongNativeToolchain(t *testing.T) {
@@ -467,5 +479,64 @@ func TestFailedPublishHasNoVerifiedManifest(t *testing.T) {
 	}
 	if info, e := os.Stat(blocker); e != nil || !info.IsDir() {
 		t.Fatalf("overwrote unrelated blocker: %v", e)
+	}
+}
+
+func TestNativeStageUsesOutputFilesystem(t *testing.T) {
+	privateNativeHome(t)
+	parent := t.TempDir()
+	out := filepath.Join(parent, "chosen output")
+	finished := make(chan error, 1)
+	go func() { finished <- releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, out) }()
+	found := false
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(30 * time.Second)
+	for !found {
+		select {
+		case err := <-finished:
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatal("build completed without a private stage beside output")
+		case <-ticker.C:
+			entries, err := os.ReadDir(parent)
+			mustFS(t, err)
+			for _, e := range entries {
+				if e.IsDir() && strings.HasPrefix(e.Name(), "selfishell-native-release-") {
+					found = true
+				}
+			}
+		case <-deadline:
+			t.Fatal("no private stage beside output")
+		}
+	}
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(parent)
+	mustFS(t, err)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "selfishell-native-release-") {
+			t.Errorf("staging directory left behind: %s", e.Name())
+		}
+	}
+	assertAssetSet(t, out, nativeArchiveVersion)
+}
+
+func TestNativeAssetFixtureCleanedAtSuiteExit(t *testing.T) {
+	temp := t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestNativeReleaseArtifacts$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "TMPDIR="+temp)
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("child tests: %v %s", err, b)
+	}
+	entries, err := os.ReadDir(temp)
+	mustFS(t, err)
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "selfishell-native-assets-") {
+			t.Fatalf("test process left native artifact fixture: %s", entry.Name())
+		}
 	}
 }

@@ -61,7 +61,18 @@ func Build(ctx context.Context, root, version, output string) error {
 	if strings.TrimSpace(string(got)) != "go"+pinned {
 		return fmt.Errorf("Go %s required on PATH; found %s", pinned, strings.TrimSpace(string(got)))
 	}
-	stage, err := os.MkdirTemp("", "selfishell-native-release-")
+	stageParent := output
+	if info, statErr := os.Stat(output); os.IsNotExist(statErr) {
+		stageParent = filepath.Dir(output)
+		if err := os.MkdirAll(stageParent, 0755); err != nil {
+			return err
+		}
+	} else if statErr != nil {
+		return statErr
+	} else if !info.IsDir() {
+		return fmt.Errorf("output path is not a directory: %s", output)
+	}
+	stage, err := os.MkdirTemp(stageParent, "selfishell-native-release-")
 	if err != nil {
 		return err
 	}

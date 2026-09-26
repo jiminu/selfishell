@@ -237,6 +237,9 @@ func TestMain(m *testing.M) {
 	if candidateDir != "" {
 		os.RemoveAll(candidateDir)
 	}
+	if nativeDir != "" {
+		os.RemoveAll(nativeDir)
+	}
 	os.Exit(code)
 }
 
