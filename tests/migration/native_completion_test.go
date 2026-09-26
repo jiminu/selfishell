@@ -26,7 +26,7 @@ func nativeWrite(t *testing.T, path, body string, mode os.FileMode) {
 }
 func nativeRun(t *testing.T, home, code string, env ...string) capture {
 	t.Helper()
-	result, err := runCommand(home, []string{nativeZsh, "-f", "-c", code, "zsh"}, nil, append([]string{"PATH=" + nativePath, "ZDOTDIR=", "WSL_DISTRO_NAME="}, env...), 10*time.Second)
+	result, err := runCommand(home, []string{nativeZsh, "-f", "-c", code, "zsh"}, nil, append([]string{"PATH=" + nativePath, "MISE_DATA_DIR=" + filepath.Join(home, ".local/share/mise"), "ZDOTDIR=", "WSL_DISTRO_NAME="}, env...), 10*time.Second)
 	if err != nil || result.Status != 0 {
 		t.Fatalf("native zsh: %+v: %v", result, err)
 	}
