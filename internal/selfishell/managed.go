@@ -20,6 +20,15 @@ type managed struct {
 	beforeBackupMove  func(string, string)
 	afterBackupChoice func(string)
 	createLink        func(string, string) error
+	atomicWrite       func(string, []byte, os.FileMode) error
+	removePath        func(string) error
+}
+
+func (m *managed) write(path string, data []byte, mode os.FileMode) error {
+	if m.atomicWrite != nil {
+		return m.atomicWrite(path, data, mode)
+	}
+	return writeAtomic(path, data, mode)
 }
 
 func blockConflictError(r Resource) error {
@@ -203,7 +212,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 			}
 		}
 	}
-	if err = writeAtomic(r.Target, source, 0644); err != nil {
+	if err = m.write(r.Target, source, 0644); err != nil {
 		return err
 	}
 	if err = m.save(r, State{"file", "active", r.Target, "-", backup, sourceChecksum}); err != nil {
@@ -453,7 +462,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 	if present {
 		mode = info.Mode().Perm()
 	}
-	if err = writeAtomic(r.Target, data, mode); err != nil {
+	if err = m.write(r.Target, data, mode); err != nil {
 		return err
 	}
 	if err = m.save(r, State{"block", "active", r.Target, "-", "-", expected}); err != nil {

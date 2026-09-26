@@ -269,7 +269,7 @@ test_suite_runner_refills_slots_and_preserves_failure_reports() {
   fixture="$TEST_ROOT/fixture/tests"
   mkdir -p "$fixture"
   cp "$ROOT_DIR/tests/run.bash" "$fixture/run.bash"
-  cat >"$fixture/managed_install_test.bash" <<'EOF'
+  cat >"$fixture/a_slow_test.bash" <<'EOF'
 for ((attempt = 0; attempt < 100; attempt++)); do
   [[ ! -f "$HOME/released" ]] || break
   sleep 0.1
