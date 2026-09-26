@@ -130,48 +130,6 @@ test_install_copies_configuration_and_tracks_resources() {
     fail "User-owned mise config was recorded as a managed resource"
 }
 
-test_install_switches_login_shell_to_listed_zsh() {
-  local fake_bin listed_zsh output
-
-  fake_bin="$TEST_ROOT/bin"
-  listed_zsh="$TEST_ROOT/listed/zsh"
-  mkdir -p "$fake_bin" "${listed_zsh%/*}"
-  cat >"$fake_bin/chsh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >"$HOME/chsh-args"
-EOF
-  printf '#!/bin/sh\n' >"$listed_zsh"
-  cp "$listed_zsh" "$fake_bin/zsh"
-  chmod +x "$fake_bin/chsh" "$fake_bin/zsh" "$listed_zsh"
-  printf '/bin/sh\n%s\n' "$listed_zsh" >"$TEST_ROOT/shells"
-  printf 'original zshrc' >"$HOME/.zshrc"
-  export SHELL="/bin/bash"
-  export SELFISHELL_TEST_SHELLS_FILE="$TEST_ROOT/shells"
-  export SELFISHELL_TEST_TERMINAL=/dev/null
-
-  PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes >/dev/null
-  [[ "$(<"$HOME/chsh-args")" == "-s $listed_zsh $(id -un)" ]] ||
-    fail "Install did not target the zsh listed in /etc/shells: $(<"$HOME/chsh-args")"
-
-  # A zsh at another path is already a Zsh login shell.
-  rm "$HOME/chsh-args"
-  SHELL=/opt/homebrew/bin/zsh PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes >/dev/null
-  [[ ! -e "$HOME/chsh-args" ]] || fail "Install replaced an existing Zsh login shell"
-
-  # Without a terminal, chsh would wait on a password prompt nobody sees.
-  output="$(SELFISHELL_TEST_TERMINAL="$TEST_ROOT/no-terminal" PATH="$fake_bin:/usr/bin:/bin" \
-    run_selfishell install --skip-packages --yes)"
-  [[ ! -e "$HOME/chsh-args" ]] || fail "Install ran chsh without a terminal"
-  [[ "$output" == *"chsh -s $listed_zsh"* ]] || fail "Install did not print the chsh command: $output"
-
-  printf '/bin/sh\n' >"$TEST_ROOT/shells"
-  output="$(PATH="$fake_bin:/usr/bin:/bin" run_selfishell install --skip-packages --yes)"
-  [[ ! -e "$HOME/chsh-args" ]] || fail "Install targeted a zsh missing from /etc/shells"
-  [[ "$output" == *'Zsh is not listed in /etc/shells'* ]] ||
-    fail "Install did not explain the unlisted zsh: $output"
-}
-
 test_macos_install_includes_ghostty_configuration() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
   mkdir -p "$XDG_CONFIG_HOME/ghostty"

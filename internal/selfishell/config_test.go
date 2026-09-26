@@ -36,11 +36,11 @@ func TestManifestValidationBeforeInstall(t *testing.T) {
 		t.Fatal("install mutated HOME")
 	}
 }
-func TestInstallRequiresSkipPackages(t *testing.T) {
+func TestFullInstallValidatesManifestBeforeMutation(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
 	code, _, err := testCLI(t, root, home, "install", "--yes")
-	if code != 1 || !strings.Contains(err, "--skip-packages") {
+	if code != 1 || !strings.Contains(err, "packages.conf") {
 		t.Fatalf("%d %s", code, err)
 	}
 }
