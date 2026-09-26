@@ -92,7 +92,7 @@ func (c CLI) install(args []string) int {
 			return 1
 		}
 	}
-	prepared, err := c.prepareConfig(platform, dry, yes)
+	prepared, err := c.prepareConfig(platform, dry, yes, false)
 	if err != nil {
 		c.error(err.Error())
 		return 1
@@ -180,7 +180,7 @@ type preparedConfig struct {
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
-func (c CLI) prepareConfig(platform string, dry, yes bool) (preparedConfig, error) {
+func (c CLI) prepareConfig(platform string, dry, yes, update bool) (preparedConfig, error) {
 	paths, err := UserPaths()
 	if err != nil {
 		return preparedConfig{}, err
@@ -189,7 +189,7 @@ func (c CLI) prepareConfig(platform string, dry, yes bool) (preparedConfig, erro
 	if platform == "macos" {
 		if data, e := os.ReadFile(paths.State + "/ghostty"); e == nil {
 			ghostty = string(data) == "1\n"
-		} else {
+		} else if !update {
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
 				fmt.Fprint(c.Out, "Install Ghostty terminal and managed configuration? [y/N] ")
@@ -213,10 +213,12 @@ func (c CLI) prepareConfig(platform string, dry, yes bool) (preparedConfig, erro
 		}
 	}
 	miseGlobal := envDefault("XDG_CONFIG_HOME", os.Getenv("HOME")+"/.config") + "/mise/config.toml"
-	if info, present, e := exists(miseGlobal); e != nil {
-		return preparedConfig{}, e
-	} else if present && !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
-		return preparedConfig{}, fmt.Errorf("user mise config path is not a regular file or symlink: %s", miseGlobal)
+	if !update {
+		if info, present, e := exists(miseGlobal); e != nil {
+			return preparedConfig{}, e
+		} else if present && !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+			return preparedConfig{}, fmt.Errorf("user mise config path is not a regular file or symlink: %s", miseGlobal)
+		}
 	}
 	for _, r := range resources {
 		if r.Kind != "block" {

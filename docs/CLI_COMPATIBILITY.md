@@ -117,9 +117,12 @@ Full install groups current-platform Apt, Homebrew, direct downloads, and pinned
 mise tools through one Go package operation after all configuration preflights.
 It then applies managed configuration, provisions declared Neovim plugins,
 and records setup markers. Initial install does not prune mise versions.
-Update, rollback,
-and `version --available` remain unavailable in the Go candidate and
-return an explicit error. The production CLI and installer remain Bash.
+The Go candidate also supports `version --available`, exact or latest CLI
+updates, tools-only synchronization, and offline rollback to an intact retained
+release. A successful default CLI update continues configuration work in the
+new executable using the legacy continuation arguments. Configuration-only
+`update --tools-only --skip-packages` avoids release metadata and package
+network access. The production CLI and installer remain Bash.
 CI runs an opt-in native Go full-install consumer in a disposable Ubuntu
 container, a pinned Neovim consumer in a private Ubuntu runner HOME, and
 native Go configuration coverage on macOS. The separate

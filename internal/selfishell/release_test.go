@@ -490,7 +490,8 @@ func TestReleaseInstallReusesValidWinnerWithoutNesting(t *testing.T) {
 }
 
 func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
-	op, share, _ := releaseFixture(t)
+	op, share, releases := releaseFixture(t)
+	isolateMiseForHome(t, os.Getenv("HOME"))
 	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
 	if err := os.Chmod(share, 0500); err != nil {
 		t.Fatal(err)
@@ -502,6 +503,24 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 	current, _ := os.Readlink(share + "/current")
 	if current != "releases/1.0.0" {
 		t.Fatalf("current changed: %s", current)
+	}
+	if _, err := os.Stat(releases + "/2.0.0/bin/selfishell"); err != nil {
+		t.Fatalf("promoted release cannot be reused: %v", err)
+	}
+	code, out, stderr := commandResult(op.Root, "update", "--cli-only", "--version", "2.0.0", "--yes")
+	if code == 0 || strings.Contains(out, "Selfishell updated") || stderr == "" {
+		t.Fatalf("CLI claimed failed activation: code %d, stdout %q, stderr %q", code, out, stderr)
+	}
+	if err := os.Chmod(share, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
+		t.Fatalf("activation retry: %v", err)
+	}
+	current, _ = os.Readlink(share + "/current")
+	previous, _ := os.Readlink(share + "/previous")
+	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
+		t.Fatalf("retry links: %q, %q", current, previous)
 	}
 }
 
@@ -527,6 +546,15 @@ func TestReleaseInstallPromoteFailureKeepsActiveLinks(t *testing.T) {
 		if strings.HasPrefix(entry.Name(), ".2.0.0.tmp.") {
 			t.Fatalf("stage remains: %s", entry.Name())
 		}
+	}
+	op.promote = nil
+	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
+		t.Fatalf("promotion retry: %v", err)
+	}
+	current, _ = os.Readlink(share + "/current")
+	previous, _ := os.Readlink(share + "/previous")
+	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
+		t.Fatalf("retry links: %q, %q", current, previous)
 	}
 }
 

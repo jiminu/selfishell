@@ -35,14 +35,6 @@ func TestCLI(t *testing.T) {
 			}
 		})
 	}
-	for _, command := range []string{"update", "rollback"} {
-		args := []string{command}
-		var out, stderr bytes.Buffer
-		c := CLI{Root: root, Out: &out, Err: &stderr}
-		if c.Run(args) != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "not implemented in the Go candidate") {
-			t.Fatalf("incomplete command reported success: %s", command)
-		}
-	}
 }
 
 func TestVersionAndRoot(t *testing.T) {
