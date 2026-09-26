@@ -159,6 +159,10 @@ func resolveCommand(name string, env []string) (string, error) {
 }
 
 func runCommand(home string, argv []string, input []byte, extraEnv []string, timeout time.Duration) (capture, error) {
+	return runCommandIn(home, home, argv, input, extraEnv, timeout)
+}
+
+func runCommandIn(home, dir string, argv []string, input []byte, extraEnv []string, timeout time.Duration) (capture, error) {
 	if len(argv) == 0 {
 		return capture{}, errors.New("empty command")
 	}
@@ -175,7 +179,7 @@ func runCommand(home string, argv []string, input []byte, extraEnv []string, tim
 		return capture{}, err
 	}
 	cmd := exec.CommandContext(ctx, program, argv[1:]...)
-	cmd.Dir = home
+	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

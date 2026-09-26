@@ -87,7 +87,7 @@ jobs:
         run: bash scripts/check.sh
 
   ubuntu-container-e2e:
-    name: Ubuntu 24.04 Go full install and legacy archive lifecycle E2E
+    name: Ubuntu 24.04 native archive full install E2E
     needs: changes
     if: needs.changes.outputs.ubuntu_container_e2e == 'true'
     runs-on: ubuntu-latest
@@ -104,10 +104,12 @@ jobs:
           # have served an index before its packages, failing installs with 404.
           sed -i -E 's#http://(archive|security)\.ubuntu\.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#' /etc/apt/sources.list.d/ubuntu.sources
           apt-get update
-          apt-get install -y ca-certificates curl
+          apt-get install -y ca-certificates curl git tar gzip
 
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up pinned Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -115,16 +117,13 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run native Go full-install consumer
+      - name: Run installed native archive full-install consumer
         env:
           SELFISHELL_UBUNTU_FULL_E2E: '1'
-        run: go test ./internal/selfishell -run '^TestUbuntuFullInstallConsumer$' -count=1 -timeout 40m -v
-
-      - name: Run legacy release archive lifecycle (until issue 248)
-        run: bash scripts/ubuntu-container-e2e.sh
+        run: go test ./tests/migration -run '^TestNativeUbuntuInstalledArchiveConsumer$' -count=1 -timeout 50m -v
 
   macos-configuration-e2e:
-    name: macOS Go configuration and legacy archive lifecycle E2E
+    name: macOS installed native archive configuration E2E
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: macos-latest
@@ -133,6 +132,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up pinned Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -140,13 +141,10 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run native Go configuration consumer
+      - name: Run installed native archive configuration consumer
         env:
           SELFISHELL_NATIVE_MACOS_E2E: '1'
-        run: go test ./internal/selfishell -run '^TestNativeMacConfigurationConsumer$' -count=1 -v
-
-      - name: Run legacy release archive lifecycle (until issue 248)
-        run: bash scripts/macos-configuration-e2e.sh
+        run: go test ./tests/migration -run '^TestNativeMacInstalledArchiveConsumer$' -count=1 -timeout 12m -v
 
   neovim-developer-e2e:
     name: Pinned Go mise cleanup and Neovim developer E2E
