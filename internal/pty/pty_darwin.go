@@ -1,6 +1,6 @@
 //go:build darwin
 
-package migration_test
+package pty
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"unsafe"
 )
 
-func openPTY() (*os.File, *os.File, error) {
+func Open() (*os.File, *os.File, error) {
 	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
 	if err != nil {
 		return nil, nil, err
