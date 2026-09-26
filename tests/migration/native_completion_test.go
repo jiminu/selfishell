@@ -318,8 +318,15 @@ func TestNativeSecureCompletionDirectory(t *testing.T) {
 		nativeOldTime(t, filepath.Join(home, p))
 	}
 	with := nativeCompletionProbe(t, home, secure, "", "")
-	nativeOldTime(t, filepath.Join(home, ".zcompdump"))
-	nativeOldTime(t, filepath.Join(home, ".zcompdump.audit"))
+	for _, p := range []string{".zcompdump", ".zcompdump.audit"} {
+		path := filepath.Join(home, p)
+		file, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mustFS(t, file.Close())
+		nativeOldTime(t, path)
+	}
 	without := nativeCompletionProbe(t, home, "", "", "")
 	if !strings.Contains(string(with.Stdout), "STARTUP_COMPLETE") || !strings.Contains(string(without.Stdout), "STARTUP_COMPLETE") {
 		t.Fatalf("startup did not complete: %+v %+v", with, without)
