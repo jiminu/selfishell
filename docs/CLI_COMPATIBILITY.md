@@ -109,10 +109,13 @@ repository gate. CI uses the same pin on Linux and macOS. Production entrypoints
 and release payloads remain Bash until the migration cutover.
 
 The candidate implements help, local version, configuration-only
-`install --skip-packages`, and `uninstall` (including `--restore` and explicit
-`--purge`). Install without `--skip-packages` fails before mutation because
-package and tool installation remains in Bash. Update, rollback, doctor,
-status, and `version --available` remain unavailable in the Go candidate and
+`install --skip-packages`, `uninstall` (including `--restore` and explicit
+`--purge`), `status`, and `doctor`. Installed tool detection and diagnostic
+commands are compared with the fixed Bash reference in
+`tests/migration/diagnostics_test.go`, including actual stdout terminal colors.
+Install without `--skip-packages` fails before mutation because
+package and tool installation remains in Bash. Update, rollback,
+and `version --available` remain unavailable in the Go candidate and
 return an explicit error. The production CLI and installer remain Bash.
 Configuration dry-run makes no filesystem changes, and user-owned targets are
 preflighted before install or uninstall changes begin.

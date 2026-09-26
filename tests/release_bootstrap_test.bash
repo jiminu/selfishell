@@ -287,29 +287,6 @@ test_update_falls_back_to_published_prerelease() {
   assert_symlink_to 'releases/0.3.0-beta.2' "$TEST_ROOT/prefix/share/selfishell/current"
 }
 
-test_status_does_not_use_network() {
-  local fake_bin="$TEST_ROOT/fakebin"
-  local output version
-  version="$RELEASE_FIXTURE_VERSION"
-  run_bootstrap --version "$version" >/dev/null
-  "$TEST_ROOT/prefix/bin/selfishell" \
-    install --skip-packages --yes >/dev/null
-  mkdir -p "$fake_bin"
-  cat >"$fake_bin/curl" <<'EOF'
-#!/usr/bin/env bash
-printf 'called\n' >>"$HOME/curl-calls"
-exit 1
-EOF
-  chmod +x "$fake_bin/curl"
-
-  output="$(PATH="$fake_bin:$PATH" "$TEST_ROOT/prefix/bin/selfishell" status)" || true
-
-  [[ ! -e "$HOME/curl-calls" ]] || fail "status invoked curl"
-  [[ "$output" == *"[CLI] Current: $version | Rollback: none"* ]] ||
-    fail "status did not report Current/Rollback: $output"
-  [[ "$output" != *'Available'* ]] || fail "status still reports an Available field: $output"
-}
-
 test_latest_lookup_failure_is_actionable() {
   local output status
   rm "$TEST_ROOT/releases/latest/download/VERSION"

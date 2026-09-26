@@ -234,7 +234,7 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		target = envDefault("XDG_DATA_HOME", home+"/.local/share") + "/" + strings.TrimPrefix(dep.Target, ".local/share/")
 	}
-	state, err := os.ReadFile(filepath.Join(i.paths.State, "dependencies", name))
+	state, err := os.ReadFile(i.paths.State + "/dependencies/" + name)
 	recorded := strings.TrimRight(strings.ReplaceAll(string(state), "\x00", ""), "\n")
 	if err == nil && recorded != "" {
 		result.Source = "selfishell"

@@ -97,7 +97,7 @@ func TestFoundation(t *testing.T) {
 		}
 		requireEqual(t, "pty-NO_COLOR="+noColor, want, got)
 	}
-	for _, command := range []string{"status", "doctor", "update", "rollback"} {
+	for _, command := range []string{"update", "rollback"} {
 		got, e := captureCommand(home, entry, []string{command}, env)
 		if e != nil {
 			t.Fatal(e)

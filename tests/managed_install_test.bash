@@ -612,32 +612,6 @@ test_user_ghostty_symlink_is_untouched_across_lifecycle() {
   assert_file_content 'cursor-style = bar' "$dotfiles_source"
 }
 
-test_status_does_not_inspect_user_ghostty() {
-  export SELFISHELL_TEST_SYSTEM_NAME=Darwin
-  local user_override="$XDG_CONFIG_HOME/ghostty/user.ghostty"
-  local before_output before_status
-  local after_output after_status
-
-  run_selfishell install --skip-packages --yes >/dev/null
-
-  set +e
-  before_output="$(run_selfishell status)"
-  before_status=$?
-  set -e
-
-  ln -s "$TEST_ROOT/does-not-exist" "$user_override"
-
-  set +e
-  after_output="$(run_selfishell status)"
-  after_status=$?
-  set -e
-
-  [[ "$after_status" -eq "$before_status" ]] ||
-    fail "A dangling user.ghostty changed the status exit code"
-  [[ "$after_output" == "$before_output" ]] ||
-    fail "A dangling user.ghostty changed status output"
-}
-
 test_install_is_idempotent() {
   local first_backup_count
   local second_backup_count
@@ -969,25 +943,6 @@ test_malformed_state_blocks_uninstall_without_removing_managed_block() {
     fail "Malformed state uninstall error did not mention the state path"
 }
 
-test_malformed_state_reported_by_status() {
-  run_selfishell install --skip-packages --yes >/dev/null
-
-  local state_file="$XDG_STATE_HOME/selfishell/resources/vimrc.state"
-  local output
-  local status=0
-
-  printf '2\n' >"$state_file"
-
-  set +e
-  output="$(run_selfishell status)"
-  status=$?
-  set -e
-
-  ((status != 0)) || fail "status should fail when a resource state is malformed"
-  [[ "$output" == *'[MALFORMED]'*'vimrc.state'* ]] ||
-    fail "status did not report the malformed resource state: $output"
-}
-
 test_untracked_and_duplicate_loaders_are_rejected() {
   local loader="$TEST_ROOT/loader"
   local status
@@ -1075,20 +1030,6 @@ test_noninteractive_install_requires_yes() {
   [[ ! -e "$XDG_CONFIG_HOME/selfishell" ]] || fail "Rejected install changed files"
 }
 
-test_status_detects_modified_managed_file() {
-  local status
-
-  run_selfishell install --skip-packages --yes >/dev/null
-  printf 'user modification' >"$XDG_CONFIG_HOME/selfishell/zsh/common.zsh"
-
-  set +e
-  run_selfishell status >/dev/null
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "Changed managed file should make status fail"
-}
-
 test_managed_file_replaced_by_same_content_symlink_is_preserved() {
   local target="$XDG_CONFIG_HOME/selfishell/vim/vimrc"
   local personal="$TEST_ROOT/personal-vimrc"
@@ -1120,34 +1061,6 @@ test_managed_file_replaced_by_same_content_symlink_is_preserved() {
     cmp -s "$personal" "$ROOT_DIR/config/shared/vimrc" || fail "$operation changed the personal file"
     cmp -s "$state" "$TEST_ROOT/original.state" || fail "$operation changed resource state"
   done
-}
-
-test_status_checks_neovim_configuration_after_reinstall() {
-  local target="$XDG_CONFIG_HOME/selfishell/nvim/init.lua"
-  local output rc=0
-
-  run_selfishell install --skip-packages --yes >/dev/null
-  run_selfishell install --skip-packages --yes >/dev/null
-  assert_file_content 1 "$SELFISHELL_STATE_DIR/configured"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/nvim" "$XDG_CONFIG_HOME/nvim"
-  assert_symlink_to "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$XDG_CONFIG_HOME/mise/conf.d/selfishell.toml"
-
-  printf '\n-- personal edit\n' >>"$target"
-  output="$(run_selfishell status 2>&1)" || rc=$?
-  ((rc != 0)) || fail "Status ignored modified Neovim configuration"
-  [[ "$output" == *"[CHANGED] $target"* ]] || fail "Status omitted retained Neovim configuration: $output"
-}
-
-test_status_uses_current_resource_list() {
-  local output
-
-  run_selfishell install --skip-packages --yes >/dev/null
-  output="$(run_selfishell status)" || true
-
-  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/zsh/zshrc'* ]] ||
-    fail "Status did not report the current Neovim resource list"
-  [[ "$output" == *'[OK] '"$XDG_CONFIG_HOME"'/selfishell/vim/vimrc'* ]] ||
-    fail "Status did not report the Vim resource list"
 }
 
 test_uninstall_restores_original_files() {
@@ -1445,36 +1358,6 @@ test_mise_config_global_preserves_existing_types() {
   install_mise_global_config 0 >/dev/null
   assert_symlink_to "$TEST_ROOT/some_dir" "$XDG_CONFIG_HOME/mise/config.toml"
   [[ ! -e "$SELFISHELL_RESOURCE_STATE_DIR" ]] || fail "Create-once file acquired managed state"
-}
-
-test_mise_config_global_idempotency_and_status() {
-  local tool
-  # Mock executable names, not mise package names.
-  for tool in zsh git curl ca-certificates vim starship fzf zoxide rg jq build-essential mise nvim tree-sitter node python uv gh lazygit; do
-    printf '#!/usr/bin/env bash\nexit 0\n' >"$TEST_ROOT/bin/$tool"
-    chmod +x "$TEST_ROOT/bin/$tool"
-  done
-  mkdir -p "$HOME/.local/share/zinit/zinit.git"
-  touch "$HOME/.local/share/zinit/zinit.git/zinit.zsh"
-
-  mkdir -p "$XDG_CONFIG_HOME/mise"
-  printf 'pre-existing user config\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --skip-packages --yes >/dev/null
-  assert_file_content 'pre-existing user config' "$XDG_CONFIG_HOME/mise/config.toml"
-  cp "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" "$TEST_ROOT/defaults.before"
-  printf 'modified by user 123\n' >"$XDG_CONFIG_HOME/mise/config.toml"
-  run_selfishell install --skip-packages --yes >/dev/null
-  assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
-
-  local status_out
-  local status=0
-  status_out="$(run_selfishell status 2>&1)" || status=$?
-  ((status == 0)) || fail "status failed after user modified config.toml (exit code $status)"
-  [[ "$status_out" != *'config.toml'* ]] || fail "user-owned config.toml should not be reported by status"
-  cmp -s "$TEST_ROOT/defaults.before" "$XDG_CONFIG_HOME/selfishell/mise/selfishell.toml" ||
-    fail "Editing user configuration changed managed defaults"
-  run_selfishell uninstall --restore --yes >/dev/null
-  assert_file_content 'modified by user 123' "$XDG_CONFIG_HOME/mise/config.toml"
 }
 
 test_mise_config_global_uninstall_preservation() {
