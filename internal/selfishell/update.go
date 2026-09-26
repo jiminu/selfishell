@@ -46,6 +46,10 @@ func (c CLI) parseUpdate(args []string) (updateOptions, int) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--cli-only":
+			if o.continuation {
+				c.error("--cli-only and --continue-after-cli-update cannot be used together")
+				return o, 2
+			}
 			if o.mode == "tools" {
 				c.error("--cli-only and --tools-only cannot be used together")
 				return o, 2
@@ -75,6 +79,10 @@ func (c CLI) parseUpdate(args []string) (updateOptions, int) {
 		case "--yes":
 			o.yes = true
 		case "--continue-after-cli-update":
+			if o.mode == "cli" {
+				c.error("--cli-only and --continue-after-cli-update cannot be used together")
+				return o, 2
+			}
 			o.continuation = true
 			o.mode = "tools"
 		case "help", "--help", "-h":
@@ -209,13 +217,22 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.error(err.Error())
 		return 1
 	}
-	if _, err := os.ReadFile(paths.State + "/configured"); err != nil {
+	marker, err := os.ReadFile(paths.State + "/configured")
+	if os.IsNotExist(err) {
 		if o.mode == "tools" && !o.continuation {
 			c.error("Selfishell configuration is not installed.")
 			return 1
 		}
 		fmt.Fprintln(c.Out, "Selfishell configuration is not installed; skipping tools and configuration.")
 		return 0
+	}
+	if err != nil {
+		c.error("Could not read Selfishell configured marker: " + err.Error())
+		return 1
+	}
+	if string(marker) != "1\n" {
+		c.error("Invalid Selfishell configured marker.")
+		return 1
 	}
 	packages, err := ReadPackages(c.Root + "/packages.conf")
 	if err != nil {

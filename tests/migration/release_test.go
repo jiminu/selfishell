@@ -330,12 +330,36 @@ func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
 	if got.Status != 0 || !bytes.Contains(got.Stdout, []byte("configuration is not installed; skipping tools and configuration")) || strings.Count(string(got.Stdout), "Selfishell updated:") != 1 {
 		t.Fatalf("no setup: %d %q %q", got.Status, got.Stdout, got.Stderr)
 	}
+	if bytes.Index(got.Stdout, []byte("configuration is not installed; skipping tools and configuration")) > bytes.Index(got.Stdout, []byte("Selfishell updated:")) {
+		t.Fatalf("skip message follows transition: %q", got.Stdout)
+	}
 	if _, err := os.Lstat(home + "/.config/selfishell"); !os.IsNotExist(err) {
 		t.Fatalf("no setup installed configuration: %v", err)
 	}
 	current, _ := os.Readlink(share + "/current")
 	if current != "releases/2.0.0" {
 		t.Fatalf("no setup release: %s", current)
+	}
+}
+
+func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	marker := home + "/.local/state/selfishell/configured"
+	mustFS(t, os.MkdirAll(marker, 0700))
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "unused-bad-marker")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--skip-packages", "--yes"}, nil, migrationReleaseEnv(t, home, remote), 20*time.Second)
+	mustFS(t, err)
+	if got.Status != 1 || bytes.Contains(got.Stdout, []byte("Selfishell updated")) || bytes.Contains(got.Stdout, []byte("skipping tools and configuration")) || !bytes.Contains(got.Stderr, []byte("configured marker")) {
+		t.Fatalf("bad marker claimed success: %d %q %q", got.Status, got.Stdout, got.Stderr)
+	}
+	current, err := os.Readlink(share + "/current")
+	mustFS(t, err)
+	if current != "releases/2.0.0" {
+		t.Fatalf("CLI activation was not preserved after child failure: %s", current)
 	}
 }
 

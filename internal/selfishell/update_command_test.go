@@ -62,6 +62,8 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 	}{
 		{[]string{"update", "--help"}, 0, "left at their current version"},
 		{[]string{"update", "--cli-only", "--tools-only"}, 2, "cannot be used together"},
+		{[]string{"update", "--cli-only", "--continue-after-cli-update"}, 2, "cannot be used together"},
+		{[]string{"update", "--continue-after-cli-update", "--cli-only"}, 2, "cannot be used together"},
 		{[]string{"update", "--tools-only", "--version", "1.2.3"}, 2, "--version cannot be used"},
 		{[]string{"update", "--version"}, 2, "requires a value"},
 		{[]string{"update", "--version", "../escape"}, 2, "Invalid semantic version"},
@@ -77,6 +79,30 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 		if code != tc.code || !strings.Contains(out+stderr, tc.text) {
 			t.Errorf("%v: code %d, out %q, err %q", tc.args, code, out, stderr)
 		}
+	}
+}
+
+func TestUpdateContinuationRejectsBadConfiguredMarker(t *testing.T) {
+	for _, kind := range []string{"directory", "malformed"} {
+		t.Run(kind, func(t *testing.T) {
+			home := isolatedUpdateHome(t)
+			root := testRelease(t)
+			path := home + "/.local/state/selfishell/configured"
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "directory" {
+				if err := os.Mkdir(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(path, []byte("invalid\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			code, out, stderr := commandResult(root, "update", "--continue-after-cli-update", "--skip-packages", "--dry-run", "--yes")
+			if code != 1 || strings.Contains(out, "skipping tools") || strings.Contains(out, "Selfishell updated") || !strings.Contains(stderr, "configured marker") {
+				t.Fatalf("%s marker: %d %q %q", kind, code, out, stderr)
+			}
+		})
 	}
 }
 
@@ -416,7 +442,7 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, stderr := commandResult(root, "update", "--tools-only", "--dry-run")
-	if code != 0 || !strings.Contains(out, "Would install required apt packages") || !strings.Contains(out, "Would prune unused mise versions") {
+	if code != 0 || !strings.Contains(out, "Would install required apt packages") || !strings.Contains(out, "git") || !strings.Contains(out, "Would sync declared Neovim plugins") || !strings.Contains(out, "Would prune unused mise versions") {
 		t.Fatalf("dry: %d %q %q", code, out, stderr)
 	}
 	after, err := os.ReadDir(home)
@@ -430,7 +456,16 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 
 func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing.T) {
 	home := isolatedUpdateHome(t)
-	root := testRelease(t)
+	root := t.TempDir()
+	copy := exec.Command("cp", "-R", testRelease(t)+"/config", root+"/config")
+	if output, err := copy.CombinedOutput(); err != nil {
+		t.Fatalf("copy fixture: %v %s", err, output)
+	}
+	for _, name := range []string{"packages.conf", "dependencies.conf"} {
+		if err := os.Symlink(testRelease(t)+"/"+name, root+"/"+name); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	t.Setenv("SHELL", "/bin/zsh")
 	code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes")
@@ -444,6 +479,22 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 	state := home + "/.local/state/selfishell/resources/vimrc.state"
 	before, err := os.ReadFile(state)
 	if err != nil {
+		t.Fatal(err)
+	}
+	earlier := home + "/.config/selfishell/zsh/runtime.zsh"
+	earlierBefore, err := os.ReadFile(earlier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := root + "/config/shared/zsh/runtime.zsh"
+	f, err := os.OpenFile(source, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("\n# new approved runtime\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	tools := t.TempDir()
@@ -462,8 +513,52 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 	if string(got) != "personal data\n" || !bytes.Equal(before, stateAfter) {
 		t.Fatalf("conflict changed user data/state")
 	}
+	earlierAfter, err := os.ReadFile(earlier)
+	if err != nil || !bytes.Equal(earlierBefore, earlierAfter) {
+		t.Fatalf("late conflict changed earlier file: %q %v", earlierAfter, err)
+	}
+	newSource, err := os.ReadFile(source)
+	if err != nil || bytes.Equal(earlierBefore, newSource) {
+		t.Fatalf("approved source did not change in fixture: %v", err)
+	}
+	if _, err := os.Lstat(home + "/.local/state/selfishell/backups"); !os.IsNotExist(err) {
+		t.Fatalf("late conflict created backup: %v", err)
+	}
 	if _, err := os.Lstat(log); !os.IsNotExist(err) {
 		t.Fatal("package work ran before preflight")
+	}
+}
+
+func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
+	home := isolatedUpdateHome(t)
+	root := testRelease(t)
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	t.Setenv("SHELL", "/bin/zsh")
+	if code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes"); code != 0 {
+		t.Fatal(stderr)
+	}
+	target := home + "/.config/selfishell/zsh/completion.zsh"
+	if err := os.WriteFile(target, []byte("personal completion\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	log := home + "/brew-called"
+	if err := os.WriteFile(bin+"/brew", []byte("#!/bin/sh\nprintf called > \"$SELFISHELL_TEST_BREW_CALLS\"\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SELFISHELL_TEST_BREW_CALLS", log)
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	var out, stderr bytes.Buffer
+	code := (CLI{Root: root, In: strings.NewReader("y\nn\n"), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only"})
+	if code == 0 || !strings.Contains(out.String(), "Managed file was modified") || strings.Contains(out.String(), "synchronized") {
+		t.Fatalf("prompt/package order: %d %q %q", code, out.String(), stderr.String())
+	}
+	if _, err := os.Stat(log); err != nil {
+		t.Fatalf("package fake did not fail after prompt: %v", err)
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "personal completion\n" {
+		t.Fatalf("conflict changed: %q %v", data, err)
 	}
 }
 
