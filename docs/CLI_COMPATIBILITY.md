@@ -126,6 +126,8 @@ native Go configuration coverage on macOS. The separate
 legacy Bash archive lifecycle jobs remain until native release archives are
 ported in issue 248. Normal `go test ./...` keeps network and system package
 installation disabled.
+The Neovim configuration Lua fixtures run through Go assertions in ordinary
+tests when Neovim is available and through the required pinned CI consumer.
 Configuration dry-run makes no filesystem changes, and user-owned targets are
 preflighted before install or uninstall changes begin.
 The Go candidate deliberately corrects one inherited Bash behavior: when an

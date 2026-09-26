@@ -119,4 +119,5 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	if _, err := os.Lstat(home + "/brand-new.py"); !os.IsNotExist(err) {
 		t.Fatal(fmt.Errorf("BufNewFile probe created its target: %v", err))
 	}
+	runNeovimConfigFixtures(t, root, p, "nvim", mise)
 }

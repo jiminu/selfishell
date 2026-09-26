@@ -1,13 +1,14 @@
 package selfishell
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 )
 
 // installPackages follows the legacy requirement/manager order with one operation.
-func (c CLI) installPackages(o *PackageOperation, paths Paths, packages []Package, platform, arch string, dry bool) error {
+func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, dry bool) error {
 	selected := platform
 	if selected == "ubuntu-wsl" {
 		selected = "ubuntu"
@@ -20,7 +21,6 @@ func (c CLI) installPackages(o *PackageOperation, paths Paths, packages []Packag
 		}
 	}
 	manifest := envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")
-	ctx := c.invocationContext()
 	for _, pair := range []struct{ requirement, manager string }{
 		{"required", "apt"}, {"optional", "apt"},
 		{"required", "formula"}, {"optional", "formula"},

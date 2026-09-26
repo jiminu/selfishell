@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const installHelp = `Usage:
@@ -98,15 +100,20 @@ func (c CLI) install(args []string) int {
 	var operation *PackageOperation
 	if !skip {
 		operation = &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err}}
-		if err = c.installPackages(operation, prepared.paths, packages, platform, DetectPlatform().Arch, dry); err != nil {
+		err = func() error {
+			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			if err := c.installPackages(ctx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, dry); err != nil {
+				return err
+			}
+			if platform == "macos" && prepared.ghostty {
+				return operation.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
+			}
+			return nil
+		}()
+		if err != nil {
 			c.error(err.Error())
 			return 1
-		}
-		if platform == "macos" && prepared.ghostty {
-			if err = operation.InstallHomebrew(c.invocationContext(), "optional", "cask", dry, "ghostty"); err != nil {
-				c.error(err.Error())
-				return 1
-			}
 		}
 	}
 	if err := c.applyConfig(prepared, dry, yes, skip, operation); err != nil {
@@ -258,7 +265,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	if dry {
 		if !skip {
-			if err := operation.InstallNeovimPlugins(c.invocationContext(), c.Root, paths, envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), true); err != nil {
+			if err := c.installNeovim(operation, paths, true); err != nil {
 				return err
 			}
 		}
@@ -281,7 +288,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		fmt.Fprintf(c.Out, "Created user mise config: %s\n", miseGlobal)
 	}
 	if !skip {
-		if err := operation.InstallNeovimPlugins(c.invocationContext(), c.Root, paths, envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry); err != nil {
+		if err := c.installNeovim(operation, paths, dry); err != nil {
 			return err
 		}
 	}
@@ -301,6 +308,12 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	fmt.Fprintln(c.Out, "Selfishell configuration installed.")
 	return nil
+}
+
+func (c CLI) installNeovim(operation *PackageOperation, paths Paths, dry bool) error {
+	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return operation.InstallNeovimPlugins(ctx, c.Root, paths, envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
 }
 func writeOnce(path string, data []byte) error { return createRawOnce(path, data) }
 func (c CLI) interactive() bool                { return IsTerminal(c.In) || os.Getenv("SELFISHELL_TEST_TTY") != "" }

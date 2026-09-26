@@ -270,7 +270,7 @@ func TestOptionalMiseSkipReportsPackageNames(t *testing.T) {
 	c := CLI{Root: root, Out: &out, Err: &stderr}
 	o := &PackageOperation{Process: Process{Out: &out, Err: &stderr, Env: []string{"HOME=" + home, "PATH=" + t.TempDir()}}}
 	paths, _ := UserPaths()
-	if err := c.installPackages(o, paths, []Package{{Platform: "all", Requirement: "optional", Manager: "mise", Name: "eza"}}, "macos", "arm64", false); err != nil {
+	if err := c.installPackages(context.Background(), o, paths, []Package{{Platform: "all", Requirement: "optional", Manager: "mise", Name: "eza"}}, "macos", "arm64", false); err != nil {
 		t.Fatal(err)
 	}
 	if len(o.SkippedOptional) != 1 || o.SkippedOptional[0] != "eza" || !strings.Contains(stderr.String(), "Skipped optional packages: eza\n") {
