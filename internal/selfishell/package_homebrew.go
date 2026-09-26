@@ -119,6 +119,9 @@ func (o *PackageOperation) brewInventory(ctx context.Context, manager string) (m
 // InstallHomebrew inventories each package kind once per operation. Missing
 // required Homebrew is bootstrapped with the official installer script.
 func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, manager string, dryRun bool, names ...string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(names) == 0 {
 		return nil
 	}

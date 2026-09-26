@@ -73,6 +73,9 @@ func validRequirement(requirement string) error {
 // InstallApt preserves argument boundaries and checks dpkg's actual status.
 // A failed index update leaves aptUpdated false, so a later group can retry.
 func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, dryRun bool, names ...string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(names) == 0 {
 		return nil
 	}

@@ -3,6 +3,7 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -377,5 +378,36 @@ case "$1 $2" in 'list --formula') printf 'needed\n'; exit 1;; esac`)
 	}
 	if !strings.Contains(f.calls(), "brew install needed\n") {
 		t.Fatal(f.calls())
+	}
+}
+
+func TestPackageAdaptersAlreadyCancelledBeforeMissingTools(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prepare func(*packageFixture)
+		install func(*PackageOperation, context.Context) error
+	}{
+		{"apt-get missing", func(*packageFixture) {}, func(o *PackageOperation, ctx context.Context) error {
+			return o.InstallApt(ctx, "optional", false, "needed")
+		}},
+		{"brew missing", func(*packageFixture) {}, func(o *PackageOperation, ctx context.Context) error {
+			return o.InstallHomebrew(ctx, "optional", "formula", false, "needed")
+		}},
+		{"sudo missing", func(f *packageFixture) { f.apt(); os.Remove(filepath.Join(f.bin, "sudo")) }, func(o *PackageOperation, ctx context.Context) error {
+			return o.InstallApt(ctx, "optional", false, "needed")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPackageFixture(t)
+			tc.prepare(f)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if err := tc.install(f.op, ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("got %v, want context.Canceled", err)
+			}
+			if f.calls() != "" || len(f.op.SkippedOptional) != 0 || f.out.Len() != 0 || f.err.Len() != 0 {
+				t.Fatalf("cancelled operation had effects: calls=%q skipped=%q out=%q err=%q", f.calls(), f.op.SkippedOptional, f.out.String(), f.err.String())
+			}
+		})
 	}
 }
