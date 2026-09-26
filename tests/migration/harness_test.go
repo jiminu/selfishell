@@ -240,6 +240,13 @@ func TestMain(m *testing.M) {
 	if nativeDir != "" {
 		os.RemoveAll(nativeDir)
 	}
+	extraNative.Range(func(_, value any) bool {
+		holder := value.(*nativeAssetFixture)
+		if holder.dir != "" {
+			os.RemoveAll(holder.dir)
+		}
+		return true
+	})
 	os.Exit(code)
 }
 

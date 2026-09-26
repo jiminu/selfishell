@@ -29,8 +29,6 @@ main() {
   local failed_suites=()
   local suites=(
     managed_install_test.bash
-    release_bootstrap_test.bash
-    lifecycle_e2e_test.bash
     common_zsh_test.bash
   )
 
@@ -44,7 +42,7 @@ main() {
   for suite_path in "$ROOT_DIR"/tests/*_test.bash; do
     suite="${suite_path##*/}"
     case "$suite" in
-      managed_install_test.bash | release_bootstrap_test.bash | lifecycle_e2e_test.bash | common_zsh_test.bash) ;;
+      managed_install_test.bash | common_zsh_test.bash) ;;
       *) suites+=("$suite") ;;
     esac
   done
