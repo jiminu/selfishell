@@ -113,31 +113,19 @@ date +%s >"$TEST_HOME/.cache/selfishell/update-checked-at"
 # measures a real full-environment startup, not the runner's PATH, reusing
 # the production installers.
 install_full_integrations() (
-  local name
   export HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/.config"
   export XDG_DATA_HOME="$TEST_DATA_HOME" XDG_STATE_HOME="$TEST_HOME/.local/state"
-  export XDG_CACHE_HOME="$TEST_HOME/.cache" SELFISHELL_ROOT="$ROOT_DIR"
-  export MISE_CEILING_PATHS="$ROOT_DIR"
+  export XDG_CACHE_HOME="$TEST_HOME/.cache" MISE_CEILING_PATHS="$ROOT_DIR"
   cd "$TEST_HOME"
-  source "$ROOT_DIR/lib/common.sh"
-  source "$ROOT_DIR/lib/paths.sh"
-  source "$ROOT_DIR/lib/platform.sh"
-  source "$ROOT_DIR/lib/dependencies.sh"
-  source "$ROOT_DIR/lib/installers.sh"
+  (cd "$ROOT_DIR" && go run ./cmd/selfishell-dev "$ROOT_DIR" benchmark-shell)
 
-  for name in mise zinit; do
-    install_direct_package required "$name" 0 "$(detect_platform)" "$(detect_architecture)" || return
-  done
-
-  # Activate only shell integrations, using the release's exact pins.
-  # Do not let the runtime implicitly install the rest of the development tools.
+  # Restrict interactive startup to the three measured shell integrations.
   awk '
     BEGIN { print "[tools]" }
     /^\[/ { in_tools = ($0 == "[tools]"); next }
     in_tools && ($1 == "starship" || $1 == "fzf" || $1 == "zoxide") { print; found++ }
     END { print "\n[settings]\nnot_found_auto_install = false"; exit(found != 3) }
   ' "$ROOT_DIR/config/shared/mise.toml" >"$TEST_HOME/.config/mise/config.toml"
-  PATH="$TEST_HOME/.local/bin:$PATH" install_mise_tools required 0 starship fzf zoxide
 )
 
 if [[ "$PROFILE_MODE" == full ]]; then

@@ -108,15 +108,26 @@ formatting, vet, tests, builds and native reference comparisons as part of the
 repository gate. CI uses the same pin on Linux and macOS. Production entrypoints
 and release payloads remain Bash until the migration cutover.
 
-The candidate implements help, local version, configuration-only
-`install --skip-packages`, `uninstall` (including `--restore` and explicit
+The candidate implements help, local version, complete `install` and
+configuration-only `install --skip-packages`, `uninstall` (including `--restore` and explicit
 `--purge`), `status`, and `doctor`. Installed tool detection and diagnostic
 commands are compared with the fixed Bash reference in
 `tests/migration/diagnostics_test.go`, including actual stdout terminal colors.
-Install without `--skip-packages` fails before mutation because
-package and tool installation remains in Bash. Update, rollback,
+Full install groups current-platform Apt, Homebrew, direct downloads, and pinned
+mise tools through one Go package operation after all configuration preflights.
+It then applies managed configuration, provisions declared Neovim plugins,
+and records setup markers. Initial install does not prune mise versions.
+Update, rollback,
 and `version --available` remain unavailable in the Go candidate and
 return an explicit error. The production CLI and installer remain Bash.
+CI runs an opt-in native Go full-install consumer in a disposable Ubuntu
+container, a pinned Neovim consumer in a private Ubuntu runner HOME, and
+native Go configuration coverage on macOS. The separate
+legacy Bash archive lifecycle jobs remain until native release archives are
+ported in issue 248. Normal `go test ./...` keeps network and system package
+installation disabled.
+The Neovim configuration Lua fixtures run through Go assertions in ordinary
+tests when Neovim is available and through the required pinned CI consumer.
 Configuration dry-run makes no filesystem changes, and user-owned targets are
 preflighted before install or uninstall changes begin.
 The Go candidate deliberately corrects one inherited Bash behavior: when an

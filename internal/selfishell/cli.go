@@ -2,6 +2,7 @@
 package selfishell
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,14 @@ type CLI struct {
 	Root     string
 	In       io.Reader
 	Out, Err io.Writer
+	Context  context.Context
+}
+
+func (c CLI) invocationContext() context.Context {
+	if c.Context != nil {
+		return c.Context
+	}
+	return context.Background()
 }
 
 func (c CLI) error(message string) {
