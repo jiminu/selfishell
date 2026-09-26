@@ -85,7 +85,9 @@ func configEnv(platform, scenario, home, tools, osRelease, proc, procWSL string)
 	if platform == "ubuntu-wsl" {
 		proc = procWSL
 	}
-	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
+	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc,
+		"MISE_DATA_DIR=" + filepath.Join(home, "mise/data"), "MISE_STATE_DIR=" + filepath.Join(home, "mise/state"),
+		"MISE_CACHE_DIR=" + filepath.Join(home, "mise/cache"), "MISE_CONFIG_DIR=" + filepath.Join(home, "mise/config")}
 	if scenario == "custom" {
 		env = append(env, "XDG_CONFIG_HOME="+filepath.Join(home, "xdg/config"), "XDG_DATA_HOME="+filepath.Join(home, "xdg/data"), "XDG_STATE_HOME="+filepath.Join(home, "xdg/state"), "XDG_CACHE_HOME="+filepath.Join(home, "xdg/cache"))
 	}
