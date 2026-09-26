@@ -101,40 +101,49 @@ func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
 }
 
 func validateReleaseLink(name, target string, members map[string]releaseMember, dirs map[string]bool) error {
-	seen := map[string]bool{name: true}
-	for {
-		if target == ".." || strings.HasPrefix(target, "../") || path.IsAbs(target) {
-			return fmt.Errorf("escaping release archive link: %s", name)
-		}
-		if target == "." {
-			return nil
-		}
-		parts := strings.Split(target, "/")
-		prefix := ""
-		followed := false
-		for i, part := range parts {
-			prefix = path.Join(prefix, part)
-			item, exists := members[prefix]
-			if exists && item.kind == tar.TypeSymlink {
-				if seen[prefix] {
-					return fmt.Errorf("cyclic release archive link: %s", name)
-				}
-				seen[prefix] = true
-				target = path.Join(path.Dir(prefix), item.target, strings.Join(parts[i+1:], "/"))
-				followed = true
-				break
+	_, _, err := resolveReleasePath(name, target, members, dirs, map[string]bool{})
+	return err
+}
+
+// active tracks only links whose definitions are currently being resolved.
+// A directory alias may be traversed again after its definition has resolved.
+func resolveReleasePath(name, target string, members map[string]releaseMember, dirs map[string]bool, active map[string]bool) (string, bool, error) {
+	if target == ".." || strings.HasPrefix(target, "../") || path.IsAbs(target) {
+		return "", false, fmt.Errorf("escaping release archive link: %s", name)
+	}
+	if target == "." {
+		return ".", true, nil
+	}
+	resolved := "."
+	parts := strings.Split(target, "/")
+	for i, part := range parts {
+		candidate := path.Join(resolved, part)
+		member, exists := members[candidate]
+		isDir := dirs[candidate]
+		if exists && member.kind == tar.TypeSymlink {
+			if active[candidate] {
+				return "", false, fmt.Errorf("cyclic release archive link: %s", name)
 			}
-			if i < len(parts)-1 && (!dirs[prefix] || (exists && item.kind != tar.TypeDir)) {
-				return fmt.Errorf("dangling release archive link: %s", name)
+			active[candidate] = true
+			var err error
+			resolved, isDir, err = resolveReleasePath(name, path.Join(path.Dir(candidate), member.target), members, dirs, active)
+			delete(active, candidate)
+			if err != nil {
+				return "", false, err
 			}
-			if i == len(parts)-1 && !exists && !dirs[prefix] {
-				return fmt.Errorf("dangling release archive link: %s", name)
-			}
+		} else if exists || isDir {
+			resolved = candidate
+		} else {
+			return "", false, fmt.Errorf("dangling release archive link: %s", name)
 		}
-		if !followed {
-			return nil
+		if i < len(parts)-1 && !isDir {
+			return "", false, fmt.Errorf("dangling release archive link: %s", name)
+		}
+		if i == len(parts)-1 {
+			return resolved, isDir, nil
 		}
 	}
+	return resolved, true, nil
 }
 
 // extractReleaseArchive completes archive validation before creating staging.

@@ -109,3 +109,34 @@ func TestReleaseArchiveAcceptsLinksToImpliedDirectories(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseArchiveAcceptsRepeatedFiniteDirectoryAlias(t *testing.T) {
+	native := filepath.Join(t.TempDir(), "native")
+	if err := os.MkdirAll(native+"/config/shared", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(native+"/config/shared/file", []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(".", native+"/root-link"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("root-link/root-link/config/shared/file", native+"/alias"); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(native + "/alias"); err != nil || string(data) != "ok" {
+		t.Fatalf("native alias %q: %v", data, err)
+	}
+	archive := testArchive(t,
+		archiveMember{"config/shared/file", "", tar.TypeReg, "ok", 0600},
+		archiveMember{"root-link", ".", tar.TypeSymlink, "", 0},
+		archiveMember{"alias", "root-link/root-link/config/shared/file", tar.TypeSymlink, "", 0},
+	)
+	stage := filepath.Join(t.TempDir(), "stage")
+	if err := extractReleaseArchive(archive, stage); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(stage + "/alias"); err != nil || string(data) != "ok" {
+		t.Fatalf("staged alias %q: %v", data, err)
+	}
+}
