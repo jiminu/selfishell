@@ -167,6 +167,16 @@ func (i *ToolInventory) loadBrewJSON() {
 	if json.Unmarshal([]byte(output), &raw) != nil || raw["formulae"] == nil || raw["casks"] == nil || string(raw["formulae"]) == "null" || string(raw["casks"]) == "null" {
 		return
 	}
+	for _, entry := range data.Formulae {
+		if entry.Versions == nil {
+			return
+		}
+	}
+	for _, entry := range data.Casks {
+		if entry.Versions == nil {
+			return
+		}
+	}
 	i.brewFormulae = map[string]string{}
 	i.brewCasks = map[string]string{}
 	for _, entry := range data.Formulae {

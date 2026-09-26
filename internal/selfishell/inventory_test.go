@@ -150,6 +150,7 @@ func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 }
 func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 	root, paths, warnings, bin := inventoryFixture(t)
+	t.Setenv("PATH", bin)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\npython = \"3.13.14\"\ngh = \"2.100.0\"\n[settings]\nnode = \"ignored\"\n", 0600)
 	fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$*\" \"$PWD\" \"$MISE_GLOBAL_CONFIG_FILE\" \"$NO_COLOR\" >>\"$HOME/mise-calls\"\nprintf 'node 24.18.0 /config/mise.toml 24.18.0\\npython 3.13.14 /config/mise.toml 3.13.14\\npython 3.12.0 /config/mise.toml 3.12.0\\n'\nif [ -f \"$HOME/mise-fail\" ]; then printf 'mise ERROR untrusted\\nextra detail\\n' >&2; exit 1; fi\n", 0700)
 	inv := inventory(t, root, paths, warnings)
@@ -226,6 +227,30 @@ func TestInventoryBrewMalformedTypedInventoryFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "1.26.0", "homebrew", "package-manager")
+	for _, tc := range []struct{ name, json string }{
+		{"null versions", `{"formulae":[],"casks":[{"token":"ghostty","versions":null}]}`},
+		{"absent versions", `{"formulae":[],"casks":[{"token":"ghostty"}]}`},
+		{"formula null versions", `{"formulae":[{"name":"starship","versions":null}],"casks":[{"token":"ghostty","versions":["0.0.0"]}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			t.Setenv("BREW_JSON", tc.json)
+			fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') printf '%s\\n' \"$BREW_JSON\";;\n 'list --cask --versions') printf 'ghostty 1.3.1\\n';;\nesac\n", 0700)
+			inv := inventory(t, root, paths, warnings)
+			got, err := inv.Detect("cask", "ghostty", "macos", "arm64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantTool(t, got, "1.3.1", "homebrew-cask", "package-manager")
+			calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "brew-calls"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(calls) != "list --versions --json\nlist --cask --versions\n" {
+				t.Fatalf("calls %q", calls)
+			}
+		})
+	}
 }
 func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
