@@ -279,7 +279,6 @@ done
 EOF
   printf 'exit 1\n' >"$fixture/release_bootstrap_test.bash"
   printf ': >"$HOME/released"\n' >"$fixture/lifecycle_e2e_test.bash"
-  printf 'exit 0\n' >"$fixture/common_zsh_test.bash"
   printf ': >"$HOME/last-suite"\n' >"$fixture/extra_test.bash"
 
   output="$(SELFISHELL_SUITE_JOBS=2 bash "$fixture/run.bash" 2>&1)" || status=$?
@@ -288,14 +287,14 @@ EOF
   [[ -f "$HOME/last-suite" ]] || fail "A failing suite prevented later suites from running"
   [[ "$status" == 1 && "$output" == *'1 test suite(s) failed: release_bootstrap_test.bash'* ]] ||
     fail "Suite runner lost the failing suite's name or exit status: $output"
-  [[ "$(grep -c '^SUITE:' <<<"$output")" == 5 ]] || fail "Suite runner omitted a suite log: $output"
+  [[ "$(grep -c '^SUITE:' <<<"$output")" == 4 ]] || fail "Suite runner omitted a suite log: $output"
 
   mkdir "$TEST_ROOT/bin"
   printf '#!/bin/sh\nexit 1\n' >"$TEST_ROOT/bin/xargs"
   chmod +x "$TEST_ROOT/bin/xargs"
   status=0
   output="$(PATH="$TEST_ROOT/bin:$PATH" SELFISHELL_SUITE_JOBS=2 bash "$fixture/run.bash" 2>&1)" || status=$?
-  [[ "$status" == 1 && "$output" == *'5 test suite(s) failed:'* ]] ||
+  [[ "$status" == 1 && "$output" == *'4 test suite(s) failed:'* ]] ||
     fail "Dispatcher failure was counted as an extra suite: $output"
 }
 
