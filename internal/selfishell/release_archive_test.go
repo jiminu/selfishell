@@ -78,3 +78,34 @@ func TestReleaseArchivePreflightsAllMembers(t *testing.T) {
 		t.Fatalf("safe link %q, %v", target, err)
 	}
 }
+
+func TestReleaseArchiveAcceptsLinksToImpliedDirectories(t *testing.T) {
+	archive := testArchive(t,
+		archiveMember{"config/shared/file", "", tar.TypeReg, "managed\n", 0644},
+		archiveMember{"config-link", "config", tar.TypeSymlink, "", 0},
+		archiveMember{"nested-alias", "config-link/shared/file", tar.TypeSymlink, "", 0},
+	)
+	stage := filepath.Join(t.TempDir(), "stage")
+	if err := extractReleaseArchive(archive, stage); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"config-link/shared/file", "nested-alias"} {
+		data, err := os.ReadFile(stage + "/" + name)
+		if err != nil || string(data) != "managed\n" {
+			t.Fatalf("%s: %q, %v", name, data, err)
+		}
+	}
+	for _, bad := range [][]archiveMember{
+		{{"config/shared/file", "", tar.TypeReg, "managed\n", 0644}, {"config-link", "config", tar.TypeSymlink, "", 0}, {"config-link/new", "", tar.TypeReg, "bad", 0644}},
+		{{"a", "b", tar.TypeSymlink, "", 0}, {"b", "a", tar.TypeSymlink, "", 0}},
+		{{"VERSION", "", tar.TypeReg, "1.0.0\n", 0644}, {"config/shared/file", "", tar.TypeReg, "managed\n", 0644}, {"a", "config/shared", tar.TypeSymlink, "", 0}, {"b", "a/../VERSION", tar.TypeSymlink, "", 0}},
+	} {
+		stage := filepath.Join(t.TempDir(), "stage")
+		if err := extractReleaseArchive(testArchive(t, bad...), stage); err == nil {
+			t.Fatalf("accepted invalid links: %+v", bad)
+		}
+		if _, err := os.Lstat(stage); !os.IsNotExist(err) {
+			t.Fatalf("wrote stage for invalid links: %v", err)
+		}
+	}
+}

@@ -64,7 +64,25 @@ func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
 		if h.Typeflag == tar.TypeSymlink && (path.IsAbs(h.Linkname) || strings.Contains(h.Linkname, "\\") || h.Linkname == "") {
 			return nil, fmt.Errorf("unsafe release archive link: %s", clean)
 		}
+		if h.Typeflag == tar.TypeSymlink {
+			// The legacy validator also rejects parent traversal, including
+			// links whose lexical path looks safe before another link resolves.
+			for _, part := range strings.Split(h.Linkname, "/") {
+				if part == ".." {
+					return nil, fmt.Errorf("unsafe release archive link: %s", clean)
+				}
+			}
+		}
 		members[clean] = releaseMember{h.Typeflag, h.Linkname}
+	}
+	dirs := map[string]bool{".": true}
+	for name, m := range members {
+		if m.kind == tar.TypeDir {
+			dirs[name] = true
+		}
+		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+			dirs[parent] = true
+		}
 	}
 	for name, m := range members {
 		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
@@ -75,27 +93,48 @@ func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
 		if m.kind != tar.TypeSymlink {
 			continue
 		}
-		seen := map[string]bool{name: true}
-		target := path.Clean(path.Join(path.Dir(name), m.target))
-		for {
-			if target == ".." || strings.HasPrefix(target, "../") || path.IsAbs(target) {
-				return nil, fmt.Errorf("escaping release archive link: %s", name)
-			}
-			item, ok := members[target]
-			if !ok {
-				return nil, fmt.Errorf("dangling release archive link: %s", name)
-			}
-			if item.kind != tar.TypeSymlink {
-				break
-			}
-			if seen[target] {
-				return nil, fmt.Errorf("cyclic release archive link: %s", name)
-			}
-			seen[target] = true
-			target = path.Clean(path.Join(path.Dir(target), item.target))
+		if err := validateReleaseLink(name, path.Join(path.Dir(name), m.target), members, dirs); err != nil {
+			return nil, err
 		}
 	}
 	return members, nil
+}
+
+func validateReleaseLink(name, target string, members map[string]releaseMember, dirs map[string]bool) error {
+	seen := map[string]bool{name: true}
+	for {
+		if target == ".." || strings.HasPrefix(target, "../") || path.IsAbs(target) {
+			return fmt.Errorf("escaping release archive link: %s", name)
+		}
+		if target == "." {
+			return nil
+		}
+		parts := strings.Split(target, "/")
+		prefix := ""
+		followed := false
+		for i, part := range parts {
+			prefix = path.Join(prefix, part)
+			item, exists := members[prefix]
+			if exists && item.kind == tar.TypeSymlink {
+				if seen[prefix] {
+					return fmt.Errorf("cyclic release archive link: %s", name)
+				}
+				seen[prefix] = true
+				target = path.Join(path.Dir(prefix), item.target, strings.Join(parts[i+1:], "/"))
+				followed = true
+				break
+			}
+			if i < len(parts)-1 && (!dirs[prefix] || (exists && item.kind != tar.TypeDir)) {
+				return fmt.Errorf("dangling release archive link: %s", name)
+			}
+			if i == len(parts)-1 && !exists && !dirs[prefix] {
+				return fmt.Errorf("dangling release archive link: %s", name)
+			}
+		}
+		if !followed {
+			return nil
+		}
+	}
 }
 
 // extractReleaseArchive completes archive validation before creating staging.
