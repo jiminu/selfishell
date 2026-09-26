@@ -1,0 +1,472 @@
+package migration_test
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+const fixedBashRelease = "d025710338036f1f54b948f1f3e5c17a0b3f7e38"
+
+func migrationReleaseEnv(t *testing.T, home, remote string) []string {
+	t.Helper()
+	osRelease := filepath.Join(home, "os-release")
+	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	return []string{
+		"SELFISHELL_RELEASE_ROOT=file://" + remote,
+		"SELFISHELL_TEST_SYSTEM_NAME=Linux",
+		"SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease,
+		"SELFISHELL_TEST_PROC_VERSION_FILE=" + osRelease,
+		"MISE_DATA_DIR=" + home + "/mise/data",
+		"MISE_CACHE_DIR=" + home + "/mise/cache",
+		"MISE_CONFIG_DIR=" + home + "/mise/config",
+		"MISE_STATE_DIR=" + home + "/mise/state",
+	}
+}
+
+func installedFixture(t *testing.T, home, version, executable string) (string, string) {
+	t.Helper()
+	share := filepath.Join(home, ".local/share/selfishell")
+	root := filepath.Join(share, "releases", version)
+	mustFS(t, os.MkdirAll(root+"/bin", 0700))
+	mustFS(t, copyFile(executable, root+"/bin/selfishell"))
+	mustFS(t, os.WriteFile(root+"/VERSION", []byte(version+"\n"), 0644))
+	for _, name := range []string{"config", "packages.conf", "dependencies.conf"} {
+		from, to := filepath.Join(repoRoot(), name), filepath.Join(root, name)
+		if name == "config" {
+			mustFS(t, copyTree(from, to))
+		} else {
+			mustFS(t, copyFile(from, to))
+		}
+	}
+	mustFS(t, os.Symlink("releases/"+version, share+"/current"))
+	return root, share
+}
+
+func archiveFixture(t *testing.T, remote, version, executable, marker string, packagesOverride ...string) {
+	t.Helper()
+	payload := t.TempDir()
+	mustFS(t, os.MkdirAll(payload+"/bin", 0700))
+	mustFS(t, copyFile(executable, payload+"/bin/selfishell"))
+	mustFS(t, os.WriteFile(payload+"/VERSION", []byte(version+"\n"), 0644))
+	for _, name := range []string{"config", "packages.conf", "dependencies.conf"} {
+		from, to := filepath.Join(repoRoot(), name), filepath.Join(payload, name)
+		if name == "config" {
+			mustFS(t, copyTree(from, to))
+		} else {
+			mustFS(t, copyFile(from, to))
+		}
+	}
+	if len(packagesOverride) != 0 {
+		mustFS(t, os.WriteFile(payload+"/packages.conf", []byte(packagesOverride[0]), 0644))
+	}
+	if marker != "" {
+		file := payload + "/config/shared/vimrc"
+		f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
+		mustFS(t, err)
+		_, err = f.WriteString("\n\" " + marker + "\n")
+		mustFS(t, err)
+		mustFS(t, f.Close())
+	}
+	platform := runtime.GOOS
+	if platform == "darwin" {
+		platform = "macos"
+	}
+	name := fmt.Sprintf("selfishell-%s-%s-%s.tar.gz", version, platform, runtime.GOARCH)
+	dir := filepath.Join(remote, "download", "v"+version)
+	mustFS(t, os.MkdirAll(dir, 0700))
+	archive := filepath.Join(dir, name)
+	f, err := os.Create(archive)
+	mustFS(t, err)
+	gz := gzip.NewWriter(f)
+	w := tar.NewWriter(gz)
+	err = filepath.WalkDir(payload, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == payload {
+			return nil
+		}
+		rel, err := filepath.Rel(payload, path)
+		if err != nil {
+			return err
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		link := ""
+		if info.Mode()&os.ModeSymlink != 0 {
+			link, err = os.Readlink(path)
+			if err != nil {
+				return err
+			}
+		}
+		h, err := tar.FileInfoHeader(info, link)
+		if err != nil {
+			return err
+		}
+		h.Name = filepath.ToSlash(rel)
+		if d.IsDir() {
+			h.Name += "/"
+		}
+		if err := w.WriteHeader(h); err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			in, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(w, in)
+			closeErr := in.Close()
+			if err != nil {
+				return err
+			}
+			return closeErr
+		}
+		return nil
+	})
+	mustFS(t, err)
+	mustFS(t, w.Close())
+	mustFS(t, gz.Close())
+	mustFS(t, f.Close())
+	data, err := os.ReadFile(archive)
+	mustFS(t, err)
+	digest := sha256.Sum256(data)
+	mustFS(t, os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0644))
+}
+
+func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	stub := filepath.Join(t.TempDir(), "selfishell")
+	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nprintf 'argv:%s\\n' \"$*\"\ncat\nprintf 'child-stderr\\n' >&2\nexit 7\n"), 0755))
+	archiveFixture(t, remote, "2.0.0", stub, "")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, []byte("child-input\n"), migrationReleaseEnv(t, home, remote), 20*time.Second)
+	mustFS(t, err)
+	if got.Status != 7 || !bytes.Contains(got.Stdout, []byte("argv:update --continue-after-cli-update --yes --skip-packages\nchild-input\n")) || !bytes.Contains(got.Stderr, []byte("child-stderr\n")) {
+		t.Fatalf("continuation: status %d stdout %q stderr %q", got.Status, got.Stdout, got.Stderr)
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/2.0.0" {
+		t.Fatalf("wrong selected release: %s", current)
+	}
+}
+
+func TestFixedBashToGoUpdateAndOfflineRollback(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	export := filepath.Join(t.TempDir(), "old")
+	mustFS(t, exportCommit(repoRoot(), fixedBashRelease, export))
+	root, share := installedFixture(t, home, "1.3.1", export+"/bin/selfishell")
+	// The old release carries its own exact configuration and manifests.
+	mustFS(t, copyTree(export, root))
+	remote := t.TempDir()
+	archiveFixture(t, remote, "1.3.2", candidate, "new-release-config")
+	env := migrationReleaseEnv(t, home, remote)
+	mustFS(t, os.WriteFile(home+"/.zshrc", []byte("alias mine='kept'\r\n"), 0600))
+	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if setup.Status != 0 {
+		t.Fatalf("old install: %d %s", setup.Status, setup.Stderr)
+	}
+	state := home + "/.local/state/selfishell/resources/user-zshrc.state"
+	oldState, err := os.ReadFile(state)
+	mustFS(t, err)
+	if !bytes.HasPrefix(oldState, []byte("2\n")) {
+		t.Fatalf("unexpected old state %q", oldState)
+	}
+	updated, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "1.3.2", "--yes", "--skip-packages"}, nil, env, 25*time.Second)
+	mustFS(t, err)
+	if updated.Status != 0 || strings.Count(string(updated.Stdout), "Selfishell updated:") != 1 {
+		t.Fatalf("Bash to Go: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
+	}
+	managed, err := os.ReadFile(home + "/.config/selfishell/vim/vimrc")
+	mustFS(t, err)
+	if !bytes.Contains(managed, []byte("new-release-config")) {
+		t.Fatal("continuation did not use new release configuration")
+	}
+	user, err := os.ReadFile(home + "/.zshrc")
+	mustFS(t, err)
+	if !bytes.Contains(user, []byte("alias mine='kept'\r\n")) {
+		t.Fatalf("lost user bytes: %q", user)
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/1.3.2" {
+		t.Fatalf("update current: %s", current)
+	}
+	rolled, err := runCommand(home, []string{share + "/current/bin/selfishell", "rollback", "--yes"}, nil, append(env, "SELFISHELL_RELEASE_ROOT=file:///definitely-unavailable"), 20*time.Second)
+	mustFS(t, err)
+	if rolled.Status != 0 {
+		t.Fatalf("offline rollback: %d %q %q", rolled.Status, rolled.Stdout, rolled.Stderr)
+	}
+	current, _ = os.Readlink(share + "/current")
+	if current != "releases/1.3.1" {
+		t.Fatalf("rollback current: %s", current)
+	}
+	oldVersion, err := runCommand(home, []string{share + "/current/bin/selfishell", "version"}, nil, env, 10*time.Second)
+	mustFS(t, err)
+	if oldVersion.Status != 0 || !bytes.Equal(oldVersion.Stdout, []byte("selfishell 1.3.1\n")) {
+		t.Fatalf("old release unusable: %+v", oldVersion)
+	}
+	oldStatus, err := runCommand(home, []string{share + "/current/bin/selfishell", "status"}, nil, env, 10*time.Second)
+	mustFS(t, err)
+	if !bytes.Contains(oldStatus.Stdout, []byte("Current: 1.3.1 | Rollback: 1.3.2")) || !bytes.Contains(oldStatus.Stdout, []byte("[OK] "+home+"/.zshrc")) || bytes.Contains(oldStatus.Stderr, []byte("invalid state")) {
+		t.Fatalf("Bash state consumer: %d %q %q", oldStatus.Status, oldStatus.Stdout, oldStatus.Stderr)
+	}
+}
+
+func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "go-new-root")
+	env := migrationReleaseEnv(t, home, remote)
+	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if setup.Status != 0 {
+		t.Fatalf("setup: %d %q", setup.Status, setup.Stderr)
+	}
+	updated, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, nil, env, 25*time.Second)
+	mustFS(t, err)
+	if updated.Status != 0 || strings.Count(string(updated.Stdout), "Selfishell updated:") != 1 {
+		t.Fatalf("update: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
+	}
+	managed, err := os.ReadFile(home + "/.config/selfishell/vim/vimrc")
+	mustFS(t, err)
+	if !bytes.Contains(managed, []byte("go-new-root")) {
+		t.Fatal("continuation used old configuration")
+	}
+	current, _ := os.Readlink(share + "/current")
+	previous, _ := os.Readlink(share + "/previous")
+	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
+		t.Fatalf("links after update: %s %s", current, previous)
+	}
+	status, err := runCommand(home, []string{share + "/current/bin/selfishell", "status"}, nil, env, 10*time.Second)
+	mustFS(t, err)
+	if !bytes.Contains(status.Stdout, []byte("Current: 2.0.0 | Rollback: 1.0.0")) {
+		t.Fatalf("updated status: %q %q", status.Stdout, status.Stderr)
+	}
+	rolled, err := runCommand(home, []string{share + "/current/bin/selfishell", "rollback", "--yes"}, nil, append(env, "SELFISHELL_RELEASE_ROOT=file:///unavailable"), 20*time.Second)
+	mustFS(t, err)
+	if rolled.Status != 0 {
+		t.Fatalf("rollback: %d %q %q", rolled.Status, rolled.Stdout, rolled.Stderr)
+	}
+	current, _ = os.Readlink(share + "/current")
+	if current != "releases/1.0.0" {
+		t.Fatalf("rollback changed wrong release: %s", current)
+	}
+	status, err = runCommand(home, []string{share + "/current/bin/selfishell", "status"}, nil, env, 10*time.Second)
+	mustFS(t, err)
+	if !bytes.Contains(status.Stdout, []byte("Current: 1.0.0 | Rollback: 2.0.0")) {
+		t.Fatalf("rolled status: %q %q", status.Stdout, status.Stderr)
+	}
+}
+
+func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "intended-root")
+	env := migrationReleaseEnv(t, home, remote)
+	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if setup.Status != 0 {
+		t.Fatalf("setup: %d %q", setup.Status, setup.Stderr)
+	}
+	// Materialize the intended target, then simulate another process changing current.
+	update, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--cli-only", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if update.Status != 0 {
+		t.Fatalf("CLI update: %d %q", update.Status, update.Stderr)
+	}
+	mustFS(t, os.Remove(share+"/current"))
+	mustFS(t, os.Symlink("releases/1.0.0", share+"/current"))
+	continued, err := runCommand(home, []string{share + "/releases/2.0.0/bin/selfishell", "update", "--continue-after-cli-update", "--yes", "--skip-packages"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if continued.Status != 0 {
+		t.Fatalf("continuation: %d %q", continued.Status, continued.Stderr)
+	}
+	managed, err := os.ReadFile(home + "/.config/selfishell/vim/vimrc")
+	mustFS(t, err)
+	if !bytes.Contains(managed, []byte("intended-root")) {
+		t.Fatal("continued from changed current instead of executable root")
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/1.0.0" {
+		t.Fatalf("continuation rewrote current: %s", current)
+	}
+}
+
+func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "unused-no-setup")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes"}, nil, migrationReleaseEnv(t, home, remote), 20*time.Second)
+	mustFS(t, err)
+	if got.Status != 0 || !bytes.Contains(got.Stdout, []byte("configuration is not installed; skipping tools and configuration")) || strings.Count(string(got.Stdout), "Selfishell updated:") != 1 {
+		t.Fatalf("no setup: %d %q %q", got.Status, got.Stdout, got.Stderr)
+	}
+	if bytes.Index(got.Stdout, []byte("configuration is not installed; skipping tools and configuration")) > bytes.Index(got.Stdout, []byte("Selfishell updated:")) {
+		t.Fatalf("skip message follows transition: %q", got.Stdout)
+	}
+	if _, err := os.Lstat(home + "/.config/selfishell"); !os.IsNotExist(err) {
+		t.Fatalf("no setup installed configuration: %v", err)
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/2.0.0" {
+		t.Fatalf("no setup release: %s", current)
+	}
+}
+
+func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	marker := home + "/.local/state/selfishell/configured"
+	mustFS(t, os.MkdirAll(marker, 0700))
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "unused-bad-marker")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--skip-packages", "--yes"}, nil, migrationReleaseEnv(t, home, remote), 20*time.Second)
+	mustFS(t, err)
+	if got.Status != 1 || bytes.Contains(got.Stdout, []byte("Selfishell updated")) || bytes.Contains(got.Stdout, []byte("skipping tools and configuration")) || !bytes.Contains(got.Stderr, []byte("configured marker")) {
+		t.Fatalf("bad marker claimed success: %d %q %q", got.Status, got.Stdout, got.Stderr)
+	}
+	current, err := os.Readlink(share + "/current")
+	mustFS(t, err)
+	if current != "releases/2.0.0" {
+		t.Fatalf("CLI activation was not preserved after child failure: %s", current)
+	}
+}
+
+func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "", "package ubuntu required apt fixture-required\n")
+	env := migrationReleaseEnv(t, home, remote)
+	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if setup.Status != 0 {
+		t.Fatalf("setup: %d %q", setup.Status, setup.Stderr)
+	}
+	bin := filepath.Join(home, "fakebin")
+	mustFS(t, os.Mkdir(bin, 0700))
+	for name, body := range map[string]string{
+		"dpkg-query": "#!/bin/sh\nexit 1\n",
+		"apt-get":    "#!/bin/sh\nexit 1\n",
+		"sudo":       "#!/bin/sh\nexec \"$@\"\n",
+	} {
+		mustFS(t, os.WriteFile(bin+"/"+name, []byte(body), 0755))
+	}
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes"}, nil, append(env, "PATH="+bin+":/usr/bin:/bin"), 20*time.Second)
+	mustFS(t, err)
+	if got.Status != 1 || bytes.Contains(got.Stdout, []byte("Selfishell updated:")) || !bytes.Contains(got.Stderr, []byte("apt")) {
+		t.Fatalf("child failure: %d %q %q", got.Status, got.Stdout, got.Stderr)
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/2.0.0" {
+		t.Fatalf("CLI not activated before child failure: %s", current)
+	}
+}
+
+func TestContinuationPreservesTerminalOutput(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, _ := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	stub := filepath.Join(t.TempDir(), "selfishell")
+	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nif [ -t 1 ]; then printf 'child-stdout-is-tty\\n'; else printf 'child-lost-tty\\n'; fi\n"), 0755))
+	archiveFixture(t, remote, "2.0.0", stub, "")
+	got, err := capturePTYOutput(home, root+"/bin/selfishell", []string{"update", "--version", "2.0.0", "--yes"}, migrationReleaseEnv(t, home, remote))
+	mustFS(t, err)
+	if got.Status != 0 || !bytes.Contains(got.Stdout, []byte("child-stdout-is-tty")) || bytes.Contains(got.Stdout, []byte("child-lost-tty")) {
+		t.Fatalf("tty: %d %q %q", got.Status, got.Stdout, got.Stderr)
+	}
+}
+
+func TestToolsOnlyOverwritesChangedSourceWithConflictBackupAndChecksum(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	mustFS(t, err)
+	home := t.TempDir()
+	root, share := installedFixture(t, home, "1.0.0", candidate)
+	remote := t.TempDir()
+	archiveFixture(t, remote, "2.0.0", candidate, "changed-source-vimrc")
+	env := migrationReleaseEnv(t, home, remote)
+	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if setup.Status != 0 {
+		t.Fatalf("setup: %d %q", setup.Status, setup.Stderr)
+	}
+	selected, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--cli-only", "--version", "2.0.0", "--yes"}, nil, env, 20*time.Second)
+	mustFS(t, err)
+	if selected.Status != 0 {
+		t.Fatalf("CLI selection: %d %q", selected.Status, selected.Stderr)
+	}
+	target := home + "/.config/selfishell/vim/vimrc"
+	state := home + "/.local/state/selfishell/resources/vimrc.state"
+	before, err := os.ReadFile(state)
+	mustFS(t, err)
+	mustFS(t, os.WriteFile(target, []byte("user_modified_vimrc\n"), 0600))
+	updated, err := runCommand(home, []string{share + "/current/bin/selfishell", "update", "--tools-only", "--skip-packages"}, []byte("y\ny\n"), append(env, "SELFISHELL_TEST_TTY=1"), 20*time.Second)
+	mustFS(t, err)
+	if updated.Status != 0 || !bytes.Contains(updated.Stdout, []byte("Selfishell tools and configuration synchronized")) {
+		t.Fatalf("changed source: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
+	}
+	source, err := os.ReadFile(share + "/releases/2.0.0/config/shared/vimrc")
+	mustFS(t, err)
+	managed, err := os.ReadFile(target)
+	mustFS(t, err)
+	if !bytes.Equal(managed, source) {
+		t.Fatal("managed file did not take new release bytes")
+	}
+	backups, err := filepath.Glob(home + "/.local/state/selfishell/backups/vimrc.backup.*")
+	mustFS(t, err)
+	if len(backups) != 1 {
+		t.Fatalf("missing conflict backup: %v", backups)
+	}
+	backup, err := os.ReadFile(backups[0])
+	mustFS(t, err)
+	if string(backup) != "user_modified_vimrc\n" {
+		t.Fatalf("backup lost personal bytes: %q", backup)
+	}
+	after, err := os.ReadFile(state)
+	mustFS(t, err)
+	if bytes.Equal(before, after) {
+		t.Fatal("state checksum not refreshed")
+	}
+	cksum, err := runCommand(home, []string{"cksum"}, source, nil, 10*time.Second)
+	mustFS(t, err)
+	fields := strings.Fields(string(cksum.Stdout))
+	lines := strings.Split(strings.TrimSuffix(string(after), "\n"), "\n")
+	if cksum.Status != 0 || len(fields) != 2 || len(lines) < 7 || lines[6] != fields[0]+":"+fields[1] {
+		t.Fatalf("state checksum does not match new source: %q vs %q", after, cksum.Stdout)
+	}
+}

@@ -33,20 +33,6 @@ test_help_and_local_version_skip_full_cli_loading() {
   [[ "$version_trace" != *'/lib/paths.sh'* ]] || fail "Local version eagerly loaded the full CLI"
 }
 
-test_version_available_reads_release_metadata() {
-  local release_root output
-
-  setup_test_home
-  release_root="$TEST_ROOT/releases"
-  mkdir -p "$release_root/latest/download"
-  printf '1.2.3\n' >"$release_root/latest/download/VERSION"
-
-  output="$(SELFISHELL_RELEASE_ROOT="file://$release_root" run_selfishell version --available)"
-
-  [[ "$output" == 1.2.3 ]] || fail "Available release version was not reported"
-  teardown_test_home
-}
-
 test_sfs_runs_same_cli() {
   local canonical
   local shorthand
@@ -80,71 +66,6 @@ test_unknown_command_returns_usage_error() {
 
   [[ "$status" -eq 2 ]] || fail "Unknown command should return exit code 2"
   [[ "$output" == *'Unknown command: unknown'* ]] || fail "Missing unknown command error"
-}
-
-test_update_help_explains_package_upgrade_policy() {
-  local output
-
-  output="$(run_selfishell update --help)"
-  [[ "$output" == *'left at their current version'* ]] ||
-    fail "update --help does not explain that apt/Homebrew packages are not upgraded: $output"
-}
-
-test_update_rejects_conflicting_scopes() {
-  local status
-
-  set +e
-  run_selfishell update --cli-only --tools-only >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 2 ]] || fail "Conflicting update scopes should return exit code 2"
-}
-
-test_update_rejects_version_for_tools_only() {
-  local status
-
-  set +e
-  run_selfishell update --tools-only --version 0.2.0 >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 2 ]] || fail "Tools-only version selection should return exit code 2"
-}
-
-test_update_validates_semantic_versions() {
-  local output status version
-
-  output="$(run_selfishell update --cli-only \
-    --version 1.2.3-alpha.1.x-7 --dry-run)"
-  [[ "$output" == *'Would update Selfishell CLI to 1.2.3-alpha.1.x-7'* ]] ||
-    fail "CLI update rejected a valid prerelease"
-
-  # An empty value must not fall back to the latest release.
-  for version in 01.2.3 1.02.3 1.2.3-alpha..1 1.2.3-alpha.01 '' v; do
-    set +e
-    output="$(run_selfishell update --cli-only \
-      --version "$version" --dry-run 2>&1)"
-    status=$?
-    set -e
-    [[ "$status" -eq 2 ]] || fail "CLI update accepted invalid version: $version"
-    [[ "$output" == *'Invalid semantic version'* ]] ||
-      fail "CLI update did not explain invalid version: $version"
-  done
-}
-
-test_update_propagates_cli_install_failure() {
-  local output
-  local status
-
-  set +e
-  output="$(run_selfishell update --cli-only --version 9.9.9 --yes 2>&1)"
-  status=$?
-  set -e
-
-  [[ "$status" -eq 1 ]] || fail "Failed CLI update should return exit code 1"
-  [[ "$output" == *'This command requires a versioned Selfishell installation.'* ]] ||
-    fail "Failed CLI update did not report the installation requirement"
 }
 
 test_cli_resolves_root_from_every_invocation_form() {
