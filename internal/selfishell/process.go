@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +25,13 @@ type Process struct {
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
 // It does not create a new process group, which would break foreground TTY reads.
 func (p Process) Run(ctx context.Context, name string, args ...string) (int, error) {
+	if p.Env != nil && !strings.ContainsRune(name, os.PathSeparator) {
+		path, err := p.lookPath(name)
+		if err != nil {
+			return 127, err
+		}
+		name = path
+	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr, cmd.Dir = p.In, p.Out, p.Err, p.Dir
 	if p.Env != nil {
@@ -48,6 +56,33 @@ func (p Process) Run(ctx context.Context, name string, args ...string) (int, err
 		return 127, err
 	}
 	return 126, err
+}
+
+// lookPath uses the child's PATH, never the caller's PATH when Env is explicit.
+func (p Process) lookPath(name string) (string, error) {
+	if strings.ContainsRune(name, os.PathSeparator) {
+		return name, nil
+	}
+	path := os.Getenv("PATH")
+	if p.Env != nil {
+		path = ""
+		for _, entry := range p.Env {
+			if strings.HasPrefix(entry, "PATH=") {
+				path = strings.TrimPrefix(entry, "PATH=")
+			}
+		}
+	}
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() && info.Mode()&0111 != 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("%w: %s", exec.ErrNotFound, name)
 }
 
 // Curl retains the existing transport, proxy environment and local-file behavior.
