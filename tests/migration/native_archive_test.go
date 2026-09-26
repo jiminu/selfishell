@@ -384,7 +384,18 @@ func TestUnavailableNativeToolchain(t *testing.T) {
 
 func TestNativeBuilderCLIOptions(t *testing.T) {
 	home := t.TempDir()
-	noGo := "/usr/bin:/bin"
+	toolBin := t.TempDir()
+	mustFS(t, os.Symlink(filepath.Join(runtime.GOROOT(), "bin", "go"), filepath.Join(toolBin, "go")))
+	toolPath := toolBin + string(os.PathListSeparator) + "/usr/bin:/bin"
+	toolEnv := []string{
+		"PATH=" + toolPath, "GOTOOLCHAIN=local", "GOCACHE=" + filepath.Join(home, "go-cache"),
+		"MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "MISE_CACHE_DIR=" + filepath.Join(home, "mise-cache"),
+		"MISE_CONFIG_DIR=" + filepath.Join(home, "mise-config"), "MISE_STATE_DIR=" + filepath.Join(home, "mise-state"),
+	}
+	noGo := t.TempDir()
+	dirname, err := exec.LookPath("dirname")
+	mustFS(t, err)
+	mustFS(t, os.Symlink(dirname, filepath.Join(noGo, "dirname")))
 	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
 		cmd := exec.Command("/bin/bash", append([]string{filepath.Join(repoRoot(), "scripts/build-native-release.sh")}, args...)...)
 		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+noGo)
@@ -398,7 +409,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
 		cmd := exec.Command("bash", append([]string{script}, args...)...)
 		cmd.Dir = home
-		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH=/tmp/selfishell-go-foundation/toolchain/go/bin:/usr/bin:/bin", "GOTOOLCHAIN=local")
+		cmd.Env = append(baseEnv(home, t.TempDir()), toolEnv...)
 		b, e := cmd.CombinedOutput()
 		var exit *exec.ExitError
 		if !errors.As(e, &exit) || exit.ExitCode() != 2 {
@@ -411,7 +422,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 	out := filepath.Base(ownedOut)
 	cmd := exec.Command("bash", script, "--version", nativeArchiveVersion, "--output", out)
 	cmd.Dir = home
-	cmd.Env = append(baseEnv(home, t.TempDir()), "PATH=/tmp/selfishell-go-foundation/toolchain/go/bin:/usr/bin:/bin", "GOTOOLCHAIN=local")
+	cmd.Env = append(baseEnv(home, t.TempDir()), toolEnv...)
 	b, e := cmd.CombinedOutput()
 	if e != nil {
 		t.Fatalf("relative output: %v %s", e, b)
