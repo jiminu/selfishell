@@ -274,7 +274,6 @@ test_latest_falls_back_to_published_prerelease() {
     fail "Prerelease fallback selected the wrong version"
 }
 
-
 test_latest_lookup_failure_is_actionable() {
   local output status
   rm "$TEST_ROOT/releases/latest/download/VERSION"
@@ -543,7 +542,6 @@ test_refuses_to_replace_foreign_cli_path() {
   done
 }
 
-
 test_bootstrap_stops_on_termination() {
   local fake_bin="$TEST_ROOT/fakebin"
   local status
@@ -591,7 +589,6 @@ fi
 EOF
   chmod +x "$fake_bin/tar"
 }
-
 
 test_concurrent_bootstrap_discards_nested_staging() {
   write_concurrent_release_tar "$TEST_ROOT/fakebin" 0
