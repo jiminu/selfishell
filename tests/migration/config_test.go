@@ -282,6 +282,58 @@ func assertEmptyConfigRestored(t *testing.T, home, config, state string) {
 
 func TestConfig(t *testing.T) { configScenarios(t) }
 
+func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
+	candidate, err := candidateCLI(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	release := filepath.Join(root, "release")
+	cli := filepath.Join(release, "bin/selfishell")
+	mustFS(t, os.MkdirAll(filepath.Dir(cli), 0700))
+	for _, name := range []string{"packages.conf", "dependencies.conf"} {
+		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(release, name)))
+	}
+	mustFS(t, copyTree(filepath.Join(repoRoot(), "config"), filepath.Join(release, "config")))
+	mustFS(t, copyFile(candidate, cli))
+	tools := fixtureTools(t, root)
+	home := filepath.Join(root, "home")
+	mustFS(t, os.Mkdir(home, 0700))
+	env := append(configEnv("macos", "empty", home, tools, "/unused", "/unused", "/unused"), "MISE_OFFLINE=1")
+	installed, err := captureCommand(home, cli, []string{"install", "--skip-packages", "--yes"}, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireStatus(t, "install", installed, 0)
+	state := filepath.Join(home, ".local/state/selfishell/resources/user-vimrc.state")
+	raw, err := os.ReadFile(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := bytes.Split(raw, []byte("\n"))
+	if len(fields) < 8 || string(fields[2]) != "active" {
+		t.Fatalf("unexpected state: %q", raw)
+	}
+	fields[2] = []byte("pending")
+	mustFS(t, os.WriteFile(state, bytes.Join(fields, []byte("\n")), 0600))
+	vimrc := filepath.Join(home, ".vimrc")
+	mustFS(t, os.WriteFile(vimrc, []byte("user vimrc\n"), 0600))
+	before := mustSnapshot(t, home)
+	got, err := captureCommand(home, cli, []string{"uninstall", "--yes"}, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireStatus(t, "pending uninstall", got, 1)
+	for _, want := range [][]byte{[]byte("Cannot manage the Selfishell user-vimrc block"), []byte("Preserving the file."), []byte("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")} {
+		if !bytes.Contains(got.Stderr, want) {
+			t.Fatalf("missing diagnostic %q in %q", want, got.Stderr)
+		}
+	}
+	if !bytes.Equal(before, got.Home) {
+		t.Fatal("failed uninstall changed HOME")
+	}
+}
+
 func TestConfigInvalidDependencies(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {

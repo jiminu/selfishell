@@ -823,28 +823,42 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 }
 
 func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	r := failureResource(t, root, "user-zshrc")
-	original := []byte("original zshrc\n")
-	blockWrite(t, r.Target, original)
-	var out bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out}, paths: paths, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected atomic write failure") }}
-	if err := m.installBlock(r, false); err == nil {
-		t.Fatal("block write failure reported success")
-	}
-	blockEqual(t, r.Target, original)
-	if blockState(t, paths, r.Name).Status != "pending" {
-		t.Fatal("failed block marked active")
-	}
-	if strings.Contains(out.String(), "Added Selfishell block") {
-		t.Fatal("false success")
-	}
-	if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temp remnants: %v %v", matches, err)
-	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if !bytes.Contains(blockRead(t, home+"/.zshrc"), []byte("# >>> Selfishell initialize >>>")) {
-		t.Fatal("retry did not add block")
+	for _, existing := range []bool{false, true} {
+		name := "absent-target"
+		if existing {
+			name = "existing-target"
+		}
+		t.Run(name, func(t *testing.T) {
+			root, home, paths := blockHome(t, "macos")
+			r := failureResource(t, root, "user-zshrc")
+			original := []byte("original zshrc\n")
+			if existing {
+				blockWrite(t, r.Target, original)
+			}
+			var out bytes.Buffer
+			m := managed{c: CLI{Root: root, Out: &out}, paths: paths, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected atomic write failure") }}
+			if err := m.installBlock(r, false); err == nil {
+				t.Fatal("block write failure reported success")
+			}
+			if existing {
+				blockEqual(t, r.Target, original)
+			} else if _, err := os.Lstat(r.Target); !os.IsNotExist(err) {
+				t.Fatalf("partial target: %v", err)
+			}
+			if blockState(t, paths, r.Name).Status != "pending" {
+				t.Fatal("failed block marked active")
+			}
+			if strings.Contains(out.String(), "Added Selfishell block") {
+				t.Fatal("false success")
+			}
+			if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
+				t.Fatalf("temp remnants: %v %v", matches, err)
+			}
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			if !bytes.Contains(blockRead(t, home+"/.zshrc"), []byte("# >>> Selfishell initialize >>>")) {
+				t.Fatal("retry did not add block")
+			}
+		})
 	}
 }
 
@@ -892,8 +906,15 @@ func TestManagedRemoveFailureRetainsFileAndResourceRecord(t *testing.T) {
 
 func TestManagedOverwriteWriteFailureKeepsConflictBackupAndRetries(t *testing.T) {
 	root, _, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, root, "vimrc")
+	original := []byte("original user vimrc before install\n")
+	blockWrite(t, r.Target, original)
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	originalBackup := blockState(t, paths, r.Name).Backup
+	if originalBackup == "-" {
+		t.Fatal("original backup missing from overwrite fixture")
+	}
+	blockEqual(t, originalBackup, original)
 	modified := []byte("user_modified_vimrc\n")
 	blockWrite(t, r.Target, modified)
 	var out bytes.Buffer
@@ -909,6 +930,10 @@ func TestManagedOverwriteWriteFailureKeepsConflictBackupAndRetries(t *testing.T)
 	if state.Status != "pending" {
 		t.Fatalf("state %v", state)
 	}
+	if state.Backup != originalBackup {
+		t.Fatalf("pending backup identity changed: %q != %q", state.Backup, originalBackup)
+	}
+	blockEqual(t, originalBackup, original)
 	entries, err := os.ReadDir(paths.State + "/backups")
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("backup: %v %v", entries, err)
@@ -922,6 +947,12 @@ func TestManagedOverwriteWriteFailureKeepsConflictBackupAndRetries(t *testing.T)
 	if blockState(t, paths, r.Name).Status != "active" {
 		t.Fatal("retry did not activate")
 	}
+	if got := blockState(t, paths, r.Name).Backup; got != originalBackup {
+		t.Fatalf("retry backup identity changed: %q != %q", got, originalBackup)
+	}
+	blockEqual(t, originalBackup, original)
+	blockOK(t, root, "uninstall", "--restore", "--yes")
+	blockEqual(t, r.Target, original)
 }
 
 func TestManagedGhosttyPreflightRejectsUserSymlinkBeforeConfiguration(t *testing.T) {
@@ -978,6 +1009,21 @@ func TestManagedFinalMarkerWriteFailureHasNoSuccess(t *testing.T) {
 			blockEqual(t, paths.State+"/"+other, otherBytes)
 			if matches, err := filepath.Glob(paths.State + "/" + marker + ".tmp.*"); err != nil || len(matches) != 0 {
 				t.Fatalf("temp remnants: %v %v", matches, err)
+			}
+			if err := os.Remove(paths.State + "/" + marker); err != nil {
+				t.Fatal(err)
+			}
+			out = blockOK(t, root, "install", "--skip-packages", "--yes")
+			if !strings.Contains(out, "Selfishell configuration installed.") {
+				t.Fatalf("retry missing success: %q", out)
+			}
+			for name, want := range map[string][]byte{"configured": []byte("1\n"), "ghostty": []byte("1\n")} {
+				path := paths.State + "/" + name
+				info, err := os.Lstat(path)
+				if err != nil || !info.Mode().IsRegular() {
+					t.Fatalf("retry marker %s: %v %v", name, info, err)
+				}
+				blockEqual(t, path, want)
 			}
 		})
 	}
