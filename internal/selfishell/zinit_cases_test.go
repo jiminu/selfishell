@@ -17,10 +17,19 @@ const zinitFixture = `zinit() {
     return 0
   fi
   if [[ "$1" == light ]]; then
+    if [[ "$SELFISHELL_TEST_ZINIT_FAIL" == occupy ]]; then
+      plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+      command mkdir -p "$plugin_dir"
+      print -r -- 'concurrent user data' > "$plugin_dir/user-data"
+      return 1
+    fi
     [[ "$SELFISHELL_TEST_ZINIT_FAIL" != before ]] || return 1
-    plugin_dir="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins/${2//\//---}"
+    plugin_dir="$ZINIT[PLUGINS_DIR]/${2//\//---}"
     command git clone -q "$SELFISHELL_TEST_ZINIT_SOURCE" "$plugin_dir" || return 1
     command git -C "$plugin_dir" checkout -q --detach "$approved_revision" || return 1
+    command mkdir -p "$plugin_dir/._zinit"
+    print -r -- '*' > "$plugin_dir/._zinit/.gitignore"
+    print -r -- cloneonly > "$plugin_dir/._zinit/ice"
     [[ "$SELFISHELL_TEST_ZINIT_FAIL" != after ]]
   fi
 }
@@ -37,9 +46,16 @@ func zinitFixtureSetup(t *testing.T, count int) (*PackageOperation, Paths, strin
 	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
 	head := gitCommand(t, repo, "rev-parse", "HEAD")
 	names := []string{"zsh-users/zsh-completions", "Aloxaf/fzf-tab", "zsh-users/zsh-autosuggestions", "zdharma-continuum/fast-syntax-highlighting"}
+	revisions := []string{head}
+	for index := 1; index < count; index++ {
+		writeTestFile(t, repo+"/marker", fmt.Sprintf("marker %d\n", index), 0600)
+		gitCommand(t, repo, "add", "marker")
+		gitCommand(t, repo, "commit", "--quiet", "-m", fmt.Sprintf("revision %d", index))
+		revisions = append(revisions, gitCommand(t, repo, "rev-parse", "HEAD"))
+	}
 	var lines strings.Builder
-	for _, name := range names[:count] {
-		fmt.Fprintf(&lines, "zsh-plugin %s %s all all %s - - -\n", name, head, repo)
+	for index, name := range names[:count] {
+		fmt.Fprintf(&lines, "zsh-plugin %s %s all all %s - - -\n", name, revisions[index], repo)
 	}
 	writeTestFile(t, manifest, lines.String(), 0600)
 	writeTestFile(t, home+"/data/zinit/zinit.git/zinit.zsh", zinitFixture, 0600)
@@ -55,21 +71,39 @@ func installPlugins(op *PackageOperation, paths Paths, manifest string) error {
 }
 
 func TestZinitProvisionsDeclaredPluginsWithoutLoading(t *testing.T) {
-	op, paths, manifest, home, head, names := zinitFixtureSetup(t, 4)
+	op, paths, manifest, home, _, names := zinitFixtureSetup(t, 4)
+	deps, err := ReadDependencies(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
 	if err := installPlugins(op, paths, manifest); err != nil {
 		t.Fatal(err)
 	}
-	log := readTestFile(t, home+"/zinit.log")
-	if strings.Count(log, "light ") != 4 {
-		t.Fatalf("expected four plugins: %s", log)
+	log := strings.Split(strings.TrimSpace(readTestFile(t, home+"/zinit.log")), "\n")
+	if len(log) != 2*len(names) {
+		t.Fatalf("unexpected calls: %q", log)
 	}
-	for _, name := range names {
-		if !strings.Contains(log, "ice cloneonly ver"+head) || !strings.Contains(log, "light "+name) {
-			t.Fatalf("cloneonly pin missing: %s", log)
+	for index, dep := range deps {
+		if seen[dep.Version] {
+			t.Fatalf("duplicate fixture revision: %s", dep.Version)
 		}
-		if got := gitCommand(t, pluginTarget(home, name), "rev-parse", "HEAD"); got != head {
-			t.Fatalf("plugin %s at %s", name, got)
+		seen[dep.Version] = true
+		if dep.Name != names[index] || log[2*index] != "ice cloneonly ver"+dep.Version || log[2*index+1] != "light "+dep.Name {
+			t.Fatalf("wrong plugin/pin pairing at %d: %q", index, log)
 		}
+		if got := gitCommand(t, pluginTarget(home, dep.Name), "rev-parse", "HEAD"); got != dep.Version {
+			t.Fatalf("plugin %s at %s", dep.Name, got)
+		}
+		if readTestFile(t, pluginTarget(home, dep.Name)+"/._zinit/ice") != "cloneonly\n" {
+			t.Fatal("Zinit checkout metadata missing after activation")
+		}
+	}
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Split(strings.TrimSpace(readTestFile(t, home+"/zinit.log")), "\n"); len(got) != len(log) {
+		t.Fatalf("Zinit metadata caused a repeat provision: %q", got)
 	}
 }
 func TestZinitMissingIsReported(t *testing.T) {
@@ -97,6 +131,20 @@ func TestZinitFailedFreshPluginCleanedForRetry(t *testing.T) {
 	t.Setenv("SELFISHELL_TEST_ZINIT_FAIL", "")
 	if err := installPlugins(op, paths, manifest); err != nil || gitCommand(t, target, "rev-parse", "HEAD") != head {
 		t.Fatalf("retry failed: %v", err)
+	}
+}
+func TestZinitFailedProvisionPreservesConcurrentCanonicalTarget(t *testing.T) {
+	op, paths, manifest, home, _, names := zinitFixtureSetup(t, 1)
+	t.Setenv("SELFISHELL_TEST_ZINIT_FAIL", "occupy")
+	if err := installPlugins(op, paths, manifest); err == nil {
+		t.Fatal("failed provision accepted")
+	}
+	target := pluginTarget(home, names[0])
+	if got := readTestFile(t, target+"/user-data"); got != "concurrent user data\n" {
+		t.Fatalf("concurrent target changed: %q", got)
+	}
+	if strings.Contains(output(op), "Updated Zsh plugin") {
+		t.Fatalf("success reported: %q", output(op))
 	}
 }
 func TestZinitApprovedPluginNoop(t *testing.T) {

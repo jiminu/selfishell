@@ -47,38 +47,74 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 		if err := makeRawDir(rawParent(target)); err != nil {
 			return err
 		}
-		previous, moved, err := moveAside(target)
+		original, originalErr := os.Lstat(target)
+		if originalErr != nil && !os.IsNotExist(originalErr) {
+			return originalErr
+		}
+		// Zinit's PLUGINS_DIR setting controls the entire checkout, including
+		// its ._zinit bookkeeping. Keep the child in a private sibling until
+		// the approved checkout has been verified.
+		stageRoot, err := os.MkdirTemp(rawParent(target), ".selfishell-zinit.*")
 		if err != nil {
 			return err
 		}
-		// Zinit creates its own checkout and bookkeeping at the canonical path.
-		// The scoped child shell runs cloneonly, so no plugin code is sourced.
+		stageTarget := stageRoot + "/" + strings.ReplaceAll(dep.Name, "/", "---")
+		defer os.RemoveAll(stageRoot)
 		p := o.Process
 		p.In = strings.NewReader("")
-		code, runErr := p.Run(ctx, "zsh", "-f", "-c", `source "$1" || exit 1
+		code, runErr := p.Run(ctx, "zsh", "-f", "-c", `typeset -A ZINIT
+ZINIT[PLUGINS_DIR]="$4"
+source "$1" || exit 1
 zinit ice cloneonly "ver${3}" || exit 1
-zinit light "$2"`, "zsh", script, dep.Name, dep.Version)
-		if runErr == nil && code == 0 && !o.validZinitPlugin(ctx, target, dep.Version) {
+zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
+		if runErr == nil && code == 0 && !o.validZinitPlugin(ctx, stageTarget, dep.Version) {
 			runErr = fmt.Errorf("Zinit plugin revision does not match after provisioning: %s", dep.Name)
 		}
 		if runErr == nil && code != 0 {
 			runErr = fmt.Errorf("Could not provision Zinit plugin: %s", dep.Name)
 		}
 		if runErr != nil {
-			// A failed fresh checkout is product-created. Remove only that path;
-			// restoration refuses an occupied target.
-			if exists, _ := present(target); exists {
-				os.RemoveAll(target)
-			}
-			if moved {
-				if restoreErr := restoreEmpty(previous, target); restoreErr != nil {
-					return fmt.Errorf("%v; restore: %w", runErr, restoreErr)
-				}
-			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			return runErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		current, currentErr := os.Lstat(target)
+		if original == nil && currentErr == nil || original != nil && (currentErr != nil || !os.SameFile(original, current)) {
+			return fmt.Errorf("Zinit plugin target changed during provisioning: %s", target)
+		}
+		if currentErr != nil && !os.IsNotExist(currentErr) {
+			return currentErr
+		}
+		var previous string
+		moved := false
+		if original != nil {
+			previous, moved, err = moveAside(target)
+			if err != nil {
+				return err
+			}
+		}
+		if occupied, err := present(target); err != nil || occupied {
+			if moved {
+				if restoreErr := restoreEmpty(previous, target); restoreErr != nil {
+					return fmt.Errorf("Zinit plugin target occupied; restore: %w", restoreErr)
+				}
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("Zinit plugin target occupied: %s", target)
+		}
+		if err := os.Rename(stageTarget, target); err != nil {
+			if moved {
+				if restoreErr := restoreEmpty(previous, target); restoreErr != nil {
+					return fmt.Errorf("%v; restore: %w", err, restoreErr)
+				}
+			}
+			return err
 		}
 		if moved {
 			os.RemoveAll(previous)
