@@ -44,7 +44,6 @@ func nativeVersionAssets(t *testing.T, version string) string {
 	if holder.err != nil {
 		t.Fatal(holder.err)
 	}
-	t.Cleanup(func() {})
 	return holder.dir
 }
 

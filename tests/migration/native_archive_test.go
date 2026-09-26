@@ -328,6 +328,9 @@ func TestProductionBashBuilderContract(t *testing.T) {
 	first := filepath.Join(home, "first")
 	second := filepath.Join(home, "second")
 	for _, out := range []string{first, second} {
+		if out == second {
+			time.Sleep(time.Second)
+		}
 		cmd := exec.Command("bash", filepath.Join(repoRoot(), "scripts/build-release.sh"), "--version", "0.2.2", "--output", out)
 		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH=/usr/bin:/bin:/opt/homebrew/bin")
 		if b, e := cmd.CombinedOutput(); e != nil {
