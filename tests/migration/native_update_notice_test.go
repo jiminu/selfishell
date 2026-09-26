@@ -256,11 +256,44 @@ func TestNativeNoticeWriteFailureCleansTemp(t *testing.T) {
 		t.Skip("root bypasses unwritable-directory permission semantics")
 	}
 	home := nativeHome(t)
+	bin := filepath.Join(filepath.Dir(home), "bin")
 	cache := filepath.Join(home, ".cache/selfishell")
 	mustFS(t, os.MkdirAll(cache, 0700))
-	mustFS(t, os.Chmod(cache, 0555))
+	lookup := filepath.Join(filepath.Dir(home), "available-lookup")
+	cleanup := filepath.Join(filepath.Dir(home), "failed-write-cleanup")
+	nativeWrite(t, filepath.Join(bin, "selfishell"), `#!/bin/sh
+[ -d "$SELFISHELL_CACHE/update-check.lock" ] || exit 1
+printf 'called\n' >"$SELFISHELL_LOOKUP_LOG"
+/bin/chmod 0555 "$SELFISHELL_CACHE" || exit 1
+printf '1.1.0\n'
+`, 0700)
+	nativeWrite(t, filepath.Join(bin, "rm"), `#!/bin/sh
+if [ "$1" = -f ]; then
+  case "$2" in
+    "$SELFISHELL_CACHE"/available-version.tmp.*)
+      printf 'called\n' >"$SELFISHELL_CLEANUP_LOG"
+      /bin/chmod 0755 "$SELFISHELL_CACHE" || exit 1
+      ;;
+  esac
+fi
+exec /bin/rm "$@"
+`, 0700)
 	t.Cleanup(func() { os.Chmod(cache, 0755) })
-	nativeQuiet(t, nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345 || :`, "SELFISHELL_CACHE="+cache))
+	r := nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345 || :`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_LOOKUP_LOG="+lookup, "SELFISHELL_CLEANUP_LOG="+cleanup)
+	if len(r.Stdout) != 0 || !strings.Contains(string(r.Stderr), "permission denied") {
+		t.Fatalf("temporary write failure was not observed: stdout=%q stderr=%q", r.Stdout, r.Stderr)
+	}
+	if got := nativeRead(t, lookup); got != "called\n" {
+		t.Fatalf("available-version lookup: %q", got)
+	}
+	if got := nativeRead(t, cleanup); got != "called\n" {
+		t.Fatalf("failed-write cleanup: %q", got)
+	}
+	nativeAbsent(t, filepath.Join(cache, "available-version"))
+	if got := nativeRead(t, filepath.Join(cache, "update-checked-at")); got != "12345\n" {
+		t.Fatalf("later checked-at write: %q", got)
+	}
+	nativeAbsent(t, filepath.Join(cache, "update-check.lock"))
 	nativeAssertNoTemp(t, cache)
 }
 func TestNativeNoticeMoveFailureCleansTemp(t *testing.T) {
