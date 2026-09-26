@@ -29,10 +29,10 @@ bash scripts/check-go.sh        # fmt, vet, tests, builds and native comparisons
 ```
 
 The Go candidate implements help/local version, configuration-only
-`install --skip-packages`, and `uninstall` (including restore and purge).
-Commands such as update, status, doctor, rollback, and `version --available`
-remain incomplete. Use `bin/selfishell` for production behavior during the
-migration; the complete integration suite is not yet supported by the candidate.
+`install --skip-packages`, `uninstall` (including restore and purge), `status`,
+and `doctor`. Update, rollback, and `version --available` remain incomplete.
+Use `bin/selfishell` for production behavior during the migration; the complete
+integration suite is not yet supported by the candidate.
 The Go gate compares the native binary against the fixed reference at identical
 paths, including generated VERSION files, symlinks, stderr terminals and
 `NO_COLOR`, and runs help/version with no tools on PATH. Cross-built binaries

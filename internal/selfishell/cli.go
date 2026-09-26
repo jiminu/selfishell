@@ -24,7 +24,7 @@ func (c CLI) error(message string) {
 	fmt.Fprintln(c.Err, prefix+" "+message)
 }
 
-// Run implements only the foundation commands. Unported operations must fail.
+// Run dispatches the currently implemented commands. Unported operations fail.
 func (c CLI) Run(args []string) int {
 	command := "help"
 	if len(args) > 0 {
@@ -76,7 +76,11 @@ func (c CLI) Run(args []string) int {
 		return c.install(args)
 	case "uninstall":
 		return c.uninstall(args)
-	case "doctor", "status", "update", "rollback":
+	case "status":
+		return c.status(args)
+	case "doctor":
+		return c.doctor(args)
+	case "update", "rollback":
 		return c.incomplete(command)
 	default:
 		c.error("Unknown command: " + command)

@@ -18,6 +18,7 @@ type Process struct {
 	In       io.Reader
 	Out, Err io.Writer
 	Dir      string
+	Env      []string
 }
 
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
@@ -25,6 +26,9 @@ type Process struct {
 func (p Process) Run(ctx context.Context, name string, args ...string) (int, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr, cmd.Dir = p.In, p.Out, p.Err, p.Dir
+	if p.Env != nil {
+		cmd.Env = p.Env
+	}
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	if err == nil {
