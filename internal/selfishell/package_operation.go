@@ -17,6 +17,10 @@ import (
 type PackageOperation struct {
 	Process                           Process
 	SkippedOptional                   []string
+	UnchangedCount                    int
+	dependencyManifest                string
+	dependencies                      []Dependency
+	dependencyFault                   func(string) error // focused filesystem-failure test seam
 	aptUpdated                        bool
 	brewFormulae, brewCasks           map[string]bool
 	brewFormulaeReady, brewCasksReady bool
