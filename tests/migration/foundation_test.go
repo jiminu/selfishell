@@ -34,7 +34,7 @@ func TestFoundation(t *testing.T) {
 	chained := filepath.Join(root, "sfs")
 	mustFS(t, os.Symlink(entry, direct))
 	mustFS(t, os.Symlink("direct", chained))
-	env := []string{"SELFISHELL_ROOT=/wrong/root", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	env := []string{"SELFISHELL_ROOT=/wrong/root", "SELFISHELL_RELEASE_ROOT=file://" + filepath.Join(root, "unavailable-release-metadata"), "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
 	arguments := [][]string{{}, {""}, {"help"}, {"--help"}, {"-h"}, {"help", ""}, {"help", "extra"}, {"unknown"}, {" unknown "}, {"version"}, {"--version"}, {"-v"}, {"version", ""}, {"version", "", "extra"}, {"version", "extra"}, {"version", "help", "extra"}, {"version", "--help"}, {"version", "-h"}, {"version", "--available", "extra"}}
 	compare := func(name, exe string, args []string, env []string, pty bool) {
 		t.Helper()
@@ -97,16 +97,22 @@ func TestFoundation(t *testing.T) {
 		}
 		requireEqual(t, "pty-NO_COLOR="+noColor, want, got)
 	}
-	for _, command := range []string{"update", "rollback"} {
-		got, e := captureCommand(home, entry, []string{command}, env)
+	for _, tc := range []struct {
+		command string
+		args    []string
+	}{
+		{"update", []string{"update", "--cli-only", "--version", "1.2.3", "--yes"}},
+		{"rollback", []string{"rollback", "--yes"}},
+	} {
+		got, e := captureCommand(home, entry, tc.args, env)
 		if e != nil {
 			t.Fatal(e)
 		}
-		if got.Status != 1 || len(got.Stdout) != 0 || !bytes.Contains(got.Stderr, []byte("not implemented in the Go candidate")) {
-			t.Fatalf("%s: %+v", command, got)
+		if got.Status != 1 || len(got.Stdout) != 0 || !bytes.Contains(got.Stderr, []byte("requires a versioned Selfishell installation")) {
+			t.Fatalf("%s: %+v", tc.command, got)
 		}
 	}
-	for _, command := range []string{"install", "uninstall"} {
+	for _, command := range []string{"install", "uninstall", "update", "rollback"} {
 		got, e := captureCommand(home, entry, []string{command, "--help"}, env)
 		if e != nil {
 			t.Fatal(e)
