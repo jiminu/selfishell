@@ -3,10 +3,14 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -566,13 +570,8 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 			if kind == "path" {
 				path = bin + ":" + path
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			cmd := exec.CommandContext(ctx, "/bin/zsh", "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
-			cmd.WaitDelay = time.Second
-			cmd.Env = []string{"HOME=" + home, "PATH=" + path, "TMPDIR=" + home, "MISE_DATA_DIR=" + home + "/mise/data"}
-			out, e := cmd.CombinedOutput()
-			if e != nil || ctx.Err() != nil || strings.TrimSpace(string(out)) != "loaded" {
+			out, e := runNativeZprofile(home, path, 5*time.Second)
+			if e != nil || strings.TrimSpace(string(out)) != "loaded" {
 				t.Fatalf("mise activation: %q %v", out, e)
 			}
 			blockEqual(t, home+"/mise-args", []byte("activate zsh --shims\n"))
@@ -580,6 +579,77 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 			blockEqual(t, home+"/.zprofile", []byte("export USER_ZPROFILE=kept"))
 		})
 	}
+}
+
+func runNativeZprofile(home, path string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/zsh", "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = 500 * time.Millisecond
+	cmd.Env = []string{"HOME=" + home, "PATH=" + path, "TMPDIR=" + home, "MISE_DATA_DIR=" + home + "/mise/data"}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	out, err := cmd.CombinedOutput()
+	if cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	if ctx.Err() != nil {
+		return out, ctx.Err()
+	}
+	return out, err
+}
+
+func TestNativeZprofileTimeoutKillsMiseDescendant(t *testing.T) {
+	if _, err := os.Stat("/bin/zsh"); err != nil {
+		t.Skip("native zsh unavailable")
+	}
+	root, home, _ := blockHome(t, "macos")
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	bin := filepath.Join(home, "fakebin")
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	blockWrite(t, filepath.Join(bin, "mise"), []byte("#!/bin/sh\nprintf '%s\\n' \"$$\" >\"$HOME/hung-mise.pid\"\nexec /bin/sleep 30\n"))
+	if err := os.Chmod(filepath.Join(bin, "mise"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err := runNativeZprofile(home, bin+":/usr/bin:/bin", time.Second)
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 4*time.Second {
+		t.Fatalf("native profile was not bounded: %v, elapsed %s", err, time.Since(start))
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(blockRead(t, home+"/hung-mise.pid"))))
+	if err != nil || pid <= 0 {
+		t.Fatalf("invalid private fake PID: %d %v", pid, err)
+	}
+	cleanup := true
+	t.Cleanup(func() {
+		if cleanup && syscall.Kill(pid, 0) == nil {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	probeErr := syscall.Kill(pid, 0)
+	if probeErr == nil && runtime.GOOS == "linux" {
+		// Container init may leave a killed grandchild as a non-running zombie.
+		stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		if readErr == nil {
+			at := bytes.LastIndex(stat, []byte(") "))
+			if at >= 0 && len(stat) > at+2 && stat[at+2] == 'Z' {
+				probeErr = syscall.ESRCH
+			}
+		}
+	}
+	if probeErr == nil {
+		t.Fatalf("private fake mise descendant %d survived timeout", pid)
+	} else if !errors.Is(probeErr, syscall.ESRCH) {
+		t.Fatal(probeErr)
+	}
+	cleanup = false
 }
 
 func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
