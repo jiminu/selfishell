@@ -64,6 +64,24 @@ func TestDiagnosticsReference(t *testing.T) {
 			mustFS(t, os.WriteFile(target, []byte("changed"), 0600))
 			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n0:0\n", target)), 0600))
 		}},
+		{"status-file-replaced-by-same-content-symlink", "status", 1, func(home string) {
+			state := filepath.Join(home, ".local/state/selfishell/resources")
+			mustFS(t, os.MkdirAll(state, 0700))
+			personal := filepath.Join(home, "personal-vimrc")
+			content := []byte("same managed bytes\n")
+			mustFS(t, os.WriteFile(personal, content, 0600))
+			checksum, err := runCommand(home, []string{"cksum"}, content, nil, 10*time.Second)
+			if err != nil || checksum.Status != 0 {
+				t.Fatalf("cksum: %v %s", err, checksum.Stderr)
+			}
+			fields := strings.Fields(string(checksum.Stdout))
+			if len(fields) != 2 {
+				t.Fatalf("cksum output: %q", checksum.Stdout)
+			}
+			target := filepath.Join(home, "vimrc")
+			mustFS(t, os.Symlink(personal, target))
+			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n%s:%s\n", target, fields[0], fields[1])), 0600))
+		}},
 		{"status-changed-link", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
@@ -136,6 +154,9 @@ func TestDiagnosticsReference(t *testing.T) {
 				t.Fatal("candidate mutated HOME")
 			}
 			requireEqual(t, tc.name, want, got)
+			if tc.name == "status-file-replaced-by-same-content-symlink" && !bytes.Contains(got.Stdout, []byte("[CHANGED] "+filepath.Join(home, "vimrc"))) {
+				t.Fatalf("file-to-symlink replacement was not reported: %s", got.Stdout)
+			}
 			if tc.name == "status-malformed-and-good" && (!strings.Contains(string(got.Stdout), "[MALFORMED]") || !strings.Contains(string(got.Stdout), "[OK]")) {
 				t.Fatalf("status did not list both resources: %s", got.Stdout)
 			}
@@ -607,7 +628,12 @@ func TestStatusInstalledResourceReference(t *testing.T) {
 			return got
 		}
 		run("install", []string{"install", "--skip-packages", "--yes"}, 0)
+		mustFS(t, os.WriteFile(global, []byte("user modified\n"), 0600))
 		run("reinstall", []string{"install", "--skip-packages", "--yes"}, 0)
+		globalBytes, e := os.ReadFile(global)
+		if e != nil || string(globalBytes) != "user modified\n" {
+			t.Fatalf("reinstall changed user mise config: %v %q", e, globalBytes)
+		}
 		mustFS(t, os.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
 		before := mustSnapshot(t, home)
 		plain := run("plain", []string{"status"}, 0)
@@ -622,7 +648,6 @@ func TestStatusInstalledResourceReference(t *testing.T) {
 		if !bytes.Equal(before, plain.Home) {
 			t.Fatal("status mutated HOME")
 		}
-		mustFS(t, os.WriteFile(global, []byte("user modified\n"), 0600))
 		ghostty := filepath.Join(config, "ghostty/user.ghostty")
 		mustFS(t, os.MkdirAll(filepath.Dir(ghostty), 0700))
 		mustFS(t, os.Symlink(filepath.Join(root, "nonexistent"), ghostty))
@@ -647,7 +672,7 @@ func TestStatusInstalledResourceReference(t *testing.T) {
 		}
 		mustFS(t, copyFile(filepath.Join(release, "config/shared/nvim/init.lua"), nvim))
 		run("uninstall", []string{"uninstall", "--restore", "--yes"}, 0)
-		globalBytes, e := os.ReadFile(global)
+		globalBytes, e = os.ReadFile(global)
 		if e != nil || string(globalBytes) != "user modified\n" {
 			t.Fatalf("user mise config lost: %v %q", e, globalBytes)
 		}
