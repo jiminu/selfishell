@@ -767,7 +767,7 @@ test_macos_lifecycle_never_touches_existing_zshenv() {
   export SELFISHELL_TEST_SYSTEM_NAME=Darwin
 
   # Creating ~/.zshenv on a clean macOS HOME is covered by
-  # scripts/macos-configuration-e2e.sh; this covers the user-data contract
+  # TestNativeMacInstalledArchiveConsumer; this covers the user-data contract
   # for one that already exists.
   # shellcheck disable=SC2016 # Literal for zsh to expand at its own startup, not now.
   printf '. "$HOME/.cargo/env"\n' >"$HOME/.zshenv"

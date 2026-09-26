@@ -123,12 +123,15 @@ release. A successful default CLI update continues configuration work in the
 new executable using the legacy continuation arguments. Configuration-only
 `update --tools-only --skip-packages` avoids release metadata and package
 network access. The production CLI and installer remain Bash.
-CI runs an opt-in native Go full-install consumer in a disposable Ubuntu
-container, a pinned Neovim consumer in a private Ubuntu runner HOME, and
-native Go configuration coverage on macOS. The separate
-legacy Bash archive lifecycle jobs remain until native release archives are
-ported in issue 248. Normal `go test ./...` keeps network and system package
-installation disabled.
+CI runs opt-in installed native archive consumers: a full install in a
+disposable root Ubuntu 24.04 container and configuration, restore, and purge
+on macOS. Both bootstrap exact locally built host archives before invoking the
+installed CLI. The Ubuntu consumer checks actual mise, Zsh, Vim, and pinned
+Zinit installation; the macOS consumer uses private homes and skips packages.
+The pinned Neovim consumer remains a separate CI job. Normal `go test ./...`
+keeps network and system package installation disabled. Cross-built archive
+format checks cover all four targets, while each opt-in executes only its
+runner's native OS and CPU.
 The Neovim configuration Lua fixtures run through Go assertions in ordinary
 tests when Neovim is available and through the required pinned CI consumer.
 Configuration dry-run makes no filesystem changes, and user-owned targets are
