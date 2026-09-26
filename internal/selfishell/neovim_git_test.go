@@ -44,6 +44,35 @@ func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 	}
 }
 
+func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
+	op, _, _, home := dependencyFixture(t)
+	parent := home + "/parent"
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, parent, "init", "-q")
+	writeTestFile(t, parent+"/tracked", "parent\n", 0600)
+	gitCommand(t, parent, "add", "tracked")
+	gitCommand(t, parent, "commit", "-qm", "parent")
+	parentHead := gitCommand(t, parent, "rev-parse", "HEAD")
+	for _, child := range []struct {
+		name      string
+		malformed bool
+	}{{"missing", false}, {"malformed", true}} {
+		dir := parent + "/" + child.name
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if child.malformed {
+			writeTestFile(t, dir+"/.git", "gitdir: missing-metadata\n", 0600)
+		}
+		got, err := op.gitHead(context.Background(), dir)
+		if err == nil || got == parentHead {
+			t.Fatalf("%s child read parent HEAD: %q, err=%v", child.name, got, err)
+		}
+	}
+}
+
 func TestGitTrackedChangesIgnoreUntrackedAndGeneratedTags(t *testing.T) {
 	op, _, _, home := dependencyFixture(t)
 	repo := home + "/checkout"

@@ -14,6 +14,10 @@ import (
 
 var gitHashPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 
+func (o *PackageOperation) gitRepositoryProcess() Process {
+	return withEnvironment(o.Process, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"})
+}
+
 func (o *PackageOperation) gitHead(ctx context.Context, dir string) (string, error) {
 	git := dir + "/.git"
 	data, err := os.ReadFile(git + "/HEAD")
@@ -43,7 +47,17 @@ func (o *PackageOperation) gitHead(ctx context.Context, dir string) (string, err
 			}
 		}
 	}
-	return o.commandOutput(ctx, "git", "-C", dir, "rev-parse", "HEAD")
+	p := o.gitRepositoryProcess()
+	var out, stderr bytes.Buffer
+	p.Out, p.Err = &out, &stderr
+	code, err := p.Run(ctx, "git", "-C", dir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	if code != 0 {
+		return "", fmt.Errorf("git rev-parse exited %d: %s", code, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(out.String()), nil
 }
 
 func (o *PackageOperation) gitTrackedChanges(ctx context.Context, dir string, excludeTags bool) (string, error) {
@@ -51,7 +65,7 @@ func (o *PackageOperation) gitTrackedChanges(ctx context.Context, dir string, ex
 }
 
 func (o *PackageOperation) gitChanges(ctx context.Context, dir string, excludeTags, includeUntracked bool) (string, error) {
-	p := withEnvironment(o.Process, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"})
+	p := o.gitRepositoryProcess()
 	var out, stderr bytes.Buffer
 	p.Out, p.Err = &out, &stderr
 	args := []string{"-C", dir, "status", "--porcelain"}
