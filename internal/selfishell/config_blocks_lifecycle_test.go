@@ -2,11 +2,13 @@ package selfishell
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func blockHome(t *testing.T, platform string) (string, string, Paths) {
@@ -17,6 +19,22 @@ func blockHome(t *testing.T, platform string) (string, string, Paths) {
 	for _, key := range []string{"MISE_DATA_DIR", "MISE_STATE_DIR", "MISE_CACHE_DIR", "MISE_CONFIG_DIR"} {
 		t.Setenv(key, filepath.Join(home, strings.ToLower(key)))
 	}
+	tools := filepath.Join(home, "tools")
+	if err := os.Mkdir(tools, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, source := range map[string]string{"cksum": "/usr/bin/cksum", "date": "/bin/date"} {
+		if err := os.Symlink(source, filepath.Join(tools, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", tools)
+	t.Setenv("MISE_GLOBAL_CONFIG_FILE", filepath.Join(home, "mise/global.toml"))
+	t.Setenv("MISE_DEFAULT_CONFIG_FILENAME", "")
+	t.Setenv("MISE_OVERRIDE_CONFIG_FILENAMES", "")
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", home)
+	t.Setenv("MISE_IGNORED_CONFIG_PATHS", "")
+	t.Setenv("MISE_OFFLINE", "1")
 	if err := os.Mkdir(filepath.Join(home, "tmp"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +101,37 @@ func blockEqual(t *testing.T, path string, want []byte) {
 	if got := blockRead(t, path); !bytes.Equal(got, want) {
 		t.Fatalf("%s: got %q want %q", path, got, want)
 	}
+}
+
+func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
+	ambient := t.TempDir()
+	bin := filepath.Join(ambient, "bin")
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(ambient, "mise-invoked")
+	global := filepath.Join(ambient, "global.toml")
+	blockWrite(t, global, []byte("private sentinel\n"))
+	blockWrite(t, filepath.Join(bin, "mise"), []byte("#!/bin/sh\nprintf invoked >\"$MISE_SENTINEL_MARKER\"\ncat \"$MISE_GLOBAL_CONFIG_FILE\" >>\"$MISE_SENTINEL_MARKER\"\n"))
+	if err := os.Chmod(filepath.Join(bin, "mise"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("MISE_GLOBAL_CONFIG_FILE", global)
+	t.Setenv("MISE_SENTINEL_MARKER", marker)
+	root, home, _ := blockHome(t, "macos")
+	if _, err := exec.LookPath("mise"); err == nil {
+		t.Fatal("ambient mise remained on fixture PATH")
+	}
+	if got := os.Getenv("MISE_GLOBAL_CONFIG_FILE"); got != filepath.Join(home, "mise/global.toml") {
+		t.Fatalf("ambient global config remained: %q", got)
+	}
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+	if _, err := os.Lstat(marker); !os.IsNotExist(err) {
+		t.Fatalf("ambient mise was invoked: %v", err)
+	}
+	blockEqual(t, global, []byte("private sentinel\n"))
 }
 
 func TestCurrentNeovimSourcesAreDeclaredOnce(t *testing.T) {
@@ -249,7 +298,8 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 			blockWrite(t, target, modified)
 			statePath := paths.Resources + "/user-zprofile.state"
 			oldState := blockRead(t, statePath)
-			later := paths.Config + "/zsh/history.zsh"
+			later := filepath.Dir(paths.Config) + "/starship.toml"
+			laterTarget := paths.Config + "/starship.toml"
 			if decision == "skip" {
 				if err := os.Remove(later); err != nil {
 					t.Fatal(err)
@@ -293,9 +343,11 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 					if !strings.Contains(out, "Skipped modified managed block:") {
 						t.Fatal(out)
 					}
-					if _, err := os.Stat(later); err != nil {
-						t.Fatalf("skip stopped later resource: %v", err)
+					link, err := os.Readlink(later)
+					if err != nil || link != laterTarget {
+						t.Fatalf("skip stopped later resource: link %q, error %v", link, err)
 					}
+					blockEqual(t, later, blockRead(t, root+"/config/shared/starship.toml"))
 				}
 			}
 		})
@@ -514,10 +566,13 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 			if kind == "path" {
 				path = bin + ":" + path
 			}
-			cmd := exec.Command("/bin/zsh", "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "/bin/zsh", "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+			cmd.WaitDelay = time.Second
 			cmd.Env = []string{"HOME=" + home, "PATH=" + path, "TMPDIR=" + home, "MISE_DATA_DIR=" + home + "/mise/data"}
 			out, e := cmd.CombinedOutput()
-			if e != nil || strings.TrimSpace(string(out)) != "loaded" {
+			if e != nil || ctx.Err() != nil || strings.TrimSpace(string(out)) != "loaded" {
 				t.Fatalf("mise activation: %q %v", out, e)
 			}
 			blockEqual(t, home+"/mise-args", []byte("activate zsh --shims\n"))
