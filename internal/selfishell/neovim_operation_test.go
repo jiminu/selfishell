@@ -3,8 +3,10 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -176,6 +178,76 @@ func TestLazyRevisionUpdateReportsAndPreservesStaleTemporaryPath(t *testing.T) {
 	}
 	if !strings.Contains(op.Process.Out.(*bytes.Buffer).String(), "Updated approved lazy.nvim revision") {
 		t.Fatal("update not reported")
+	}
+}
+
+func TestLazyPreviousCheckoutCleanupFailureWarnsAfterActivation(t *testing.T) {
+	op, paths, _, manifest, home, _ := neovimFixture(t)
+	deps, err := ReadDependencies(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
+	writeTestFile(t, home+"/lazy-source/init.lua", "next\n", 0600)
+	gitCommand(t, home+"/lazy-source", "add", ".")
+	gitCommand(t, home+"/lazy-source", "commit", "-qm", "next")
+	dep := deps[0]
+	dep.Version = gitCommand(t, home+"/lazy-source", "rev-parse", "HEAD")
+	op.lazyRemoveAll = func(path string) error {
+		if strings.Contains(path, ".previous.") {
+			return errors.New("injected cleanup failure")
+		}
+		return os.RemoveAll(path)
+	}
+	if err := op.installLazy(context.Background(), paths, dep); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != dep.Version {
+		t.Fatalf("activation did not complete: %s", got)
+	}
+	if warning := op.Process.Err.(*bytes.Buffer).String(); !strings.Contains(warning, "injected cleanup failure") || !strings.Contains(warning, "previous") {
+		t.Fatalf("missing previous-checkout cleanup warning: %q", warning)
+	}
+}
+
+func TestLazyStageCleanupFailureWarnsAlongsideCheckoutFailure(t *testing.T) {
+	op, paths, _, manifest, _, _ := neovimFixture(t)
+	deps, err := ReadDependencies(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := deps[0]
+	dep.Version = strings.Repeat("0", 40)
+	op.lazyRemoveAll = func(path string) error {
+		if strings.Contains(path, ".tmp.") {
+			return errors.New("injected stage cleanup failure")
+		}
+		return os.RemoveAll(path)
+	}
+	if err := op.installLazy(context.Background(), paths, dep); err == nil {
+		t.Fatal("unavailable approved revision accepted")
+	}
+	if warning := op.Process.Err.(*bytes.Buffer).String(); !strings.Contains(warning, "injected stage cleanup failure") || !strings.Contains(warning, "staging path") {
+		t.Fatalf("missing stage cleanup warning: %q", warning)
+	}
+}
+
+func TestLazyRestoreFailureIncludesPrimaryActivationError(t *testing.T) {
+	home := t.TempDir()
+	old, target := home+"/previous", home+"/lazy.nvim"
+	writeTestFile(t, old, "previous", 0600)
+	writeTestFile(t, target, "occupied", 0600)
+	primary := errors.New("activation failed")
+	err := restoreLazyOnFailure(old, target, primary)
+	if !errors.Is(err, primary) || !strings.Contains(err.Error(), "cannot restore over occupied target") {
+		t.Fatalf("activation or restoration error lost: %v", err)
+	}
+	if data, readErr := os.ReadFile(old); readErr != nil || string(data) != "previous" {
+		t.Fatalf("previous checkout changed: %q %v", data, readErr)
 	}
 }
 

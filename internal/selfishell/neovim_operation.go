@@ -188,7 +188,15 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(stage)
+	removeAll := os.RemoveAll
+	if o.lazyRemoveAll != nil {
+		removeAll = o.lazyRemoveAll
+	}
+	defer func() {
+		if err := removeAll(stage); err != nil {
+			o.warn(fmt.Sprintf("Could not clean up lazy.nvim staging path %s: %v", stage, err))
+		}
+	}()
 	if _, err := o.commandOutput(ctx, "git", "clone", "--quiet", "--filter=blob:none", "--", dep.Source, stage); err != nil {
 		return err
 	}
@@ -203,22 +211,24 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 		return err
 	}
 	if occupied, err := present(target); err != nil || occupied {
+		if err == nil {
+			err = fmt.Errorf("lazy.nvim target occupied: %s", target)
+		}
 		if moved {
-			_ = restoreEmpty(old, target)
+			return restoreLazyOnFailure(old, target, err)
 		}
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("lazy.nvim target occupied: %s", target)
+		return err
 	}
 	if err := os.Rename(stage, target); err != nil {
 		if moved {
-			_ = restoreEmpty(old, target)
+			return restoreLazyOnFailure(old, target, err)
 		}
 		return err
 	}
 	if moved {
-		os.RemoveAll(old)
+		if err := removeAll(old); err != nil {
+			o.warn(fmt.Sprintf("Could not clean up previous lazy.nvim checkout %s: %v", old, err))
+		}
 	}
 	verb := "Installed"
 	if previously {
@@ -226,6 +236,13 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 	}
 	fmt.Fprintf(o.Process.Out, "%s approved lazy.nvim revision: %s\n", verb, dep.Version)
 	return nil
+}
+
+func restoreLazyOnFailure(old, target string, primary error) error {
+	if err := restoreEmpty(old, target); err != nil {
+		return errors.Join(primary, fmt.Errorf("Could not restore previous lazy.nvim checkout %s: %w", old, err))
+	}
+	return primary
 }
 
 // InstallNeovimPlugins syncs declared pins and parser updates with the release environment.

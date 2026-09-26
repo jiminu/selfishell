@@ -21,6 +21,7 @@ type PackageOperation struct {
 	dependencyManifest                string
 	dependencies                      []Dependency
 	dependencyFault                   func(string) error // focused filesystem-failure test seam
+	lazyRemoveAll                     func(string) error // focused cleanup-failure test seam
 	aptUpdated                        bool
 	brewFormulae, brewCasks           map[string]bool
 	brewFormulaeReady, brewCasksReady bool
@@ -31,6 +32,11 @@ type PackageOperation struct {
 func (o *PackageOperation) warn(message string) {
 	color, reset := o.color(o.Process.Err, "\x1b[33m")
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
+}
+func (o *PackageOperation) reportSkippedOptional() {
+	if len(o.SkippedOptional) != 0 {
+		o.warn("Skipped optional packages: " + strings.Join(o.SkippedOptional, " "))
+	}
 }
 func (o *PackageOperation) color(stream io.Writer, code string) (string, string) {
 	noColor := os.Getenv("NO_COLOR")

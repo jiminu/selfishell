@@ -107,8 +107,11 @@ func (c CLI) install(args []string) int {
 				return err
 			}
 			if platform == "macos" && prepared.ghostty {
-				return operation.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
+				if err := operation.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty"); err != nil {
+					return err
+				}
 			}
+			operation.reportSkippedOptional()
 			return nil
 		}()
 		if err != nil {

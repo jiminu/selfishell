@@ -288,6 +288,10 @@ func TestOptionalMiseSkipReportsPackageNames(t *testing.T) {
 	if err := c.installPackages(context.Background(), o, paths, []Package{{Platform: "all", Requirement: "optional", Manager: "mise", Name: "eza"}}, "macos", "arm64", false); err != nil {
 		t.Fatal(err)
 	}
+	if strings.Contains(stderr.String(), "Skipped optional packages:") {
+		t.Fatalf("reported before remaining optional phases: %q", stderr.String())
+	}
+	o.reportSkippedOptional()
 	if len(o.SkippedOptional) != 1 || o.SkippedOptional[0] != "eza" || !strings.Contains(stderr.String(), "Skipped optional packages: eza\n") {
 		t.Fatalf("skipped %v, warning %q", o.SkippedOptional, stderr.String())
 	}
@@ -349,6 +353,43 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 		if got := strings.Contains(out.String(), "Would install optional Homebrew cask: ghostty"); got != choice.want {
 			t.Fatalf("choice %q cask plan %t: %s", choice.value, got, out.String())
 		}
+	}
+}
+
+func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
+	_, _, root, manifest, home, _ := neovimFixture(t)
+	if err := os.RemoveAll(root + "/config"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(testRelease(t)+"/config", root+"/config"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(manifest, root+"/dependencies.conf"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root+"/packages.conf", []byte("package macos optional cask fixture-optional\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(home+"/bin/brew", []byte("#!/bin/sh\ncase \"$1\" in install) exit 1;; esac\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", home+"/bin:/usr/bin:/bin")
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	t.Setenv("SHELL", "/bin/zsh")
+	paths, err := UserPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.State, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.State+"/ghostty", []byte("1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
+	if code != 0 || !strings.Contains(stderr.String(), "Skipped optional packages: fixture-optional ghostty\n") {
+		t.Fatalf("full install %d, optional summary %q", code, stderr.String())
 	}
 }
 

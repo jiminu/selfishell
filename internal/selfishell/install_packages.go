@@ -59,9 +59,6 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			return err
 		}
 	}
-	if len(o.SkippedOptional) > 0 {
-		o.warn("Skipped optional packages: " + strings.Join(o.SkippedOptional, " "))
-	}
 	return nil
 }
 
