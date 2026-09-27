@@ -176,6 +176,10 @@ while (($#)); do
 done
 if [[ -n "$out" ]]; then
   [[ "${DISCOVERY_FAILURE:-}" != download ]] || exit 22
+  if [[ "$url" == */registry.json.zip ]]; then
+    [[ "${DISCOVERY_FAILURE:-}" != registry ]] || { printf broken >"$out"; exit 0; }
+    cp "$REGISTRY_ZIP" "$out"; exit 0
+  fi
   printf archive-bytes >"$out"; exit 0
 fi
 case "$url" in
@@ -220,10 +224,15 @@ esac
 	put(t, manifest, lines.String())
 	put(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), completion)
 	put(t, filepath.Join(zroot, "config/shared/mise.toml"), replace(mise, "lazygit = \"0.65.0\"", "lazygit = \"0.65.0\"\ngh = \"2.0.0\""))
+	languages := "local M = {\n  lsp = {\n    \"lua_ls@3.19.1\",\n    \"tombi@v1.5.5\",\n  },\n}\nreturn M\n"
+	languagePath := filepath.Join(zroot, "config/shared/nvim/lua/config/languages.lua")
+	put(t, languagePath, languages)
+	registryZip := filepath.Join(root, "registry.json.zip")
+	writeRegistryZip(t, registryZip, `[{"name":"lua-language-server","source":{"id":"pkg:github/LuaLS/lua-language-server@3.20.0"},"neovim":{"lspconfig":"lua_ls"}},{"name":"tombi","source":{"id":"pkg:github/tombi-toml/tombi@v1.5.6"},"neovim":{"lspconfig":"tombi"}}]`)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "../../scripts/update-dependencies.sh", "--manifest", manifest, "--zsh-root", zroot)
-	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOCACHE=" + testutil.GoCache(t), "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "GIT_LOG=" + filepath.Join(root, "git.log"), "GH_TOKEN=private-secret"}
+	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOCACHE=" + testutil.GoCache(t), "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "GIT_LOG=" + filepath.Join(root, "git.log"), "REGISTRY_ZIP=" + registryZip, "GH_TOKEN=private-secret"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("discovery: %v: %s", err, out)
@@ -250,9 +259,10 @@ esac
 		t.Fatal("secret in diagnostics")
 	}
 	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
-	for _, failure := range []string{"curl", "json", "git", "download"} {
+	exact(t, languagePath, strings.Replace(strings.Replace(languages, "lua_ls@3.19.1", "lua_ls@3.20.0", 1), "tombi@v1.5.5", "tombi@v1.5.6", 1))
+	for _, failure := range []string{"curl", "json", "git", "download", "registry"} {
 		t.Run(failure+" preserves files", func(t *testing.T) {
-			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml")}
+			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath}
 			before := make(map[string]string)
 			for _, path := range paths {
 				data, err := os.ReadFile(path)

@@ -71,6 +71,10 @@ Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
 available as well.
 
+`selfishell update --tools-only` synchronizes the seven default LSP servers with
+the current release's approved versions through Mason. See
+[LSP updates](UPDATES.md#neovim-lsp-servers) for scope and failure handling.
+
 Additional LSP servers are installed with `:LspInstall <server>`, the standard
 mason-lspconfig command; installed servers auto-enable on the next matching
 buffer. For a server Selfishell does not manage by default, customize its

@@ -14,6 +14,10 @@ user experience consistent across supported platforms.
 - `packages.conf` defines the environment's package membership.
 - `dependencies.conf` pins direct downloads and Git dependencies.
 - `config/shared/mise.toml` pins mise-managed developer tools.
+- `config/shared/nvim/lua/config/languages.lua` declares default LSP servers and
+  their exact `server@version` pins. Dependency automation updates these pins;
+  the update tools phase applies them through Mason, including replacing a
+  manually installed different version. User-added Mason packages are not managed.
 - `docs/RELEASING.md` is the release procedure.
 
 ## Product Contract

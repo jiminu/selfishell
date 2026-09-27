@@ -42,5 +42,8 @@ assert(
   "mason-lspconfig must install Selfishell's default LSP servers: " .. vim.inspect(setup_opts.ensure_installed)
 )
 assert(setup_opts.automatic_enable == true, "mason-lspconfig must auto-enable installed servers")
+for _, server in ipairs(setup_opts.ensure_installed) do
+  assert(server:match("^[%w_]+@v?%d[%d%.%-]*$"), "default LSP must pin an exact version: " .. server)
+end
 
 print("LSP Mason setup: OK")

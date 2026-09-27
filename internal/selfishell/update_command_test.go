@@ -913,6 +913,54 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 	if _, err := os.Stat(home + "/nvim.log"); err != nil {
 		t.Fatal("Neovim phase did not run before cleanup")
 	}
+	nvimCalls, err := os.ReadFile(home + "/nvim.log")
+	if err != nil || !strings.Contains(string(nvimCalls), "mason-registry") {
+		t.Fatalf("default LSP update did not run: %q %v", nvimCalls, err)
+	}
+}
+
+func TestUpdateLSPFailureStopsBeforeCleanup(t *testing.T) {
+	root, home, log := updateCleanupFixture(t, false, false)
+	nvim := home + "/bin/nvim"
+	script, err := os.ReadFile(nvim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script = append(script, []byte("case \"$*\" in *mason-registry*) printf 'LSP install failed\\n' >&2; exit 9 ;; esac\n")...)
+	if err := os.WriteFile(nvim, script, 0755); err != nil {
+		t.Fatal(err)
+	}
+	code, out, stderr := commandResult(root, "update", "--tools-only", "--yes")
+	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "LSP install failed") {
+		t.Fatalf("LSP failure: %d %q %q", code, out, stderr)
+	}
+	calls, err := os.ReadFile(log)
+	if err != nil || strings.Contains(string(calls), "prune --tools") {
+		t.Fatalf("LSP failure pruned tools: %q %v", calls, err)
+	}
+}
+
+func TestUpdateModesSkipLSP(t *testing.T) {
+	for _, args := range [][]string{
+		{"--cli-only", "--version", "1.0.0"},
+		{"--version", "1.0.0"},
+		{"--tools-only", "--skip-packages"},
+		{"--tools-only", "--dry-run"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root, home, _ := updateCleanupFixture(t, false, false)
+			code, out, stderr := commandResult(root, append([]string{"update", "--yes"}, args...)...)
+			if code != 0 {
+				t.Fatalf("update: %d %q %q", code, out, stderr)
+			}
+			if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
+				t.Fatalf("mode invoked Neovim: %v", err)
+			}
+			if args[len(args)-1] == "--dry-run" && !strings.Contains(out, "Would update default Neovim LSP servers") {
+				t.Fatalf("dry run omitted LSP scope: %q", out)
+			}
+		})
+	}
 }
 
 func TestUpdateOptionalFailureSkipsCleanupButCompletes(t *testing.T) {
