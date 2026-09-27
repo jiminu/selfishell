@@ -17,8 +17,6 @@ import (
 	"time"
 )
 
-const fixedBashRelease = "d025710338036f1f54b948f1f3e5c17a0b3f7e38"
-
 func migrationReleaseEnv(t *testing.T, home, remote string) []string {
 	t.Helper()
 	osRelease := filepath.Join(home, "os-release")
@@ -168,70 +166,6 @@ func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
 	}
 }
 
-func TestFixedBashToGoUpdateAndOfflineRollback(t *testing.T) {
-	candidate, err := candidateCLI(t)
-	mustFS(t, err)
-	home := t.TempDir()
-	export := filepath.Join(t.TempDir(), "old")
-	mustFS(t, exportCommit(repoRoot(), fixedBashRelease, export))
-	root, share := installedFixture(t, home, "1.3.1", export+"/bin/selfishell")
-	// The old release carries its own exact configuration and manifests.
-	mustFS(t, copyTree(export, root))
-	remote := t.TempDir()
-	archiveFixture(t, remote, "1.3.2", candidate, "new-release-config")
-	env := migrationReleaseEnv(t, home, remote)
-	mustFS(t, os.WriteFile(home+"/.zshrc", []byte("alias mine='kept'\r\n"), 0600))
-	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
-	mustFS(t, err)
-	if setup.Status != 0 {
-		t.Fatalf("old install: %d %s", setup.Status, setup.Stderr)
-	}
-	state := home + "/.local/state/selfishell/resources/user-zshrc.state"
-	oldState, err := os.ReadFile(state)
-	mustFS(t, err)
-	if !bytes.HasPrefix(oldState, []byte("2\n")) {
-		t.Fatalf("unexpected old state %q", oldState)
-	}
-	updated, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "1.3.2", "--yes", "--skip-packages"}, nil, env, 25*time.Second)
-	mustFS(t, err)
-	if updated.Status != 0 || strings.Count(string(updated.Stdout), "Selfishell updated:") != 1 {
-		t.Fatalf("Bash to Go: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
-	}
-	managed, err := os.ReadFile(home + "/.config/selfishell/vim/vimrc")
-	mustFS(t, err)
-	if !bytes.Contains(managed, []byte("new-release-config")) {
-		t.Fatal("continuation did not use new release configuration")
-	}
-	user, err := os.ReadFile(home + "/.zshrc")
-	mustFS(t, err)
-	if !bytes.Contains(user, []byte("alias mine='kept'\r\n")) {
-		t.Fatalf("lost user bytes: %q", user)
-	}
-	current, _ := os.Readlink(share + "/current")
-	if current != "releases/1.3.2" {
-		t.Fatalf("update current: %s", current)
-	}
-	rolled, err := runCommand(home, []string{share + "/current/bin/selfishell", "rollback", "--yes"}, nil, append(env, "SELFISHELL_RELEASE_ROOT=file:///definitely-unavailable"), 20*time.Second)
-	mustFS(t, err)
-	if rolled.Status != 0 {
-		t.Fatalf("offline rollback: %d %q %q", rolled.Status, rolled.Stdout, rolled.Stderr)
-	}
-	current, _ = os.Readlink(share + "/current")
-	if current != "releases/1.3.1" {
-		t.Fatalf("rollback current: %s", current)
-	}
-	oldVersion, err := runCommand(home, []string{share + "/current/bin/selfishell", "version"}, nil, env, 10*time.Second)
-	mustFS(t, err)
-	if oldVersion.Status != 0 || !bytes.Equal(oldVersion.Stdout, []byte("selfishell 1.3.1\n")) {
-		t.Fatalf("old release unusable: %+v", oldVersion)
-	}
-	oldStatus, err := runCommand(home, []string{share + "/current/bin/selfishell", "status"}, nil, env, 10*time.Second)
-	mustFS(t, err)
-	if !bytes.Contains(oldStatus.Stdout, []byte("Current: 1.3.1 | Rollback: 1.3.2")) || !bytes.Contains(oldStatus.Stdout, []byte("[OK] "+home+"/.zshrc")) || bytes.Contains(oldStatus.Stderr, []byte("invalid state")) {
-		t.Fatalf("Bash state consumer: %d %q %q", oldStatus.Status, oldStatus.Stdout, oldStatus.Stderr)
-	}
-}
-
 func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	mustFS(t, err)
@@ -240,16 +174,46 @@ func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 	remote := t.TempDir()
 	archiveFixture(t, remote, "2.0.0", candidate, "go-new-root")
 	env := migrationReleaseEnv(t, home, remote)
+	original := []byte("\" personal Vim configuration\r\n")
+	vimrc := filepath.Join(home, ".config/selfishell/vim/vimrc")
+	mustFS(t, os.MkdirAll(filepath.Dir(vimrc), 0700))
+	mustFS(t, os.WriteFile(vimrc, original, 0640))
+	statePath := filepath.Join(home, ".local/state/selfishell/resources/vimrc.state")
+	backupPath := func() string {
+		t.Helper()
+		fields := strings.Split(strings.TrimSuffix(string(readBytes(t, statePath)), "\n"), "\n")
+		if len(fields) != 7 || fields[5] == "-" || fields[5] == "" {
+			t.Fatalf("missing original backup: %q", fields)
+		}
+		return fields[5]
+	}
 	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
 	mustFS(t, err)
 	if setup.Status != 0 {
 		t.Fatalf("setup: %d %q", setup.Status, setup.Stderr)
 	}
+	backup := backupPath()
+	assertBackup := func() {
+		t.Helper()
+		if got := backupPath(); got != backup {
+			t.Fatalf("backup path changed: %q -> %q", backup, got)
+		}
+		if got := readBytes(t, backup); !bytes.Equal(got, original) {
+			t.Fatalf("original backup changed: %q", got)
+		}
+		info, err := os.Lstat(backup)
+		mustFS(t, err)
+		if !info.Mode().IsRegular() || info.Mode().Perm() != 0640 {
+			t.Fatalf("backup type/mode changed: %v", info.Mode())
+		}
+	}
+	assertBackup()
 	updated, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, nil, env, 25*time.Second)
 	mustFS(t, err)
 	if updated.Status != 0 || strings.Count(string(updated.Stdout), "Selfishell updated:") != 1 {
 		t.Fatalf("update: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
 	}
+	assertBackup()
 	managed, err := os.ReadFile(home + "/.config/selfishell/vim/vimrc")
 	mustFS(t, err)
 	if !bytes.Contains(managed, []byte("go-new-root")) {
@@ -279,6 +243,20 @@ func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 	if !bytes.Contains(status.Stdout, []byte("Current: 1.0.0 | Rollback: 2.0.0")) {
 		t.Fatalf("rolled status: %q %q", status.Stdout, status.Stderr)
 	}
+	assertBackup()
+	restored, err := runCommand(home, []string{share + "/current/bin/selfishell", "uninstall", "--restore", "--yes"}, nil, append(env, "SELFISHELL_RELEASE_ROOT=file:///unavailable"), 20*time.Second)
+	mustFS(t, err)
+	requireOK(t, restored)
+	if got := readBytes(t, vimrc); !bytes.Equal(got, original) {
+		t.Fatalf("restore changed original Vim bytes: %q", got)
+	}
+	info, err := os.Lstat(vimrc)
+	mustFS(t, err)
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0640 {
+		t.Fatalf("restore changed Vim type/mode: %v", info.Mode())
+	}
+	requireAbsent(t, backup)
+	requireAbsent(t, statePath)
 }
 
 func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {

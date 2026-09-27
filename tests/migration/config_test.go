@@ -18,13 +18,8 @@ func configScenarios(t *testing.T) {
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
-	mustFS(t, os.Mkdir(filepath.Join(release, ".git"), 0700))
+	copyCLIFixture(t, release, candidate)
 	cli := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(cli)
-	if err != nil {
-		t.Fatal(err)
-	}
 	packages, err := os.ReadFile(filepath.Join(release, "packages.conf"))
 	if err != nil {
 		t.Fatal(err)
@@ -43,35 +38,11 @@ func configScenarios(t *testing.T) {
 	for _, platform := range configPlatforms {
 		for _, scenario := range configCases {
 			t.Run(platform+"/"+scenario, func(t *testing.T) {
-				var want map[string]capture
-				for _, implementation := range []string{"bash", "go"} {
-					home := filepath.Join(root, "home")
-					mustFS(t, os.RemoveAll(home))
-					mustFS(t, os.MkdirAll(home, 0700))
-					mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), packages, 0644))
-					mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), dependencies, 0644))
-					if implementation == "bash" {
-						mustFS(t, os.WriteFile(cli, reference, 0755))
-					} else {
-						mustFS(t, copyFile(candidate, cli))
-					}
-					env := configEnv(platform, scenario, home, tools, osRelease, proc, procWSL)
-					got := runConfigScenario(t, home, cli, release, scenario, env)
-					if implementation == "bash" {
-						want = got
-					} else {
-						if len(want) != len(got) {
-							t.Fatalf("capture count: bash %d go %d", len(want), len(got))
-						}
-						for name, expected := range want {
-							actual, ok := got[name]
-							if !ok {
-								t.Fatalf("missing %s", name)
-							}
-							requireEqual(t, name, expected, actual)
-						}
-					}
-				}
+				home := t.TempDir()
+				mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), packages, 0644))
+				mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), dependencies, 0644))
+				env := configEnv(platform, scenario, home, tools, osRelease, proc, procWSL)
+				runConfigScenario(t, home, cli, release, scenario, env)
 			})
 		}
 	}
@@ -101,7 +72,7 @@ func configPaths(home, scenario string) (config, state string) {
 	return filepath.Join(home, ".config"), filepath.Join(home, ".local/state")
 }
 
-func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []string) map[string]capture {
+func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []string) {
 	t.Helper()
 	config, state := configPaths(home, scenario)
 	if scenario != "empty" {
@@ -112,14 +83,12 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		mustFS(t, os.WriteFile(filepath.Join(config, "starship.toml"), nil, 0600))
 	}
 	initial := mustSnapshot(t, home)
-	captures := map[string]capture{}
 	run := func(name string, status int, args ...string) capture {
 		got, err := captureCommand(home, cli, args, env)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		requireStatus(t, name, got, status)
-		captures[name] = got
 		return got
 	}
 	run("help", 0, "help")
@@ -142,7 +111,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		if !bytes.Equal(initial, got.Home) {
 			t.Fatal("malformed package mutated HOME")
 		}
-		return captures
+		return
 	}
 	if scenario == "late-preflight" {
 		f, err := os.OpenFile(filepath.Join(home, ".vimrc"), os.O_APPEND|os.O_WRONLY, 0)
@@ -159,7 +128,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		if !bytes.Equal(before, got.Home) {
 			t.Fatal("late preflight mutated HOME")
 		}
-		return captures
+		return
 	}
 	dry := run("dry-run", 0, "install", "--skip-packages", "--dry-run", "--yes")
 	if !bytes.Equal(initial, dry.Home) {
@@ -216,7 +185,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		if !bytes.Equal(before, got.Home) {
 			t.Fatal("failed uninstall mutated HOME")
 		}
-		return captures
+		return
 	}
 	run("restore", 0, "uninstall", "--restore", "--yes")
 	if scenario == "empty" {
@@ -224,7 +193,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 	} else {
 		assertPersonalFilesRestored(t, home, config)
 	}
-	return captures
+	return
 }
 
 func assertPersonalFilesRestored(t *testing.T, home, config string) {
@@ -341,10 +310,8 @@ func TestConfigInvalidDependencies(t *testing.T) {
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
-	mustFS(t, os.Mkdir(filepath.Join(release, ".git"), 0700))
+	copyCLIFixture(t, release, candidate)
 	cli := filepath.Join(release, "bin/selfishell")
-	mustFS(t, copyFile(candidate, cli))
 	tools := fixtureTools(t, root)
 	file := filepath.Join(release, "dependencies.conf")
 	f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
@@ -380,10 +347,8 @@ func TestConfigIdenticalExistingFile(t *testing.T) {
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
-	mustFS(t, os.Mkdir(filepath.Join(release, ".git"), 0700))
+	copyCLIFixture(t, release, candidate)
 	cli := filepath.Join(release, "bin/selfishell")
-	mustFS(t, copyFile(candidate, cli))
 	tools := fixtureTools(t, root)
 	home := filepath.Join(root, "home")
 	target := filepath.Join(home, ".config/selfishell/zsh/history.zsh")
@@ -439,49 +404,24 @@ func TestConfigIdenticalExistingFile(t *testing.T) {
 
 func TestConfigPurge(t *testing.T) {
 	candidate, err := candidateCLI(t)
-	if err != nil {
-		t.Fatal(err)
-	}
+	mustFS(t, err)
 	root := t.TempDir()
 	tools := fixtureTools(t, root)
 	prefix := filepath.Join(root, "prefix")
-	home := filepath.Join(root, "home")
-	export := filepath.Join(root, "export")
-	var want map[string]capture
-	for _, implementation := range []string{"bash", "go"} {
-		mustFS(t, os.RemoveAll(home))
-		mustFS(t, os.RemoveAll(prefix))
-		mustFS(t, os.RemoveAll(export))
-		mustFS(t, os.MkdirAll(home, 0700))
-		mustFS(t, exportCommit(repoRoot(), referenceCommit, export))
-		release := filepath.Join(prefix, "share/selfishell/releases/1.0")
-		mustFS(t, copyTree(export, release))
-		mustFS(t, os.RemoveAll(export))
-		if _, err := os.Lstat(export); !os.IsNotExist(err) {
-			t.Fatalf("source export remains: %v", err)
-		}
-		mustFS(t, os.Mkdir(filepath.Join(release, ".git"), 0700))
-		if implementation == "go" {
-			mustFS(t, copyFile(candidate, filepath.Join(release, "bin/selfishell")))
-		}
-		mustFS(t, os.MkdirAll(filepath.Join(prefix, "bin"), 0700))
-		mustFS(t, os.Symlink("releases/1.0", filepath.Join(prefix, "share/selfishell/current")))
-		mustFS(t, os.Symlink("../share/selfishell/current/bin/selfishell", filepath.Join(prefix, "bin/selfishell")))
-		mustFS(t, os.Symlink("selfishell", filepath.Join(prefix, "bin/sfs")))
-		cli := filepath.Join(prefix, "bin/selfishell")
-		env := configEnv("macos", "existing", home, tools, "/unused", "/unused", "/unused")
-		captures := runPurgeScenario(t, home, cli, prefix, env)
-		if implementation == "bash" {
-			want = captures
-		} else {
-			for name, expected := range want {
-				requireEqual(t, name, expected, captures[name])
-			}
-		}
-	}
+	home := t.TempDir()
+	release := filepath.Join(prefix, "share/selfishell/releases/1.0.0")
+	copyCLIFixture(t, release, candidate)
+	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.0.0\n"), 0644))
+	mustFS(t, os.MkdirAll(filepath.Join(prefix, "bin"), 0700))
+	mustFS(t, os.Symlink("releases/1.0.0", filepath.Join(prefix, "share/selfishell/current")))
+	mustFS(t, os.Symlink("../share/selfishell/current/bin/selfishell", filepath.Join(prefix, "bin/selfishell")))
+	mustFS(t, os.Symlink("selfishell", filepath.Join(prefix, "bin/sfs")))
+	cli := filepath.Join(prefix, "bin/selfishell")
+	env := configEnv("macos", "existing", home, tools, "/unused", "/unused", "/unused")
+	runPurgeScenario(t, home, cli, prefix, env)
 }
 
-func runPurgeScenario(t *testing.T, home, cli, prefix string, env []string) map[string]capture {
+func runPurgeScenario(t *testing.T, home, cli, prefix string, env []string) {
 	t.Helper()
 	config, _ := configPaths(home, "existing")
 	mustFS(t, os.MkdirAll(filepath.Join(config, "nvim"), 0700))
@@ -527,5 +467,4 @@ func runPurgeScenario(t *testing.T, home, cli, prefix string, env []string) map[
 	purged.Home = append(purged.Home, prefixAfter...)
 	result["purge"] = purged
 	assertPersonalFilesRestored(t, home, config)
-	return result
 }

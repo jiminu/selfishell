@@ -28,22 +28,6 @@ type capture struct {
 	Stdout, Stderr, Home []byte
 }
 
-func compareCapture(want, got capture) error {
-	if want.Status != got.Status {
-		return fmt.Errorf("status: want %d got %d", want.Status, got.Status)
-	}
-	if !bytes.Equal(want.Stdout, got.Stdout) {
-		return fmt.Errorf("stdout differs")
-	}
-	if !bytes.Equal(want.Stderr, got.Stderr) {
-		return fmt.Errorf("stderr differs")
-	}
-	if !bytes.Equal(want.Home, got.Home) {
-		return fmt.Errorf("home differs")
-	}
-	return nil
-}
-
 type snapshotEntry struct {
 	Path   []byte `json:"path"`
 	Type   string `json:"type"`
@@ -214,25 +198,6 @@ func runCommandIn(home, dir string, argv []string, input []byte, extraEnv []stri
 	return result, nil
 }
 
-func exportCommit(repo, commit, dest string) error {
-	check, err := runCommand(repo, []string{"git", "-C", repo, "cat-file", "-e", commit + "^{commit}"}, nil, nil, 10*time.Second)
-	if err != nil || check.Status != 0 {
-		return fmt.Errorf("missing migration reference %s; fetch repository history (CI: fetch-depth: 0): %v %s", commit, err, check.Stderr)
-	}
-	archive, err := runCommand(repo, []string{"git", "-C", repo, "archive", commit}, nil, nil, 30*time.Second)
-	if err != nil || archive.Status != 0 {
-		return fmt.Errorf("archive %s: %v %s", commit, err, archive.Stderr)
-	}
-	if err := os.MkdirAll(dest, 0700); err != nil {
-		return err
-	}
-	extract, err := runCommand(dest, []string{"tar", "-xf", "-"}, archive.Stdout, nil, 30*time.Second)
-	if err != nil || extract.Status != 0 {
-		return fmt.Errorf("extract %s: %v %s", commit, err, extract.Stderr)
-	}
-	return nil
-}
-
 var candidateOnce sync.Once
 var candidatePath string
 var candidateErr error
@@ -376,12 +341,6 @@ func requireStatus(t *testing.T, name string, got capture, want int) {
 		t.Fatalf("%s: status %d want %d; stderr=%s", name, got.Status, want, got.Stderr)
 	}
 }
-func requireEqual(t *testing.T, name string, want, got capture) {
-	t.Helper()
-	if err := compareCapture(want, got); err != nil {
-		t.Fatalf("%s: %v\nwant stdout=%q stderr=%q\ngot stdout=%q stderr=%q", name, err, want.Stdout, want.Stderr, got.Stdout, got.Stderr)
-	}
-}
 func fixtureTools(t *testing.T, root string) string {
 	t.Helper()
 	tools := filepath.Join(root, "tools")
@@ -410,15 +369,6 @@ func fixtureTools(t *testing.T, root string) string {
 	}
 	if checksumTools == 0 {
 		t.Fatal("required fixture checksum tool: need shasum or sha256sum")
-	}
-	if err := os.Remove(filepath.Join(tools, "date")); err != nil {
-		t.Fatal(err)
-	}
-	if err := copyFile(filepath.Join(repoRoot(), "tests/fixtures/go_migration/date.bash"), filepath.Join(tools, "date")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(filepath.Join(tools, "date"), 0755); err != nil {
-		t.Fatal(err)
 	}
 	return tools
 }
@@ -497,4 +447,16 @@ func capturePTYStreams(home, executable string, args []string, extraEnv []string
 	}
 	result.Home, err = snapshot(home)
 	return result, err
+}
+
+// copyCLIFixture uses only the current checkout and an already-built Go CLI.
+func copyCLIFixture(t *testing.T, root, executable string) {
+	t.Helper()
+	mustFS(t, os.MkdirAll(filepath.Join(root, "bin"), 0700))
+	mustFS(t, copyFile(executable, filepath.Join(root, "bin/selfishell")))
+	mustFS(t, copyTree(filepath.Join(repoRoot(), "config"), filepath.Join(root, "config")))
+	for _, name := range []string{"packages.conf", "dependencies.conf"} {
+		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(root, name)))
+	}
+	mustFS(t, os.WriteFile(filepath.Join(root, "VERSION"), []byte("0.0.0-test\n"), 0644))
 }

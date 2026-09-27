@@ -10,19 +10,15 @@ import (
 	"time"
 )
 
-func TestDiagnosticsReference(t *testing.T) {
+func TestDiagnostics(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "releases", "1.2.3")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.2.3\n"), 0600))
 	tools := fixtureTools(t, root)
 	osRelease := filepath.Join(root, "os-release")
@@ -135,28 +131,33 @@ func TestDiagnosticsReference(t *testing.T) {
 				mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 			}
 			before := mustSnapshot(t, home)
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, err := captureCommand(home, entry, args, env)
-			if err != nil {
-				t.Fatal(err)
-			}
-			requireStatus(t, "reference", want, tc.status)
-			if !bytes.Equal(before, want.Home) {
-				t.Fatal("reference mutated HOME")
-			}
-			mustFS(t, copyFile(candidate, entry))
 			got, err := captureCommand(home, entry, args, env)
 			if err != nil {
 				t.Fatal(err)
 			}
-			requireStatus(t, "candidate", got, tc.status)
+			requireStatus(t, "CLI", got, tc.status)
 			if !bytes.Equal(before, got.Home) {
-				t.Fatal("candidate mutated HOME")
+				t.Fatal("CLI mutated HOME")
 			}
-			requireEqual(t, tc.name, want, got)
-			if tc.name == "status-file-replaced-by-same-content-symlink" && !bytes.Contains(got.Stdout, []byte("[CHANGED] "+filepath.Join(home, "vimrc"))) {
-				t.Fatalf("file-to-symlink replacement was not reported: %s", got.Stdout)
+			expected := map[string]string{
+				"status-empty":                                 "Selfishell configuration is not installed.",
+				"status-help":                                  "Usage: selfishell status [--verbose]",
+				"doctor-unconfigured":                          "[OK] Platform: Ubuntu",
+				"doctor-unsupported":                           "[ERROR] Platform: Unsupported Linux distribution",
+				"doctor-unsupported-architecture":              "[ERROR] Architecture: mips64",
+				"doctor-ubuntu-wsl":                            "[OK] Platform: Ubuntu on WSL",
+				"status-ghostty-user-override":                 "[OK] " + filepath.Join(home, "link"),
+				"status-pending":                               "[PENDING] " + filepath.Join(home, "vimrc"),
+				"status-changed-file":                          "[CHANGED] " + filepath.Join(home, "vimrc"),
+				"status-file-replaced-by-same-content-symlink": "[CHANGED] " + filepath.Join(home, "vimrc"),
+				"status-changed-link":                          "[CHANGED] " + filepath.Join(home, "link"),
+				"status-changed-block":                         "[CHANGED] " + filepath.Join(home, ".vimrc"),
+				"status-malformed-and-good":                    "[MALFORMED]",
+			}[tc.name]
+			if expected == "" || !bytes.Contains(got.Stdout, []byte(expected)) {
+				t.Fatalf("missing diagnostic %q: %s", expected, got.Stdout)
 			}
+
 			if tc.name == "status-malformed-and-good" && (!strings.Contains(string(got.Stdout), "[MALFORMED]") || !strings.Contains(string(got.Stdout), "[OK]")) {
 				t.Fatalf("status did not list both resources: %s", got.Stdout)
 			}
@@ -164,19 +165,15 @@ func TestDiagnosticsReference(t *testing.T) {
 	}
 }
 
-func TestConfiguredDiagnosticsReference(t *testing.T) {
+func TestConfiguredDiagnostics(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "releases", "2.0.0")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
 	tools := fixtureTools(t, root)
@@ -211,42 +208,40 @@ func TestConfiguredDiagnosticsReference(t *testing.T) {
 			mustFS(t, os.WriteFile(filepath.Join(state, "resources/aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
 			mustFS(t, os.Symlink(target, filepath.Join(home, "link")))
 			before := mustSnapshot(t, home)
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, err := captureCommand(home, entry, tc.args, env)
-			if err != nil {
-				t.Fatal(err)
-			}
-			requireStatus(t, "reference", want, tc.status)
-			if !bytes.Equal(before, want.Home) {
-				t.Fatal("reference mutated HOME")
-			}
-			mustFS(t, copyFile(candidate, entry))
 			got, err := captureCommand(home, entry, tc.args, env)
 			if err != nil {
 				t.Fatal(err)
 			}
-			requireStatus(t, "candidate", got, tc.status)
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("candidate mutated HOME")
+			requireStatus(t, "CLI", got, tc.status)
+			requireContains(t, got.Stdout, "Selfishell configuration is installed.")
+			if tc.name == "doctor" {
+				requireContains(t, got.Stdout, "[OK] Tool: git 2.0")
+				requireContains(t, got.Stdout, "Optional tool: optional is not installed")
+			} else {
+				requireContains(t, got.Stdout, "[OK] "+filepath.Join(home, "link"))
+				if tc.name == "status-verbose" {
+					requireContains(t, got.Stdout, "[TOOL] git | Installed: 2.0")
+					requireContains(t, got.Stdout, "[TOOL] optional | Installed: missing")
+				} else {
+					requireContains(t, got.Stdout, "Managed paths: 1 | Tools: 1 present, 1 missing")
+				}
 			}
-			requireEqual(t, tc.name, want, got)
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("CLI mutated HOME")
+			}
 		})
 	}
 }
 
-func TestDoctorPluginsReference(t *testing.T) {
+func TestDoctorPlugins(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
 	git, err := resolveCommand("git", baseEnv(root, os.TempDir()))
@@ -302,8 +297,7 @@ func TestDoctorPluginsReference(t *testing.T) {
 			}
 			mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
 			before := mustSnapshot(t, home)
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, e := captureCommand(home, entry, []string{"doctor"}, env)
+			got, e := captureCommand(home, entry, []string{"doctor"}, env)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -311,20 +305,17 @@ func TestDoctorPluginsReference(t *testing.T) {
 			if name != "clean" {
 				status = 1
 			}
-			requireStatus(t, "reference", want, status)
-			if !bytes.Equal(before, want.Home) {
-				t.Fatal("reference mutated HOME")
-			}
-			mustFS(t, copyFile(candidate, entry))
-			got, e := captureCommand(home, entry, []string{"doctor"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "candidate", got, status)
+			requireStatus(t, "CLI", got, status)
+			expected := map[string]string{
+				"missing": "Zsh plugins: 1 not provisioned (test/plugin)",
+				"clean":   "Zsh plugins: provisioned",
+				"drift":   "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"dirty":   "Zsh plugins: 1 modified locally (test/plugin)",
+			}[name]
+			requireContains(t, got.Stdout, expected)
 			if !bytes.Equal(before, got.Home) {
-				t.Fatal("candidate mutated HOME")
+				t.Fatal("CLI mutated HOME")
 			}
-			requireEqual(t, name, want, got)
 		})
 	}
 }
@@ -336,12 +327,8 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
 	state := filepath.Join(home, ".local/state/selfishell/resources")
@@ -352,33 +339,22 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 	for _, noColor := range []string{"", "1"} {
 		t.Run("NO_COLOR="+noColor, func(t *testing.T) {
 			env := []string{"NO_COLOR=" + noColor, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, e := capturePTYOutput(home, entry, []string{"status"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "reference", want, 1)
-			if bytes.Contains(want.Stdout, []byte("\x1b[33m")) != (noColor == "") {
-				t.Fatalf("reference color: %q", want.Stdout)
-			}
-			if !bytes.Equal(before, want.Home) {
-				t.Fatal("reference mutated HOME")
-			}
-			mustFS(t, copyFile(candidate, entry))
 			got, e := capturePTYOutput(home, entry, []string{"status"}, env)
 			if e != nil {
 				t.Fatal(e)
 			}
-			requireStatus(t, "candidate", got, 1)
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("candidate mutated HOME")
+			requireStatus(t, "CLI", got, 1)
+			if bytes.Contains(got.Stdout, []byte("\x1b[33m")) != (noColor == "") {
+				t.Fatalf("CLI color: %q", got.Stdout)
 			}
-			requireEqual(t, "color", want, got)
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("CLI mutated HOME")
+			}
 		})
 	}
 }
 
-func TestStatusRollbackMetadataReference(t *testing.T) {
+func TestStatusRollbackMetadata(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -386,12 +362,8 @@ func TestStatusRollbackMetadataReference(t *testing.T) {
 	root := t.TempDir()
 	share := filepath.Join(root, "share", "selfishell")
 	release := filepath.Join(share, "releases", "2.0.0")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
 	old := filepath.Join(share, "releases", "1.0.0")
 	mustFS(t, os.MkdirAll(filepath.Join(old, "bin"), 0700))
@@ -413,28 +385,17 @@ func TestStatusRollbackMetadataReference(t *testing.T) {
 				mustFS(t, os.WriteFile(filepath.Join(old, "VERSION"), []byte(tc.version), 0600))
 			}
 			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, e := captureCommand(home, entry, []string{"status"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "reference", want, 1)
-			if !bytes.Contains(want.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
-				t.Fatalf("reference rollback: %q", want.Stdout)
-			}
-			if !bytes.Equal(before, want.Home) {
-				t.Fatal("reference mutated HOME")
-			}
-			mustFS(t, copyFile(candidate, entry))
 			got, e := captureCommand(home, entry, []string{"status"}, env)
 			if e != nil {
 				t.Fatal(e)
 			}
-			requireStatus(t, "candidate", got, 1)
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("candidate mutated HOME")
+			requireStatus(t, "CLI", got, 1)
+			if !bytes.Contains(got.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
+				t.Fatalf("CLI rollback: %q", got.Stdout)
 			}
-			requireEqual(t, tc.name, want, got)
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("CLI mutated HOME")
+			}
 		})
 	}
 }
@@ -473,19 +434,15 @@ func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestDoctorXcodeStubReference(t *testing.T) {
+func TestDoctorXcodeStub(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
 	for name, body := range map[string]string{"brew": "#!/bin/sh\nexit 0\n", "xcode-select": "#!/bin/sh\nexit 2\n", "gcc": "#!/bin/sh\nprintf 'stub compiler\\n'\n"} {
@@ -496,28 +453,17 @@ func TestDoctorXcodeStubReference(t *testing.T) {
 	mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
 	before := mustSnapshot(t, home)
 	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64"}
-	mustFS(t, os.WriteFile(entry, reference, 0755))
-	want, e := captureCommand(home, entry, []string{"doctor"}, env)
-	if e != nil {
-		t.Fatal(e)
-	}
-	requireStatus(t, "reference", want, 1)
-	if !bytes.Contains(want.Stdout, []byte("Xcode Command Line Tools are not installed")) || bytes.Contains(want.Stdout, []byte("[OK] C compiler")) {
-		t.Fatalf("reference guard: %s", want.Stdout)
-	}
-	if !bytes.Equal(before, want.Home) {
-		t.Fatal("reference mutated HOME")
-	}
-	mustFS(t, copyFile(candidate, entry))
 	got, e := captureCommand(home, entry, []string{"doctor"}, env)
 	if e != nil {
 		t.Fatal(e)
 	}
-	requireStatus(t, "candidate", got, 1)
-	if !bytes.Equal(before, got.Home) {
-		t.Fatal("candidate mutated HOME")
+	requireStatus(t, "CLI", got, 1)
+	if !bytes.Contains(got.Stdout, []byte("Xcode Command Line Tools are not installed")) || bytes.Contains(got.Stdout, []byte("[OK] C compiler")) {
+		t.Fatalf("compiler guard: %s", got.Stdout)
 	}
-	requireEqual(t, "xcode stub", want, got)
+	if !bytes.Equal(before, got.Home) {
+		t.Fatal("CLI mutated HOME")
+	}
 }
 
 func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
@@ -527,12 +473,8 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
@@ -558,45 +500,30 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 		status  int
 	}{{"status", 0}, {"doctor", 1}} {
 		t.Run(tc.command, func(t *testing.T) {
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-			want, e := captureCommand(home, entry, []string{tc.command}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "reference", want, tc.status)
-			if !bytes.Contains(want.Stdout, []byte("Selfishell configuration is installed.")) {
-				t.Fatalf("reference missed literal state: %s", want.Stdout)
-			}
-			if !bytes.Equal(beforeHome, want.Home) || !bytes.Equal(beforeState, mustSnapshot(t, actual)) {
-				t.Fatal("reference mutated state")
-			}
-			mustFS(t, copyFile(candidate, entry))
 			got, e := captureCommand(home, entry, []string{tc.command}, env)
 			if e != nil {
 				t.Fatal(e)
 			}
-			requireStatus(t, "candidate", got, tc.status)
-			if !bytes.Equal(beforeHome, got.Home) || !bytes.Equal(beforeState, mustSnapshot(t, actual)) {
-				t.Fatal("candidate mutated state")
+			requireStatus(t, "CLI", got, tc.status)
+			if !bytes.Contains(got.Stdout, []byte("Selfishell configuration is installed.")) {
+				t.Fatalf("CLI missed literal state: %s", got.Stdout)
 			}
-			requireEqual(t, tc.command, want, got)
+			if !bytes.Equal(beforeHome, got.Home) || !bytes.Equal(beforeState, mustSnapshot(t, actual)) {
+				t.Fatal("CLI mutated state")
+			}
 		})
 	}
 }
 
-func TestStatusInstalledResourceReference(t *testing.T) {
+func TestStatusInstalledResource(t *testing.T) {
 	candidate, err := candidateCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	mustFS(t, exportCommit(repoRoot(), referenceCommit, release))
+	copyCLIFixture(t, release, candidate)
 	entry := filepath.Join(release, "bin/selfishell")
-	reference, err := os.ReadFile(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
 	osRelease := filepath.Join(root, "os-release")
@@ -604,85 +531,70 @@ func TestStatusInstalledResourceReference(t *testing.T) {
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
 	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=x86_64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
-	outputs := map[string]capture{}
-	for _, implementation := range []string{"bash", "go"} {
-		home := filepath.Join(root, "home")
-		mustFS(t, os.RemoveAll(home))
-		mustFS(t, os.MkdirAll(home, 0700))
-		config := filepath.Join(home, ".config")
-		mustFS(t, os.MkdirAll(filepath.Join(config, "mise"), 0700))
-		global := filepath.Join(config, "mise/config.toml")
-		mustFS(t, os.WriteFile(global, []byte("user original\n"), 0600))
-		if implementation == "bash" {
-			mustFS(t, os.WriteFile(entry, reference, 0755))
-		} else {
-			mustFS(t, copyFile(candidate, entry))
-		}
-		run := func(name string, args []string, status int) capture {
-			t.Helper()
-			got, e := captureCommand(home, entry, args, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, name, got, status)
-			return got
-		}
-		run("install", []string{"install", "--skip-packages", "--yes"}, 0)
-		mustFS(t, os.WriteFile(global, []byte("user modified\n"), 0600))
-		run("reinstall", []string{"install", "--skip-packages", "--yes"}, 0)
-		globalBytes, e := os.ReadFile(global)
-		if e != nil || string(globalBytes) != "user modified\n" {
-			t.Fatalf("reinstall changed user mise config: %v %q", e, globalBytes)
-		}
-		mustFS(t, os.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
-		before := mustSnapshot(t, home)
-		plain := run("plain", []string{"status"}, 0)
-		for _, name := range []string{"zsh/zshrc", "vim/vimrc", "nvim/init.lua"} {
-			if !bytes.Contains(plain.Stdout, []byte(name)) {
-				t.Fatalf("%s missing %s", implementation, name)
-			}
-		}
-		if bytes.Contains(plain.Stdout, []byte("config.toml")) {
-			t.Fatal("user config.toml reported")
-		}
-		if !bytes.Equal(before, plain.Home) {
-			t.Fatal("status mutated HOME")
-		}
-		ghostty := filepath.Join(config, "ghostty/user.ghostty")
-		mustFS(t, os.MkdirAll(filepath.Dir(ghostty), 0700))
-		mustFS(t, os.Symlink(filepath.Join(root, "nonexistent"), ghostty))
-		unchanged := run("user files ignored", []string{"status"}, 0)
-		if !bytes.Equal(plain.Stdout, unchanged.Stdout) || !bytes.Equal(plain.Stderr, unchanged.Stderr) {
-			t.Fatal("user config changed status output")
-		}
-		nvim := filepath.Join(config, "selfishell/nvim/init.lua")
-		f, e := os.OpenFile(nvim, os.O_APPEND|os.O_WRONLY, 0)
+	home := filepath.Join(root, "home")
+	mustFS(t, os.RemoveAll(home))
+	mustFS(t, os.MkdirAll(home, 0700))
+	config := filepath.Join(home, ".config")
+	mustFS(t, os.MkdirAll(filepath.Join(config, "mise"), 0700))
+	global := filepath.Join(config, "mise/config.toml")
+	mustFS(t, os.WriteFile(global, []byte("user original\n"), 0600))
+	run := func(name string, args []string, status int) capture {
+		t.Helper()
+		got, e := captureCommand(home, entry, args, env)
 		if e != nil {
 			t.Fatal(e)
 		}
-		_, e = f.WriteString("\n-- personal edit\n")
-		mustFS(t, e)
-		mustFS(t, f.Close())
-		changed := run("changed Neovim", []string{"status"}, 1)
-		if !bytes.Contains(changed.Stdout, []byte("[CHANGED] "+nvim)) {
-			t.Fatalf("modified Neovim not reported: %s", changed.Stdout)
+		requireStatus(t, name, got, status)
+		return got
+	}
+	run("install", []string{"install", "--skip-packages", "--yes"}, 0)
+	mustFS(t, os.WriteFile(global, []byte("user modified\n"), 0600))
+	run("reinstall", []string{"install", "--skip-packages", "--yes"}, 0)
+	globalBytes, e := os.ReadFile(global)
+	if e != nil || string(globalBytes) != "user modified\n" {
+		t.Fatalf("reinstall changed user mise config: %v %q", e, globalBytes)
+	}
+	mustFS(t, os.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
+	before := mustSnapshot(t, home)
+	plain := run("plain", []string{"status"}, 0)
+	for _, name := range []string{"zsh/zshrc", "vim/vimrc", "nvim/init.lua"} {
+		if !bytes.Contains(plain.Stdout, []byte(name)) {
+			t.Fatalf("status missing %s", name)
 		}
-		if _, e := os.Stat(filepath.Join(root, "curl-calls")); e == nil {
-			t.Fatal("status invoked curl")
-		}
-		mustFS(t, copyFile(filepath.Join(release, "config/shared/nvim/init.lua"), nvim))
-		run("uninstall", []string{"uninstall", "--restore", "--yes"}, 0)
-		globalBytes, e = os.ReadFile(global)
-		if e != nil || string(globalBytes) != "user modified\n" {
-			t.Fatalf("user mise config lost: %v %q", e, globalBytes)
-		}
-		for name, got := range map[string]capture{"plain": plain, "unchanged": unchanged, "changed": changed} {
-			if implementation == "bash" {
-				outputs[name] = got
-			} else {
-				requireEqual(t, name, outputs[name], got)
-			}
-		}
+	}
+	if bytes.Contains(plain.Stdout, []byte("config.toml")) {
+		t.Fatal("user config.toml reported")
+	}
+	if !bytes.Equal(before, plain.Home) {
+		t.Fatal("status mutated HOME")
+	}
+	ghostty := filepath.Join(config, "ghostty/user.ghostty")
+	mustFS(t, os.MkdirAll(filepath.Dir(ghostty), 0700))
+	mustFS(t, os.Symlink(filepath.Join(root, "nonexistent"), ghostty))
+	unchanged := run("user files ignored", []string{"status"}, 0)
+	if !bytes.Equal(plain.Stdout, unchanged.Stdout) || !bytes.Equal(plain.Stderr, unchanged.Stderr) {
+		t.Fatal("user config changed status output")
+	}
+	nvim := filepath.Join(config, "selfishell/nvim/init.lua")
+	f, e := os.OpenFile(nvim, os.O_APPEND|os.O_WRONLY, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_, e = f.WriteString("\n-- personal edit\n")
+	mustFS(t, e)
+	mustFS(t, f.Close())
+	changed := run("changed Neovim", []string{"status"}, 1)
+	if !bytes.Contains(changed.Stdout, []byte("[CHANGED] "+nvim)) {
+		t.Fatalf("modified Neovim not reported: %s", changed.Stdout)
+	}
+	if _, e := os.Stat(filepath.Join(root, "curl-calls")); e == nil {
+		t.Fatal("status invoked curl")
+	}
+	mustFS(t, copyFile(filepath.Join(release, "config/shared/nvim/init.lua"), nvim))
+	run("uninstall", []string{"uninstall", "--restore", "--yes"}, 0)
+	globalBytes, e = os.ReadFile(global)
+	if e != nil || string(globalBytes) != "user modified\n" {
+		t.Fatalf("user mise config lost: %v %q", e, globalBytes)
 	}
 }
 

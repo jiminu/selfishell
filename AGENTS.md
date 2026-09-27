@@ -92,6 +92,9 @@ Preserve these lifecycle invariants:
 - Keep `packages.conf` declarative: only supported `package` records, never
   executable shell code.
 - Make repeated setup safe and idempotent.
+- The Bash-to-Go transition uses a fresh installation. Do not retain old Bash
+  engines or historical-commit comparisons in tests; preserve Go-to-Go lifecycle
+  coverage and user-data safety checks.
 - Download to a temporary location, verify it, and activate it atomically.
 - Never execute an unversioned remote release payload as the installer.
 - Avoid `sudo` for Selfishell files; use it only for system package operations
@@ -186,7 +189,7 @@ bash scripts/check.sh
 The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, Go
 format/vet, four native builds, and the Go-owned test suite. Maintained test
 setup, process control, assertions, and cleanup belong in Go; native Zsh/Lua
-runtime probes and fixed Bash protocol fixtures may remain. Tests must use a
+runtime probes and small external-process fixtures may remain. Tests must use a
 temporary `HOME` and must never install against or modify the developer's real
 home directory. Behavioral changes require tests,
 especially for empty/existing paths, repeated operations, interruptions,
@@ -209,7 +212,7 @@ it; the gate remains required for the change categories listed above.
 | `bin/`, `cmd/`, `internal/` | Explicit source launcher, native CLI, lifecycle, platform and package adapters |
 | `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
 | `packages.conf`, `dependencies.conf` | Declarative packages and approved dependencies |
-| `tests/` | Go-owned isolated unit and lifecycle coverage; native runtime and fixed-reference fixtures |
+| `tests/` | Go-owned isolated unit and lifecycle coverage; native runtime and external-process fixtures |
 | `scripts/` | Validation, benchmarks, dependency discovery, release builds |
 | `.github/` | CI, dependency automation, and release publication |
 | `docs/` | User, maintainer, and security documentation |

@@ -26,30 +26,27 @@ and the other CPU/OS pairings remain unexecuted in this migration evidence.
 The new ordinary CI exact-prebuilt smoke step and Release workflow's artifact
 transfer need completed runs before their results can be claimed.
 
-## Fixed references and comparison
+## Transition and test boundary
 
-The immutable Bash behavior reference is
-`3bbbfa0346ee74eb47f31a81ec666340a5ef6018`. Actual Bash v1.3.1 is
-`d025710338036f1f54b948f1f3e5c17a0b3f7e38`, used separately for release
-and state interoperability. Tests export these exact local commits; missing
-history fails without fetching or substituting current code. The baseline
-comparison captures command streams, status and entire private HOME tree,
-including exact bytes, modes, link targets, state and backups. The native
-comparison uses the same release paths and fixtures. Fixed Bash bridge scripts
-are protocol references, not a maintained command engine or assertion runner.
+The Bash-to-Go transition uses a fresh installation. In-place upgrades from
+Bash releases and rollback across the Bash/Go boundary are not supported.
+See [reinstalling from a Bash release](INSTALLATION.md#reinstalling-from-a-bash-release).
+Go-to-Go updates and offline rollback remain supported.
+
+Tests exercise the current Go CLI directly, including exit statuses, diagnostic
+output, personal-file bytes and modes, managed links, state and backups. They
+use the current checkout without exporting historical commits. No old Bash
+engine, state bridge or full-history test requirement remains.
 
 All maintained test orchestration, setup, assertions and cleanup use Go.
 Native Zsh probes cover shell startup, completion, widgets and notices; Lua
-probes cover Neovim APIs. `tests/fixtures/go_migration/state_bridge.bash`
-exercises old state-v2 interoperability, `date.bash` supplies an external fixed
-backup clock, and `cksum.bash` injects an external checksum failure. No Bash
-feature runner or Python benchmark driver remains. Shell scripts under
-`scripts/` are bootstrap, narrow maintenance/CI glue, explicit builders or
-benchmark launchers. `scripts/check.sh` is the repository gate: shell checks,
-Go format/vet/tests, four builds and native host checks. Release publication
-is a separate manual tag decision.
+probes cover Neovim APIs. Small child-process fixtures inject external failures.
+Shell scripts under `scripts/` are bootstrap, narrow maintenance/CI glue,
+explicit builders or benchmark launchers. `scripts/check.sh` is the repository
+gate: shell checks, Go format/vet/tests, four builds and native host checks.
+Release publication is a separate manual tag decision.
 
-## Product behavior and deliberate differences
+## Product behavior
 
 Managed paths remain user-safe: pending state is written before mutation,
 regular files are checksummed, original backups persist across reinstalls,
@@ -58,22 +55,21 @@ occupied target. Dry-run writes nothing. `update --tools-only --skip-packages`
 reapplies current configuration without network access; ordinary default
 update is a no-op when already current. Rollback uses retained files offline.
 
-The native CLI deliberately corrects a Bash data-loss edge: an existing user
-file with the same bytes as a managed default is backed up before adoption.
-The Bash reference could skip the backup and delete that file on restore.
-Three other inherited decisions remain intentional. Optional Apt failures warn
+An existing user file with the same bytes as a managed default is backed up
+before adoption and preserved on restore.
+Three operational limits remain intentional. Optional Apt failures warn
 without invalidating a setup that otherwise completes; a fresh download may
 activate before a later state commit failure is reported; and concurrent
 installers have no lock guarantee. Run one bootstrap/update/rollback at a time.
 A failure after activation requires checking `selfishell version` before retry.
 
-## Managed-state interoperability
+## Managed-state format
 
-The Go state primitives keep v2's seven newline-terminated fields in order:
+State format v2 has seven newline-terminated fields in order:
 version, kind, status, target, reference, backup, checksum. Reads preserve field
-bytes and empty optional fields. As with the retained Bash reader, trailing lines
-after the seventh field are ignored; a write emits exactly seven lines. Invalid
-version/kind/status, an empty target, a missing field terminator, or NUL bytes
+bytes and empty optional fields. Trailing lines after the seventh field are
+ignored; a write emits exactly seven lines. Invalid version/kind/status, an
+empty target, a missing field terminator, or NUL bytes
 are rejected. Writers reject embedded line breaks and NUL rather than producing
 a record whose fields cannot be represented faithfully.
 
@@ -91,15 +87,14 @@ normalization. The Go helper uses the existing `cksum` executable on a regular
 file and propagates input, process and output errors. It does not follow a
 managed-path symlink as though it were an unchanged file.
 
-Resource declarations retain their Bash order. Installation selection chooses
+Resource declarations have a fixed order. Installation selection chooses
 the platform Zsh entrypoint, the saved macOS Ghostty choice, and Ubuntu/WSL's
 zshenv block. Uninstall must use the complete declaration set, including resources
 left from another platform. State collection returns no partial list on an error;
 lifecycle consumers must still validate every managed target before removing any.
 The primitives perform no target removal, backup replacement, or restoration.
 
-Interoperability tests use the fixed Bash reference and v1.3.1's own native
-release payload after removing its source export. Both generate pending file,
-link and block records, consume Go-written records, finish interrupted setup,
-retain original backups through reinstalls, and restore user bytes. These tests
-prove the state boundary used by the configuration lifecycle comparison above.
+Go tests cover pending file, link and block records, interrupted-operation
+recovery, original-backup retention across reinstalls, and restoration of user
+bytes. State format v2 remains unchanged; changes to field order or meaning
+still require a new format version.

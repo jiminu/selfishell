@@ -56,12 +56,14 @@ func TestChecksumFailure(t *testing.T) {
 	}
 	t.Setenv("HOME", dir)
 	t.Setenv("PATH", dir)
-	fixture, err := os.ReadFile("../../tests/fixtures/go_migration/cksum.bash")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Keep /bin/sh available for the fixture without exposing the host cksum.
-	fixture = bytes.Replace(fixture, []byte("#!/usr/bin/env bash"), []byte("#!/bin/sh"), 1)
+	fixture := []byte(`#!/bin/sh
+case "$SELFISHELL_TEST_CKSUM_CASE" in
+  failed) printf '123 5\n'; exit 9 ;;
+  malformed) printf 'not-a-checksum\n' ;;
+  overflow) printf '4294967296 5\n' ;;
+  *) exit 2 ;;
+esac
+`)
 	if err := os.WriteFile(dir+"/cksum", fixture, 0700); err != nil {
 		t.Fatal(err)
 	}
