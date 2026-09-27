@@ -94,6 +94,34 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	if _, err := os.Lstat(paths.Config + "/nvim/lazy-lock.json"); !os.IsNotExist(err) {
 		t.Fatal("runtime lock polluted managed config")
 	}
+	if err := op.UpdateDefaultLSP(ctx, root, paths, false); err != nil {
+		t.Fatalf("default LSP provisioning: %v\n%s", err, output.String())
+	}
+	receipts, err := filepath.Glob(home + "/.local/share/nvim/mason/packages/*/mason-receipt.json")
+	if err != nil || len(receipts) != 7 {
+		t.Fatalf("default LSP receipts: %v %v\n%s", receipts, err, output.String())
+	}
+	installed := make(map[string]time.Time)
+	for _, receipt := range receipts {
+		info, err := os.Stat(receipt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		installed[receipt] = info.ModTime()
+	}
+	if err := op.UpdateDefaultLSP(ctx, root, paths, false); err != nil {
+		t.Fatalf("repeated default LSP update: %v\n%s", err, output.String())
+	}
+	for receipt, modified := range installed {
+		if info, err := os.Stat(receipt); err != nil || !info.ModTime().Equal(modified) {
+			t.Fatalf("current LSP was reinstalled: %s %v", receipt, err)
+		}
+	}
+	nvim, _, err := op.nvimCommand(ctx, root, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runDefaultLSPSelection(t, root, nvim)
 	for _, probe := range []struct{ name, filename, content, marker string }{
 		{"terraform", "main.tf", "terraform { required_version = \">= 1.0\" }\n", "Neovim developer smoke: OK"},
 		{"python", "main.py", "def nested(value):\n    return {\"items\": [(value,)]}\n", "Python highlighting smoke: OK"},

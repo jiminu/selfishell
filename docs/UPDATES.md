@@ -44,6 +44,21 @@ Apt upgrade policy separately.
 matching `selfishell install --skip-packages`. CLI-only and already-current
 default updates skip the entire phase.
 
+### Neovim LSP servers
+
+The tools phase refreshes the Mason registry and updates only Selfishell's seven
+default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, and marksman.
+Missing servers are installed; servers already at the registry version are left
+alone. User-added servers and other Mason packages remain under `:Mason` control.
+The default servers follow the registry version, including when a different
+version was installed manually; they are not pinned to a Selfishell release.
+
+Run `selfishell update --tools-only` to refresh them when the CLI release is
+already current. `--cli-only`, `--skip-packages`, and `--dry-run` do not run Mason.
+Registry or server installation failures fail the update and skip mise cleanup;
+earlier tool and configuration changes may already have applied. Resolve the
+reported error and retry with `selfishell update --tools-only`.
+
 ### Unused mise versions
 
 After successful synchronization, Selfishell runs `mise prune --tools --yes`

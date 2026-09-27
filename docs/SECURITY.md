@@ -15,8 +15,9 @@ release provenance and preservation of existing files are security boundaries.
   background. See [update notices](UPDATES.md#status-and-update-notices).
 - LSP servers, including the defaults (lua_ls, pyright, bashls, jsonls,
   yamlls, tombi, marksman), are not version-approved: they install from the
-  Mason registry at its current version on first use, the standard
-  mason-lspconfig way, and `:Mason` manages their updates.
+  Mason registry at its current version on first use. Selfishell's update tools
+  phase refreshes only these defaults to the registry version; additional servers
+  and other Mason packages are updated manually with `:Mason`.
 - Selfishell files are installed without root privileges. Apt may request `sudo`
   for system packages, and Homebrew follows its own privilege model.
 

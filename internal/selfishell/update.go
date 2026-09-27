@@ -323,9 +323,14 @@ func (c CLI) updateTools(o updateOptions) int {
 			c.error(err.Error())
 			return 1
 		}
-		pruneCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
-		pruneErr := operation.PruneMise(pruneCtx, c.Root, prepared.paths, packages, platform, o.dry)
-		canceled := pruneCtx.Err()
+		toolsCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
+		if err := operation.UpdateDefaultLSP(toolsCtx, c.Root, prepared.paths, o.dry); err != nil {
+			stop()
+			c.error(err.Error())
+			return 1
+		}
+		pruneErr := operation.PruneMise(toolsCtx, c.Root, prepared.paths, packages, platform, o.dry)
+		canceled := toolsCtx.Err()
 		stop()
 		if pruneErr != nil {
 			if canceled != nil {
