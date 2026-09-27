@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 const oldC = "1111111111111111111111111111111111111111"
@@ -195,7 +197,7 @@ esac
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "../../scripts/update-dependencies.sh", "--manifest", manifest, "--zsh-root", zroot)
-	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "GIT_LOG=" + filepath.Join(root, "git.log"), "GH_TOKEN=private-secret"}
+	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOCACHE=" + testutil.GoCache(t), "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "GIT_LOG=" + filepath.Join(root, "git.log"), "GH_TOKEN=private-secret"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("discovery: %v: %s", err, out)
