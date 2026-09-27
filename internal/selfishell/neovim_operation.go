@@ -15,7 +15,9 @@ import (
 var gitHashPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 
 func (o *PackageOperation) gitRepositoryProcess() Process {
-	return withEnvironment(o.Process, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"})
+	p := withEnvironment(o.Process, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"})
+	p.repoScopedGit = true
+	return p
 }
 
 func (o *PackageOperation) gitHead(ctx context.Context, dir string) (string, error) {

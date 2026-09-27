@@ -61,6 +61,34 @@ func TestDirectDownloadChecksumAndState(t *testing.T) {
 	}
 }
 
+func TestManagedRawDownloadRestoresChangedBytesAndSkipsUnchangedTransfer(t *testing.T) {
+	op, paths, manifest, home := dependencyFixture(t)
+	source := home + "/source"
+	directDownload(t, manifest, source, "1.0", ".local/bin/tool", false)
+	target := home + "/.local/bin/tool"
+	if err := installTool(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	approved := readTestFile(t, target)
+	if err := os.Remove(source); err != nil {
+		t.Fatal(err)
+	}
+	if err := installTool(op, paths, manifest); err != nil || op.UnchangedCount != 1 {
+		t.Fatalf("unchanged target fetched source: %v, count=%d", err, op.UnchangedCount)
+	}
+	writeTestFile(t, target, "#!/bin/sh\necho changed\n", 0755)
+	writeTestFile(t, source, approved, 0600)
+	if err := installTool(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTestFile(t, target); got != approved {
+		t.Fatalf("managed bytes not restored: %q", got)
+	}
+	if op.UnchangedCount != 1 {
+		t.Fatalf("changed executable counted unchanged: %d", op.UnchangedCount)
+	}
+}
+
 func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	op, paths, manifest, home := dependencyFixture(t)
 	t.Setenv("TMPDIR", t.TempDir())

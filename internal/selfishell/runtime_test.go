@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -309,6 +310,94 @@ func TestGitTransferSpeedEnvironment(t *testing.T) {
 				t.Fatalf("git child environment %q want %q: %v", data, tc.want, err)
 			}
 		})
+	}
+}
+
+func TestProcessSkipsRelativePATHEntries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	project := t.TempDir()
+	safe := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(safe, "git"), []byte("#!/bin/sh\nprintf safe\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	workdir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(workdir, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", rel+":"+safe)
+	var out bytes.Buffer
+	p := Process{Dir: project, Out: &out, Env: []string{"HOME=" + home, "PATH=" + rel + ":" + safe}}
+	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
+		t.Fatalf("PATH lookup: code=%d err=%v output=%q", code, err, out.String())
+	}
+	out.Reset()
+	if code, err := (Process{Dir: project, Out: &out}).Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
+		t.Fatalf("inherited PATH lookup: code=%d err=%v output=%q", code, err, out.String())
+	}
+	out.Reset()
+	if code, err := p.Run(context.Background(), "./git"); err != nil || code != 0 || out.String() != "unsafe" {
+		t.Fatalf("explicit relative command: code=%d err=%v output=%q", code, err, out.String())
+	}
+}
+
+func TestProcessInheritedEnvironmentUpdatesPWDForDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", "256")
+	t.Setenv("GIT_HTTP_LOW_SPEED_TIME", "120")
+	dir := t.TempDir()
+	var out bytes.Buffer
+	code, err := (Process{Dir: dir, Out: &out}).Run(context.Background(), "/usr/bin/env")
+	if err != nil || code != 0 {
+		t.Fatalf("env: code=%d err=%v", code, err)
+	}
+	for _, line := range strings.Split(out.String(), "\n") {
+		if value, ok := strings.CutPrefix(line, "PWD="); ok {
+			if value != dir {
+				t.Fatalf("child PWD=%q, want %q", value, dir)
+			}
+			out.Reset()
+			code, err = (Process{Dir: dir, Out: &out, Env: []string{"HOME=" + home, "PWD=/preserved"}}).Run(context.Background(), "/usr/bin/env")
+			if err != nil || code != 0 || !strings.Contains(out.String(), "PWD=/preserved\n") {
+				t.Fatalf("explicit child PWD: code=%d err=%v output=%q", code, err, out.String())
+			}
+			return
+		}
+	}
+	t.Fatal("child PWD missing")
+}
+
+func TestGitChildIgnoresInheritedRepositorySelectors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(home+"/git", []byte("#!/bin/sh\nprintf '%s|%s|%s|%s' \"$GIT_DIR\" \"$GIT_WORK_TREE\" \"$GIT_INDEX_FILE\" \"$GIT_HTTP_LOW_SPEED_LIMIT\"\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	p := Process{Out: &out, Env: []string{"HOME=" + home, "PATH=" + home, "GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index", "GIT_HTTP_LOW_SPEED_LIMIT=12"}}
+	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "|||12" {
+		t.Fatalf("Git child environment: code=%d err=%v output=%q", code, err, out.String())
+	}
+}
+
+func TestIndirectGitChildIgnoresInheritedRepositorySelectors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.WriteFile(home+"/nvim", []byte("#!/bin/sh\nprintf '%s|%s|%s' \"$GIT_DIR\" \"$GIT_WORK_TREE\" \"$GIT_INDEX_FILE\"\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	p := Process{Out: &out, Env: []string{"HOME=" + home, "PATH=" + home, "GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index"}}
+	if code, err := p.Run(context.Background(), "nvim"); err != nil || code != 0 || out.String() != "||" {
+		t.Fatalf("indirect child environment: code=%d err=%v output=%q", code, err, out.String())
 	}
 }
 

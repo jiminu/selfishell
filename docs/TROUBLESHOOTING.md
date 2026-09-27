@@ -66,6 +66,12 @@ Untouched marked blocks from an older Selfishell release are upgraded
 automatically. Bytes outside the block markers remain unchanged. Uninstall
 still refuses to remove a block that was modified after installation.
 
+If the whole block was deleted or a regular rc file was replaced, run
+`selfishell update --tools-only --skip-packages` to append the current block
+while preserving the file's other content. `selfishell install --skip-packages`
+also repairs it. Uninstall leaves an already absent block and its user file
+alone. Incomplete or duplicated markers must still be resolved before retrying.
+
 Install and update reprovision a Zinit checkout whose tracked files were
 edited. An edited Neovim plugin checkout stops them instead, because lazy.nvim
 will not check out over local changes: remove that plugin's directory under

@@ -108,7 +108,11 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 			}
 			switch tc.shape {
 			case "valid":
-				writeTestFile(t, target, "existing-install-marker", 0755)
+				content := "existing-install-marker"
+				if tc.old == tc.version {
+					content = readTestFile(t, home+"/source")
+				}
+				writeTestFile(t, target, content, 0755)
 			case "nonexecutable":
 				writeTestFile(t, target, "broken", 0644)
 			case "symlink":
@@ -124,7 +128,7 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.shape == "valid" && tc.old == tc.version {
-				if output(op) != "" || readTestFile(t, target) != "existing-install-marker" || op.UnchangedCount != 1 {
+				if output(op) != "" || readTestFile(t, target) != readTestFile(t, home+"/source") || op.UnchangedCount != 1 {
 					t.Fatalf("noop: %q", output(op))
 				}
 				return

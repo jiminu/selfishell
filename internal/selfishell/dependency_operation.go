@@ -397,7 +397,20 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, targ
 	}
 	switch dep.Kind {
 	case "download":
-		return info.Mode().IsRegular() && info.Mode()&0111 != 0
+		if !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+			return false
+		}
+		if !managed || dep.Marker != "raw" {
+			return true
+		}
+		file, err := os.Open(target)
+		if err != nil {
+			return false
+		}
+		h := sha256.New()
+		_, err = io.Copy(h, file)
+		closeErr := file.Close()
+		return err == nil && closeErr == nil && hex.EncodeToString(h.Sum(nil)) == dep.Checksum
 	case "git":
 		if !info.IsDir() || !filepath.IsLocal(dep.Marker) {
 			return false

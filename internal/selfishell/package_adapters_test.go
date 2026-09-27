@@ -28,7 +28,7 @@ func newPackageFixture(t *testing.T) *packageFixture {
 		}
 	}
 	env := []string{"HOME=" + f.home, "XDG_CONFIG_HOME=" + filepath.Join(root, "config"), "XDG_DATA_HOME=" + filepath.Join(root, "data"), "XDG_STATE_HOME=" + filepath.Join(root, "state"), "XDG_CACHE_HOME=" + filepath.Join(root, "cache"), "PATH=" + f.bin}
-	f.op = &PackageOperation{Process: Process{Out: &f.out, Err: &f.err, Env: env}}
+	f.op = &PackageOperation{Process: Process{Out: &f.out, Err: &f.err, Env: env}, brewLocations: []string{}}
 	return f
 }
 
@@ -313,6 +313,39 @@ func TestHomebrewOptionalMissingDoesNotBootstrap(t *testing.T) {
 	}
 }
 
+func TestHomebrewActivatesExistingStandardLocationBeforeInstall(t *testing.T) {
+	for _, tc := range []struct {
+		requirement string
+		duplicate   bool
+	}{{"required", false}, {"optional", false}, {"required", true}, {"optional", true}} {
+		name := tc.requirement
+		if tc.duplicate {
+			name += " duplicate PATH"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newPackageFixture(t)
+			standard := filepath.Join(t.TempDir(), "bin", "brew")
+			if err := os.MkdirAll(filepath.Dir(standard), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(standard, []byte("#!/bin/sh\nprintf 'activated %s\\n' \"$*\" >>\"$HOME/calls\"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			f.op.brewLocations = []string{standard}
+			f.executable("curl", `printf 'unexpected curl\n' >>"$HOME/calls"; exit 99`)
+			if tc.duplicate {
+				f.op.Process.Env = append(f.op.Process.Env, "PATH="+filepath.Join(f.home, "other-bin"))
+			}
+			if err := f.op.InstallHomebrew(context.Background(), tc.requirement, "formula", false, "needed"); err != nil {
+				t.Fatal(err)
+			}
+			if got := f.calls(); strings.Contains(got, "unexpected curl") || !strings.Contains(got, "activated install needed") {
+				t.Fatalf("installed Homebrew was not activated: %s", got)
+			}
+		})
+	}
+}
+
 func TestAptOptionalInstallFailureIsSkipped(t *testing.T) {
 	f := newPackageFixture(t)
 	f.apt()
@@ -345,11 +378,12 @@ func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(standard), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(standard, []byte("#!/bin/sh\nprintf 'activated %s no_ask=%s\\n' \"$*\" \"$HOMEBREW_NO_ASK\" >>\"$HOME/calls\"\n"), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(f.home, "seed-brew"), []byte("#!/bin/sh\nprintf 'activated %s no_ask=%s\\n' \"$*\" \"$HOMEBREW_NO_ASK\" >>\"$HOME/calls\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	f.op.brewLocations = []string{standard}
-	f.executable("curl", `printf 'curl %s\n' "$*" >>"$HOME/calls"; printf ':\n'`)
+	f.op.Process.Env = append(f.op.Process.Env, "BREW_TARGET="+standard)
+	f.executable("curl", `printf 'curl %s\n' "$*" >>"$HOME/calls"; printf '/bin/cp "$HOME/seed-brew" "$BREW_TARGET"\n'`)
 	if err := f.op.InstallHomebrew(context.Background(), "required", "formula", false, "needed"); err != nil {
 		t.Fatal(err)
 	}

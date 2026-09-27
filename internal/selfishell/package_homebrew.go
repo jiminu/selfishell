@@ -28,27 +28,8 @@ func (o *PackageOperation) activateBrew() bool {
 			continue
 		}
 		bin := filepath.Dir(candidate)
-		old := ""
-		for _, entry := range o.Process.Env {
-			if strings.HasPrefix(entry, "PATH=") {
-				old = strings.TrimPrefix(entry, "PATH=")
-			}
-		}
-		if o.Process.Env == nil {
-			old = os.Getenv("PATH")
-			o.Process.Env = os.Environ()
-		}
-		updated := false
-		for i, entry := range o.Process.Env {
-			if strings.HasPrefix(entry, "PATH=") {
-				o.Process.Env[i] = "PATH=" + bin + string(os.PathListSeparator) + old
-				updated = true
-				break
-			}
-		}
-		if !updated {
-			o.Process.Env = append(o.Process.Env, "PATH="+bin)
-		}
+		old := envValue(o.Process.environment(), "PATH")
+		o.Process = withEnvironment(o.Process, map[string]string{"PATH": bin + string(os.PathListSeparator) + old})
 		return true
 	}
 	return false
@@ -56,6 +37,9 @@ func (o *PackageOperation) activateBrew() bool {
 
 func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 	if o.brewPath() != "" {
+		return nil
+	}
+	if o.activateBrew() && o.brewPath() != "" {
 		return nil
 	}
 	color, reset := o.color(o.Process.Out, "\x1b[36m")
@@ -135,6 +119,9 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 		color, reset := o.color(o.Process.Out, "\x1b[36m")
 		fmt.Fprintf(o.Process.Out, "%sWould install %s Homebrew %s:%s %s\n", color, requirement, manager, reset, strings.Join(names, " "))
 		return nil
+	}
+	if o.brewPath() == "" && requirement == "optional" {
+		o.activateBrew()
 	}
 	if o.brewPath() == "" && requirement == "required" {
 		if err := o.ensureBrew(ctx); err != nil {

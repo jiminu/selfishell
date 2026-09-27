@@ -8,13 +8,15 @@ for external fault injection.
 
 ## Local development
 
-Go **1.27.1** is pinned in `go.mod` for development and CI. The installed
+The exact Go version is pinned in `go.mod` for development and CI. The installed
 product does not need Go. The build uses `GOTOOLCHAIN=local` and fails if that
 version is unavailable. Zsh, ShellCheck, shfmt and Neovim are needed for the
 repository gate.
 The root `mise.toml` selects the same Go version for local development; keep it
 in sync with `go.mod`. With mise installed, run `mise trust` and `mise install go`
 from the checkout before building.
+Dependency update PRs keep these two pins together for patch releases within
+the selected Go release line. A new Go release line requires a maintainer change.
 
 Source build scripts share `scripts/go-env.sh`: they require that exact Go
 version on `PATH`, disable automatic toolchain downloads and ignore caller

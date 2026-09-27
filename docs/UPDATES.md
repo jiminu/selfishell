@@ -19,6 +19,9 @@ is needed on the user's machine.
 
 Add `--yes` for non-interactive confirmation or `--dry-run` to preview the
 selected phases without changing tools, configuration, or the active release.
+When the CLI would change, the tools preview uses the running release's manifest;
+the actual update uses the downloaded target release. The preview identifies
+this limitation and does not download that release's configuration.
 Use `--version VERSION` to select an exact release; it cannot be combined with
 `--tools-only`. Without it, update never moves to an older release: an active
 release newer than the latest one, such as a prerelease, is kept.
@@ -39,6 +42,11 @@ is reported but does not fail the whole setup. Required package failures do.
 Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
+
+Selfishell also verifies the bytes of its managed mise executable against the
+release's approved checksum. A manual `mise self-update` is replaced with the
+approved version on the next tools synchronization. An external mise installation
+that Selfishell does not own remains untouched.
 
 `--skip-packages` skips all package and tool installation when this phase runs,
 matching `selfishell install --skip-packages`. CLI-only and already-current
@@ -94,6 +102,9 @@ and previous releases, removing only recognized older inactive releases.
 Unknown directories in `releases` and foreign `current` or `previous` links
 are preserved. An occupied release-link path or failure to save `previous`
 stops the update before activation, keeping the active release intact.
+If activation fails after saving `previous`, Selfishell attempts to restore its
+original value. Release cleanup is skipped when retention links cannot be read
+or validated safely.
 Version discovery prefers the latest stable release; if none exists, it accepts
 the newest version tag only when that exact release's `VERSION` asset is published.
 If a freshly downloaded release activates but the following state commit
@@ -135,6 +146,11 @@ declared in `config/shared/nvim/lua/config/languages.lua` are considered. This
 launcher builds the Go maintenance tool with the version pinned in `go.mod`;
 discovery requires curl and Git. `--metadata FILE` applies saved metadata without
 network access. Node and Python release lines remain a manual maintainer choice.
+Go's official release metadata supplies stable patch updates within the
+development toolchain's existing release line. These update `go.mod` and the
+root `mise.toml` together; the workflow selects the updated compiler before
+validation. A new Go release line remains a maintainer choice. This development
+toolchain update does not add Go to the installed environment.
 All manifest and configuration edits are validated and staged before any file
 is replaced, and each replacement uses an atomic rename. The
 weekly workflow runs the same script, skips shell tooling setup and the full

@@ -30,6 +30,41 @@ func TestReleaseVersionLargeNumericOrder(t *testing.T) {
 	}
 }
 
+func TestSelectedChecksumIgnoresCompanionAssets(t *testing.T) {
+	name := "selfishell-2.0.0-linux-amd64.tar.gz"
+	sum := strings.Repeat("a", 64)
+	manifest := sum + "  " + name + "\n" + sum + "  " + name + ".sig\n" + sum + "  " + name + ".sbom.json\n"
+	if got, err := selectedChecksum([]byte(manifest), name); err != nil || got != sum {
+		t.Fatalf("checksum %q, %v", got, err)
+	}
+	for _, row := range []string{name, "bad  " + name, sum + "  " + name + " extra", strings.Repeat("b", 64) + "  " + name} {
+		if _, err := selectedChecksum([]byte(manifest+row+"\n"), name); err == nil {
+			t.Fatalf("accepted selected archive row %q", row)
+		}
+	}
+}
+
+func TestPruneInactiveReleasesRequiresValidCurrentLink(t *testing.T) {
+	_, share, releases := releaseFixture(t)
+	stale := releases + "/0.9.0"
+	if err := os.MkdirAll(stale+"/bin", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale+"/VERSION", []byte("0.9.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(share + "/current"); err != nil {
+		t.Fatal(err)
+	}
+	pruneInactiveReleases(releaseLayout{current: share + "/current", previous: share + "/previous", releases: releases})
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("pruned with unknown current: %v", err)
+	}
+}
+
 func TestReleaseVersionFixture(t *testing.T) {
 	path := filepath.Join("..", "..", "tests", "fixtures", "version-precedence.txt")
 	f, err := os.Open(path)
@@ -460,6 +495,52 @@ func TestReleaseInstallPreviousLinkRaceKeepsActiveRelease(t *testing.T) {
 	}
 	if data, err := os.ReadFile(share + "/previous"); err != nil || string(data) != "user data\n" {
 		t.Fatalf("occupied previous changed: %q, %v", data, err)
+	}
+}
+
+func TestReleaseInstallRestoresPreviousAfterActivationFailure(t *testing.T) {
+	op, share, _ := releaseFixture(t)
+	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	if err := os.Symlink("releases/0.9.0", share+"/previous"); err != nil {
+		t.Fatal(err)
+	}
+	op.link = func(target, path string) error {
+		if target == "releases/2.0.0" {
+			return fmt.Errorf("activation failed")
+		}
+		return atomicReleaseLink(target, path)
+	}
+	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+		t.Fatal("reported activation success")
+	}
+	if got, _ := os.Readlink(share + "/previous"); got != "releases/0.9.0" {
+		t.Fatalf("previous=%q", got)
+	}
+	if got, _ := os.Readlink(share + "/current"); got != "releases/1.0.0" {
+		t.Fatalf("current=%q", got)
+	}
+}
+
+func TestReleaseInstallDoesNotClobberChangedPreviousAfterActivationFailure(t *testing.T) {
+	op, share, _ := releaseFixture(t)
+	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.link = func(target, path string) error {
+		if target == "releases/2.0.0" {
+			if err := os.Remove(share + "/previous"); err != nil {
+				return err
+			}
+			if err := os.Symlink("releases/0.8.0", share+"/previous"); err != nil {
+				return err
+			}
+			return fmt.Errorf("activation failed")
+		}
+		return atomicReleaseLink(target, path)
+	}
+	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+		t.Fatal("reported activation success")
+	}
+	if got, _ := os.Readlink(share + "/previous"); got != "releases/0.8.0" {
+		t.Fatalf("clobbered changed previous=%q", got)
 	}
 }
 

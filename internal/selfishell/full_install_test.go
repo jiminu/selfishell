@@ -118,7 +118,7 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	for name, body := range map[string]string{
 		"zsh":  "#!/bin/sh\nexit 0\n",
 		"id":   "#!/bin/sh\nprintf 'fixture-user\\n'\n",
-		"chsh": "#!/bin/sh\nprintf '%s\\n' \"$*\" >\"$HOME/chsh-args\"\n",
+		"chsh": "#!/bin/sh\n[ -f \"$HOME/.local/state/selfishell/configured\" ] && [ -f \"$HOME/.local/state/selfishell/ghostty\" ] || exit 42\nprintf '%s\\n' \"$*\" >\"$HOME/chsh-args\"\n",
 	} {
 		if err := os.WriteFile(bin+"/"+name, []byte(body), 0700); err != nil {
 			t.Fatal(err)

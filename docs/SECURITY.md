@@ -7,6 +7,8 @@ release provenance and preservation of existing files are security boundaries.
 - GitHub Release assets have signed Sigstore build-provenance attestations bound
   to the release workflow and artifact digests.
 - Direct dependency versions are approved in `dependencies.conf`.
+- Managed raw executables are checked against their approved download checksum
+  again during installation and tool synchronization.
 - mise-managed tool selectors are reviewed in `config/shared/mise.toml`; mise verifies
   checksums or stronger provenance when supported by the selected backend.
 - Git dependencies use an approved tag or commit.
@@ -36,3 +38,15 @@ gh attestation verify selfishell-<version>-<platform>-<architecture>.tar.gz \
 
 Review `install.sh`, use an exact release, and mirror verified artifacts for
 high-control environments.
+
+The Go security workflow runs weekly and on manual dispatch. It uses the pinned
+compiler and `govulncheck` to scan reachable package and standard-library
+vulnerabilities for all four release targets. It runs independently of pull
+request CI. Check its latest result before releasing; a clean scan covers known
+vulnerabilities and is not a substitute for reviewing lifecycle changes.
+
+Child-command discovery skips relative `PATH` entries. Installer Git commands
+discard inherited repository-selection variables such as `GIT_DIR` and
+`GIT_WORK_TREE`, while retaining authentication and proxy settings. Dependency
+discovery sends its GitHub token through curl's standard input rather than its
+command-line arguments.

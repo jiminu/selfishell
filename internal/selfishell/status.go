@@ -209,9 +209,8 @@ func (c CLI) status(args []string) int {
 				continue
 			}
 			suffix := state.Target + " (" + label + ")"
-			data, e := os.ReadFile(state.Target)
-			info, le := os.Lstat(state.Target)
-			if e == nil && le == nil && info.Mode().IsRegular() {
+			data, e := readStateFile(state.Target)
+			if e == nil {
 				view, ve := inspectBlock(name, data)
 				if ve == nil && view.status == "intact" && view.checksum == state.Checksum {
 					c.sayDiagnostic("32", "OK", suffix)

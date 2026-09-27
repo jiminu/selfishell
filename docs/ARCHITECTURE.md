@@ -10,7 +10,7 @@ membership and pins live in
 
 ## Development and platform boundary
 
-`go.mod` pins Go 1.27.1 for source builds and CI. Build explicitly with
+`go.mod` pins the exact Go version for source builds and CI. Build explicitly with
 `bash scripts/build-cli.sh`; `bin/selfishell` then executes the existing
 `.build/selfishell` and gives a build instruction if it is absent. Ordinary
 invocation never compiles. `scripts/build-release.sh --version VERSION` is the

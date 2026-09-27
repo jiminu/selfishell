@@ -166,7 +166,10 @@ func writeArchive(root, binary, version, destination string) (err error) {
 		if e != nil {
 			return e
 		}
-		members = append(members, member{name: name, source: filepath.Join(root, name), mode: info.Mode()})
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported payload type: %s", name)
+		}
+		members = append(members, member{name: name, source: filepath.Join(root, name), mode: 0644})
 	}
 	err = filepath.WalkDir(filepath.Join(root, "config"), func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -180,7 +183,13 @@ func writeArchive(root, binary, version, destination string) (err error) {
 		if e != nil {
 			return e
 		}
-		m := member{name: filepath.ToSlash(rel), source: path, mode: info.Mode()}
+		mode := fs.FileMode(0644)
+		if info.IsDir() {
+			mode = os.ModeDir | 0755
+		} else if info.Mode()&os.ModeSymlink != 0 {
+			mode = os.ModeSymlink | 0777
+		}
+		m := member{name: filepath.ToSlash(rel), source: path, mode: mode}
 		if info.Mode()&os.ModeSymlink != 0 {
 			m.link, e = os.Readlink(path)
 			if e != nil {

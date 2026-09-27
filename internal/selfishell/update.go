@@ -157,6 +157,13 @@ func (c CLI) update(args []string) int {
 		}
 		if o.dry {
 			fmt.Fprintf(c.Out, "Would update Selfishell CLI to %s.\n", version)
+			if o.mode == "all" {
+				running := active
+				if running == "" {
+					running = "development"
+				}
+				fmt.Fprintf(c.Out, "Tools and configuration preview uses the running release (%s); target release contents are not downloaded for dry-run.\n", running)
+			}
 		} else {
 			if _, err := installedReleaseLayout(c.Root); err != nil {
 				c.error(err.Error())

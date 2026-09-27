@@ -1,0 +1,38 @@
+name: Go security
+
+on:
+  schedule:
+    - cron: '30 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-security
+  cancel-in-progress: false
+
+jobs:
+  vulnerabilities:
+    name: Scan Go packages and standard library
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install vulnerability scanner
+        run: GOBIN="$RUNNER_TEMP/go-security-bin" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+      - name: Check supported targets
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            printf 'Scanning %s\n' "$target"
+            CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" "$RUNNER_TEMP/go-security-bin/govulncheck" ./...
+          done

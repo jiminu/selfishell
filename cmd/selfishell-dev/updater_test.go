@@ -171,7 +171,9 @@ if [[ "${DISCOVERY_FAILURE:-}" == curl ]]; then printf 'private-secret' >&2; exi
 if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 out=""; url=""
 while (($#)); do
-  if [[ "$1" == -o ]]; then shift; out="$1"; else url="$1"; fi
+  if [[ "$1" == -o ]]; then shift; out="$1"
+  elif [[ "$1" == -H && "$2" == @- ]]; then cat >>"$AUTH_LOG"; shift
+  else url="$1"; fi
   shift
 done
 if [[ -n "$out" ]]; then
@@ -183,6 +185,9 @@ if [[ -n "$out" ]]; then
   printf archive-bytes >"$out"; exit 0
 fi
 case "$url" in
+  'https://go.dev/dl/?mode=json')
+    [[ "${DISCOVERY_FAILURE:-}" != go-line ]] || { printf '[{"version":"go1.28.0","stable":true}]'; exit 0; }
+    printf '[{"version":"go1.28.0","stable":true},{"version":"go1.27.3rc1","stable":false},{"version":"go1.27.2","stable":true},{"version":"go1.26.9","stable":true}]' ;;
   */jqlang/jq/releases/latest) printf '{"tag_name":"jq-2.0.0"}\n' ;;
   */zdharma-continuum/zinit/releases/latest) printf '{"tag_name":"v1.2.3"}\n' ;;
   *) printf '{"tag_name":"v1.2.3"}\n' ;;
@@ -223,6 +228,8 @@ esac
 	}
 	put(t, manifest, lines.String())
 	put(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), completion)
+	put(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.1\n")
+	put(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.1\"\n")
 	put(t, filepath.Join(zroot, "config/shared/mise.toml"), replace(mise, "lazygit = \"0.65.0\"", "lazygit = \"0.65.0\"\ngh = \"2.0.0\""))
 	languages := "local M = {\n  lsp = {\n    \"lua_ls@3.19.1\",\n    \"tombi@v1.5.5\",\n  },\n}\nreturn M\n"
 	languagePath := filepath.Join(zroot, "config/shared/nvim/lua/config/languages.lua")
@@ -232,7 +239,7 @@ esac
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "bash", "../../scripts/update-dependencies.sh", "--manifest", manifest, "--zsh-root", zroot)
-	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOCACHE=" + testutil.GoCache(t), "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "GIT_LOG=" + filepath.Join(root, "git.log"), "REGISTRY_ZIP=" + registryZip, "GH_TOKEN=private-secret"}
+	cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=" + fakebin + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOCACHE=" + testutil.GoCache(t), "GOPROXY=off", "GOSUMDB=off", "GOFLAGS=-buildvcs=false", "DISCOVERY_LOG=" + log, "AUTH_LOG=" + filepath.Join(root, "auth.log"), "GIT_LOG=" + filepath.Join(root, "git.log"), "REGISTRY_ZIP=" + registryZip, "GH_TOKEN=private-secret"}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("discovery: %v: %s", err, out)
@@ -252,7 +259,11 @@ esac
 		t.Fatalf("annotated tag not peeled: %s", gitlog)
 	}
 	calls, _ := os.ReadFile(log)
-	if !strings.Contains(string(calls), "Authorization: Bearer private-secret") || !strings.Contains(string(calls), "Accept: application/vnd.github+json") || !strings.Contains(string(calls), "X-GitHub-Api-Version: 2022-11-28") || !strings.Contains(string(calls), "--max-time 15") || !strings.Contains(string(calls), "--speed-limit 1024") {
+	if strings.Contains(string(calls), "private-secret") {
+		t.Fatal("GitHub token exposed in curl arguments")
+	}
+	auth, _ := os.ReadFile(filepath.Join(root, "auth.log"))
+	if !strings.Contains(string(auth), "Authorization: Bearer private-secret\n") || !strings.Contains(string(calls), "Accept: application/vnd.github+json") || !strings.Contains(string(calls), "X-GitHub-Api-Version: 2022-11-28") || !strings.Contains(string(calls), "--max-time 15") || !strings.Contains(string(calls), "--speed-limit 1024") {
 		t.Fatalf("transport policy missing: %s", calls)
 	}
 	if strings.Contains(string(out), "private-secret") {
@@ -260,9 +271,11 @@ esac
 	}
 	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
 	exact(t, languagePath, strings.Replace(strings.Replace(languages, "lua_ls@3.19.1", "lua_ls@3.20.0", 1), "tombi@v1.5.5", "tombi@v1.5.6", 1))
-	for _, failure := range []string{"curl", "json", "git", "download", "registry"} {
+	exact(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.2\n")
+	exact(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.2\"\n")
+	for _, failure := range []string{"curl", "json", "git", "download", "registry", "go-line"} {
 		t.Run(failure+" preserves files", func(t *testing.T) {
-			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath}
+			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath, filepath.Join(zroot, "go.mod"), filepath.Join(zroot, "mise.toml")}
 			before := make(map[string]string)
 			for _, path := range paths {
 				data, err := os.ReadFile(path)
