@@ -12,6 +12,49 @@ import (
 	"time"
 )
 
+func TestGoBuildCacheLifetime(t *testing.T) {
+	if os.Getenv("SELFISHELL_TEST_CACHE_CHILD") == "1" {
+		mustFS(t, os.WriteFile(filepath.Join(testGoCache, "child-marker"), []byte("compiled fixture"), 0600))
+		return
+	}
+	for _, mode := range []string{"private", "shared", "relative"} {
+		t.Run(mode, func(t *testing.T) {
+			home, temp, shared := t.TempDir(), t.TempDir(), t.TempDir()
+			cache := ""
+			if mode == "shared" {
+				cache = shared
+			} else if mode == "relative" {
+				cache = "relative-cache"
+			}
+			mustFS(t, os.WriteFile(filepath.Join(shared, "owner-marker"), []byte("retained"), 0600))
+			cmd := exec.Command(os.Args[0], "-test.run=^TestGoBuildCacheLifetime$", "-test.count=1")
+			cmd.Dir = home
+			cmd.Env = withEnv(baseEnv(home, temp), "SELFISHELL_TEST_CACHE_CHILD=1", "SELFISHELL_TEST_GO_CACHE="+cache)
+			out, err := cmd.CombinedOutput()
+			if mode == "relative" {
+				if err == nil || !bytes.Contains(out, []byte("SELFISHELL_TEST_GO_CACHE must be absolute")) {
+					t.Fatalf("relative cache: %v %s", err, out)
+				}
+			} else if err != nil {
+				t.Fatalf("child tests: %v %s", err, out)
+			}
+			entries, err := os.ReadDir(temp)
+			mustFS(t, err)
+			if len(entries) != 0 {
+				t.Fatalf("test process left temporary cache state: %v", entries)
+			}
+			if got := readBytes(t, filepath.Join(shared, "owner-marker")); string(got) != "retained" {
+				t.Fatalf("caller-owned cache changed: %q", got)
+			}
+			if mode == "shared" {
+				if got := readBytes(t, filepath.Join(shared, "child-marker")); string(got) != "compiled fixture" {
+					t.Fatalf("shared cache was not retained: %q", got)
+				}
+			}
+		})
+	}
+}
+
 func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "file")

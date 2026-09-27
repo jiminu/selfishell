@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/crc32"
+	"io"
+	"math/bits"
 	"os"
-	"strconv"
-	"strings"
 	"syscall"
 )
 
@@ -32,41 +33,48 @@ func Checksum(ctx context.Context, path string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("checksum requires a regular file: %s", path)
 	}
-	var out, stderr bytes.Buffer
-	status, err := (Process{In: file, Out: &out, Err: &stderr}).Run(ctx, "cksum")
+	sum, err := checksumReader(ctx, file)
 	if err != nil {
 		return "", fmt.Errorf("checksum %s: %w", path, err)
 	}
-	if status != 0 {
-		return "", fmt.Errorf("checksum %s: cksum exited %d: %s", path, status, strings.TrimSpace(stderr.String()))
-	}
-	return parseChecksum(out.String(), path)
+	return sum, nil
 }
 
 func checksumBytes(data []byte) (string, error) {
-	var out, stderr bytes.Buffer
-	code, err := (Process{In: bytes.NewReader(data), Out: &out, Err: &stderr}).Run(context.Background(), "cksum")
-	if err != nil {
-		return "", err
-	}
-	if code != 0 {
-		return "", fmt.Errorf("cksum exited %d: %s", code, stderr.String())
-	}
-	return parseChecksum(out.String(), "bytes")
+	return checksumReader(context.Background(), bytes.NewReader(data))
 }
 
-func parseChecksum(output, path string) (string, error) {
-	fields := strings.Fields(output)
-	if len(fields) != 2 {
-		return "", fmt.Errorf("invalid cksum output for %s", path)
-	}
-	for index, bits := range []int{32, 64} {
-		if strings.IndexFunc(fields[index], func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
-			return "", fmt.Errorf("invalid cksum output for %s", path)
+func checksumReader(ctx context.Context, input io.Reader) (string, error) {
+	// POSIX cksum uses the IEEE polynomial with an initial zero register,
+	// most-significant bit first. Reverse each byte to use Go's reflected CRC,
+	// then reverse the result; Update already applies the final complement.
+	crc := ^uint32(0)
+	var size uint64
+	var buf [32 * 1024]byte
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
 		}
-		if _, err := strconv.ParseUint(fields[index], 10, bits); err != nil {
-			return "", fmt.Errorf("invalid cksum output for %s: %w", path, err)
+		n, err := input.Read(buf[:])
+		size += uint64(n)
+		for i := range buf[:n] {
+			buf[i] = bits.Reverse8(buf[i])
+		}
+		crc = crc32.Update(crc, crc32.IEEETable, buf[:n])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
 		}
 	}
-	return fields[0] + ":" + fields[1], nil
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	// Append the byte length, least-significant byte first, without leading zeros.
+	for length := size; length != 0; length >>= 8 {
+		buf[0] = bits.Reverse8(byte(length))
+		crc = crc32.Update(crc, crc32.IEEETable, buf[:1])
+	}
+	return fmt.Sprintf("%d:%d", bits.Reverse32(crc), size), nil
 }

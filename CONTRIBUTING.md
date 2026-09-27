@@ -35,6 +35,11 @@ Tests use the current checkout. Integration tests live in `tests/integration`
 and cover updates, rollback, backup, restore and interrupted-operation recovery. `SELFISHELL_TEST_CLI` may select an existing native
 executable for focused Go test runs.
 
+Integration builds use a temporary Go cache by default. CI sets
+`SELFISHELL_TEST_GO_CACHE` to an absolute compiler-cache path to reuse restored
+builds; the test process leaves that caller-owned cache in place. Test homes and
+mise state remain private, and the reproducibility check still uses a fresh cache.
+
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
 repository gate. Four archive formats are checked; host-native execution occurs
 on each CI host. Platform selectors in tests are simulations, not evidence of

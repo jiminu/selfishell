@@ -81,7 +81,7 @@ jobs:
         run: brew install shellcheck shfmt
 
       - name: Run checks
-        run: bash scripts/check.sh
+        run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
 
       - name: Build disposable release artifacts
         run: |
