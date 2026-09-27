@@ -12,20 +12,27 @@ const defaultLSPUpdateLua = `
 local ok, message = pcall(function()
   require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim" } })
   local registry = require("mason-registry")
-  local updated, result
-  registry.update(function(success, registries) updated, result = success, registries end)
-  assert(vim.wait(60000, function() return updated ~= nil end), "Mason registry update timed out")
-  assert(updated, "Mason registry update failed: " .. vim.inspect(result))
-  local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
-  local pending = {}
-  for _, specifier in ipairs(require("config.languages").lsp) do
-    local server, version = specifier:match("^([^@]+)@([^@]+)$")
-    assert(server and version, "Missing approved version for default LSP server: " .. specifier)
-    local name = assert(mapping[server], "No Mason package for default LSP server: " .. server)
-    local package = registry.get_package(name)
-    if not package:is_installed() or package:get_installed_version() ~= version then
-      table.insert(pending, name .. "@" .. version)
+  local function pending_servers()
+    local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
+    local pending = {}
+    for _, specifier in ipairs(require("config.languages").lsp) do
+      local server, version = specifier:match("^([^@]+)@([^@]+)$")
+      assert(server and version, "Missing approved version for default LSP server: " .. specifier)
+      local name = assert(mapping[server], "No Mason package for default LSP server: " .. server)
+      local package = registry.get_package(name)
+      if not package:is_installed() or package:get_installed_version() ~= version then
+        table.insert(pending, name .. "@" .. version)
+      end
     end
+    return pending
+  end
+  local readable, pending = pcall(pending_servers)
+  if not readable or #pending > 0 then
+    local updated, result
+    registry.update(function(success, registries) updated, result = success, registries end)
+    assert(vim.wait(60000, function() return updated ~= nil end), "Mason registry update timed out")
+    assert(updated, "Mason registry update failed: " .. vim.inspect(result))
+    pending = pending_servers()
   end
   if #pending > 0 then
     -- Installer stderr (including npm warnings) otherwise becomes an nvim_cmd

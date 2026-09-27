@@ -25,7 +25,12 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 		failed     bool
 	}{
 		{"mixed", "install:lua_ls-package,pyright-package,bashls-package,jsonls-package", false},
-		{"current", "registry:updated", false},
+		{"current", "checked:marksman-package", false},
+		{"missing-registry", "registry:updated", false},
+		{"missing-package", "registry:updated", false},
+		{"version-query-error", "registry:updated", false},
+		{"unreadable-version", "local version unavailable", true},
+		{"current-after-refresh", "registry:updated", false},
 		{"install-warning", "install:lua_ls-package,pyright-package,bashls-package,jsonls-package", false},
 		{"registry-failure", "registry unavailable", true},
 		{"missing-mapping", "lua_ls", true},
@@ -50,8 +55,19 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 			if err != nil || (code != 0) != tc.failed || !strings.Contains(output.String(), tc.want) {
 				t.Fatalf("code=%d err=%v output=%s", code, err, output.String())
 			}
-			if tc.mode == "current" && strings.Contains(output.String(), "install:") {
-				t.Fatal("reinstalled current servers")
+			if tc.mode == "current" && strings.Count(output.String(), "checked:") != 7 {
+				t.Fatalf("did not check every default server: %s", output.String())
+			}
+			if tc.mode == "current" && strings.Contains(output.String(), "registry:updated") {
+				t.Fatal("forced registry update for current servers")
+			}
+			if tc.mode == "current" || tc.mode == "missing-registry" || tc.mode == "missing-package" || tc.mode == "version-query-error" || tc.mode == "current-after-refresh" {
+				if strings.Contains(output.String(), "install:") {
+					t.Fatal("reinstalled current servers")
+				}
+			}
+			if tc.mode != "current" && strings.Count(output.String(), "registry:updated") != 1 {
+				t.Fatalf("expected one necessary refresh: %s", output.String())
 			}
 		})
 	}
@@ -62,6 +78,7 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 const defaultLSPFixtureLua = `
 local mode = vim.env.SELFISHELL_LSP_TEST_MODE
 local refreshed = false
+local current = mode == "current" or mode == "missing-registry" or mode == "missing-package" or mode == "version-query-error" or mode == "current-after-refresh"
 local packages, mapping, versions = {}, {}, {}
 local languages = require("config.languages")
 for index, specifier in ipairs(languages.lsp) do
@@ -71,11 +88,17 @@ for index, specifier in ipairs(languages.lsp) do
   mapping[server] = name
   versions[name] = version
   packages[name] = {
-    is_installed = function() return mode == "current" or index ~= 1 end,
+    is_installed = function() return current or index ~= 1 end,
     get_installed_version = function()
-      if mode ~= "current" and index == 2 then return "old" end
-      if mode ~= "current" and index == 3 then return nil end
-      if mode ~= "current" and index == 4 then return "999.0.0" end
+      print("checked:" .. name)
+      if mode == "unreadable-version" then error("local version unavailable") end
+      if not refreshed and index == 1 then
+        if mode == "version-query-error" then error("local version unavailable") end
+        if mode == "current-after-refresh" then return "old" end
+      end
+      if not current and index == 2 then return "old" end
+      if not current and index == 3 then return nil end
+      if not current and index == 4 then return "999.0.0" end
       return version
     end,
     get_latest_version = function() error("runtime must use approved versions") end,
@@ -93,13 +116,13 @@ package.preload["mason-registry"] = function() return {
     end)
   end,
   get_package = function(name)
-    assert(refreshed, "used stale registry")
+    if mode == "missing-package" and not refreshed then error("package unavailable") end
     return assert(packages[name], "touched a user-added package")
   end,
 } end
 package.preload["mason-lspconfig.mappings"] = function() return {
   get_mason_map = function()
-    assert(refreshed, "mapped before registry refresh")
+    if mode == "missing-registry" and not refreshed then return { lspconfig_to_package = {} } end
     return { lspconfig_to_package = mapping }
   end,
 } end

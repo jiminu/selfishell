@@ -54,7 +54,7 @@ default updates skip the entire phase.
 
 ### Neovim LSP servers
 
-The tools phase refreshes the Mason registry and synchronizes only Selfishell's
+The tools phase checks local installation versions and synchronizes only Selfishell's
 seven default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, and marksman.
 Their exact versions are pinned in
 `config/shared/nvim/lua/config/languages.lua` as `server@version` entries.
@@ -62,6 +62,12 @@ Missing servers are installed; servers already at the approved version are left
 alone. A different installed version, including a newer manually installed one,
 is replaced with this release's pin. User-added servers and other Mason packages
 remain under `:Mason` control.
+
+When every default server is already at its approved version, Selfishell skips
+its additional forced registry update. Missing servers, version differences, or
+unavailable local information trigger a registry update and a fresh check before
+installation. Mason's normal initialization refresh still applies; this does not
+make the tools phase or the full update offline.
 
 Run `selfishell update --tools-only` to reapply these pins when the CLI release is
 already current. New LSP pins arrive through dependency update PRs and Selfishell
