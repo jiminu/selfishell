@@ -20,6 +20,11 @@ Developer build entrypoints use `scripts/go-env.sh` to check the pin before
 compilation and isolate Go settings from the caller. Full benchmark provisioning
 applies the same policy inside its private child process.
 
+Dependency discovery and pin rewriting live in the `selfishell-dev` Go command.
+`scripts/update-dependencies.sh` only builds and invokes that source-maintenance
+tool. It uses the existing curl/Git transport and Go's JSON and SHA256 support;
+saved metadata can be applied without network access.
+
 The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
 and ARM64 archive formats. See [verification coverage](INSTALLATION.md#verification-coverage)
 for environments exercised in CI and the limits of simulated platform tests.

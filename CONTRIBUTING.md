@@ -21,8 +21,9 @@ version on `PATH`, disable automatic toolchain downloads and ignore caller
 Go settings, workspaces, build flags and cross-compilation targets. They build
 in module mode without CGO, module downloads or VCS stamping and preserve
 explicit compiler/module cache paths. The release builder selects its four
-targets explicitly. Dependency updates using an existing `--metadata` file
-still run without Go.
+targets explicitly. `scripts/update-dependencies.sh` also builds its Go
+maintenance tool; `--metadata FILE` applies saved metadata without network
+access. Discovery uses curl and Git; JSON and checksums are handled in Go.
 
 ```bash
 bash scripts/build-cli.sh       # Build the host CLI at .build/selfishell

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/selfishell"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -53,7 +56,17 @@ func TestUpdaterCases(t *testing.T) {
 	fLine := zshLine("Aloxaf/fzf-tab", oldF)
 	aLine := zshLine("zsh-users/zsh-autosuggestions", oldA)
 	base := []updaterCase{
-		{name: "test_updates_only_matching_manifest_fields", manifest: "# type name version platform architecture source checksum target marker\ndownload mise 1.0.0 linux amd64 https://old/mise-amd64 oldsum .local/bin/mise raw\ndownload mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw\ngit zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + cLine, metadata: "download mise 2.0.0 linux amd64 https://new/mise-amd64 newsum\ndownload mise 2.0.0 linux arm64 https://new/mise newmise\ngit zinit v0.2.0 " + oldF + "\nnvim-plugin folke/lazy.nvim " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", wantManifest: "# type name version platform architecture source checksum target marker\ndownload mise 2.0.0 linux amd64 https://new/mise-amd64 newsum .local/bin/mise raw\ndownload mise 2.0.0 linux arm64 https://new/mise newmise .local/bin/mise raw\ngit zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git " + oldF + " .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + newC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + zshLine("zsh-users/zsh-completions", newC), wantCompletion: replace(completion, oldC, newC)},
+		{name: "empty_metadata_preserves_manifest", manifest: "# retained comment\n" + cLine},
+		{name: "pin_replacement_is_literal", metadata: "mise-tool uv 0.12.3\n", mise: mise + "# uv = \"0x5x21\"\n", wantMise: replace(mise, "uv = \"0.5.21\"", "uv = \"0.12.3\"") + "# uv = \"0x5x21\"\n"},
+		{name: "duplicate_pin_on_one_line", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\n", completion: "ver'" + oldC + "' ver'" + oldC + "'\n", failure: true},
+		{name: "invalid_mise_bump_preserves_staged_plugin", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nmise-tool neovim nightly\n", failure: true},
+		{name: "unknown_metadata", manifest: cLine, metadata: "unknown item value\n", failure: true},
+		{name: "duplicate_metadata", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", failure: true},
+		{name: "short_download_metadata", metadata: "download mise 1.2.3 linux amd64\n", failure: true},
+		{name: "malformed_download_checksum", manifest: "download mise 1.0.0 linux amd64 https://old.invalid/mise oldsum .local/bin/mise raw\n", metadata: "download mise 2.0.0 linux amd64 https://new.invalid/mise not-a-sha256\n", failure: true},
+		{name: "missing_tool_pin", metadata: "mise-tool missing 1.2.3\n", failure: true},
+		{name: "large_numeric_version", metadata: "mise-tool uv 999999999999999999999.1\n", wantMise: replace(mise, "uv = \"0.5.21\"", "uv = \"999999999999999999999.1\"")},
+		{name: "test_updates_only_matching_manifest_fields", manifest: "# type name version platform architecture source checksum target marker\ndownload mise 1.0.0 linux amd64 https://old/mise-amd64 oldsum .local/bin/mise raw\ndownload mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw\ngit zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + cLine, metadata: "download mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888\ngit zinit v0.2.0 " + oldF + "\nnvim-plugin folke/lazy.nvim " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", wantManifest: "# type name version platform architecture source checksum target marker\ndownload mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777 .local/bin/mise raw\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888 .local/bin/mise raw\ngit zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git " + oldF + " .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + newC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + zshLine("zsh-users/zsh-completions", newC), wantCompletion: replace(completion, oldC, newC)},
 		{name: "test_rejects_metadata_without_manifest_entry", manifest: "git zinit v0.1.0 all all https://example.invalid/zinit.git - .zinit zinit.zsh\n", metadata: "git missing v1.0.0\n", failure: true},
 		{name: "test_zsh_plugin_update_rewrites_manifest_and_pin_file", manifest: cLine + fLine + aLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin Aloxaf/fzf-tab " + newF + "\n", wantManifest: zshLine("zsh-users/zsh-completions", newC) + zshLine("Aloxaf/fzf-tab", newF) + aLine, wantCompletion: replace(completion, oldC, newC), wantInteractive: replace(interactive, oldF, newF)},
 		{name: "test_zsh_plugin_update_fails_when_target_pin_missing", manifest: zshLine("zsh-users/zsh-completions", strings.Repeat("9", 40)), metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\n", failure: true},
@@ -118,11 +131,11 @@ func TestUpdaterCases(t *testing.T) {
 				t.Helper()
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, "bash", "../../scripts/update-dependencies.sh", "--manifest", manifest, "--metadata", metadata, "--zsh-root", zroot)
-				cmd.Env = []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + root, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-				out, err := cmd.CombinedOutput()
-				if (err != nil) != tc.failure {
-					t.Fatalf("failure=%v err=%v output=%s", tc.failure, err, out)
+				var output bytes.Buffer
+				p := selfishell.Process{Out: &output, Err: &output, Env: []string{"HOME=" + home, "PATH=" + filepath.Join(root, "no-tools")}}
+				status := runDependencyUpdate(ctx, root, []string{"--manifest", manifest, "--metadata", metadata, "--zsh-root", zroot}, p)
+				if (status != 0) != tc.failure {
+					t.Fatalf("failure=%v status=%d output=%s", tc.failure, status, output.String())
 				}
 				if ctx.Err() != nil {
 					t.Fatal(ctx.Err())
@@ -154,12 +167,17 @@ func TestUpdaterDiscoveryUsesPrivateTransportAndPeeledGitTag(t *testing.T) {
 	log := filepath.Join(root, "curl.log")
 	curl := `#!/bin/bash
 printf '%s\n' "$*" >>"$DISCOVERY_LOG"
+if [[ "${DISCOVERY_FAILURE:-}" == curl ]]; then printf 'private-secret' >&2; exit 22; fi
+if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 out=""; url=""
 while (($#)); do
   if [[ "$1" == -o ]]; then shift; out="$1"; else url="$1"; fi
   shift
 done
-if [[ -n "$out" ]]; then printf archive-bytes >"$out"; exit 0; fi
+if [[ -n "$out" ]]; then
+  [[ "${DISCOVERY_FAILURE:-}" != download ]] || exit 22
+  printf archive-bytes >"$out"; exit 0
+fi
 case "$url" in
   */jqlang/jq/releases/latest) printf '{"tag_name":"jq-2.0.0"}\n' ;;
   */zdharma-continuum/zinit/releases/latest) printf '{"tag_name":"v1.2.3"}\n' ;;
@@ -168,6 +186,7 @@ esac
 `
 	git := `#!/bin/bash
 printf '%s\n' "$*" >>"$GIT_LOG"
+if [[ "${DISCOVERY_FAILURE:-}" == git ]]; then printf 'invalid\tHEAD\n'; exit 0; fi
 case "$*" in
   *zdharma-continuum/zinit.git*) printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v1.2.3\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v1.2.3^{}\n' ;;
   *) printf 'cccccccccccccccccccccccccccccccccccccccc\tHEAD\n' ;;
@@ -177,6 +196,13 @@ esac
 	put(t, filepath.Join(fakebin, "git"), git)
 	for _, name := range []string{"curl", "git"} {
 		if err := os.Chmod(filepath.Join(fakebin, name), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"jq", "sha256sum", "shasum"} {
+		path := filepath.Join(fakebin, name)
+		put(t, path, "#!/bin/sh\nexit 99\n")
+		if err := os.Chmod(path, 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -204,6 +230,9 @@ esac
 	}
 	result, _ := os.ReadFile(manifest)
 	got := string(result)
+	if count := strings.Count(got, " 0c982986710a026635603031674053ca851fc0e3ea760094a34f59b84f7f6da6 .local/bin/mise raw"); count != 4 {
+		t.Fatalf("expected verified checksums for all four downloads, got %d: %s", count, got)
+	}
 	for _, want := range []string{"git zinit v1.2.3 all all https://github.com/zdharma-continuum/zinit.git bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "nvim-plugin folke/lazy.nvim cccccccccccccccccccccccccccccccccccccccc", "zsh-plugin zsh-users/zsh-completions cccccccccccccccccccccccccccccccccccccccc", "download mise 1.2.3 linux amd64 https://github.com/jdx/mise/releases/download/v1.2.3/mise-v1.2.3-linux-x64"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %s", want, got)
@@ -221,4 +250,117 @@ esac
 		t.Fatal("secret in diagnostics")
 	}
 	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
+	for _, failure := range []string{"curl", "json", "git", "download"} {
+		t.Run(failure+" preserves files", func(t *testing.T) {
+			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml")}
+			before := make(map[string]string)
+			for _, path := range paths {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				before[path] = string(data)
+			}
+			var output bytes.Buffer
+			p := selfishell.Process{Out: &output, Err: &output, Env: append(append([]string{}, cmd.Env...), "DISCOVERY_FAILURE="+failure)}
+			if status := runDependencyUpdate(ctx, root, []string{"--manifest", manifest, "--zsh-root", zroot}, p); status == 0 || strings.Contains(output.String(), "private-secret") {
+				t.Fatalf("discovery failure status=%d output=%s", status, output.String())
+			}
+			for path, data := range before {
+				exact(t, path, data)
+			}
+		})
+	}
+}
+
+func TestUpdaterArgumentsBeforeEffects(t *testing.T) {
+	for _, args := range [][]string{{"--unknown"}, {"--manifest"}, {"--metadata"}, {"--zsh-root"}, {"--metadata", ""}, {"--manifest", ""}, {"unexpected"}, {"--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := t.TempDir()
+			var output bytes.Buffer
+			status := runDependencyUpdate(context.Background(), root, args, selfishell.Process{Out: &output, Err: &output})
+			want := 2
+			if args[0] == "--help" {
+				want = 0
+			}
+			if status != want {
+				t.Fatalf("status=%d output=%s", status, output.String())
+			}
+			entries, err := os.ReadDir(root)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("argument validation caused effects: %v %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
+	for _, mode := range []string{"missing", "symlink", "directory", "canceled", "success", "special mode"} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			manifest := filepath.Join(root, "dependencies.conf")
+			metadata := filepath.Join(root, "metadata")
+			pin := filepath.Join(root, "config/shared/zsh/completion.zsh")
+			original := zshLine("zsh-users/zsh-completions", oldC)
+			put(t, manifest, original)
+			put(t, metadata, "zsh-plugin zsh-users/zsh-completions "+newC+"\n")
+			put(t, pin, completion)
+			wantMode := os.FileMode(0640)
+			if mode == "special mode" {
+				wantMode |= os.ModeSetuid
+			}
+			if err := os.Chmod(manifest, wantMode); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			switch mode {
+			case "missing", "symlink", "directory":
+				if err := os.Remove(pin); err != nil {
+					t.Fatal(err)
+				}
+				if mode == "symlink" {
+					outside := filepath.Join(t.TempDir(), "user-file")
+					put(t, outside, completion)
+					if err := os.Symlink(outside, pin); err != nil {
+						t.Fatal(err)
+					}
+					defer exact(t, outside, completion)
+				} else if mode == "directory" {
+					if err := os.Mkdir(pin, 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+			case "canceled":
+				cancel()
+			}
+			var output bytes.Buffer
+			status := runDependencyUpdate(ctx, root, []string{"--metadata", metadata}, selfishell.Process{Out: &output, Err: &output})
+			success := mode == "success" || mode == "special mode"
+			if (status == 0) != success {
+				t.Fatalf("status=%d output=%s", status, output.String())
+			}
+			if success {
+				exact(t, manifest, zshLine("zsh-users/zsh-completions", newC))
+				exact(t, pin, replace(completion, oldC, newC))
+			} else {
+				exact(t, manifest, original)
+				if mode == "canceled" {
+					exact(t, pin, completion)
+				}
+			}
+			info, err := os.Stat(manifest)
+			if err != nil || info.Mode() != wantMode {
+				t.Fatalf("manifest mode changed: %v %v", info, err)
+			}
+			if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+				if err == nil && strings.HasPrefix(entry.Name(), ".selfishell-dependency-update-") {
+					t.Errorf("staging file retained: %s", path)
+				}
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }

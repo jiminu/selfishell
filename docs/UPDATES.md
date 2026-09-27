@@ -106,7 +106,12 @@ exact defaults. Both manifests change through review and a Selfishell release.
 Project-local `mise.toml` files remain outside this lifecycle.
 
 Maintainers use `scripts/update-dependencies.sh` to discover upstream releases,
-calculate downloaded mise artifact checksums, and update mise tool pins. The
+calculate downloaded mise artifact checksums, and update mise tool pins. This
+launcher builds the Go maintenance tool with the version pinned in `go.mod`;
+discovery requires curl and Git. `--metadata FILE` applies saved metadata without
+network access. Node and Python release lines remain a manual maintainer choice.
+All manifest and configuration edits are validated and staged before any file
+is replaced, and each replacement uses an atomic rename. The
 weekly workflow runs the same script and opens or refreshes
 `automation/dependency-updates` only when tracked files change. It never merges
 or publishes. Review upstream release notes, checksums, and CI before merging,
