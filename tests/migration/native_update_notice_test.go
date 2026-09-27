@@ -57,12 +57,25 @@ func TestNativeNoticeDefersCurrentVersionLookup(t *testing.T) {
 	root := filepath.Dir(home)
 	current := filepath.Join(root, "current-calls")
 	refresh := filepath.Join(root, "refresh-calls")
+	release := filepath.Join(root, "refresh-release")
 	code := `_selfishell_command_path() { command -v "$1"; }
 source "$SELFISHELL_SOURCE"
 _selfishell_current_version() { print -r -- called >>"$SELFISHELL_CURRENT_CALLS"; print -r -- 1.0.0; }
-_selfishell_update_notice_refresh() { print -r -- scheduled >>"$SELFISHELL_REFRESH_CALLS"; }
+_selfishell_update_notice_refresh() {
+  # Expose the empty file until the observer acknowledges it.
+  : >"$SELFISHELL_REFRESH_CALLS"
+  while [[ ! -e "$SELFISHELL_REFRESH_RELEASE" ]]; do command sleep 0.05; done
+  print -r -- scheduled >>"$SELFISHELL_REFRESH_CALLS"
+}
 SELFISHELL_UPDATE_CHECK_INTERVAL=0 _selfishell_update_notice
-for attempt in {1..40}; do [[ -r "$SELFISHELL_REFRESH_CALLS" ]] && break; command sleep 0.05; done
+for attempt in {1..40}; do
+  if [[ -r "$SELFISHELL_REFRESH_CALLS" ]]; then
+    : >"$SELFISHELL_REFRESH_RELEASE"
+    [[ "$(<"$SELFISHELL_REFRESH_CALLS")" == scheduled ]] && break
+  fi
+  command sleep 0.05
+done
+[[ -r "$SELFISHELL_REFRESH_CALLS" && "$(<"$SELFISHELL_REFRESH_CALLS")" == scheduled ]] || { print -u2 -r -- 'refresh notification not ready'; exit 1; }
 print -r -- "stage1=${$(<"$SELFISHELL_REFRESH_CALLS"):-missing}"
 print -r -- "current1=$([[ -e "$SELFISHELL_CURRENT_CALLS" ]] && print present || print absent)"
 : >"$SELFISHELL_CACHE/available-version"
@@ -77,7 +90,7 @@ print -r -- 1.0.0 >"$SELFISHELL_CACHE/available-version"
 SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999 _selfishell_update_notice
 print -r -- "stage4=$([[ -e "$SELFISHELL_CACHE/available-version" ]] && print present || print absent)"
 print -r -- "current4=$(command wc -l <"$SELFISHELL_CURRENT_CALLS" | command tr -d ' ')"`
-	r := nativeNoticeRun(t, home, code, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_CURRENT_CALLS="+current, "SELFISHELL_REFRESH_CALLS="+refresh)
+	r := nativeNoticeRun(t, home, code, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_CURRENT_CALLS="+current, "SELFISHELL_REFRESH_CALLS="+refresh, "SELFISHELL_REFRESH_RELEASE="+release)
 	if string(r.Stdout) != "stage1=scheduled\ncurrent1=absent\nstage2=empty\ncurrent2=absent\nstage3=1.1.0\ncurrent3=1\nstage4=absent\ncurrent4=2\n" || string(r.Stderr) != "[Selfishell] 1.1.0 is available. Run: selfishell update\n" {
 		t.Fatalf("deferred lookup: %+v", r)
 	}
