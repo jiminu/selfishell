@@ -373,6 +373,21 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	_, jobs := workflowSections(t, "release.yml")
 	build, smoke, publish := policyJob(t, jobs, "build"), policyJob(t, jobs, "smoke"), policyJob(t, jobs, "publish")
+	for _, stage := range []struct{ job, command string }{
+		{"verify", "Run verification suite"},
+		{"build", "Build release artifacts"},
+		{"smoke", "Smoke exact prebuilt release"},
+	} {
+		job := policyJob(t, jobs, stage.job)
+		setup := strings.Join(policyStep(t, job, "Set up pinned Go toolchain"), "\n")
+		if !strings.Contains(setup, "uses: actions/setup-go@") || !strings.Contains(setup, "go-version-file: go.mod") {
+			t.Errorf("%s must select the Go toolchain from go.mod", stage.job)
+		}
+		order := strings.Join(job.lines, "\n")
+		if strings.Index(order, "- name: Set up pinned Go toolchain") >= strings.Index(order, "- name: "+stage.command) {
+			t.Errorf("%s selects Go after using it", stage.job)
+		}
+	}
 	var all string
 	for _, j := range jobs {
 		all += strings.Join(j.lines, "\n")
