@@ -10,6 +10,8 @@ for name in TMPDIR SELFISHELL_BENCHMARK_RESULTS_FILE SELFISHELL_BENCHMARK_ZPROF_
   fi
 done
 cd "$SOURCE_ROOT"
+source "$SOURCE_ROOT/scripts/go-env.sh"
+selfishell_prepare_go "$SOURCE_ROOT"
 mkdir -p "$SOURCE_ROOT/.build"
-go build -o "$SOURCE_ROOT/.build/selfishell-benchmark" ./cmd/selfishell-benchmark
+go build -buildvcs=false -o "$SOURCE_ROOT/.build/selfishell-benchmark" ./cmd/selfishell-benchmark
 exec "$SOURCE_ROOT/.build/selfishell-benchmark" "$@"

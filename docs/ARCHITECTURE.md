@@ -16,6 +16,9 @@ membership and pins live in
 invocation never compiles. `scripts/build-release.sh --version VERSION` is the
 single production builder and writes native archives without a source `VERSION`
 file. Release executables use `CGO_ENABLED=0`, `GOAMD64=v1` and `GOARM64=v8.0`.
+Developer build entrypoints use `scripts/go-env.sh` to check the pin before
+compilation and isolate Go settings from the caller. Full benchmark provisioning
+applies the same policy inside its private child process.
 
 The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
 and ARM64 archive formats. See [verification coverage](INSTALLATION.md#verification-coverage)
