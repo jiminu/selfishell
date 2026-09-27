@@ -96,7 +96,7 @@ func TestUpdateContinuationRejectsUnreadableConfiguredMarker(t *testing.T) {
 }
 
 func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
-	for _, content := range []string{"", "legacy-marker\n"} {
+	for _, content := range []string{"", "invalid-marker\n"} {
 		t.Run("bytes-"+strconv.Itoa(len(content)), func(t *testing.T) {
 			home := isolatedUpdateHome(t)
 			root := testRelease(t)

@@ -45,7 +45,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		"HOME": home, "GOTOOLCHAIN": "local", "GOCACHE": home + "/.cache/go-build", "GOMODCACHE": home + "/go/pkg/mod", "GOPROXY": "off",
 	}).Env
 	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build real candidate: %v\n%s", err, output)
+		t.Fatalf("build test CLI: %v\n%s", err, output)
 	}
 	bin := fixture + "/fake-bin"
 	if err := os.MkdirAll(bin, 0700); err != nil {

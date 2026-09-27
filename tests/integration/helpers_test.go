@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"bytes"
@@ -122,7 +122,7 @@ func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
 	}
 }
 
-func TestInvalidCandidateOverrideFails(t *testing.T) {
+func TestInvalidCLIOverrideFails(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "not-executable")
 	mustFS(t, os.WriteFile(file, []byte("#!/bin/sh\nexit 0\n"), 0600))
@@ -133,19 +133,19 @@ func TestInvalidCandidateOverrideFails(t *testing.T) {
 		{file, "is not executable"},
 	} {
 		t.Setenv("SELFISHELL_TEST_CLI", tc.path)
-		if _, err := candidateCLI(t); err == nil || !strings.Contains(err.Error(), tc.diagnostic) {
+		if _, err := testCLI(t); err == nil || !strings.Contains(err.Error(), tc.diagnostic) {
 			t.Fatalf("override %q: %v", tc.path, err)
 		}
 	}
 }
 
-func TestCandidateOverrideExecutableSymlinkPreservesIO(t *testing.T) {
+func TestCLIOverrideExecutableSymlinkPreservesIO(t *testing.T) {
 	root := t.TempDir()
-	target, link := filepath.Join(root, "target"), filepath.Join(root, "candidate")
+	target, link := filepath.Join(root, "target"), filepath.Join(root, "test-cli")
 	mustFS(t, os.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
 	mustFS(t, os.Symlink(target, link))
 	t.Setenv("SELFISHELL_TEST_CLI", link)
-	selected, err := candidateCLI(t)
+	selected, err := testCLI(t)
 	if err != nil || selected != link {
 		t.Fatalf("selected %q: %v", selected, err)
 	}

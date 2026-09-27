@@ -65,7 +65,7 @@ func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
 			return nil, fmt.Errorf("unsafe release archive link: %s", clean)
 		}
 		if h.Typeflag == tar.TypeSymlink {
-			// The legacy validator also rejects parent traversal, including
+			// Reject parent traversal, including
 			// links whose lexical path looks safe before another link resolves.
 			for _, part := range strings.Split(h.Linkname, "/") {
 				if part == ".." {

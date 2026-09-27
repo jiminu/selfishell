@@ -12,20 +12,16 @@ selfishell install
 
 `selfishell install` sets up the complete development environment.
 
-## Reinstalling from a Bash release
-
-The Go CLI starts from a fresh Selfishell installation. In-place upgrades from
-old Bash releases and rollback across that transition are not supported.
+## Reinstallation
 
 Before removing an old installation, keep a separate copy of personal
-configuration and any backups you need. Use the old CLI's
+configuration and any backups you need. Use the
 [uninstall procedure](#uninstallation) to preview and restore managed paths
 before explicitly purging the CLI. Resolve any reported conflicts first; do
 not delete configuration or state directories by hand. Then follow the normal
-installation steps with a published Go release.
+installation steps.
 
 Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
-Updates and rollback between Go releases continue to use the normal commands.
 
 ## Verification coverage
 
@@ -33,9 +29,8 @@ Automated verification has exercised a native Linux/AMD64 archive and full
 installation in an Ubuntu 24.04 container, a native macOS/ARM64 archive and
 configuration lifecycle on macOS 26.6.2, and the pinned Neovim developer
 lifecycle on Ubuntu. The release builder produces four archive formats; only
-the host's native archive executes in each job. The current ordinary CI
-workflow is configured to smoke an exact prebuilt archive on each host after
-the repository gate; results from that new step require a completed CI run.
+the host's native archive executes in each job. CI smoke tests install an exact
+prebuilt archive on Linux and macOS after the repository gate.
 
 WSL 2, Ubuntu 26.04 and every advertised CPU/OS combination have not been
 executed as separate CI runners. Platform selection and configuration behavior

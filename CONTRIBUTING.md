@@ -28,16 +28,13 @@ checkout. The eight public commands run Go logic. The standalone Bash 3.2
 bootstrap remains the installer transport, and maintenance scripts retain
 narrow shell glue where needed.
 
-Tests use the current checkout and do not require old Bash commits or full Git
-history. The Bash-to-Go transition uses a fresh installation; in-place upgrades
-and rollback between the Bash and Go implementations are outside the supported
-contract. Go-to-Go updates, rollback, backup, restore and interrupted-operation
-recovery remain covered. `SELFISHELL_TEST_CLI` may select an existing native
+Tests use the current checkout. Integration tests live in `tests/integration`
+and cover updates, rollback, backup, restore and interrupted-operation recovery. `SELFISHELL_TEST_CLI` may select an existing native
 executable for focused Go test runs.
 
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
 repository gate. Four archive formats are checked; host-native execution occurs
 on each CI host. Platform selectors in tests are simulations, not evidence of
-runtime execution on another OS or CPU. See [CLI compatibility](docs/CLI_COMPATIBILITY.md)
+runtime execution on another OS or CPU. See [architecture](docs/ARCHITECTURE.md)
 for supported behavior and [release procedure](docs/RELEASING.md) for manual
 publication.

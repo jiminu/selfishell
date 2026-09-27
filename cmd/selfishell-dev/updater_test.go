@@ -46,7 +46,7 @@ type updaterCase struct {
 	failure, rerun                                          bool
 }
 
-func TestUpdaterLegacyCases(t *testing.T) {
+func TestUpdaterCases(t *testing.T) {
 	cLine := zshLine("zsh-users/zsh-completions", oldC)
 	fLine := zshLine("Aloxaf/fzf-tab", oldF)
 	aLine := zshLine("zsh-users/zsh-autosuggestions", oldA)
@@ -65,9 +65,6 @@ func TestUpdaterLegacyCases(t *testing.T) {
 		{name: "test_mise_tool_update_skips_same_or_older_candidate", metadata: "mise-tool neovim 0.12.4\nmise-tool uv 0.5.20\n"},
 		{name: "test_mise_tool_update_rejects_non_stable_candidate_format", metadata: "mise-tool neovim nightly\n", failure: true},
 		{name: "test_mise_tool_update_is_idempotent_on_rerun", metadata: "mise-tool neovim 0.12.5\n", wantMise: replace(mise, "neovim = \"0.12.4\"", "neovim = \"0.12.5\""), rerun: true},
-	}
-	if len(base) != 14 {
-		t.Fatal("legacy case count changed")
 	}
 	for _, tc := range base {
 		t.Run(tc.name, func(t *testing.T) {

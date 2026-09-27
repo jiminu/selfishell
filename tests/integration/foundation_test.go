@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"bytes"
@@ -9,11 +9,11 @@ import (
 )
 
 func TestFoundation(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	root := t.TempDir()
 	release := filepath.Join(root, "release with spaces")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	mustFS(t, os.Remove(filepath.Join(release, "VERSION")))
 	mustFS(t, os.WriteFile(filepath.Join(release, ".git"), nil, 0600))
 	entry := filepath.Join(release, "bin/selfishell")
@@ -107,7 +107,7 @@ func TestFoundation(t *testing.T) {
 	installed := filepath.Join(root, "installed")
 	mustFS(t, os.MkdirAll(filepath.Join(installed, "bin"), 0700))
 	installedCLI := filepath.Join(installed, "bin/selfishell")
-	mustFS(t, copyFile(candidate, installedCLI))
+	mustFS(t, copyFile(cli, installedCLI))
 	mustFS(t, os.WriteFile(filepath.Join(installed, "VERSION"), []byte("0.0.0-test\n"), 0600))
 	mustFS(t, os.RemoveAll(release))
 	noTools := []string{"SELFISHELL_ROOT=/wrong/root", "PATH=" + filepath.Join(root, "no-tools")}

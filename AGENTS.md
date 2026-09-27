@@ -92,9 +92,6 @@ Preserve these lifecycle invariants:
 - Keep `packages.conf` declarative: only supported `package` records, never
   executable shell code.
 - Make repeated setup safe and idempotent.
-- The Bash-to-Go transition uses a fresh installation. Do not retain old Bash
-  engines or historical-commit comparisons in tests; preserve Go-to-Go lifecycle
-  coverage and user-data safety checks.
 - Download to a temporary location, verify it, and activate it atomically.
 - Never execute an unversioned remote release payload as the installer.
 - Avoid `sudo` for Selfishell files; use it only for system package operations

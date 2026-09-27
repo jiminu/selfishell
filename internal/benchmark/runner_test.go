@@ -17,6 +17,13 @@ import (
 )
 
 func TestParseOptions(t *testing.T) {
+	o, help, err := parseOptions(nil, map[string]string{
+		"SELFISHELL_BENCHMARK_ROOT": "/unrelated/root",
+		"SELFISHELL_BENCHMARK_CLI":  "/unrelated/selfishell",
+	}, "/checkout")
+	if err != nil || help || o.root != "/checkout" || o.cli != "/checkout/.build/selfishell" {
+		t.Fatalf("benchmark must use this checkout: %+v help=%v err=%v", o, help, err)
+	}
 	cases := []struct {
 		name string
 		args []string
@@ -78,7 +85,7 @@ func TestMissingAliases(t *testing.T) {
 
 func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 	root := repositoryRoot(t)
-	cli := buildTestCLI(t, root)
+	buildTestCLI(t, root)
 	private := t.TempDir()
 	ambient := filepath.Join(private, "ambient")
 	if e := os.MkdirAll(ambient, 0755); e != nil {
@@ -99,7 +106,7 @@ func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 		t.Fatal(e)
 	}
 	profile := filepath.Join(private, "startup.zprof")
-	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=" + ambient + ":/usr/bin:/bin", "XDG_DATA_HOME=" + callerData, "SELFISHELL_BENCHMARK_CLI=" + cli, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_ZPROF_FILE=" + profile}
+	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=" + ambient + ":/usr/bin:/bin", "XDG_DATA_HOME=" + callerData, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_ZPROF_FILE=" + profile}
 	var out, err bytes.Buffer
 	if code := Run([]string{"--mode", "base"}, env, root, &out, &err); code != 0 {
 		t.Fatalf("exit %d: %s", code, err.String())
@@ -130,10 +137,16 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	private := t.TempDir()
 	results := filepath.Join(private, "results.tsv")
 	guardedCLI, guardLog := guardDiagnosticCLI(t, private, cli)
-	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=/usr/bin:/bin", "SELFISHELL_BENCHMARK_CLI=" + guardedCLI, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=" + results}
+	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=/usr/bin:/bin", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=" + results}
 	var out, err bytes.Buffer
-	if code := Run([]string{"--mode", "base", "--prompt", "--diagnostics"}, env, root, &out, &err); code != 0 {
-		t.Fatalf("exit %d: %s", code, err.String())
+	benchmarkEnv := environment(env)
+	opts, _, e := parseOptions([]string{"--mode", "base", "--prompt", "--diagnostics"}, benchmarkEnv, root)
+	if e != nil {
+		t.Fatal(e)
+	}
+	opts.cli = guardedCLI
+	if e := run(context.Background(), opts, benchmarkEnv, &out, &err); e != nil {
+		t.Fatalf("benchmark: %v: %s", e, err.String())
 	}
 	if data, e := os.ReadFile(guardLog); e == nil {
 		t.Fatalf("diagnostic reached guarded command: %s", data)
@@ -172,14 +185,13 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	}
 }
 
-func TestFullProvisionUsesSourceHelperAndSelectedRoot(t *testing.T) {
+func TestFullProvisionUsesCheckoutHelper(t *testing.T) {
 	private := t.TempDir()
-	source := filepath.Join(private, "go-source")
-	selected := filepath.Join(private, "historical-root")
+	root := filepath.Join(private, "checkout")
 	home := filepath.Join(private, "home")
 	bin := filepath.Join(private, "bin")
 	log := filepath.Join(private, "helper.log")
-	for _, p := range []string{source, selected, home, bin} {
+	for _, p := range []string{root, home, bin} {
 		if e := os.MkdirAll(p, 0755); e != nil {
 			t.Fatal(e)
 		}
@@ -189,7 +201,7 @@ func TestFullProvisionUsesSourceHelperAndSelectedRoot(t *testing.T) {
 		t.Fatal(e)
 	}
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	f := &fixture{options: options{root: selected}, source: source, home: home, data: filepath.Join(home, ".local/share"), env: map[string]string{"PATH": "/usr/bin:/bin"}}
+	f := &fixture{options: options{root: root}, home: home, data: filepath.Join(home, ".local/share"), env: map[string]string{"PATH": "/usr/bin:/bin"}}
 	if e := f.provision(context.Background()); e != nil {
 		t.Fatal(e)
 	}
@@ -197,7 +209,7 @@ func TestFullProvisionUsesSourceHelperAndSelectedRoot(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, want := range []string{source + "|run ./cmd/selfishell-dev " + selected + " benchmark-shell|" + home + "|" + filepath.Join(home, ".local/share") + "|0"} {
+	for _, want := range []string{root + "|run ./cmd/selfishell-dev " + root + " benchmark-shell|" + home + "|" + filepath.Join(home, ".local/share") + "|0"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("helper routing: %s", data)
 		}
@@ -241,55 +253,6 @@ func buildTestCLI(t *testing.T, root string) string {
 		t.Fatalf("build CLI: %v: %s", e, output)
 	}
 	return path
-}
-
-func TestRunnerSelectedHistoricalRootAndCLI(t *testing.T) {
-	source := repositoryRoot(t)
-	private := t.TempDir()
-	historical := filepath.Join(private, "bash-export")
-	if e := os.MkdirAll(filepath.Join(historical, "bin"), 0755); e != nil {
-		t.Fatal(e)
-	}
-	copyConfig := exec.Command("/bin/cp", "-R", filepath.Join(source, "config"), filepath.Join(historical, "config"))
-	if output, e := copyConfig.CombinedOutput(); e != nil {
-		t.Fatalf("copy historical config: %v %s", e, output)
-	}
-	sentinel := filepath.Join(private, "historical-alias-loaded")
-	aliases := filepath.Join(historical, "config/shared/zsh/aliases.zsh")
-	file, e := os.OpenFile(aliases, os.O_APPEND|os.O_WRONLY, 0)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = fmt.Fprintf(file, "\nprint -r -- selected > '%s'\n", sentinel); e != nil {
-		t.Fatal(e)
-	}
-	if e = file.Close(); e != nil {
-		t.Fatal(e)
-	}
-	log := filepath.Join(private, "legacy-cli-args")
-	cli := filepath.Join(historical, "bin/selfishell")
-	script := "#!/usr/bin/env bash\nprintf '%s\\n' \"$1\" >>" + log + "\nexit 0\n"
-	if e := os.WriteFile(cli, []byte(script), 0755); e != nil {
-		t.Fatal(e)
-	}
-	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=/usr/bin:/bin", "SELFISHELL_BENCHMARK_ROOT=" + historical, "SELFISHELL_BENCHMARK_CLI=" + cli, "SELFISHELL_BENCHMARK_ITERATIONS=1"}
-	var out, stderr bytes.Buffer
-	if code := Run(nil, env, source, &out, &stderr); code != 0 {
-		t.Fatalf("code=%d stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(out.String(), "cli-version") || !strings.Contains(out.String(), "cli-help") {
-		t.Fatal("selected CLI metrics missing")
-	}
-	data, e := os.ReadFile(log)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if string(data) != "version\nhelp\n" {
-		t.Fatalf("selected CLI calls: %q", data)
-	}
-	if content, e := os.ReadFile(sentinel); e != nil || string(content) != "selected\n" {
-		t.Fatalf("historical module not sourced: %q %v", content, e)
-	}
 }
 
 func TestFullDiagnosticHomeSharesPrivateMise(t *testing.T) {
@@ -500,28 +463,14 @@ exit 97
 func TestRunnerRelativePathsFromSeparateCWD(t *testing.T) {
 	source := repositoryRoot(t)
 	caller := t.TempDir()
-	historical := filepath.Join(caller, "historical")
-	if e := os.MkdirAll(filepath.Join(historical, "bin"), 0755); e != nil {
-		t.Fatal(e)
-	}
-	copyConfig := exec.Command("/bin/cp", "-R", filepath.Join(source, "config"), filepath.Join(historical, "config"))
-	if output, e := copyConfig.CombinedOutput(); e != nil {
-		t.Fatalf("copy historical config: %v %s", e, output)
-	}
-	cli := filepath.Join(historical, "bin/selfishell")
-	calls := filepath.Join(caller, "cli-calls")
-	if e := os.WriteFile(cli, []byte(fmt.Sprintf(`#!/bin/sh
-printf '%%s\n' "$1" >> '%s'
-`, calls)), 0755); e != nil {
-		t.Fatal(e)
-	}
+	buildTestCLI(t, source)
 	for _, p := range []string{filepath.Join(caller, "tmp"), filepath.Join(caller, "out")} {
 		if e := os.MkdirAll(p, 0755); e != nil {
 			t.Fatal(e)
 		}
 	}
 	outer := filepath.Join(caller, "outer-home")
-	env := []string{"HOME=" + outer, "GOCACHE=" + filepath.Join(caller, "go-cache"), "TMPDIR=tmp", "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_ROOT=historical", "SELFISHELL_BENCHMARK_CLI=historical/bin/selfishell", "SELFISHELL_BENCHMARK_RESULTS_FILE=out/results.tsv", "SELFISHELL_BENCHMARK_ZPROF_FILE=out/startup.zprof"}
+	env := []string{"HOME=" + outer, "GOCACHE=" + filepath.Join(caller, "go-cache"), "TMPDIR=tmp", "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=out/results.tsv", "SELFISHELL_BENCHMARK_ZPROF_FILE=out/startup.zprof"}
 	cmd := exec.Command("bash", filepath.Join(source, "scripts/benchmark.sh"), "--mode", "base")
 	cmd.Dir = caller
 	cmd.Env = env
@@ -549,13 +498,6 @@ printf '%%s\n' "$1" >> '%s'
 		t.Fatalf("direct Run exit %d: %s", code, directErr.String())
 	}
 	verifyRelativeBenchmarkArtifacts(t, caller, "results.tsv", "startup.zprof")
-	data, e := os.ReadFile(calls)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if string(data) != "version\nhelp\nversion\nhelp\n" {
-		t.Fatalf("selected CLI calls: %q", data)
-	}
 }
 
 func verifyRelativeBenchmarkArtifacts(t *testing.T, caller, results, profile string) {
@@ -565,7 +507,7 @@ func verifyRelativeBenchmarkArtifacts(t *testing.T, caller, results, profile str
 		t.Fatal(e)
 	}
 	if !strings.Contains(string(rows), "\tcli-version\t") || !strings.Contains(string(rows), "\tcli-help\t") {
-		t.Fatalf("missing selected CLI results: %s", rows)
+		t.Fatalf("missing CLI results: %s", rows)
 	}
 	zprof, e := os.ReadFile(filepath.Join(caller, "out", profile))
 	if e != nil || !strings.Contains(string(zprof), "num  calls") {
