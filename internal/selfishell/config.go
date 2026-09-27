@@ -50,8 +50,7 @@ func (c CLI) install(args []string) int {
 	}
 	packages, err := ReadPackages(filepath.Join(c.Root, "packages.conf"))
 	if err != nil {
-		c.error(err.Error())
-		return 1
+		return c.diagnosticError(err)
 	}
 	if _, err := ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(c.Root, "dependencies.conf"))); err != nil {
 		c.error(err.Error())

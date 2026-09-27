@@ -10,6 +10,10 @@ import (
 type Package struct{ Platform, Requirement, Manager, Name string }
 type Dependency struct{ Kind, Name, Version, Platform, Arch, Source, Checksum, Target, Marker string }
 
+type invalidPackageNameError string
+
+func (e invalidPackageNameError) Error() string { return "Invalid package name: " + string(e) }
+
 func parseManifest(path string, fields int, accept func([]string) error) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -56,7 +60,7 @@ func ReadPackages(path string) ([]Package, error) {
 		if strings.HasPrefix(p.Name, "-") || strings.IndexFunc(p.Name, func(r rune) bool {
 			return !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@+._/-", r)
 		}) >= 0 {
-			return fmt.Errorf("Invalid package name: %s", p.Name)
+			return invalidPackageNameError(p.Name)
 		}
 		if !seen[p] {
 			packages = append(packages, p)

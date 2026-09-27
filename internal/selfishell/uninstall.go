@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -34,6 +35,9 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	for _, record := range records {
 		if e := m.preflightUninstall(record, restore); e != nil {
 			c.error(e.Error())
+			if record.State.Status == "pending" && !strings.Contains(e.Error(), "An interrupted install left this unfinished") {
+				c.error("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
+			}
 			failed = true
 		}
 	}
@@ -158,7 +162,7 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			if err = m.save(r, pending); err != nil {
 				return err
 			}
-			if err = writeAtomic(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
+			if err = m.write(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
 				return err
 			}
 		}
@@ -168,6 +172,10 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 				m.say("Would remove managed link: %s", s.Target)
 			} else {
 				m.say("Would remove managed file: %s", s.Target)
+			}
+		} else if m.removePath != nil {
+			if err = m.removePath(s.Target); err != nil {
+				return err
 			}
 		} else if err = os.Remove(s.Target); err != nil {
 			return err

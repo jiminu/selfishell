@@ -27,9 +27,7 @@ main() {
   local suite
   local suite_path
   local failed_suites=()
-  local suites=(
-    managed_install_test.bash
-  )
+  local suites=()
 
   case "$suite_jobs" in
     '' | *[!0-9]* | 0)
@@ -40,10 +38,7 @@ main() {
 
   for suite_path in "$ROOT_DIR"/tests/*_test.bash; do
     suite="${suite_path##*/}"
-    case "$suite" in
-      managed_install_test.bash) ;;
-      *) suites+=("$suite") ;;
-    esac
+    suites+=("$suite")
   done
 
   log_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-suite-test.XXXXXX")"

@@ -39,9 +39,81 @@ func TestManifestValidationBeforeInstall(t *testing.T) {
 func TestFullInstallValidatesManifestBeforeMutation(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	code, _, err := testCLI(t, root, home, "install", "--yes")
-	if code != 1 || !strings.Contains(err, "packages.conf") {
-		t.Fatalf("%d %s", code, err)
+	bin := t.TempDir()
+	t.Setenv("TMPDIR", t.TempDir())
+	for _, name := range []string{"apt-get", "apt-cache", "dpkg-query", "sudo", "brew", "curl", "git", "mise", "chsh"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf '%s\\n' called >>\"$HOME/external-called\"\nexit 99\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	t.Setenv("SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
+	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
+	if err := os.WriteFile(filepath.Join(root, "os-release"), []byte("ID=ubuntu\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
+		t.Setenv(name, filepath.Join(home, "mise", name))
+	}
+	isolateHome(t, home)
+	var out, stderr bytes.Buffer
+	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
+	if code != 1 || !strings.Contains(stderr.String(), "packages.conf") {
+		t.Fatalf("%d %s", code, stderr.String())
+	}
+	if _, err := os.Lstat(filepath.Join(home, "external-called")); !os.IsNotExist(err) {
+		t.Fatalf("external command reached: %v", err)
+	}
+}
+
+func TestInvalidPackageNameHasUsageStatusAtPublicConsumers(t *testing.T) {
+	root, home, bin := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("TMPDIR", t.TempDir())
+	for _, name := range []string{"apt-get", "apt-cache", "dpkg-query", "sudo", "brew", "curl", "git", "mise", "chsh"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	t.Setenv("SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
+	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
+	if err := os.WriteFile(filepath.Join(root, "os-release"), []byte("ID=ubuntu\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
+		t.Setenv(name, filepath.Join(home, "mise", name))
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range []struct {
+		line       string
+		status     int
+		diagnostic string
+	}{
+		{"package ubuntu required apt --allow-unauthenticated\n", 2, "Invalid package name: --allow-unauthenticated"},
+		{"execute unsafe\n", 1, "Unknown package manifest record: execute"},
+	} {
+		if err := os.WriteFile(filepath.Join(root, "packages.conf"), []byte(record.line), 0600); err != nil {
+			t.Fatal(err)
+		}
+		isolateHome(t, home)
+		for _, args := range [][]string{{"install", "--yes"}, {"update", "--tools-only", "--skip-packages", "--dry-run"}, {"status"}, {"doctor"}} {
+			var out, stderr bytes.Buffer
+			code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run(args)
+			diagnostic := stderr.String()
+			if code != record.status || !strings.Contains(diagnostic, record.diagnostic) {
+				t.Fatalf("%q: code=%d diagnostic=%q", args, code, diagnostic)
+			}
+			if _, err := os.Lstat(filepath.Join(home, "package-called")); !os.IsNotExist(err) {
+				t.Fatalf("%q invoked apt-get: %v", args, err)
+			}
+		}
 	}
 }
 func TestInstallAndRestoreExistingResources(t *testing.T) {

@@ -276,3 +276,60 @@ func TestCurlUsesProxy(t *testing.T) {
 		t.Fatal("proxy received no request")
 	}
 }
+
+func TestGitTransferSpeedEnvironment(t *testing.T) {
+	for _, tc := range []struct{ name, curlLimit, curlTime, gitLimit, gitTime, want string }{
+		{"defaults", "", "", "", "", "1024 30\n"},
+		{"configured", "256", "120", "", "", "256 120\n"},
+		{"caller override", "256", "120", "5", "", "5 120\n"},
+		{"invalid curl policy", "0", "120", "", "", " \n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HOME", root)
+			t.Setenv("TMPDIR", t.TempDir())
+			t.Setenv("PATH", root)
+			t.Setenv("SELFISHELL_CURL_LOW_SPEED_LIMIT", tc.curlLimit)
+			t.Setenv("SELFISHELL_CURL_LOW_SPEED_TIME", tc.curlTime)
+			t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", tc.gitLimit)
+			t.Setenv("GIT_HTTP_LOW_SPEED_TIME", tc.gitTime)
+			for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
+				t.Setenv(key, root+"/private/"+key)
+			}
+			if err := os.WriteFile(root+"/git", []byte("#!/bin/sh\nprintf '%s %s\\n' \"$GIT_HTTP_LOW_SPEED_LIMIT\" \"$GIT_HTTP_LOW_SPEED_TIME\" >\"$HOME/git-env\"\nexit 9\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			dep := Dependency{Kind: "git", Name: "fixture", Source: "file:///private/fixture"}
+			if err := op.stageGit(context.Background(), dep, root+"/stage"); err == nil {
+				t.Fatal("fake git failure ignored")
+			}
+			data, err := os.ReadFile(root + "/git-env")
+			if err != nil || string(data) != tc.want {
+				t.Fatalf("git child environment %q want %q: %v", data, tc.want, err)
+			}
+		})
+	}
+}
+
+func TestGitSpeedEnvironmentReachesIndirectToolChild(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("PATH", root)
+	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
+		t.Setenv(key, root+"/private/"+key)
+	}
+	t.Setenv("SELFISHELL_CURL_LOW_SPEED_LIMIT", "256")
+	t.Setenv("SELFISHELL_CURL_LOW_SPEED_TIME", "120")
+	t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", "5")
+	t.Setenv("GIT_HTTP_LOW_SPEED_TIME", "")
+	if err := os.WriteFile(root+"/nvim", []byte("#!/bin/sh\nprintf '%s %s\\n' \"$GIT_HTTP_LOW_SPEED_LIMIT\" \"$GIT_HTTP_LOW_SPEED_TIME\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	code, err := (Process{Out: &out, Err: io.Discard}).Run(context.Background(), "nvim")
+	if err != nil || code != 0 || out.String() != "5 120\n" {
+		t.Fatalf("indirect child: code=%d err=%v env=%q", code, err, out.String())
+	}
+}
