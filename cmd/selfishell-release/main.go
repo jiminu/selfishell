@@ -11,7 +11,7 @@ import (
 	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
-const usage = "Usage: scripts/build-native-release.sh --version VERSION [--output OUTPUT_DIR]"
+const usage = "Usage: scripts/build-release.sh --version VERSION [--output OUTPUT_DIR]"
 
 func main() {
 	if len(os.Args) < 2 {

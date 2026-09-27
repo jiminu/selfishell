@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1091 # Sources exist only in immutable exported Bash roots.
 
 set -euo pipefail
 SELFISHELL_ROOT="$1"

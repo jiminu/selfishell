@@ -323,7 +323,7 @@ func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
 		}
 	}
 }
-func TestProductionBashBuilderContract(t *testing.T) {
+func TestProductionNativeBuilderContract(t *testing.T) {
 	home := t.TempDir()
 	first := filepath.Join(home, "first")
 	second := filepath.Join(home, "second")
@@ -332,7 +332,7 @@ func TestProductionBashBuilderContract(t *testing.T) {
 			time.Sleep(time.Second)
 		}
 		cmd := exec.Command("bash", filepath.Join(repoRoot(), "scripts/build-release.sh"), "--version", "0.2.2", "--output", out)
-		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH=/usr/bin:/bin:/opt/homebrew/bin")
+		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":/usr/bin:/bin:/usr/sbin:/sbin", "GOTOOLCHAIN=local", "GOCACHE="+filepath.Join(home, "go-cache"))
 		if b, e := cmd.CombinedOutput(); e != nil {
 			t.Fatalf("production builder: %v %s", e, b)
 		}
@@ -345,7 +345,7 @@ func TestProductionBashBuilderContract(t *testing.T) {
 		b, e := os.ReadFile(filepath.Join(second, name))
 		mustFS(t, e)
 		if !bytes.Equal(a, b) {
-			t.Errorf("Bash archive not reproducible: %s", name)
+			t.Errorf("native archive not reproducible: %s", name)
 		}
 	}
 	a, e := os.ReadFile(filepath.Join(first, "SHA256SUMS"))
@@ -353,9 +353,9 @@ func TestProductionBashBuilderContract(t *testing.T) {
 	b, e := os.ReadFile(filepath.Join(second, "SHA256SUMS"))
 	mustFS(t, e)
 	if !bytes.Equal(a, b) {
-		t.Error("Bash checksums differ")
+		t.Error("native checksums differ")
 	}
-	assertConfigPayload(t, filepath.Join(first, "selfishell-0.2.2-linux-amd64.tar.gz"), "0.2.2", false)
+	assertConfigPayload(t, filepath.Join(first, "selfishell-0.2.2-linux-amd64.tar.gz"), "0.2.2", true)
 }
 func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
 	privateNativeHome(t)
@@ -397,7 +397,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 	mustFS(t, err)
 	mustFS(t, os.Symlink(dirname, filepath.Join(noGo, "dirname")))
 	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
-		cmd := exec.Command("/bin/bash", append([]string{filepath.Join(repoRoot(), "scripts/build-native-release.sh")}, args...)...)
+		cmd := exec.Command("/bin/bash", append([]string{filepath.Join(repoRoot(), "scripts/build-release.sh")}, args...)...)
 		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+noGo)
 		b, e := cmd.CombinedOutput()
 		var exit *exec.ExitError
@@ -405,7 +405,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 			t.Errorf("without Go args %q: status %v output %s", args, e, b)
 		}
 	}
-	script := filepath.Join(repoRoot(), "scripts/build-native-release.sh")
+	script := filepath.Join(repoRoot(), "scripts/build-release.sh")
 	for _, args := range [][]string{{}, {"--bogus"}, {"--version"}, {"--version", "v1.2.3"}} {
 		cmd := exec.Command("bash", append([]string{script}, args...)...)
 		cmd.Dir = home

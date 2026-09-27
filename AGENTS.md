@@ -84,9 +84,9 @@ Preserve these lifecycle invariants:
 
 ## Implementation Boundaries
 
-- Keep `install.sh`, the CLI entrypoint, and shared libraries compatible with
+- Keep `install.sh`, the source CLI launcher, and maintenance scripts compatible with
   macOS Bash 3.2 unless the product explicitly installs another interpreter.
-- Keep Homebrew and Apt operations in `lib/package_managers/`; do not scatter
+- Keep Homebrew and Apt operations in the Go platform adapters; do not scatter
   platform branches through command implementations.
 - Keep `packages.conf` declarative: only supported `package` records, never
   executable shell code.
@@ -202,7 +202,7 @@ it; the gate remains required for the change categories listed above.
 
 | Path | Responsibility |
 | --- | --- |
-| `bin/`, `lib/` | CLI commands, lifecycle, platform and package adapters |
+| `bin/`, `cmd/`, `internal/` | Source launcher, native CLI, lifecycle, platform and package adapters |
 | `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
 | `packages.conf`, `dependencies.conf` | Declarative packages and approved dependencies |
 | `tests/` | Isolated unit and lifecycle coverage |
