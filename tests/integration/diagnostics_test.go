@@ -265,7 +265,7 @@ func TestDoctorPlugins(t *testing.T) {
 		}
 		return strings.TrimSpace(string(result.Stdout))
 	}
-	for _, name := range []string{"missing", "clean", "drift", "dirty"} {
+	for _, name := range []string{"missing", "clean", "detached", "packed", "fallback", "unborn", "broken", "invalid-config", "drift", "dirty", "untracked"} {
 		t.Run(name, func(t *testing.T) {
 			home := filepath.Join(root, "home")
 			mustFS(t, os.RemoveAll(home))
@@ -287,6 +287,25 @@ func TestDoctorPlugins(t *testing.T) {
 				runGit(plugin, "add", "tracked")
 				runGit(plugin, "commit", "--quiet", "-m", "first")
 				revision = runGit(plugin, "rev-parse", "HEAD")
+				switch name {
+				case "detached":
+					runGit(plugin, "checkout", "--quiet", "--detach")
+				case "packed":
+					runGit(plugin, "pack-refs", "--all")
+				case "fallback":
+					ref := runGit(plugin, "symbolic-ref", "HEAD")
+					runGit(plugin, "symbolic-ref", "refs/heads/alias", ref)
+					runGit(plugin, "symbolic-ref", "HEAD", "refs/heads/alias")
+				case "unborn":
+					runGit(plugin, "rm", "-q", "tracked")
+					runGit(plugin, "symbolic-ref", "HEAD", "refs/heads/unborn")
+				case "broken":
+					mustFS(t, os.WriteFile(filepath.Join(plugin, ".git/HEAD"), []byte("invalid\n"), 0600))
+				case "invalid-config":
+					mustFS(t, os.WriteFile(filepath.Join(plugin, ".git/config"), []byte("[invalid\n"), 0600))
+				case "untracked":
+					mustFS(t, os.WriteFile(filepath.Join(plugin, "untracked"), []byte("user data\n"), 0600))
+				}
 				if name == "drift" {
 					mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("second\n"), 0600))
 					runGit(plugin, "commit", "--quiet", "-am", "second")
@@ -296,23 +315,42 @@ func TestDoctorPlugins(t *testing.T) {
 				}
 			}
 			mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
+			trace := filepath.Join(root, "git-trace")
+			mustFS(t, os.WriteFile(trace, nil, 0600))
+			diagnosticEnv := append(append([]string{}, env...), "GIT_TRACE="+trace, "GIT_DIR="+root+"/foreign", "GIT_WORK_TREE="+root+"/foreign")
 			before := mustSnapshot(t, home)
-			got, e := captureCommand(home, entry, []string{"doctor"}, env)
+			got, e := captureCommand(home, entry, []string{"doctor"}, diagnosticEnv)
 			if e != nil {
 				t.Fatal(e)
 			}
 			status := 0
-			if name != "clean" {
+			if name != "clean" && name != "detached" && name != "packed" && name != "fallback" {
 				status = 1
 			}
 			requireStatus(t, "CLI", got, status)
 			expected := map[string]string{
-				"missing": "Zsh plugins: 1 not provisioned (test/plugin)",
-				"clean":   "Zsh plugins: provisioned",
-				"drift":   "Zsh plugins: 1 at an unapproved revision (test/plugin)",
-				"dirty":   "Zsh plugins: 1 modified locally (test/plugin)",
+				"missing":        "Zsh plugins: 1 not provisioned (test/plugin)",
+				"clean":          "Zsh plugins: provisioned",
+				"detached":       "Zsh plugins: provisioned",
+				"packed":         "Zsh plugins: provisioned",
+				"fallback":       "Zsh plugins: provisioned",
+				"unborn":         "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"broken":         "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"invalid-config": "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"untracked":      "Zsh plugins: 1 modified locally (test/plugin)",
+				"drift":          "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"dirty":          "Zsh plugins: 1 modified locally (test/plugin)",
 			}[name]
 			requireContains(t, got.Stdout, expected)
+			calls, err := os.ReadFile(trace)
+			mustFS(t, err)
+			wantHeads := 0
+			if name == "fallback" || name == "unborn" {
+				wantHeads = 1
+			}
+			if got := strings.Count(string(calls), "rev-parse HEAD"); got != wantHeads {
+				t.Fatalf("HEAD processes=%d want=%d: %s", got, wantHeads, calls)
+			}
 			if !bytes.Equal(before, got.Home) {
 				t.Fatal("CLI mutated HOME")
 			}

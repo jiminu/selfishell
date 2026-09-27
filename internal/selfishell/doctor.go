@@ -160,12 +160,16 @@ func (c CLI) doctorPlugins(paths Paths, dependencies []Dependency) bool {
 			continue
 		}
 		changes, _, ok := runInventory("", append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), "git", "-C", dir, "status", "--porcelain")
-		if ok && changes != "" {
+		if !ok {
+			drifted = append(drifted, d.Name)
+			continue
+		}
+		if changes != "" {
 			dirty = append(dirty, d.Name)
 			continue
 		}
-		head, _, ok := runInventory("", append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), "git", "-C", dir, "rev-parse", "HEAD")
-		if !ok || strings.TrimSpace(head) != d.Version {
+		head, err := inventoryGitHead(dir)
+		if err != nil || head != d.Version {
 			drifted = append(drifted, d.Name)
 		}
 	}

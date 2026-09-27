@@ -408,6 +408,51 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "v3.15.0", "selfishell", "v3.15.0")
+	for _, format := range []string{"loose", "packed", "detached", "fallback", "broken"} {
+		t.Run(format, func(t *testing.T) {
+			switch format {
+			case "packed":
+				gitCommand(t, target, "pack-refs", "--all")
+			case "detached":
+				gitCommand(t, target, "checkout", "--quiet", "--detach")
+			case "fallback":
+				gitCommand(t, target, "update-ref", "refs/heads/pinned", sha)
+				gitCommand(t, target, "symbolic-ref", "refs/heads/alias", "refs/heads/pinned")
+				gitCommand(t, target, "symbolic-ref", "HEAD", "refs/heads/alias")
+			case "broken":
+				fixtureFile(t, target+"/.git/HEAD", "invalid\n", 0600)
+			}
+			trace := root + "/git-trace"
+			fixtureFile(t, trace, "", 0600)
+			t.Setenv("GIT_TRACE", trace)
+			t.Setenv("GIT_DIR", root+"/foreign")
+			t.Setenv("GIT_WORK_TREE", root+"/foreign")
+			got, err := inv.Detect("direct", "zinit", "linux", "amd64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			installed := "v3.15.0"
+			if format == "broken" {
+				installed = "missing"
+			}
+			wantTool(t, got, installed, "selfishell", "v3.15.0")
+			wantHeads := 0
+			if format == "fallback" || format == "broken" {
+				wantHeads = 1
+			}
+			calls := readTestFile(t, trace)
+			if got := strings.Count(calls, "rev-parse HEAD"); got != wantHeads {
+				t.Fatalf("HEAD processes=%d want=%d: %s", got, wantHeads, calls)
+			}
+		})
+	}
+	fixtureFile(t, target+"/.git/HEAD", sha+"\n", 0600)
+	fixtureFile(t, target+"/untracked", "user data\n", 0600)
+	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTool(t, got, "v3.15.0", "selfishell", "v3.15.0")
 	fixtureFile(t, marker, "changed\n", 0600)
 	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
 	if err != nil {
