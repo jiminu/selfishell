@@ -1,159 +1,71 @@
 # CLI compatibility
 
-The Go CLI preserves the existing command, user-data and release contracts in
-[AGENTS.md](../AGENTS.md). A language change does not change package membership,
-managed state meaning, or the boundaries between CLI updates and environment
-updates. Bootstrap remains a shell script, and Zsh/editor configuration remains
-in its native form. Users receive a compiled executable and do not install Go.
+The installed `selfishell` command is a native Go executable with all eight
+public commands: `help`, `version`, `doctor`, `install`, `status`, `update`,
+`rollback`, and `uninstall`. `sfs` is an optional link. The standalone Bash 3.2
+bootstrap transports a verified archive; native Zsh and editor configuration
+continue to run in their own languages. There is no selectable Bash/Go mode
+and users do not need Go. Package membership and pins remain in
+`packages.conf`, `dependencies.conf`, and `config/shared/mise.toml`.
 
-## Toolchain and platform boundary
+## Development and platform boundary
 
-The selected development toolchain is Go **1.27.1**. Native release candidates
-use `CGO_ENABLED=0`, with baseline CPU targets (`GOAMD64=v1`, `GOARM64=v8.0`),
-for macOS/Linux on AMD64/ARM64. The toolchain version belongs to development and
-CI configuration; it is not an environment package in `packages.conf`.
+`go.mod` pins Go 1.27.1 for source builds and CI. Build explicitly with
+`bash scripts/build-cli.sh`; `bin/selfishell` then executes the existing
+`.build/selfishell` and gives a build instruction if it is absent. Ordinary
+invocation never compiles. `scripts/build-release.sh --version VERSION` is the
+single production builder and writes native archives without a source `VERSION`
+file. Release executables use `CGO_ENABLED=0`, `GOAMD64=v1` and `GOARM64=v8.0`.
 
-The Go CLI requires **macOS 13 or newer**. Older macOS versions are outside the
-support scope; no compatibility implementation or intermediate migration
-release is planned for them. The Linux validation baseline is **Ubuntu 24.04
-LTS**, with **WSL 2 running Ubuntu** as the Windows environment. Ubuntu 26.04
-LTS, actual WSL execution and additional CPU combinations need their own
-installation checks before being reported as verified. WSL 1, native Windows
-and other Linux distributions are outside the Go migration's support scope.
-These are migration targets, not evidence that the Go candidate has passed
-platform verification. See [installation verification coverage](INSTALLATION.md#verification-coverage)
-for the production environment's existing coverage.
+The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
+and ARM64 archive formats. Completed native CI execution has covered a Linux
+AMD64 Ubuntu 24.04 container and macOS ARM64 26.6.2. Four formats are built and
+inspected; format inspection and simulated platform selectors do not prove
+runtime behavior on all four targets. Actual WSL, Ubuntu 26.04, macOS 13,
+and the other CPU/OS pairings remain unexecuted in this migration evidence.
+The new ordinary CI exact-prebuilt smoke step and Release workflow's artifact
+transfer need completed runs before their results can be claimed.
 
-Manifest validation precedes configuration application, including when
-`--skip-packages` is used. Runtime consumers such as benchmarks and E2E scripts
-must exercise the candidate as each capability becomes available. Even an early
-candidate must be built for all four targets and smoke-tested with `help` and
-`version` on its native hosts; complete upgrade/rollback validation follows
-when that behavior exists. Production activation waits for compatibility and
-release checks, and publication remains a separate maintainer decision.
+## Fixed references and comparison
 
-## Fixed references
+The immutable Bash behavior reference is
+`3bbbfa0346ee74eb47f31a81ec666340a5ef6018`. Actual Bash v1.3.1 is
+`d025710338036f1f54b948f1f3e5c17a0b3f7e38`, used separately for release
+and state interoperability. Tests export these exact local commits; missing
+history fails without fetching or substituting current code. The baseline
+comparison captures command streams, status and entire private HOME tree,
+including exact bytes, modes, link targets, state and backups. The native
+comparison uses the same release paths and fixtures. Fixed Bash bridge scripts
+are protocol references, not a maintained command engine or assertion runner.
 
-The behavior reference is commit
-`3bbbfa0346ee74eb47f31a81ec666340a5ef6018`. The legacy release is **v1.3.1** at
-`d025710338036f1f54b948f1f3e5c17a0b3f7e38`. Tests export these exact commits
-from local Git history. Missing history fails explicitly; tests never fetch
-or substitute the current checkout for a legacy release.
+All maintained test orchestration, setup, assertions and cleanup use Go.
+Native Zsh probes cover shell startup, completion, widgets and notices; Lua
+probes cover Neovim APIs. `tests/fixtures/go_migration/state_bridge.bash`
+exercises old state-v2 interoperability, `date.bash` supplies an external fixed
+backup clock, and `cksum.bash` injects an external checksum failure. No Bash
+feature runner or Python benchmark driver remains. Shell scripts under
+`scripts/` are bootstrap, narrow maintenance/CI glue, explicit builders or
+benchmark launchers. `scripts/check.sh` is the repository gate: shell checks,
+Go format/vet/tests, four builds and native host checks. Release publication
+is a separate manual tag decision.
 
-The legacy archives are built twice with the legacy commit's own builder.
-Tests compare all four archives, `SHA256SUMS` and generated `VERSION`, then
-check each checksum and install the exact host archive through the legacy
-bootstrap using `file://` URLs. The source export is removed before exercising
-the installed CLI, configuration lifecycle and purge.
+## Product behavior and deliberate differences
 
-## Comparison method
+Managed paths remain user-safe: pending state is written before mutation,
+regular files are checksummed, original backups persist across reinstalls,
+preflights cover all uninstall resources, and restore never overwrites an
+occupied target. Dry-run writes nothing. `update --tools-only --skip-packages`
+reapplies current configuration without network access; ordinary default
+update is a no-op when already current. Rollback uses retained files offline.
 
-`go test ./tests/migration -run '^TestBaseline$' -count=1` runs the fixed reference
-twice, using empty and existing user-data fixtures. The scenario captures
-stdout, stderr, exit status and the complete HOME tree after help/version,
-invalid arguments, configuration dry-run, install, reinstall, configuration
-update and restore. Filesystem captures retain exact bytes, permission bits,
-path types and symlink targets, including managed state and backups. Directory
-links are not followed and special files are not opened.
-
-Each repetition uses the same HOME and release paths. A fixture fixes only the
-backup-name clock so timestamp differences cannot obscure backup identity or
-collision suffixes. No captured content, path or checksum is rewritten. The
-Go snapshot code reads without modifying the fixture. A restricted command PATH and an empty inherited environment keep
-caller configuration, package managers and network tools out of the reference
-scenario.
-
-The baseline proves the comparator and fixtures. The separate
-`go test ./tests/migration -run '^TestConfig' -count=1` runs the actual native Go
-binary and fixed Bash CLI from the same temporary release path. It compares
-command output, exit status, and complete HOME bytes, permissions, links, state,
-and backups for empty, existing, custom XDG, changed-resource, pending-recovery,
-late-preflight, and malformed-package cases on simulated macOS, Ubuntu, and
-Ubuntu/WSL. A versioned temporary prefix also exercises dry-run and real purge
-after removing the source export. Expected failure statuses and dry-run
-invariance are asserted independently of the Bash/Go comparison. The candidate
-checks malformed dependency records before mutation; this is an intentional
-parser boundary beyond the reference's lazy dependency selection.
-
-`scripts/check-go.sh` runs the config tests and compares both the native
-development binary and native cross-build artifact through `TestFoundation`
-on each CI host. Four cross-builds are produced; only native artifacts execute.
-Simulated
-platform selection checks resource choice and lifecycle logic; it does not
-constitute runtime verification on another OS or CPU. Bash-specific failure
-injection remains in its existing integration suites.
-
-The old Bash/Python migration driver and scenario scripts have been replaced
-by Go tests. Remaining Bash feature suites still use `tests/run.bash`,
-`tests/test_helper.bash`, and `tests/cli_runner.bash`. Go compatibility tests
-retain `cksum.bash` and `state_bridge.bash`; `date.bash` remains solely as the
-external fixed-clock fixture for backup naming. Python 3 is still required by
-other feature suites and benchmark tooling in the full developer gate.
-
-## Verification reporting
-
-Report local checks, GitHub Actions checks and unavailable environments
-separately. Archive-format inspection or cross-compilation is not execution on
-that OS/CPU. Release tests select the real host archive; simulated platform
-detection remains a separate behavior test. Preserve this distinction in
-performance comparisons as well: measure matched fixtures on the same host,
-and do not present Linux timings as macOS results.
-
-## Development execution foundation
-
-`go.mod` pins the development and CI toolchain. `scripts/build-cli.sh` builds
-`.build/selfishell` with CGO disabled and baseline CPU settings; `--all` also
-builds the four targets under `.build/targets`. `scripts/check-go.sh` runs Go
-formatting, vet, tests, builds and native reference comparisons as part of the
-repository gate. CI uses the same pin on Linux and macOS. Production entrypoints
-and release payloads remain Bash until the migration cutover.
-
-The candidate implements help, local version, complete `install` and
-configuration-only `install --skip-packages`, `uninstall` (including `--restore` and explicit
-`--purge`), `status`, and `doctor`. Installed tool detection and diagnostic
-commands are compared with the fixed Bash reference in
-`tests/migration/diagnostics_test.go`, including actual stdout terminal colors.
-Full install groups current-platform Apt, Homebrew, direct downloads, and pinned
-mise tools through one Go package operation after all configuration preflights.
-It then applies managed configuration, provisions declared Neovim plugins,
-and records setup markers. Initial install does not prune mise versions.
-The Go candidate also supports `version --available`, exact or latest CLI
-updates, tools-only synchronization, and offline rollback to an intact retained
-release. A successful default CLI update continues configuration work in the
-new executable using the legacy continuation arguments. Configuration-only
-`update --tools-only --skip-packages` avoids release metadata and package
-network access. The production CLI and installer remain Bash.
-CI runs opt-in installed native archive consumers: a full install in a
-disposable root Ubuntu 24.04 container and configuration, restore, and purge
-on macOS. Both bootstrap exact locally built host archives before invoking the
-installed CLI. The Ubuntu consumer checks actual mise, Zsh, Vim, and pinned
-Zinit installation; the macOS consumer uses private homes and skips packages.
-The pinned Neovim consumer remains a separate CI job. Normal `go test ./...`
-keeps network and system package installation disabled. Cross-built archive
-format checks cover all four targets, while each opt-in executes only its
-runner's native OS and CPU.
-The Neovim configuration Lua fixtures run through Go assertions in ordinary
-tests when Neovim is available and through the required pinned CI consumer.
-Configuration dry-run makes no filesystem changes, and user-owned targets are
-preflighted before install or uninstall changes begin.
-The Go candidate deliberately corrects one inherited Bash behavior: when an
-existing user file already has the same bytes as a managed default, install
-still saves the original before adopting that path. This preserves its original
-permissions and lets `uninstall --restore` return it. The immutable Bash
-reference skips that backup and can delete the preexisting file on uninstall.
-The candidate-only configuration lifecycle test covers this safety correction;
-the fixed-reference comparisons and their existing snapshots remain intact.
-Release location follows the resolved executable (including chained symlinks),
-not the caller's working directory or `SELFISHELL_ROOT`. Generated VERSION files
-remain the installed version source; `.git` marks source development builds.
-
-The execution helper passes argument arrays, environment and standard streams
-directly to `os/exec`. It retains foreground terminal membership, preserves child
-exit/signal statuses, and cancels and reaps its direct child when its context is
-cancelled; it does not promise process-tree cancellation. Downloads keep curl's
-proxy and `file://` behavior, connection/stall policy and metadata timeout.
-Verification and atomic activation of downloaded files belong to their lifecycle
-consumers. No shell command is constructed from an argument string.
+The native CLI deliberately corrects a Bash data-loss edge: an existing user
+file with the same bytes as a managed default is backed up before adoption.
+The Bash reference could skip the backup and delete that file on restore.
+Three other inherited decisions remain intentional. Optional Apt failures warn
+without invalidating a setup that otherwise completes; a fresh download may
+activate before a later state commit failure is reported; and concurrent
+installers have no lock guarantee. Run one bootstrap/update/rollback at a time.
+A failure after activation requires checking `selfishell version` before retry.
 
 ## Managed-state interoperability
 

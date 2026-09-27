@@ -1,33 +1,19 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
-
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/lib/common.sh"
-
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/release-version.sh"
 version=""
-output_dir="$ROOT_DIR/dist"
-
-usage() {
-  printf 'Usage: scripts/build-release.sh --version VERSION [--output OUTPUT_DIR]\n' >&2
-}
-
+usage() { printf 'Usage: scripts/build-release.sh --version VERSION [--output OUTPUT_DIR]\n' >&2; }
+args=("$@")
 while (("$#" > 0)); do
   case "$1" in
-    --version)
+    --version | --output)
       (($# >= 2)) || {
         usage
         exit 2
       }
-      version="$2"
-      shift 2
-      ;;
-    --output)
-      (($# >= 2)) || {
-        usage
-        exit 2
-      }
-      output_dir="$2"
+      [[ "$1" == --version ]] && version="$2"
       shift 2
       ;;
     *)
@@ -37,86 +23,19 @@ while (("$#" > 0)); do
       ;;
   esac
 done
-
 if ! selfishell_version_is_valid "$version"; then
   printf 'A valid semantic version is required.\n' >&2
   usage
   exit 2
 fi
-[[ "$output_dir" == /* ]] || output_dir="$ROOT_DIR/$output_dir"
-
-staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release.XXXXXX")"
-trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
-payload_dir="$staging_root/payload"
-archive_files="$staging_root/archive-files"
-mkdir -p "$payload_dir" "$output_dir"
-
-cp -R \
-  "$ROOT_DIR/bin" \
-  "$ROOT_DIR/lib" \
-  "$ROOT_DIR/packages.conf" \
-  "$ROOT_DIR/config" \
-  "$payload_dir/"
-cp "$ROOT_DIR/dependencies.conf" "$payload_dir/"
-printf '%s\n' "$version" >"$payload_dir/VERSION"
-chmod 0644 "$payload_dir/VERSION"
-
-# Normalize archive inputs so builds do not depend on checkout ownership,
-# staging timestamps, filesystem traversal order, or gzip headers.
-TZ=UTC find "$payload_dir" -exec touch -h -t 200001010000 {} +
-(
-  cd "$payload_dir"
-  find . \( -type f -o -type l \) -print | LC_ALL=C sort >"$archive_files"
-)
-
-create_release_archive() {
-  local destination="$1"
-
-  if tar --version 2>/dev/null | head -n 1 | grep -q 'GNU tar'; then
-    tar --format=ustar --owner=0 --group=0 --numeric-owner --mtime=@946684800 \
-      -cf - -C "$payload_dir" -T "$archive_files" | gzip -n >"$destination"
-  else
-    COPYFILE_DISABLE=1 tar --format=ustar --uid 0 --gid 0 --uname root --gname root \
-      -cf - -C "$payload_dir" -T "$archive_files" | gzip -n >"$destination"
-  fi
-}
-
-for platform in linux macos; do
-  for architecture in amd64 arm64; do
-    archive="selfishell-${version}-${platform}-${architecture}.tar.gz"
-    create_release_archive "$output_dir/$archive"
-  done
-done
-
-(
-  cd "$output_dir"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum selfishell-"$version"-*.tar.gz >SHA256SUMS
-  else
-    shasum -a 256 selfishell-"$version"-*.tar.gz >SHA256SUMS
-  fi
-)
-printf '%s\n' "$version" >"$output_dir/VERSION"
-
-printf 'Verifying built release artifacts...\n'
-for platform in linux macos; do
-  for architecture in amd64 arm64; do
-    archive="selfishell-${version}-${platform}-${architecture}.tar.gz"
-    if [[ ! -f "$output_dir/$archive" ]]; then
-      printf 'Error: Missing release archive %s\n' "$archive" >&2
-      exit 1
-    fi
-    if ! grep -q "$archive" "$output_dir/SHA256SUMS"; then
-      printf 'Error: Archive %s is not registered in SHA256SUMS\n' "$archive" >&2
-      exit 1
-    fi
-  done
-done
-
-if [[ "$(tr -d '[:space:]' <"$output_dir/VERSION")" != "$version" ]]; then
-  printf 'Error: dist/VERSION content mismatch. Expected: %s\n' "$version" >&2
+set -- "${args[@]}"
+export GOTOOLCHAIN=local GOFLAGS='' GOENV=off GOWORK=off GOOS='' GOARCH='' CGO_ENABLED=0 GOAMD64=v1 GOARM64=v8.0 GOEXPERIMENT=none GOPROXY=off GOSUMDB=off
+required="$(awk '$1 == "go" { print $2 }' go.mod)"
+if ! command -v go >/dev/null 2>&1 || [[ "$(go env GOVERSION 2>/dev/null || :)" != "go$required" ]]; then
+  printf 'Building the native release requires Go %s on PATH.\n' "$required" >&2
   exit 1
 fi
-printf 'Build artifacts verification passed.\n'
-
-printf 'Built Selfishell %s release artifacts in %s\n' "$version" "$output_dir"
+staging_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-release-builder.XXXXXX")"
+trap 'rm -rf "$staging_root"' EXIT HUP INT TERM
+go build -trimpath -buildvcs=false -o "$staging_root/builder" ./cmd/selfishell-release
+"$staging_root/builder" "$ROOT_DIR" "$@"

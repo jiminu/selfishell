@@ -84,9 +84,10 @@ Preserve these lifecycle invariants:
 
 ## Implementation Boundaries
 
-- Keep `install.sh`, the CLI entrypoint, and shared libraries compatible with
-  macOS Bash 3.2 unless the product explicitly installs another interpreter.
-- Keep Homebrew and Apt operations in `lib/package_managers/`; do not scatter
+- Keep `install.sh`, the source CLI launcher, and maintenance shell scripts
+  compatible with macOS Bash 3.2. The installed CLI is a prebuilt native Go
+  executable; source development requires the pinned Go toolchain explicitly.
+- Keep Homebrew and Apt operations in the Go platform adapters; do not scatter
   platform branches through command implementations.
 - Keep `packages.conf` declarative: only supported `package` records, never
   executable shell code.
@@ -182,9 +183,12 @@ for any shell, lifecycle, package, dependency, or release change:
 bash scripts/check.sh
 ```
 
-The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, and the
-test suite. Tests must use a temporary `HOME` and must never install against or
-modify the developer's real home directory. Behavioral changes require tests,
+The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, Go
+format/vet, four native builds, and the Go-owned test suite. Maintained test
+setup, process control, assertions, and cleanup belong in Go; native Zsh/Lua
+runtime probes and fixed Bash protocol fixtures may remain. Tests must use a
+temporary `HOME` and must never install against or modify the developer's real
+home directory. Behavioral changes require tests,
 especially for empty/existing paths, repeated operations, interruptions,
 unsupported platforms, --skip-packages behavior, uninstall, restore, update,
 and rollback.
@@ -202,10 +206,10 @@ it; the gate remains required for the change categories listed above.
 
 | Path | Responsibility |
 | --- | --- |
-| `bin/`, `lib/` | CLI commands, lifecycle, platform and package adapters |
+| `bin/`, `cmd/`, `internal/` | Explicit source launcher, native CLI, lifecycle, platform and package adapters |
 | `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
 | `packages.conf`, `dependencies.conf` | Declarative packages and approved dependencies |
-| `tests/` | Isolated unit and lifecycle coverage |
+| `tests/` | Go-owned isolated unit and lifecycle coverage; native runtime and fixed-reference fixtures |
 | `scripts/` | Validation, benchmarks, dependency discovery, release builds |
 | `.github/` | CI, dependency automation, and release publication |
 | `docs/` | User, maintainer, and security documentation |

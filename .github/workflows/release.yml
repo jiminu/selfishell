@@ -47,15 +47,16 @@ jobs:
       - name: Run verification suite
         run: bash scripts/check.sh
 
-  publish:
+  build:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: write
-      attestations: write
-      id-token: write
-      artifact-metadata: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
 
     steps:
       - name: Check out release commit
@@ -78,7 +79,7 @@ jobs:
         run: |
           TAG="$PUSHED_TAG"
           version="${TAG#v}"
-          source lib/common.sh
+          source scripts/release-version.sh
           if ! selfishell_version_is_valid "$version"; then
             printf 'Invalid release tag: %s\n' "$TAG" >&2
             exit 1
@@ -87,31 +88,104 @@ jobs:
           printf 'tag=%s\n' "$TAG" >>"$GITHUB_OUTPUT"
 
       - name: Build release artifacts
-        run: bash scripts/build-release.sh --version '${{ steps.version.outputs.version }}' --output dist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bash scripts/build-release.sh --version "$VERSION" --output dist
+
+      - name: Upload release artifacts
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke exact release (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: dist
+          digest-mismatch: error
+
+      - name: Smoke exact prebuilt release
+        env:
+          SELFISHELL_TEST_RELEASE_DIR: ${{ github.workspace }}/dist
+          SELFISHELL_TEST_RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
+          go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1
+
+  publish:
+    needs: [build, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+      artifact-metadata: write
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: dist
+          digest-mismatch: error
+
+      - name: Verify downloaded artifacts
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cd dist
+          test "$(cat VERSION)" = "$VERSION"
+          test "$(find . -maxdepth 1 -type f | wc -l)" -eq 6
+          for target in linux-amd64 linux-arm64 macos-amd64 macos-arm64; do
+            test -f "selfishell-$VERSION-$target.tar.gz"
+          done
+          sha256sum -c SHA256SUMS
 
       - name: Generate signed build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/*
 
-      - name: Smoke test exact release
-        env:
-          SELFISHELL_BOOTSTRAP_OS: Linux
-          SELFISHELL_BOOTSTRAP_ARCH: x86_64
-          SELFISHELL_RELEASE_ROOT: file://${{ runner.temp }}/selfishell-releases
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          release_dir="$RUNNER_TEMP/selfishell-releases/download/v$VERSION"
-          mkdir -p "$release_dir"
-          cp dist/* "$release_dir/"
-          prefix="$RUNNER_TEMP/selfishell-prefix"
-          bash install.sh --version "$VERSION" --prefix "$prefix"
-          test "$("$prefix/bin/selfishell" version)" = "selfishell $VERSION"
-
       - name: Publish immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
           release_args=()
           [[ "$TAG" != *-* ]] || release_args+=(--prerelease)

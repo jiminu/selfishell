@@ -3,6 +3,7 @@ package benchmark
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -101,6 +102,32 @@ zshexit() { print finished >> "$HOME/finished"; }
 	}
 	if !reflect.DeepEqual(strings.Fields(string(data)), []string{"finished", "finished"}) {
 		t.Fatalf("zshexit evidence: %q", data)
+	}
+}
+
+func TestPromptFromSessionLeader(t *testing.T) {
+	if _, err := os.Stat("/bin/zsh"); err != nil {
+		t.Skip("/bin/zsh unavailable")
+	}
+	if home := os.Getenv("SELFISHELL_PTY_SESSION_HELPER"); home != "" {
+		env := PromptEnvironment("/release", home, home, "/release/zshrc", "/usr/bin:/bin", nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if _, err := MeasurePrompt(ctx, home, env, 1); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	home := t.TempDir()
+	config := "setopt promptsubst\ntypeset -gi count=0\nprecmd() { (( ++count )); }\nRPROMPT='__SFS_READY_${count}__'\n"
+	if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run", "^TestPromptFromSessionLeader$")
+	cmd.Env = append(os.Environ(), "SELFISHELL_PTY_SESSION_HELPER="+home)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("session-leading prompt: %v: %s", err, out)
 	}
 }
 

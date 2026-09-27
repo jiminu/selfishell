@@ -26,7 +26,7 @@ func Open() (*os.File, *os.File, error) {
 		master.Close()
 		return nil, nil, errno
 	}
-	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR, 0)
+	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		master.Close()
 		return nil, nil, err

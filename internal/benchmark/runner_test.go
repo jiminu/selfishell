@@ -268,7 +268,7 @@ func TestRunnerSelectedHistoricalRootAndCLI(t *testing.T) {
 	}
 	log := filepath.Join(private, "legacy-cli-args")
 	cli := filepath.Join(historical, "bin/selfishell")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$1\" >>" + log + "\nexit 0\n"
+	script := "#!/usr/bin/env bash\nprintf '%s\\n' \"$1\" >>" + log + "\nexit 0\n"
 	if e := os.WriteFile(cli, []byte(script), 0755); e != nil {
 		t.Fatal(e)
 	}
@@ -289,6 +289,29 @@ func TestRunnerSelectedHistoricalRootAndCLI(t *testing.T) {
 	}
 	if content, e := os.ReadFile(sentinel); e != nil || string(content) != "selected\n" {
 		t.Fatalf("historical module not sourced: %q %v", content, e)
+	}
+}
+
+func TestFullDiagnosticHomeSharesPrivateMise(t *testing.T) {
+	private := t.TempDir()
+	f := &fixture{options: options{mode: "full"}, home: filepath.Join(private, "shell"), data: filepath.Join(private, "shell/.local/share")}
+	source := filepath.Join(f.home, ".local/bin/mise")
+	if err := os.MkdirAll(filepath.Dir(source), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(private, "diagnostics")
+	if err := f.prepareDiagnosticHome(home); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(home, ".local/bin/mise")
+	if info, err := os.Stat(target); err != nil || info.Mode()&0111 == 0 {
+		t.Fatalf("diagnostic mise target unavailable: %v, %v", info, err)
+	}
+	if link, err := os.Readlink(target); err != nil || link != source {
+		t.Fatalf("diagnostic mise link = %q, %v", link, err)
 	}
 }
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/lib/release-version.sh"
+source "$ROOT_DIR/scripts/release-version.sh"
 
 version="${1:-}"
 repository="${2:-jiminu/selfishell}"

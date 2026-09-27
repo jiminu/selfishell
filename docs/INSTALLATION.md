@@ -1,6 +1,7 @@
 # Installation
 
-Selfishell supports macOS, native Ubuntu, and Ubuntu on WSL on AMD64 or ARM64.
+Selfishell targets macOS 13 or newer, Ubuntu 24.04 LTS, and Ubuntu on WSL 2
+on AMD64 or ARM64. The installed CLI is prebuilt and does not require Go.
 The public bootstrap installs the CLI in the current user's home directory and
 does not require root access.
 
@@ -13,14 +14,17 @@ selfishell install
 
 ## Verification coverage
 
-Automated verification currently exercises the Ubuntu 24.04 container
-installation lifecycle, the configuration lifecycle on a GitHub-hosted macOS
-runner, and the pinned Neovim developer lifecycle on Ubuntu. Shell checks run
-on Ubuntu and macOS.
+Automated verification has exercised a native Linux/AMD64 archive and full
+installation in an Ubuntu 24.04 container, a native macOS/ARM64 archive and
+configuration lifecycle on macOS 26.6.2, and the pinned Neovim developer
+lifecycle on Ubuntu. The release builder produces four archive formats; only
+the host's native archive executes in each job. The current ordinary CI
+workflow is configured to smoke an exact prebuilt archive on each host after
+the repository gate; results from that new step require a completed CI run.
 
-The supported-platform list is broader than this runner matrix. WSL and every
-advertised architecture are not exercised as separate CI runners, although
-their detection and platform-specific behavior have isolated test coverage.
+WSL 2, Ubuntu 26.04 and every advertised CPU/OS combination have not been
+executed as separate CI runners. Platform selection and configuration behavior
+have isolated tests, which are not substitutes for execution on those hosts.
 
 ## Bootstrap options
 

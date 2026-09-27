@@ -86,6 +86,18 @@ jobs:
       - name: Run checks
         run: bash scripts/check.sh
 
+      - name: Build disposable release artifacts
+        run: |
+          bash scripts/build-release.sh --version 0.0.0-ci --output "$RUNNER_TEMP/selfishell-release-assets"
+
+      - name: Smoke exact prebuilt release
+        env:
+          SELFISHELL_TEST_RELEASE_DIR: ${{ runner.temp }}/selfishell-release-assets
+          SELFISHELL_TEST_RELEASE_VERSION: 0.0.0-ci
+        run: |
+          printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
+          go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1
+
   ubuntu-container-e2e:
     name: Ubuntu 24.04 native archive full install E2E
     needs: changes
