@@ -3,6 +3,7 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +31,9 @@ func (b *signalBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); retur
 
 func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 	source, fixture, home := testRelease(t), t.TempDir(), t.TempDir()
-	release := fixture + "/release"
+	isolateHome(t, home)
+	share := fixture + "/selfishell"
+	release := share + "/releases/1.0.0"
 	if err := os.MkdirAll(release+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -44,13 +47,17 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	buildNativeTestCLI(t, source, home, release+"/bin/selfishell")
+	fixtureFile(t, release+"/VERSION", "1.0.0\n", 0600)
+	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
+		t.Fatal(err)
+	}
 	bin := fixture + "/fake-bin"
 	if err := os.MkdirAll(bin, 0700); err != nil {
 		t.Fatal(err)
 	}
 	for name, content := range map[string]string{
 		"apt-get":    "#!/bin/sh\nexit 0\n",
-		"dpkg-query": "#!/bin/sh\nprintf started >\"$HOME/child-started\"\nexec /bin/sleep 30\n",
+		"dpkg-query": "#!/bin/sh\nprintf '%s\\n' \"$$\" >\"$HOME/child-started\"\nexec /bin/sleep 30\n",
 	} {
 		if err := os.WriteFile(bin+"/"+name, []byte(content), 0700); err != nil {
 			t.Fatal(err)
@@ -64,7 +71,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		"HOME": home, "PATH": bin + ":/usr/bin:/bin", "SHELL": "/bin/zsh",
 		"SELFISHELL_TEST_SYSTEM_NAME": "Linux", "SELFISHELL_TEST_OS_RELEASE_FILE": osRelease,
 	}).Env
-	run := func(args []string, tty bool) (*exec.Cmd, *signalBuffer, chan error) {
+	run := func(t *testing.T, args []string, tty bool) (*exec.Cmd, *signalBuffer, chan error) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		cmd := exec.CommandContext(ctx, release+"/bin/selfishell", args...)
@@ -74,6 +81,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		}
 		var output signalBuffer
 		cmd.Stdout, cmd.Stderr = &output, &output
+		cmd.WaitDelay = time.Second
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			t.Fatal(err)
@@ -81,12 +89,13 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = cmd.Process.Kill(); cancel(); _ = stdin.Close() })
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait(); _ = stdin.Close(); cancel() }()
 		return cmd, &output, done
 	}
 	t.Run("blocked confirmation keeps default SIGINT", func(t *testing.T) {
-		cmd, output, done := run([]string{"install"}, true)
+		cmd, output, done := run(t, []string{"install"}, true)
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) && !strings.Contains(output.String(), "Install Selfishell configuration?") {
 			time.Sleep(10 * time.Millisecond)
@@ -107,7 +116,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		}
 	})
 	t.Run("blocked package child is canceled and reaped", func(t *testing.T) {
-		cmd, output, done := run([]string{"install", "--yes"}, false)
+		cmd, output, done := run(t, []string{"install", "--yes"}, false)
 		marker := filepath.Join(home, "child-started")
 		deadline := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
@@ -129,6 +138,77 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatal("package child hung after SIGINT")
+		}
+	})
+	t.Run("full update forwards cancellation to package phase", func(t *testing.T) {
+		binary, err := os.ReadFile(release + "/bin/selfishell")
+		if err != nil {
+			t.Fatal(err)
+		}
+		members := []archiveMember{
+			{"VERSION", "", 0, "2.0.0\n", 0644},
+			{"bin/selfishell", "", 0, string(binary), 0755},
+			{"packages.conf", "", 0, "package ubuntu required apt demo\n", 0644},
+			{"dependencies.conf", "", 0, "", 0644},
+		}
+		if err := filepath.WalkDir(source+"/config", func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err == nil {
+				members = append(members, archiveMember{strings.TrimPrefix(path, source+"/"), "", 0, string(data), 0644})
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		publishReleaseFixture(t, "2.0.0", members...)
+		env = withEnvironment(Process{Env: env}, map[string]string{"SELFISHELL_RELEASE_ROOT": os.Getenv("SELFISHELL_RELEASE_ROOT")}).Env
+		fixtureFile(t, home+"/.local/state/selfishell/configured", "1\n", 0600)
+		for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+			t.Run(sig.String(), func(t *testing.T) {
+				marker := home + "/child-started"
+				_ = os.Remove(marker)
+				if err := atomicReleaseLink("releases/1.0.0", share+"/current"); err != nil {
+					t.Fatal(err)
+				}
+				cmd, output, done := run(t, []string{"update", "--version", "2.0.0", "--yes"}, false)
+				pid := 0
+				t.Cleanup(func() {
+					if pid > 0 {
+						_ = syscall.Kill(pid, syscall.SIGKILL)
+					}
+				})
+				deadline := time.Now().Add(3 * time.Second)
+				for time.Now().Before(deadline) {
+					if data, err := os.ReadFile(marker); err == nil {
+						pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+						if pid > 0 {
+							break
+						}
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				if pid == 0 {
+					t.Fatalf("continuation package did not start: %s", output.String())
+				}
+				if err := cmd.Process.Signal(sig); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case err := <-done:
+					if err == nil || !strings.Contains(output.String(), "context canceled") {
+						t.Fatalf("continuation cancellation: %v %s", err, output.String())
+					}
+				case <-time.After(2 * time.Second):
+					t.Fatal("continuation hung after signal")
+				}
+				if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
+					t.Fatalf("continuation left package child running: pid=%d err=%v", pid, err)
+				}
+				pid = 0
+			})
 		}
 	})
 }

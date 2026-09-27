@@ -72,15 +72,40 @@ func (c CLI) rollback(args []string) int {
 		fmt.Fprintf(c.Out, "Release is already active: %s\n", requested)
 		return 0
 	}
+	if err := releaseLinkReplaceable(l.current); err != nil {
+		c.error(err.Error())
+		return 1
+	}
+	if err := releaseLinkReplaceable(l.previous); err != nil {
+		c.error(err.Error())
+		return 1
+	}
+	previous, previousErr := os.Readlink(l.previous)
+	if previousErr != nil && !os.IsNotExist(previousErr) {
+		c.error(previousErr.Error())
+		return 1
+	}
 	if code := c.confirmRelease("Roll back Selfishell CLI to "+requested+"?", yes, false); code != 0 {
 		return code
 	}
-	if err := atomicReleaseLink(target, l.current); err != nil {
-		c.error("Failed to roll back to " + requested + ".")
+	if err := atomicReleaseLink(current, l.previous); err != nil {
+		c.error("Failed to retain current Selfishell release: " + err.Error())
 		return 1
 	}
-	if err := atomicReleaseLink(current, l.previous); err != nil {
-		fmt.Fprintln(c.Err, "selfishell: warning: Failed to update the previous release link; continuing.")
+	if err := atomicReleaseLink(target, l.current); err != nil {
+		var restoreErr error
+		if link, readErr := os.Readlink(l.previous); readErr != nil || link != current {
+			restoreErr = fmt.Errorf("previous release link changed during rollback")
+		} else if previousErr == nil {
+			restoreErr = atomicReleaseLink(previous, l.previous)
+		} else {
+			restoreErr = os.Remove(l.previous)
+		}
+		if restoreErr != nil {
+			fmt.Fprintln(c.Err, "selfishell: warning: Failed to restore the previous release link: "+restoreErr.Error())
+		}
+		c.error("Failed to roll back to " + requested + ".")
+		return 1
 	}
 	fmt.Fprintf(c.Out, "Selfishell CLI rolled back to %s.\n", requested)
 	return 0
