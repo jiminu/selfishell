@@ -85,30 +85,6 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	}
 }
 
-func TestComparisonRejectsEachDifference(t *testing.T) {
-	a := capture{Status: 0, Stdout: []byte("out"), Stderr: []byte("err"), Home: []byte("home")}
-	for name, b := range map[string]capture{"status": {Status: 1, Stdout: a.Stdout, Stderr: a.Stderr, Home: a.Home}, "stdout": {Status: 0, Stdout: []byte("bad"), Stderr: a.Stderr, Home: a.Home}, "stderr": {Status: 0, Stdout: a.Stdout, Stderr: []byte("bad"), Home: a.Home}, "home": {Status: 0, Stdout: a.Stdout, Stderr: a.Stderr, Home: []byte("bad")}} {
-		if err := compareCapture(a, b); err == nil || !strings.Contains(err.Error(), name) {
-			t.Fatalf("%s: %v", name, err)
-		}
-	}
-	if err := compareCapture(a, a); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestChecksumRecordsRequireCompleteUniqueLines(t *testing.T) {
-	records, err := checksumRecords([]byte("abc  first.tar.gz\ndef  second.tar.gz\n"))
-	if err != nil || len(records) != 2 || records["first.tar.gz"] != "abc" || records["second.tar.gz"] != "def" {
-		t.Fatalf("valid records: %v %v", records, err)
-	}
-	for _, input := range []string{"abc  first.tar.gz extra\n", "abc  first.tar.gz\ndef  first.tar.gz\n", "abc  first.tar.gz\nnot-a-record\n"} {
-		if _, err := checksumRecords([]byte(input)); err == nil {
-			t.Fatalf("accepted malformed records: %q", input)
-		}
-	}
-}
-
 func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 	root := t.TempDir()
 	stateDir := filepath.Join(root, ".local/state/selfishell")
@@ -176,22 +152,6 @@ func TestCandidateOverrideExecutableSymlinkPreservesIO(t *testing.T) {
 	got, err := runCommand(root, []string{selected, "", "two words"}, []byte("input\x00bytes"), []string{"PATH=/usr/bin:/bin"}, 5*time.Second)
 	if err != nil || got.Status != 7 || !bytes.Equal(got.Stdout, []byte("\ntwo words\ninput\x00bytes")) || !bytes.Equal(got.Stderr, []byte("error\n")) {
 		t.Fatalf("capture %+v: %v", got, err)
-	}
-}
-
-func TestMissingHistoryDoesNotCreateExport(t *testing.T) {
-	root := t.TempDir()
-	got, runErr := runCommand(root, []string{"git", "init", "-q", root}, nil, nil, 5*time.Second)
-	if runErr != nil || got.Status != 0 {
-		t.Fatalf("git init: %v %+v", runErr, got)
-	}
-	dest := filepath.Join(root, "export")
-	err := exportCommit(root, "3bbbfa0346ee74eb47f31a81ec666340a5ef6018", dest)
-	if err == nil || !strings.Contains(err.Error(), "fetch-depth: 0") {
-		t.Fatalf("%v", err)
-	}
-	if _, e := os.Lstat(dest); !os.IsNotExist(e) {
-		t.Fatalf("partial export: %v", e)
 	}
 }
 

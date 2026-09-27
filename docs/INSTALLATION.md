@@ -12,6 +12,21 @@ selfishell install
 
 `selfishell install` sets up the complete development environment.
 
+## Reinstalling from a Bash release
+
+The Go CLI starts from a fresh Selfishell installation. In-place upgrades from
+old Bash releases and rollback across that transition are not supported.
+
+Before removing an old installation, keep a separate copy of personal
+configuration and any backups you need. Use the old CLI's
+[uninstall procedure](#uninstallation) to preview and restore managed paths
+before explicitly purging the CLI. Resolve any reported conflicts first; do
+not delete configuration or state directories by hand. Then follow the normal
+installation steps with a published Go release.
+
+Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
+Updates and rollback between Go releases continue to use the normal commands.
+
 ## Verification coverage
 
 Automated verification has exercised a native Linux/AMD64 archive and full

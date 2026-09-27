@@ -11,6 +11,9 @@ for environments actually exercised in CI.
 
 ## Quick Start
 
+For an existing Bash installation, follow the
+[reinstallation steps](docs/INSTALLATION.md#reinstalling-from-a-bash-release) first.
+
 Install the CLI:
 
 ```bash

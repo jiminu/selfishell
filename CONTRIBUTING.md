@@ -3,8 +3,8 @@
 Keep each change focused and preserve unrelated worktree changes. Behavioral
 changes need Go-owned tests with private `HOME`, XDG, mise and temporary paths.
 Go owns maintained setup, process execution, assertions and cleanup. Keep
-native Zsh/Lua probes for their runtime APIs and fixed Bash fixtures only for
-old state/protocol comparisons and external fault injection.
+native Zsh/Lua probes for their runtime APIs and small child-process fixtures
+for external fault injection.
 
 ## Local development
 
@@ -28,17 +28,16 @@ checkout. The eight public commands run Go logic. The standalone Bash 3.2
 bootstrap remains the installer transport, and maintenance scripts retain
 narrow shell glue where needed.
 
-Compatibility tests require full local Git history. They export immutable
-Bash reference `3bbbfa0346ee74eb47f31a81ec666340a5ef6018` and actual
-v1.3.1 `d025710338036f1f54b948f1f3e5c17a0b3f7e38`; missing history fails
-without fetching or substituting another revision. CI uses `fetch-depth: 0`.
-The fixed Bash executable is a comparison fixture, never a selectable product
-engine. `SELFISHELL_TEST_CLI` may select an existing native executable for
-focused Go test runs.
+Tests use the current checkout and do not require old Bash commits or full Git
+history. The Bash-to-Go transition uses a fresh installation; in-place upgrades
+and rollback between the Bash and Go implementations are outside the supported
+contract. Go-to-Go updates, rollback, backup, restore and interrupted-operation
+recovery remain covered. `SELFISHELL_TEST_CLI` may select an existing native
+executable for focused Go test runs.
 
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
 repository gate. Four archive formats are checked; host-native execution occurs
 on each CI host. Platform selectors in tests are simulations, not evidence of
 runtime execution on another OS or CPU. See [CLI compatibility](docs/CLI_COMPATIBILITY.md)
-for reference boundaries and [release procedure](docs/RELEASING.md) for manual
+for supported behavior and [release procedure](docs/RELEASING.md) for manual
 publication.
