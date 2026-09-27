@@ -72,9 +72,11 @@ Identical writes retain the existing state inode and timestamps. This does not
 introduce a concurrent-installer or power-loss durability guarantee.
 
 Checksums use POSIX `cksum`'s `CRC:SIZE` representation, without text
-normalization. The Go helper uses the existing `cksum` executable on a regular
-file and propagates input, process and output errors. It does not follow a
-managed-path symlink as though it were an unchanged file.
+normalization. Go computes the same checksum in process using the standard
+library's IEEE CRC, preserving existing state values without starting an
+external command for each file or block. Reads use bounded buffers, check
+cancellation between reads, and propagate read errors. The regular-file checks
+and no-follow open prevent treating a managed-path symlink as an unchanged file.
 
 Resource declarations have a fixed order. Installation selection chooses
 the platform Zsh entrypoint, the saved macOS Ghostty choice, and Ubuntu/WSL's
