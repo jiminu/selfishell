@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/lib/common.sh"
+source "$ROOT_DIR/lib/release-version.sh"
 
 version="${1:-}"
 repository="${2:-jiminu/selfishell}"
@@ -20,7 +20,7 @@ case "$repository" in
     ;;
 esac
 
-for required_command in gh curl; do
+for required_command in gh curl go; do
   command -v "$required_command" >/dev/null 2>&1 || {
     printf '%s is required to verify a published release.\n' "$required_command" >&2
     exit 1
@@ -32,6 +32,9 @@ release_root="${SELFISHELL_VERIFY_RELEASE_ROOT:-https://github.com/$repository/r
 raw_root="${SELFISHELL_VERIFY_RAW_ROOT:-https://raw.githubusercontent.com/$repository}"
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-published-release.XXXXXX")"
 trap 'rm -rf "$temporary_root"' EXIT HUP INT TERM
+transport_helper="$temporary_root/selfishell-dev"
+(cd "$ROOT_DIR" && GOTOOLCHAIN=local go build -o "$transport_helper" ./cmd/selfishell-dev)
+selfishell_curl() { "$transport_helper" curl "$@"; }
 
 metadata="$(gh release view "$tag" --repo "$repository" \
   --json tagName,isPrerelease,url \
