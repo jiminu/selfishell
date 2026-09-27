@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"bytes"
@@ -198,15 +198,15 @@ func runCommandIn(home, dir string, argv []string, input []byte, extraEnv []stri
 	return result, nil
 }
 
-var candidateOnce sync.Once
-var candidatePath string
-var candidateErr error
-var candidateDir string
+var testCLIOnce sync.Once
+var testCLIPath string
+var testCLIErr error
+var testCLIDir string
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if candidateDir != "" {
-		os.RemoveAll(candidateDir)
+	if testCLIDir != "" {
+		os.RemoveAll(testCLIDir)
 	}
 	if nativeDir != "" {
 		os.RemoveAll(nativeDir)
@@ -221,7 +221,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func candidateCLI(t *testing.T) (string, error) {
+func testCLI(t *testing.T) (string, error) {
 	t.Helper()
 	if override := os.Getenv("SELFISHELL_TEST_CLI"); override != "" {
 		if !filepath.IsAbs(override) {
@@ -236,21 +236,21 @@ func candidateCLI(t *testing.T) (string, error) {
 		}
 		return override, nil
 	}
-	candidateOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "selfishell-candidate-")
+	testCLIOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "selfishell-test-cli-")
 		if err != nil {
-			candidateErr = err
+			testCLIErr = err
 			return
 		}
-		candidatePath = filepath.Join(dir, "selfishell")
-		candidateDir = dir
+		testCLIPath = filepath.Join(dir, "selfishell")
+		testCLIDir = dir
 		if err := os.MkdirAll(filepath.Join(dir, "tmp"), 0700); err != nil {
-			candidateErr = err
+			testCLIErr = err
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-o", candidatePath, "./cmd/selfishell")
+		cmd := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-o", testCLIPath, "./cmd/selfishell")
 		cmd.Dir = repoRoot()
 		cmd.Env = withEnv(baseEnv(dir, filepath.Join(dir, "tmp")), "GOTOOLCHAIN=local", "GOCACHE="+filepath.Join(dir, "go-cache"), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -266,10 +266,10 @@ func candidateCLI(t *testing.T) (string, error) {
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 		if err != nil {
-			candidateErr = fmt.Errorf("build candidate: %w: %s", err, out)
+			testCLIErr = fmt.Errorf("build test CLI: %w: %s", err, out)
 		}
 	})
-	return candidatePath, candidateErr
+	return testCLIPath, testCLIErr
 }
 
 func captureCommand(home, executable string, args []string, extraEnv []string) (capture, error) {

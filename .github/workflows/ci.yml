@@ -93,7 +93,7 @@ jobs:
           SELFISHELL_TEST_RELEASE_VERSION: 0.0.0-ci
         run: |
           printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
-          go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1
+          go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 native archive full install E2E
@@ -127,7 +127,7 @@ jobs:
       - name: Run installed native archive full-install consumer
         env:
           SELFISHELL_UBUNTU_FULL_E2E: '1'
-        run: go test ./tests/migration -run '^TestNativeUbuntuInstalledArchiveConsumer$' -count=1 -timeout 50m -v
+        run: go test ./tests/integration -run '^TestNativeUbuntuInstalledArchiveConsumer$' -count=1 -timeout 50m -v
 
   macos-configuration-e2e:
     name: macOS installed native archive configuration E2E
@@ -149,7 +149,7 @@ jobs:
       - name: Run installed native archive configuration consumer
         env:
           SELFISHELL_NATIVE_MACOS_E2E: '1'
-        run: go test ./tests/migration -run '^TestNativeMacInstalledArchiveConsumer$' -count=1 -timeout 12m -v
+        run: go test ./tests/integration -run '^TestNativeMacInstalledArchiveConsumer$' -count=1 -timeout 12m -v
 
   neovim-developer-e2e:
     name: Pinned Go mise cleanup and Neovim developer E2E

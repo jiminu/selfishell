@@ -1,11 +1,11 @@
-# CLI compatibility
+# Architecture
 
 The installed `selfishell` command is a native Go executable with all eight
 public commands: `help`, `version`, `doctor`, `install`, `status`, `update`,
 `rollback`, and `uninstall`. `sfs` is an optional link. The standalone Bash 3.2
 bootstrap transports a verified archive; native Zsh and editor configuration
-continue to run in their own languages. There is no selectable Bash/Go mode
-and users do not need Go. Package membership and pins remain in
+continue to run in their own languages. Users do not need Go. Package
+membership and pins live in
 `packages.conf`, `dependencies.conf`, and `config/shared/mise.toml`.
 
 ## Development and platform boundary
@@ -18,25 +18,14 @@ single production builder and writes native archives without a source `VERSION`
 file. Release executables use `CGO_ENABLED=0`, `GOAMD64=v1` and `GOARM64=v8.0`.
 
 The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
-and ARM64 archive formats. Completed native CI execution has covered a Linux
-AMD64 Ubuntu 24.04 container and macOS ARM64 26.6.2. Four formats are built and
-inspected; format inspection and simulated platform selectors do not prove
-runtime behavior on all four targets. Actual WSL, Ubuntu 26.04, macOS 13,
-and the other CPU/OS pairings remain unexecuted in this migration evidence.
-The new ordinary CI exact-prebuilt smoke step and Release workflow's artifact
-transfer need completed runs before their results can be claimed.
+and ARM64 archive formats. See [verification coverage](INSTALLATION.md#verification-coverage)
+for environments exercised in CI and the limits of simulated platform tests.
 
-## Transition and test boundary
+## Tests
 
-The Bash-to-Go transition uses a fresh installation. In-place upgrades from
-Bash releases and rollback across the Bash/Go boundary are not supported.
-See [reinstalling from a Bash release](INSTALLATION.md#reinstalling-from-a-bash-release).
-Go-to-Go updates and offline rollback remain supported.
-
-Tests exercise the current Go CLI directly, including exit statuses, diagnostic
-output, personal-file bytes and modes, managed links, state and backups. They
-use the current checkout without exporting historical commits. No old Bash
-engine, state bridge or full-history test requirement remains.
+Tests exercise the current CLI directly, including exit statuses, diagnostic
+output, personal-file bytes and modes, managed links, state and backups.
+Integration tests in `tests/integration` use the current checkout.
 
 All maintained test orchestration, setup, assertions and cleanup use Go.
 Native Zsh probes cover shell startup, completion, widgets and notices; Lua
@@ -82,7 +71,7 @@ an interrupted process may leave a temporary file, which subsequent reads ignore
 Identical writes retain the existing state inode and timestamps. This does not
 introduce a concurrent-installer or power-loss durability guarantee.
 
-Checksums retain POSIX `cksum`'s `CRC:SIZE` representation, without text
+Checksums use POSIX `cksum`'s `CRC:SIZE` representation, without text
 normalization. The Go helper uses the existing `cksum` executable on a regular
 file and propagates input, process and output errors. It does not follow a
 managed-path symlink as though it were an unchanged file.
@@ -96,5 +85,4 @@ The primitives perform no target removal, backup replacement, or restoration.
 
 Go tests cover pending file, link and block records, interrupted-operation
 recovery, original-backup retention across reinstalls, and restoration of user
-bytes. State format v2 remains unchanged; changes to field order or meaning
-still require a new format version.
+bytes. Changes to field order or meaning require a new format version.

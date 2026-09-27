@@ -7,9 +7,6 @@ resynchronize the current environment.
 The CLI phase installs a checksum-verified native executable; no Go toolchain
 is needed on the user's machine.
 
-These update and rollback instructions apply between Go releases. For the
-Bash-to-Go transition, use a [fresh installation](INSTALLATION.md#reinstalling-from-a-bash-release).
-
 ## Update modes
 
 | Command | Effect |

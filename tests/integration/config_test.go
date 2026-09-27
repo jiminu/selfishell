@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"bytes"
@@ -12,13 +12,13 @@ var configPlatforms = []string{"macos", "ubuntu", "ubuntu-wsl"}
 var configCases = []string{"empty", "existing", "custom", "changed-file", "changed-link", "changed-block", "pending", "late-preflight", "malformed-package"}
 
 func configScenarios(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, builtCLI)
 	cli := filepath.Join(release, "bin/selfishell")
 	packages, err := os.ReadFile(filepath.Join(release, "packages.conf"))
 	if err != nil {
@@ -252,7 +252,7 @@ func assertEmptyConfigRestored(t *testing.T, home, config, state string) {
 func TestConfig(t *testing.T) { configScenarios(t) }
 
 func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(release, name)))
 	}
 	mustFS(t, copyTree(filepath.Join(repoRoot(), "config"), filepath.Join(release, "config")))
-	mustFS(t, copyFile(candidate, cli))
+	mustFS(t, copyFile(builtCLI, cli))
 	tools := fixtureTools(t, root)
 	home := filepath.Join(root, "home")
 	mustFS(t, os.Mkdir(home, 0700))
@@ -304,13 +304,13 @@ func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 }
 
 func TestConfigInvalidDependencies(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, builtCLI)
 	cli := filepath.Join(release, "bin/selfishell")
 	tools := fixtureTools(t, root)
 	file := filepath.Join(release, "dependencies.conf")
@@ -341,13 +341,13 @@ func TestConfigInvalidDependencies(t *testing.T) {
 }
 
 func TestConfigIdenticalExistingFile(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, builtCLI)
 	cli := filepath.Join(release, "bin/selfishell")
 	tools := fixtureTools(t, root)
 	home := filepath.Join(root, "home")
@@ -403,14 +403,14 @@ func TestConfigIdenticalExistingFile(t *testing.T) {
 }
 
 func TestConfigPurge(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	builtCLI, err := testCLI(t)
 	mustFS(t, err)
 	root := t.TempDir()
 	tools := fixtureTools(t, root)
 	prefix := filepath.Join(root, "prefix")
 	home := t.TempDir()
 	release := filepath.Join(prefix, "share/selfishell/releases/1.0.0")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, builtCLI)
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.0.0\n"), 0644))
 	mustFS(t, os.MkdirAll(filepath.Join(prefix, "bin"), 0700))
 	mustFS(t, os.Symlink("releases/1.0.0", filepath.Join(prefix, "share/selfishell/current")))

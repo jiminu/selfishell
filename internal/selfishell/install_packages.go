@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// installPackages follows the legacy requirement/manager order with one operation.
+// installPackages follows the requirement/manager order with one operation.
 func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, dry bool) error {
 	selected := platform
 	if selected == "ubuntu-wsl" {

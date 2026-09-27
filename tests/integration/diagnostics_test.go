@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"bytes"
@@ -11,13 +11,13 @@ import (
 )
 
 func TestDiagnostics(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "releases", "1.2.3")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.2.3\n"), 0600))
 	tools := fixtureTools(t, root)
@@ -166,13 +166,13 @@ func TestDiagnostics(t *testing.T) {
 }
 
 func TestConfiguredDiagnostics(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "releases", "2.0.0")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
@@ -234,13 +234,13 @@ func TestConfiguredDiagnostics(t *testing.T) {
 }
 
 func TestDoctorPlugins(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
@@ -321,13 +321,13 @@ func TestDoctorPlugins(t *testing.T) {
 }
 
 func TestDiagnosticsTTYColors(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
@@ -355,14 +355,14 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 }
 
 func TestStatusRollbackMetadata(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	share := filepath.Join(root, "share", "selfishell")
 	release := filepath.Join(share, "releases", "2.0.0")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
 	old := filepath.Join(share, "releases", "1.0.0")
@@ -401,14 +401,14 @@ func TestStatusRollbackMetadata(t *testing.T) {
 }
 
 func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
 	mustFS(t, os.MkdirAll(filepath.Join(release, "bin"), 0700))
-	mustFS(t, copyFile(candidate, filepath.Join(release, "bin/selfishell")))
+	mustFS(t, copyFile(cli, filepath.Join(release, "bin/selfishell")))
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required direct zinit\n"), 0600))
 	injected := filepath.Join(root, "injected")
 	mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte("download zinit invalid all all - - - - $(touch "+injected+")\n"), 0600))
@@ -435,13 +435,13 @@ func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
 }
 
 func TestDoctorXcodeStub(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
@@ -467,13 +467,13 @@ func TestDoctorXcodeStub(t *testing.T) {
 }
 
 func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	home := filepath.Join(root, "home")
@@ -516,13 +516,13 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 }
 
 func TestStatusInstalledResource(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, candidate)
+	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
@@ -599,14 +599,14 @@ func TestStatusInstalledResource(t *testing.T) {
 }
 
 func TestStatusListsUnknownTrackedResources(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	release := filepath.Join(root, "release")
 	mustFS(t, os.MkdirAll(filepath.Join(release, "bin"), 0700))
-	mustFS(t, copyFile(candidate, filepath.Join(release, "bin/selfishell")))
+	mustFS(t, copyFile(cli, filepath.Join(release, "bin/selfishell")))
 	home := filepath.Join(root, "home")
 	state := filepath.Join(home, ".local/state/selfishell/resources")
 	mustFS(t, os.MkdirAll(state, 0700))

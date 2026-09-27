@@ -25,8 +25,8 @@ type Process struct {
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
 // It does not create a new process group, which would break foreground TTY reads.
 func (p Process) Run(ctx context.Context, name string, args ...string) (int, error) {
-	// The Bash CLI exports these before running tools, including tools that
-	// start Git themselves (for example Neovim's plugin sync).
+	// Propagate transfer limits to tools that start Git themselves,
+	// including Neovim plugin sync.
 	env := p.environment()
 	limit, duration := envValue(env, "SELFISHELL_CURL_LOW_SPEED_LIMIT"), envValue(env, "SELFISHELL_CURL_LOW_SPEED_TIME")
 	if limit == "" {

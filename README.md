@@ -11,9 +11,6 @@ for environments actually exercised in CI.
 
 ## Quick Start
 
-For an existing Bash installation, follow the
-[reinstallation steps](docs/INSTALLATION.md#reinstalling-from-a-bash-release) first.
-
 Install the CLI:
 
 ```bash
@@ -93,5 +90,6 @@ startup.
 ### Project and maintainer guides
 
 - [Contributing](CONTRIBUTING.md) — source checkout and verification.
+- [Architecture](docs/ARCHITECTURE.md) — CLI boundaries and managed state.
 - [Release process](docs/RELEASING.md) — tag-driven publishing and verification.
 - [Vulnerability reporting](SECURITY.md) — report a security issue privately.

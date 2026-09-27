@@ -139,7 +139,7 @@ jobs:
           SELFISHELL_TEST_RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
           printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
-          go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1
+          go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1
 
   publish:
     needs: [build, smoke]

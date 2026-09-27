@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"archive/tar"
@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func migrationReleaseEnv(t *testing.T, home, remote string) []string {
+func releaseEnv(t *testing.T, home, remote string) []string {
 	t.Helper()
 	osRelease := filepath.Join(home, "os-release")
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
@@ -147,15 +147,15 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 }
 
 func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
 	stub := filepath.Join(t.TempDir(), "selfishell")
 	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nprintf 'argv:%s\\n' \"$*\"\ncat\nprintf 'child-stderr\\n' >&2\nexit 7\n"), 0755))
 	archiveFixture(t, remote, "2.0.0", stub, "")
-	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, []byte("child-input\n"), migrationReleaseEnv(t, home, remote), 20*time.Second)
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, []byte("child-input\n"), releaseEnv(t, home, remote), 20*time.Second)
 	mustFS(t, err)
 	if got.Status != 7 || !bytes.Contains(got.Stdout, []byte("argv:update --continue-after-cli-update --yes --skip-packages\nchild-input\n")) || !bytes.Contains(got.Stderr, []byte("child-stderr\n")) {
 		t.Fatalf("continuation: status %d stdout %q stderr %q", got.Status, got.Stdout, got.Stderr)
@@ -167,13 +167,13 @@ func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
 }
 
 func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "go-new-root")
-	env := migrationReleaseEnv(t, home, remote)
+	archiveFixture(t, remote, "2.0.0", cli, "go-new-root")
+	env := releaseEnv(t, home, remote)
 	original := []byte("\" personal Vim configuration\r\n")
 	vimrc := filepath.Join(home, ".config/selfishell/vim/vimrc")
 	mustFS(t, os.MkdirAll(filepath.Dir(vimrc), 0700))
@@ -260,13 +260,13 @@ func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 }
 
 func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "intended-root")
-	env := migrationReleaseEnv(t, home, remote)
+	archiveFixture(t, remote, "2.0.0", cli, "intended-root")
+	env := releaseEnv(t, home, remote)
 	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
 	mustFS(t, err)
 	if setup.Status != 0 {
@@ -297,13 +297,13 @@ func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {
 }
 
 func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "unused-no-setup")
-	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes"}, nil, migrationReleaseEnv(t, home, remote), 20*time.Second)
+	archiveFixture(t, remote, "2.0.0", cli, "unused-no-setup")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes"}, nil, releaseEnv(t, home, remote), 20*time.Second)
 	mustFS(t, err)
 	if got.Status != 0 || !bytes.Contains(got.Stdout, []byte("configuration is not installed; skipping tools and configuration")) || strings.Count(string(got.Stdout), "Selfishell updated:") != 1 {
 		t.Fatalf("no setup: %d %q %q", got.Status, got.Stdout, got.Stderr)
@@ -321,15 +321,15 @@ func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
 }
 
 func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	marker := home + "/.local/state/selfishell/configured"
 	mustFS(t, os.MkdirAll(marker, 0700))
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "unused-bad-marker")
-	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--skip-packages", "--yes"}, nil, migrationReleaseEnv(t, home, remote), 20*time.Second)
+	archiveFixture(t, remote, "2.0.0", cli, "unused-bad-marker")
+	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--skip-packages", "--yes"}, nil, releaseEnv(t, home, remote), 20*time.Second)
 	mustFS(t, err)
 	if got.Status != 1 || bytes.Contains(got.Stdout, []byte("Selfishell updated")) || bytes.Contains(got.Stdout, []byte("skipping tools and configuration")) || !bytes.Contains(got.Stderr, []byte("configured marker")) {
 		t.Fatalf("bad marker claimed success: %d %q %q", got.Status, got.Stdout, got.Stderr)
@@ -342,13 +342,13 @@ func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T
 }
 
 func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "", "package ubuntu required apt fixture-required\n")
-	env := migrationReleaseEnv(t, home, remote)
+	archiveFixture(t, remote, "2.0.0", cli, "", "package ubuntu required apt fixture-required\n")
+	env := releaseEnv(t, home, remote)
 	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
 	mustFS(t, err)
 	if setup.Status != 0 {
@@ -375,15 +375,15 @@ func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing
 }
 
 func TestContinuationPreservesTerminalOutput(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, _ := installedFixture(t, home, "1.0.0", candidate)
+	root, _ := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
 	stub := filepath.Join(t.TempDir(), "selfishell")
 	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nif [ -t 1 ]; then printf 'child-stdout-is-tty\\n'; else printf 'child-lost-tty\\n'; fi\n"), 0755))
 	archiveFixture(t, remote, "2.0.0", stub, "")
-	got, err := capturePTYOutput(home, root+"/bin/selfishell", []string{"update", "--version", "2.0.0", "--yes"}, migrationReleaseEnv(t, home, remote))
+	got, err := capturePTYOutput(home, root+"/bin/selfishell", []string{"update", "--version", "2.0.0", "--yes"}, releaseEnv(t, home, remote))
 	mustFS(t, err)
 	if got.Status != 0 || !bytes.Contains(got.Stdout, []byte("child-stdout-is-tty")) || bytes.Contains(got.Stdout, []byte("child-lost-tty")) {
 		t.Fatalf("tty: %d %q %q", got.Status, got.Stdout, got.Stderr)
@@ -391,13 +391,13 @@ func TestContinuationPreservesTerminalOutput(t *testing.T) {
 }
 
 func TestToolsOnlyOverwritesChangedSourceWithConflictBackupAndChecksum(t *testing.T) {
-	candidate, err := candidateCLI(t)
+	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
-	root, share := installedFixture(t, home, "1.0.0", candidate)
+	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
-	archiveFixture(t, remote, "2.0.0", candidate, "changed-source-vimrc")
-	env := migrationReleaseEnv(t, home, remote)
+	archiveFixture(t, remote, "2.0.0", cli, "changed-source-vimrc")
+	env := releaseEnv(t, home, remote)
 	setup, err := runCommand(home, []string{root + "/bin/selfishell", "install", "--skip-packages", "--yes"}, nil, env, 20*time.Second)
 	mustFS(t, err)
 	if setup.Status != 0 {

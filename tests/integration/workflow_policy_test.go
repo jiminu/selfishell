@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"fmt"
@@ -410,7 +410,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 		}
 	}
 	smokeText := strings.Join(smoke.lines, "\n")
-	for _, needle := range []string{"SELFISHELL_TEST_RELEASE_DIR: ${{ github.workspace }}/dist", "SELFISHELL_TEST_RELEASE_VERSION: ${{ needs.build.outputs.version }}", "go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1"} {
+	for _, needle := range []string{"SELFISHELL_TEST_RELEASE_DIR: ${{ github.workspace }}/dist", "SELFISHELL_TEST_RELEASE_VERSION: ${{ needs.build.outputs.version }}", "go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1"} {
 		if !strings.Contains(smokeText, needle) {
 			t.Errorf("smoke missing %s", needle)
 		}
@@ -440,7 +440,7 @@ func TestCIExactPrebuiltSmoke(t *testing.T) {
 	if !strings.Contains(build, `bash scripts/build-release.sh --version 0.0.0-ci --output "$RUNNER_TEMP/selfishell-release-assets"`) {
 		t.Error("CI does not build disposable exact assets")
 	}
-	for _, needle := range []string{"SELFISHELL_TEST_RELEASE_DIR: ${{ runner.temp }}/selfishell-release-assets", "SELFISHELL_TEST_RELEASE_VERSION: 0.0.0-ci", "go test ./tests/migration -run '^TestExactReleaseSmoke$' -count=1"} {
+	for _, needle := range []string{"SELFISHELL_TEST_RELEASE_DIR: ${{ runner.temp }}/selfishell-release-assets", "SELFISHELL_TEST_RELEASE_VERSION: 0.0.0-ci", "go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1"} {
 		if !strings.Contains(smoke, needle) {
 			t.Errorf("CI smoke missing %s", needle)
 		}

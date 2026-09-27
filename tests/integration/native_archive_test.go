@@ -1,4 +1,4 @@
-package migration_test
+package integration_test
 
 import (
 	"archive/tar"
@@ -153,7 +153,7 @@ func assertConfigPayload(t *testing.T, archive, version string, native bool) map
 	}
 	for name := range m {
 		if strings.HasPrefix(name, "common/") || strings.HasPrefix(name, "mac/") || strings.HasPrefix(name, "ubuntu/") {
-			t.Errorf("legacy payload root %s", name)
+			t.Errorf("unexpected payload root %s", name)
 		}
 	}
 	if !native {

@@ -1,24 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/jiminu/selfishell/internal/benchmark"
 )
 
 func main() {
-	source := os.Getenv("SELFISHELL_BENCHMARK_SOURCE_ROOT")
-	if source == "" {
-		var err error
-		source, err = os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		source, err = filepath.Abs(source)
-		if err != nil {
-			panic(err)
-		}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "benchmark:", err)
+		os.Exit(1)
 	}
-	os.Exit(benchmark.Run(os.Args[1:], os.Environ(), source, os.Stdout, os.Stderr))
+	os.Exit(benchmark.Run(os.Args[1:], os.Environ(), root, os.Stdout, os.Stderr))
 }

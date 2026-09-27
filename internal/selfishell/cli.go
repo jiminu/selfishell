@@ -1,4 +1,4 @@
-// Package selfishell implements the development Go CLI candidate.
+// Package selfishell implements the Selfishell CLI.
 package selfishell
 
 import (
@@ -77,7 +77,7 @@ func (c CLI) Run(args []string) int {
 		data, err := os.ReadFile(file)
 		version := ""
 		if err == nil {
-			// Bash command substitution drops NULs and trailing LF bytes, not spaces/CR.
+			// Version text ignores NULs and trailing LF bytes, preserving spaces/CR.
 			version = strings.TrimRight(strings.ReplaceAll(string(data), "\x00", ""), "\n")
 		} else if _, err := os.Stat(filepath.Join(c.Root, ".git")); err == nil {
 			version = "development"

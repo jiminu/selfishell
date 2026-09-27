@@ -28,8 +28,7 @@ const usage = `Usage: scripts/benchmark.sh [--mode base|full] [--prompt] [--diag
   --diagnostics  Measure status and doctor after isolated configuration setup.
 
 SELFISHELL_BENCHMARK_PROFILE=base|full is equivalent to --mode.
-SELFISHELL_BENCHMARK_ROOT and SELFISHELL_BENCHMARK_CLI select an existing
-configuration root and executable for development comparisons.
+The benchmark uses this checkout and its built .build/selfishell executable.
 `
 
 type options struct {
@@ -58,7 +57,7 @@ func getenv(m map[string]string, k, defaultValue string) string {
 }
 
 func parseOptions(args []string, env map[string]string, source string) (options, bool, error) {
-	o := options{mode: getenv(env, "SELFISHELL_BENCHMARK_PROFILE", "base"), iterations: 30, root: getenv(env, "SELFISHELL_BENCHMARK_ROOT", source), results: env["SELFISHELL_BENCHMARK_RESULTS_FILE"], zprof: env["SELFISHELL_BENCHMARK_ZPROF_FILE"], enforce: env["SELFISHELL_BENCHMARK_ENFORCE"] == "1"}
+	o := options{mode: getenv(env, "SELFISHELL_BENCHMARK_PROFILE", "base"), iterations: 30, root: source, results: env["SELFISHELL_BENCHMARK_RESULTS_FILE"], zprof: env["SELFISHELL_BENCHMARK_ZPROF_FILE"], enforce: env["SELFISHELL_BENCHMARK_ENFORCE"] == "1"}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--mode":
@@ -92,12 +91,11 @@ func parseOptions(args []string, env map[string]string, source string) (options,
 		}
 		o.iterations = n
 	}
-	o.cli = getenv(env, "SELFISHELL_BENCHMARK_CLI", filepath.Join(o.root, ".build/selfishell"))
+	o.cli = filepath.Join(o.root, ".build/selfishell")
 	return o, false, nil
 }
 
-// Run is the development benchmark entry point. source is the current Go checkout;
-// a selected root may be a historical Bash export without any Go source.
+// Run benchmarks the current checkout and its built CLI. source is the checkout root.
 func Run(args, inherited []string, source string, out, stderr io.Writer) int {
 	env := environment(inherited)
 	o, help, err := parseOptions(args, env, source)
@@ -121,7 +119,6 @@ func Run(args, inherited []string, source string, out, stderr io.Writer) int {
 		}
 		return filepath.Join(cwd, p)
 	}
-	source = absolute(source)
 	o.root = absolute(o.root)
 	o.cli = absolute(o.cli)
 	o.results = absolute(o.results)
@@ -131,7 +128,7 @@ func Run(args, inherited []string, source string, out, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err = run(ctx, o, env, source, out, stderr); err != nil {
+	if err = run(ctx, o, env, out, stderr); err != nil {
 		fmt.Fprintln(stderr, "benchmark:", err)
 		return 1
 	}
@@ -140,16 +137,16 @@ func Run(args, inherited []string, source string, out, stderr io.Writer) int {
 
 type fixture struct {
 	options
-	source, dir, home, data, platform, commonPath, interactivePath string
-	env                                                            map[string]string
-	out, stderr                                                    io.Writer
-	resultFile                                                     *os.File
-	resultErr                                                      error
+	dir, home, data, platform, commonPath, interactivePath string
+	env                                                    map[string]string
+	out, stderr                                            io.Writer
+	resultFile                                             *os.File
+	resultErr                                              error
 }
 
-func run(ctx context.Context, o options, env map[string]string, source string, out, stderr io.Writer) error {
+func run(ctx context.Context, o options, env map[string]string, out, stderr io.Writer) error {
 	if _, e := os.Stat(o.cli); e != nil {
-		return fmt.Errorf("built CLI %s unavailable: run bash scripts/build-cli.sh (or set SELFISHELL_BENCHMARK_CLI): %w", o.cli, e)
+		return fmt.Errorf("built CLI %s unavailable: run bash scripts/build-cli.sh: %w", o.cli, e)
 	}
 	tmp := getenv(env, "TMPDIR", os.TempDir())
 	dir, e := os.MkdirTemp(tmp, "selfishell-benchmark.")
@@ -157,7 +154,7 @@ func run(ctx context.Context, o options, env map[string]string, source string, o
 		return e
 	}
 	defer os.RemoveAll(dir)
-	f := &fixture{options: o, source: source, dir: dir, home: filepath.Join(dir, "home"), env: env, out: out, stderr: stderr}
+	f := &fixture{options: o, dir: dir, home: filepath.Join(dir, "home"), env: env, out: out, stderr: stderr}
 	f.data = filepath.Join(f.home, ".local/share")
 	if runtime.GOOS == "darwin" {
 		f.platform = filepath.Join(o.root, "config/macos/zshrc")
@@ -206,8 +203,7 @@ func run(ctx context.Context, o options, env map[string]string, source string, o
 	if e != nil {
 		return e
 	}
-	// The fixed Bash reference uses /usr/bin/env bash. Keep CLI process
-	// conditions equal while shell-startup probes retain their masked PATH.
+	// CLI probes use system tools while startup probes keep their masked PATH.
 	cliEnv := append(append([]string{}, shellEnv...), "PATH=/usr/bin:/bin")
 	version, e := f.measure(ctx, "cli-version", o.iterations, execSpec{o.cli, []string{"version"}, f.home, cliEnv})
 	if e != nil {
@@ -343,7 +339,7 @@ func (f *fixture) provision(ctx context.Context) error {
 		}
 	}
 	// `go run` is setup only; it never enters a timed sample.
-	spec := execSpec{"go", []string{"run", "./cmd/selfishell-dev", f.root, "benchmark-shell"}, f.source, env}
+	spec := execSpec{"go", []string{"run", "./cmd/selfishell-dev", f.root, "benchmark-shell"}, f.root, env}
 	_, e := execute(ctx, spec)
 	if e != nil {
 		return fmt.Errorf("private full provisioning failed: %w", e)
