@@ -11,6 +11,15 @@ import (
 	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
+func maintenanceMiseEnv(home string) []string {
+	return []string{
+		"MISE_DATA_DIR=" + filepath.Join(home, "mise-data"),
+		"MISE_CACHE_DIR=" + filepath.Join(home, "mise-cache"),
+		"MISE_CONFIG_DIR=" + filepath.Join(home, "mise-config"),
+		"MISE_STATE_DIR=" + filepath.Join(home, "mise-state"),
+	}
+}
+
 func publishedFixture(t *testing.T, version string) (string, []string) {
 	t.Helper()
 	home := t.TempDir()
@@ -103,7 +112,7 @@ func TestPublishedReleaseVerification(t *testing.T) {
 func TestPublishedReleaseInvalidInputBeforeEffects(t *testing.T) {
 	home := t.TempDir()
 	for _, args := range [][]string{{"invalid"}, {"1.2.3", "invalid-repository"}} {
-		got, err := runCommand(home, append([]string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")}, args...), nil, []string{"PATH=/usr/bin:/bin", "TMPDIR=" + home}, 5*time.Second)
+		got, err := runCommand(home, append([]string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")}, args...), nil, append(maintenanceMiseEnv(home), "PATH=/usr/bin:/bin", "TMPDIR="+home), 5*time.Second)
 		mustFS(t, err)
 		if got.Status != 2 {
 			t.Fatalf("%v status=%d stderr=%q", args, got.Status, got.Stderr)
@@ -123,7 +132,7 @@ func TestNextPatchVersionContract(t *testing.T) {
 		version, output string
 		status          int
 	}{{"1.2.3", "1.2.4\n", 0}, {"01.2.3", "", 1}} {
-		got, err := runCommand(home, []string{"/bin/bash", script, "--current", tc.version}, nil, nil, 5*time.Second)
+		got, err := runCommand(home, []string{"/bin/bash", script, "--current", tc.version}, nil, maintenanceMiseEnv(home), 5*time.Second)
 		mustFS(t, err)
 		if got.Status != tc.status || string(got.Stdout) != tc.output {
 			t.Fatalf("%s: status=%d stdout=%q stderr=%q", tc.version, got.Status, got.Stdout, got.Stderr)
@@ -144,7 +153,8 @@ func TestMaintenanceScriptsNoRuntimeCommonImport(t *testing.T) {
 func TestReleaseVersionValidatorParity(t *testing.T) {
 	script := filepath.Join(repoRoot(), "lib", "release-version.sh")
 	for _, version := range []string{"0.0.0", "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.2.3-0.3.7", "1.2.3-x.7.z-92", "1.2.3-01alpha", "v1.2.3", "01.2.3", "1.02.3", "1.2.03", "1.2", "1.2.3-", "1.2.3-alpha..1", "1.2.3-alpha_1", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+build"} {
-		got, err := runCommand(t.TempDir(), []string{"/bin/bash", "-c", "source \"$1\"; selfishell_version_is_valid \"$2\"", "bash", script, version}, nil, nil, 5*time.Second)
+		home := t.TempDir()
+		got, err := runCommand(home, []string{"/bin/bash", "-c", "source \"$1\"; selfishell_version_is_valid \"$2\"", "bash", script, version}, nil, maintenanceMiseEnv(home), 5*time.Second)
 		mustFS(t, err)
 		if (got.Status == 0) != selfishell.ValidReleaseVersion(version) {
 			t.Errorf("validator disagreement for %q: shell status %d", version, got.Status)
@@ -154,14 +164,15 @@ func TestReleaseVersionValidatorParity(t *testing.T) {
 
 func TestNextPatchUsesLocalStableTags(t *testing.T) {
 	home := t.TempDir()
+	env := maintenanceMiseEnv(home)
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "test"}, {"tag", "v1.2.3"}, {"tag", "v1.2.4-beta.1"}, {"tag", "v1.2.4"}} {
-		got, err := runCommandIn(home, home, append([]string{"git"}, args...), nil, nil, 5*time.Second)
+		got, err := runCommandIn(home, home, append([]string{"git"}, args...), nil, env, 5*time.Second)
 		mustFS(t, err)
 		if got.Status != 0 {
 			t.Fatalf("git %v: %d %s", args, got.Status, got.Stderr)
 		}
 	}
-	got, err := runCommandIn(home, home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "next-patch-version.sh")}, nil, nil, 5*time.Second)
+	got, err := runCommandIn(home, home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "next-patch-version.sh")}, nil, env, 5*time.Second)
 	mustFS(t, err)
 	if got.Status != 0 || string(got.Stdout) != "1.2.5\n" {
 		t.Fatalf("local tag patch: %d %q %q", got.Status, got.Stdout, got.Stderr)
@@ -181,7 +192,7 @@ func TestCurrentProductionBuilderRejectsInvalidVersions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			output := filepath.Join(home, tc.name)
 			args := append(append([]string{"/bin/bash", script}, tc.args...), "--output", output)
-			got, err := runCommand(home, args, nil, nil, 5*time.Second)
+			got, err := runCommand(home, args, nil, maintenanceMiseEnv(home), 5*time.Second)
 			mustFS(t, err)
 			if got.Status != 2 {
 				t.Fatalf("status=%d stderr=%q", got.Status, got.Stderr)
