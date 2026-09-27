@@ -110,6 +110,25 @@ func Run(args, inherited []string, source string, out, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(stderr, "benchmark: resolve invocation directory:", err)
+		return 1
+	}
+	absolute := func(p string) string {
+		if p == "" || filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(cwd, p)
+	}
+	source = absolute(source)
+	o.root = absolute(o.root)
+	o.cli = absolute(o.cli)
+	o.results = absolute(o.results)
+	o.zprof = absolute(o.zprof)
+	if value := env["TMPDIR"]; value != "" {
+		env["TMPDIR"] = absolute(value)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err = run(ctx, o, env, source, out, stderr); err != nil {

@@ -473,3 +473,83 @@ exit 97
 	}
 	return wrapper, log
 }
+
+func TestRunnerRelativePathsFromSeparateCWD(t *testing.T) {
+	source := repositoryRoot(t)
+	caller := t.TempDir()
+	historical := filepath.Join(caller, "historical")
+	if e := os.MkdirAll(filepath.Join(historical, "bin"), 0755); e != nil {
+		t.Fatal(e)
+	}
+	copyConfig := exec.Command("/bin/cp", "-R", filepath.Join(source, "config"), filepath.Join(historical, "config"))
+	if output, e := copyConfig.CombinedOutput(); e != nil {
+		t.Fatalf("copy historical config: %v %s", e, output)
+	}
+	cli := filepath.Join(historical, "bin/selfishell")
+	calls := filepath.Join(caller, "cli-calls")
+	if e := os.WriteFile(cli, []byte(fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$1" >> '%s'
+`, calls)), 0755); e != nil {
+		t.Fatal(e)
+	}
+	for _, p := range []string{filepath.Join(caller, "tmp"), filepath.Join(caller, "out")} {
+		if e := os.MkdirAll(p, 0755); e != nil {
+			t.Fatal(e)
+		}
+	}
+	outer := filepath.Join(caller, "outer-home")
+	env := []string{"HOME=" + outer, "GOCACHE=" + filepath.Join(caller, "go-cache"), "TMPDIR=tmp", "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_ROOT=historical", "SELFISHELL_BENCHMARK_CLI=historical/bin/selfishell", "SELFISHELL_BENCHMARK_RESULTS_FILE=out/results.tsv", "SELFISHELL_BENCHMARK_ZPROF_FILE=out/startup.zprof"}
+	cmd := exec.Command("bash", filepath.Join(source, "scripts/benchmark.sh"), "--mode", "base")
+	cmd.Dir = caller
+	cmd.Env = env
+	output, e := cmd.CombinedOutput()
+	if e != nil {
+		t.Fatalf("wrapper from caller cwd: %v %s", e, output)
+	}
+	verifyRelativeBenchmarkArtifacts(t, caller, "results.tsv", "startup.zprof")
+	if e := os.Remove(filepath.Join(caller, "out/results.tsv")); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.Remove(filepath.Join(caller, "out/startup.zprof")); e != nil {
+		t.Fatal(e)
+	}
+	original, e := os.Getwd()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = os.Chdir(caller); e != nil {
+		t.Fatal(e)
+	}
+	defer os.Chdir(original)
+	var directOut, directErr bytes.Buffer
+	if code := Run([]string{"--mode", "base"}, env, source, &directOut, &directErr); code != 0 {
+		t.Fatalf("direct Run exit %d: %s", code, directErr.String())
+	}
+	verifyRelativeBenchmarkArtifacts(t, caller, "results.tsv", "startup.zprof")
+	data, e := os.ReadFile(calls)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if string(data) != "version\nhelp\nversion\nhelp\n" {
+		t.Fatalf("selected CLI calls: %q", data)
+	}
+}
+
+func verifyRelativeBenchmarkArtifacts(t *testing.T, caller, results, profile string) {
+	t.Helper()
+	rows, e := os.ReadFile(filepath.Join(caller, "out", results))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(string(rows), "\tcli-version\t") || !strings.Contains(string(rows), "\tcli-help\t") {
+		t.Fatalf("missing selected CLI results: %s", rows)
+	}
+	zprof, e := os.ReadFile(filepath.Join(caller, "out", profile))
+	if e != nil || !strings.Contains(string(zprof), "num  calls") {
+		t.Fatalf("missing caller-relative zprof: %v %s", e, zprof)
+	}
+	entries, e := os.ReadDir(filepath.Join(caller, "tmp"))
+	if e != nil || len(entries) != 0 {
+		t.Fatalf("temporary leftovers: %v %v", entries, e)
+	}
+}
