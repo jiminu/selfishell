@@ -3,12 +3,16 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/lib/common.sh"
 
 manifest="$ROOT_DIR/dependencies.conf"
 zsh_root="$ROOT_DIR"
 metadata=""
 temporary_dir=""
+transport_helper=""
+
+selfishell_curl() {
+  "$transport_helper" curl "$@"
+}
 
 cleanup() {
   [[ -z "$temporary_dir" ]] || rm -rf "$temporary_dir"
@@ -419,6 +423,12 @@ done
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency-update.XXXXXX")"
 trap cleanup EXIT HUP INT TERM
 if [[ -z "$metadata" ]]; then
+  command -v go >/dev/null 2>&1 || {
+    printf 'Go is required to discover dependency metadata; install the version pinned in go.mod or use --metadata FILE.\n' >&2
+    exit 1
+  }
+  transport_helper="$temporary_dir/selfishell-dev"
+  (cd "$ROOT_DIR" && go build -o "$transport_helper" ./cmd/selfishell-dev)
   metadata="$temporary_dir/metadata"
   : >"$metadata"
   discover_metadata
