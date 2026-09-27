@@ -1,9 +1,10 @@
 # Shell Performance
 
 Selfishell can measure shell startup and small CLI commands with
-`scripts/benchmark.sh`, run manually when needed. The benchmark uses an
-isolated temporary `HOME`; it never reads or changes the developer's shell
-configuration.
+`scripts/benchmark.sh`, run manually when needed. The Go runner builds in the
+current checkout before sampling and requires an already-built `.build/selfishell`
+CLI (run `bash scripts/build-cli.sh`). The benchmark uses an isolated temporary
+`HOME`; it never reads or changes the developer's shell configuration.
 
 Run it locally with:
 
@@ -56,7 +57,7 @@ They use the same iteration count (`SELFISHELL_BENCHMARK_ITERATIONS`, default
 30) and append metrics to `SELFISHELL_BENCHMARK_RESULTS_FILE` when set.
 They have no enforced timing budgets.
 
-`--prompt` requires Python 3, using only its standard library. It measures
+`--prompt` uses the native Go PTY probe. It measures
 `prompt-first-{empty,repository}` and `prompt-command-{empty,repository}` in
 a 160-column PTY with the managed Starship configuration. Each scenario warms
 one shell before collecting samples. Every measured shell runs three `:`
