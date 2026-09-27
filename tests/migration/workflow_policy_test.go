@@ -134,7 +134,7 @@ func TestDependabotTracksGitHubActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `package-ecosystem: "github-actions"`) {
+	if !regexp.MustCompile(`(?m)^  - package-ecosystem: ["']?github-actions["']?[ \t]*$`).Match(data) {
 		t.Error("Dependabot does not track github-actions")
 	}
 }
@@ -390,12 +390,11 @@ func policyNeeds(t *testing.T, lines []string) []string {
 func TestDependencyWorkflowPRBlock(t *testing.T) {
 	_, jobs := workflowSections(t, "dependency-updates.yml")
 	block := policyRun(t, policyStep(t, policyJob(t, jobs, "update"), "Create or refresh dependency update PR"))
-	for _, open := range []bool{true, false} {
-		name := "create_when_absent"
-		if open {
-			name = "skip_when_open"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		open, unexpected bool
+	}{{"skip_when_open", true, false}, {"create_when_absent", false, false}, {"reject_unexpected_path", false, true}} {
+		t.Run(tc.name, func(t *testing.T) {
 			home, repo, _ := policyRepo(t)
 			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml"} {
 				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
@@ -403,13 +402,17 @@ func TestDependencyWorkflowPRBlock(t *testing.T) {
 			policyGit(t, home, repo, "add", ".")
 			policyGit(t, home, repo, "commit", "-qm", "tracked workflow files")
 			policyWrite(t, filepath.Join(repo, "dependencies.conf"), classificationDeps("2222222222222222222222222222222222222222", "1.0"))
+			if tc.unexpected {
+				policyWrite(t, filepath.Join(repo, "README.md"), "unrelated change\n")
+			}
+			before := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
 			fake := filepath.Join(home, "fakebin")
 			if err := os.MkdirAll(fake, 0700); err != nil {
 				t.Fatal(err)
 			}
 			log := filepath.Join(home, "gh.log")
 			mode := "0"
-			if open {
+			if tc.open {
 				mode = "1"
 			}
 			gh := `#!/bin/bash
@@ -431,6 +434,27 @@ exec /usr/bin/git "$@"
 			}
 			env := append(policyEnv(home), "PATH="+fake+":/usr/bin:/bin:/usr/sbin:/sbin", "BRANCH=automation/dependency-updates", "POLICY_GH_LOG="+log, "POLICY_OPEN_COUNT="+mode)
 			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 10*time.Second)
+			if tc.unexpected {
+				if err != nil || got.Status != 1 || !strings.Contains(string(got.Stderr), "Dependency update touched unexpected files:") {
+					t.Fatalf("unexpected path not rejected: status=%d err=%v stdout=%s stderr=%s", got.Status, err, got.Stdout, got.Stderr)
+				}
+				if after := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD")); after != before {
+					t.Errorf("workflow committed unexpected path: before=%s after=%s", before, after)
+				}
+				if branch := strings.TrimSpace(policyGit(t, home, repo, "branch", "--show-current")); branch != "main" {
+					t.Errorf("workflow switched branch before rejecting: %s", branch)
+				}
+				if staged := strings.TrimSpace(policyGit(t, home, repo, "diff", "--cached", "--name-only")); staged != "" {
+					t.Errorf("workflow staged paths before rejecting: %s", staged)
+				}
+				if calls, readErr := os.ReadFile(log); readErr == nil {
+					t.Errorf("workflow called fake git/gh before rejecting: %s", calls)
+				} else if !os.IsNotExist(readErr) {
+					t.Fatal(readErr)
+				}
+				t.Log("current PR block rejected unrelated tracked change with status 1 before commit, push, or gh")
+				return
+			}
 			if err != nil || got.Status != 0 {
 				t.Fatalf("PR block: status=%d err=%v stdout=%s stderr=%s", got.Status, err, got.Stdout, got.Stderr)
 			}
@@ -443,8 +467,8 @@ exec /usr/bin/git "$@"
 				t.Errorf("wrong PR lookup: %s", calls)
 			}
 			created := strings.Contains(calls, "pr create ")
-			if created == open {
-				t.Errorf("create=%t for open=%t: %s", created, open, calls)
+			if created == tc.open {
+				t.Errorf("create=%t for open=%t: %s", created, tc.open, calls)
 			}
 			if !strings.Contains(calls, "git push --force-with-lease origin HEAD:automation/dependency-updates") {
 				t.Errorf("missing guarded branch push: %s", calls)
