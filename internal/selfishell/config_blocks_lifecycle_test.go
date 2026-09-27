@@ -633,23 +633,33 @@ func TestNativeZprofileTimeoutKillsMiseDescendant(t *testing.T) {
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
 	})
-	probeErr := syscall.Kill(pid, 0)
-	if probeErr == nil && runtime.GOOS == "linux" {
-		// Container init may leave a killed grandchild as a non-running zombie.
-		stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-		if readErr == nil {
-			at := bytes.LastIndex(stat, []byte(") "))
-			if at >= 0 && len(stat) > at+2 && stat[at+2] == 'Z' {
-				probeErr = syscall.ESRCH
+	// SIGKILL delivery is asynchronous, and waiting for Zsh does not reap its
+	// grandchild. Give that private descendant a bounded chance to stop.
+	deadline := time.Now().Add(time.Second)
+	for {
+		probeErr := syscall.Kill(pid, 0)
+		if probeErr == nil && runtime.GOOS == "linux" {
+			// Container init may leave a killed grandchild as a non-running zombie.
+			stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+			if readErr == nil {
+				at := bytes.LastIndex(stat, []byte(") "))
+				if at >= 0 && len(stat) > at+2 && stat[at+2] == 'Z' {
+					probeErr = syscall.ESRCH
+				}
 			}
 		}
+		if errors.Is(probeErr, syscall.ESRCH) {
+			cleanup = false
+			break
+		}
+		if probeErr != nil {
+			t.Fatal(probeErr)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("private fake mise descendant %d survived timeout", pid)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if probeErr == nil {
-		t.Fatalf("private fake mise descendant %d survived timeout", pid)
-	} else if !errors.Is(probeErr, syscall.ESRCH) {
-		t.Fatal(probeErr)
-	}
-	cleanup = false
 }
 
 func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
