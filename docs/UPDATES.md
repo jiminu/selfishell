@@ -4,6 +4,8 @@
 package list to synchronize tools and configuration. If the target release is
 already active, it exits without changing anything; use `--tools-only` to
 resynchronize the current environment.
+The CLI phase installs a checksum-verified native executable; no Go toolchain
+is needed on the user's machine.
 
 ## Update modes
 
@@ -32,6 +34,8 @@ finish with `Selfishell tools and configuration synchronized.`
 Synchronization installs missing Apt or Homebrew packages from `packages.conf`,
 applies approved direct-tool and Git dependency versions from `dependencies.conf`,
 synchronizes mise tools and Neovim plugins, and reapplies managed configuration.
+Optional Apt packages are attempted automatically; a failed optional package
+is reported but does not fail the whole setup. Required package failures do.
 Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
@@ -71,6 +75,9 @@ checksum, and switches `current` only after validation. It retains the active
 and previous releases, removing older inactive releases. Version discovery
 prefers the latest stable release; if none exists, it accepts the newest version
 tag only when that exact release's `VERSION` asset is published.
+If a freshly downloaded release activates but the following state commit
+fails, the active CLI can have changed even though `update` reports failure.
+Check `selfishell version` and rerun the update after resolving the state error.
 
 ```sh
 selfishell rollback --yes

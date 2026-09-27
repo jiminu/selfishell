@@ -206,11 +206,14 @@ func run(ctx context.Context, o options, env map[string]string, source string, o
 	if e != nil {
 		return e
 	}
-	version, e := f.measure(ctx, "cli-version", o.iterations, execSpec{o.cli, []string{"version"}, f.home, shellEnv})
+	// The fixed Bash reference uses /usr/bin/env bash. Keep CLI process
+	// conditions equal while shell-startup probes retain their masked PATH.
+	cliEnv := append(append([]string{}, shellEnv...), "PATH=/usr/bin:/bin")
+	version, e := f.measure(ctx, "cli-version", o.iterations, execSpec{o.cli, []string{"version"}, f.home, cliEnv})
 	if e != nil {
 		return e
 	}
-	help, e := f.measure(ctx, "cli-help", o.iterations, execSpec{o.cli, []string{"help"}, f.home, shellEnv})
+	help, e := f.measure(ctx, "cli-help", o.iterations, execSpec{o.cli, []string{"help"}, f.home, cliEnv})
 	if e != nil {
 		return e
 	}
@@ -577,8 +580,7 @@ func (f *fixture) diagnosticEnv(home, path string) []string {
 	}
 	return env
 }
-func (f *fixture) diagnosticsRun(ctx context.Context) error {
-	home := filepath.Join(f.dir, "diagnostics-home")
+func (f *fixture) prepareDiagnosticHome(home string) error {
 	if e := mkdir(filepath.Join(home, ".local/share")); e != nil {
 		return e
 	}
@@ -586,6 +588,22 @@ func (f *fixture) diagnosticsRun(ctx context.Context) error {
 		if e = os.Symlink(filepath.Join(f.data, "zinit"), filepath.Join(home, ".local/share/zinit")); e != nil {
 			return e
 		}
+	}
+	if f.mode == "full" {
+		bin := filepath.Join(home, ".local/bin")
+		if e := mkdir(bin); e != nil {
+			return e
+		}
+		if e := os.Symlink(filepath.Join(f.home, ".local/bin/mise"), filepath.Join(bin, "mise")); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+func (f *fixture) diagnosticsRun(ctx context.Context) error {
+	home := filepath.Join(f.dir, "diagnostics-home")
+	if e := f.prepareDiagnosticHome(home); e != nil {
+		return e
 	}
 	path := "/usr/bin:/bin"
 	if f.mode == "full" {

@@ -35,7 +35,8 @@ func Open() (*os.File, *os.File, error) {
 		master.Close()
 		return nil, nil, errno
 	}
-	slave, err := os.OpenFile(string(bytes.TrimRight(name[:], "\x00")), os.O_RDWR, 0)
+	// A session-leading caller must not acquire the slave as its own terminal.
+	slave, err := os.OpenFile(string(bytes.TrimRight(name[:], "\x00")), os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		master.Close()
 		return nil, nil, err
