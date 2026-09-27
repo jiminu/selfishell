@@ -32,7 +32,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
       - name: Install shell tooling (Ubuntu)
         if: runner.os == 'Linux'
@@ -45,7 +45,7 @@ jobs:
         run: brew install shellcheck shfmt
 
       - name: Run verification suite
-        run: bash scripts/check.sh
+        run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
 
   build:
     needs: verify
@@ -69,7 +69,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
       - name: Require release commit on main
         run: |
@@ -130,7 +130,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
       - name: Download release artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

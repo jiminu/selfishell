@@ -29,26 +29,45 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: false
-
-      - name: Install shell tooling
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt zsh
+          cache: true
 
       - name: Update dependency manifest
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/update-dependencies.sh
 
+      - name: Check dependency changes
+        id: changes
+        run: |
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml')"
+          [[ -z "$unexpected" ]] || {
+            printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
+            exit 1
+          }
+          if git diff --quiet -- dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml; then
+            printf 'All approved dependencies are current.\n'
+            printf 'changed=false\n' >>"$GITHUB_OUTPUT"
+          else
+            printf 'changed=true\n' >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Install shell tooling
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt zsh
+
       - name: Validate updated manifest
-        run: bash scripts/check.sh
+        if: steps.changes.outputs.changed == 'true'
+        run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
 
       - name: Create or refresh dependency update PR
+        if: steps.changes.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/dependency-updates
         run: |
+          # Recheck after verification before committing any files.
           tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml)
           git diff --quiet -- "${tracked_files[@]}" && {
             printf 'All approved dependencies are current.\n'
