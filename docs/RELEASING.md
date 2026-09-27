@@ -4,9 +4,10 @@ Selfishell uses the immutable `v<version>` Git tag as the single source of truth
 for a release version. The source tree does not carry a release `VERSION` file;
 `VERSION` is generated only for built and published release artifacts.
 
-Release archives are platform and architecture labeled even though the current
-payload is shell-based. This keeps the download contract stable if native assets
-are added later.
+Release archives contain a native executable for their labeled OS and CPU,
+configuration and manifests. Users do not need the Go compiler. The source
+bootstrap remains standalone Bash 3.2 and verifies an exact archive before
+atomic activation.
 
 ## Optional local artifact check
 
@@ -69,8 +70,11 @@ dot-separated SemVer identifiers made of ASCII letters, digits, and hyphens;
 numeric identifiers must not contain leading zeroes.
 
 The Release workflow validates the pushed tag, runs the full verification
-suite, builds every platform archive, smoke-tests an exact install, generates
-GitHub Artifact Attestations, and creates the GitHub Release with all archives,
+suite on Linux and macOS, builds the six-file asset set once, and transfers the
+same artifact ID to native smoke jobs on both hosts and the publisher. Both
+smokes must pass before the publisher verifies the exact file set, `VERSION`
+and checksums, generates GitHub Artifact Attestations, and creates the GitHub
+Release with all archives,
 `SHA256SUMS`, and generated `VERSION`. The GitHub Release title is the version
 tag itself, such as `v1.2.3`; artifact filenames retain the `selfishell-`
 prefix so downloaded files remain identifiable.

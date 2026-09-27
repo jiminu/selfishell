@@ -1,110 +1,20 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-# Avoid spawning dirname on every invocation; a bare filename needs a "." fallback.
-SELFISHELL_SOURCE="${BASH_SOURCE[0]}"
-while [[ -L "$SELFISHELL_SOURCE" ]]; do
-  SELFISHELL_SOURCE_DIR="${SELFISHELL_SOURCE%/*}"
-  [[ "$SELFISHELL_SOURCE_DIR" != "$SELFISHELL_SOURCE" ]] || SELFISHELL_SOURCE_DIR=.
-  SELFISHELL_SOURCE_DIR="$(cd "$SELFISHELL_SOURCE_DIR" && pwd)"
-  SELFISHELL_SOURCE="$(readlink "$SELFISHELL_SOURCE")"
-  if [[ "$SELFISHELL_SOURCE" != /* ]]; then
-    SELFISHELL_SOURCE="$SELFISHELL_SOURCE_DIR/$SELFISHELL_SOURCE"
-  fi
+source_path="${BASH_SOURCE[0]}"
+while [[ -L "$source_path" ]]; do
+  source_dir="${source_path%/*}"
+  [[ "$source_dir" != "$source_path" ]] || source_dir=.
+  source_dir="$(cd "$source_dir" && pwd -P)"
+  source_path="$(readlink "$source_path")"
+  [[ "$source_path" == /* ]] || source_path="$source_dir/$source_path"
 done
-
-SELFISHELL_ROOT="${SELFISHELL_SOURCE%/*}"
-[[ "$SELFISHELL_ROOT" != "$SELFISHELL_SOURCE" ]] || SELFISHELL_ROOT=.
-SELFISHELL_ROOT="$(cd "$SELFISHELL_ROOT/.." && pwd -P)"
-export SELFISHELL_ROOT
-unset SELFISHELL_SOURCE SELFISHELL_SOURCE_DIR
-
-source "$SELFISHELL_ROOT/lib/common.sh"
-
-# Keep the two startup-only commands independent of the package, platform, and
-# managed-resource modules. `version --available` still needs release metadata
-# and therefore follows the full command path below.
-case "${1:-help}" in
-  help | --help | -h)
-    source "$SELFISHELL_ROOT/lib/commands/help.sh"
-    if (("$#" > 0)); then
-      shift
-    fi
-    command_help "$@"
-    exit
-    ;;
-  version | --version | -v)
-    if [[ "${2:-}" != --available ]]; then
-      source "$SELFISHELL_ROOT/lib/commands/version.sh"
-      shift
-      command_version "$@"
-      exit
-    fi
-    ;;
-esac
-
-source "$SELFISHELL_ROOT/lib/paths.sh"
-source "$SELFISHELL_ROOT/lib/platform.sh"
-source "$SELFISHELL_ROOT/lib/resources.sh"
-source "$SELFISHELL_ROOT/lib/dependencies.sh"
-source "$SELFISHELL_ROOT/lib/tool_status.sh"
-source "$SELFISHELL_ROOT/lib/package_scan.sh"
-source "$SELFISHELL_ROOT/lib/managed.sh"
-source "$SELFISHELL_ROOT/lib/package_manifest.sh"
-source "$SELFISHELL_ROOT/lib/package_managers/apt.sh"
-source "$SELFISHELL_ROOT/lib/package_managers/homebrew.sh"
-source "$SELFISHELL_ROOT/lib/installers.sh"
-source "$SELFISHELL_ROOT/lib/packages.sh"
-source "$SELFISHELL_ROOT/lib/commands/help.sh"
-source "$SELFISHELL_ROOT/lib/commands/version.sh"
-source "$SELFISHELL_ROOT/lib/commands/doctor.sh"
-source "$SELFISHELL_ROOT/lib/commands/install.sh"
-source "$SELFISHELL_ROOT/lib/commands/status.sh"
-source "$SELFISHELL_ROOT/lib/commands/uninstall.sh"
-source "$SELFISHELL_ROOT/lib/releases.sh"
-selfishell_export_git_speed_limits
-source "$SELFISHELL_ROOT/lib/commands/update.sh"
-source "$SELFISHELL_ROOT/lib/commands/rollback.sh"
-
-main() {
-  local command="${1:-help}"
-
-  if (("$#" > 0)); then
-    shift
-  fi
-
-  case "$command" in
-    help | --help | -h)
-      command_help "$@"
-      ;;
-    version | --version | -v)
-      command_version "$@"
-      ;;
-    doctor)
-      command_doctor "$@"
-      ;;
-    install)
-      command_install "$@"
-      ;;
-    status)
-      command_status "$@"
-      ;;
-    uninstall)
-      command_uninstall "$@"
-      ;;
-    update)
-      command_update "$@"
-      ;;
-    rollback)
-      command_rollback "$@"
-      ;;
-    *)
-      cli_error "Unknown command: $command"
-      cli_error "Run 'selfishell help' to see available commands."
-      return "$SELFISHELL_EXIT_USAGE"
-      ;;
-  esac
-}
-
-main "$@"
+source_dir="${source_path%/*}"
+[[ "$source_dir" != "$source_path" ]] || source_dir=.
+root_dir="$(cd "$source_dir/.." && pwd -P)"
+binary="$root_dir/.build/selfishell"
+if [[ ! -x "$binary" ]]; then
+  printf 'Selfishell development binary is missing: %s\nRun bash scripts/build-cli.sh from %s with the pinned Go version in go.mod.\n' "$binary" "$root_dir" >&2
+  exit 1
+fi
+exec "$binary" "$@"

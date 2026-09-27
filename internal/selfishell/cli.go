@@ -2,6 +2,7 @@
 package selfishell
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,14 @@ type CLI struct {
 	Root     string
 	In       io.Reader
 	Out, Err io.Writer
+	Context  context.Context
+}
+
+func (c CLI) invocationContext() context.Context {
+	if c.Context != nil {
+		return c.Context
+	}
+	return context.Background()
 }
 
 func (c CLI) error(message string) {
@@ -24,7 +33,7 @@ func (c CLI) error(message string) {
 	fmt.Fprintln(c.Err, prefix+" "+message)
 }
 
-// Run implements only the foundation commands. Unported operations must fail.
+// Run dispatches the CLI commands.
 func (c CLI) Run(args []string) int {
 	command := "help"
 	if len(args) > 0 {
@@ -50,7 +59,13 @@ func (c CLI) Run(args []string) int {
 				return 0
 			case "--available":
 				if len(args) == 1 {
-					return c.incomplete("version --available")
+					version, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(c.invocationContext())
+					if err != nil {
+						c.error("Unable to determine the latest Selfishell release.")
+						return 1
+					}
+					fmt.Fprintln(c.Out, version)
+					return 0
 				}
 				fallthrough
 			default:
@@ -72,18 +87,23 @@ func (c CLI) Run(args []string) int {
 		}
 		fmt.Fprintln(c.Out, "selfishell "+version)
 		return 0
-	case "doctor", "install", "status", "update", "rollback", "uninstall":
-		return c.incomplete(command)
+	case "install":
+		return c.install(args)
+	case "uninstall":
+		return c.uninstall(args)
+	case "status":
+		return c.status(args)
+	case "doctor":
+		return c.doctor(args)
+	case "update":
+		return c.update(args)
+	case "rollback":
+		return c.rollback(args)
 	default:
 		c.error("Unknown command: " + command)
 		c.error("Run 'selfishell help' to see available commands.")
 		return 2
 	}
-}
-
-func (c CLI) incomplete(command string) int {
-	c.error(command + " is not implemented in the Go candidate.")
-	return 1
 }
 
 // ReleaseRoot resolves both bin/selfishell and the development .build/selfishell.

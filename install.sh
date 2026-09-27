@@ -6,7 +6,7 @@ SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/se
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 
-# Bootstrap cannot source lib/common.sh yet; gate colors separately for each stream.
+# Bootstrap gates colors separately for each stream.
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   SELFISHELL_COLOR_GREEN=$'\033[32m'
   SELFISHELL_COLOR_YELLOW=$'\033[33m'

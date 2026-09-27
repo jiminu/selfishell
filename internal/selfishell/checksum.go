@@ -40,7 +40,23 @@ func Checksum(ctx context.Context, path string) (string, error) {
 	if status != 0 {
 		return "", fmt.Errorf("checksum %s: cksum exited %d: %s", path, status, strings.TrimSpace(stderr.String()))
 	}
-	fields := strings.Fields(out.String())
+	return parseChecksum(out.String(), path)
+}
+
+func checksumBytes(data []byte) (string, error) {
+	var out, stderr bytes.Buffer
+	code, err := (Process{In: bytes.NewReader(data), Out: &out, Err: &stderr}).Run(context.Background(), "cksum")
+	if err != nil {
+		return "", err
+	}
+	if code != 0 {
+		return "", fmt.Errorf("cksum exited %d: %s", code, stderr.String())
+	}
+	return parseChecksum(out.String(), "bytes")
+}
+
+func parseChecksum(output, path string) (string, error) {
+	fields := strings.Fields(output)
 	if len(fields) != 2 {
 		return "", fmt.Errorf("invalid cksum output for %s", path)
 	}

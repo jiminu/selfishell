@@ -1,0 +1,1 @@
+assert(vim.fn.filereadable(vim.fn.expand("%:p")) == 0, "the target file must not already exist for this to be a real BufNewFile check"); assert(require("snacks.indent").enabled == true, "Snacks indent was not enabled for a brand-new file"); print("BufNewFile indent smoke: OK")

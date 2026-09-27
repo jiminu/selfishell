@@ -4,6 +4,10 @@
 
 Selfishell is a managed Zsh development environment for macOS, Ubuntu, and
 Ubuntu on WSL.
+The installed CLI is a native executable; installation does not require Go.
+The supported baseline is macOS 13 or newer, Ubuntu 24.04 LTS, and Ubuntu on
+WSL 2. See the [verification coverage](docs/INSTALLATION.md#verification-coverage)
+for environments actually exercised in CI.
 
 ## Quick Start
 

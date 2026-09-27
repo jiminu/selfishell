@@ -12,7 +12,7 @@ while IFS= read -r file; do
 done < <(
   {
     printf '%s\n' bin/selfishell install.sh
-    find lib scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
+    find scripts tests -type f \( -name '*.sh' -o -name '*.bash' \)
   } | sort -u
 )
 
@@ -43,8 +43,5 @@ printf '%s\0' "${bash_files[@]}" | xargs -0 -n 4 -P 4 shellcheck -x
 printf 'Checking shell formatting\n'
 shfmt -d -i 2 -ci "${bash_files[@]}"
 
-printf 'Checking Go candidate\n'
+printf 'Checking Go engine\n'
 bash scripts/check-go.sh
-
-printf 'Running tests\n'
-bash tests/run.bash
