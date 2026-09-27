@@ -411,7 +411,14 @@ func TestIntegrationQueryCancellationCleansDescendants(t *testing.T) {
 			t.Fatalf("stuck query cancellation: %v", e)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("mise query did not cancel promptly")
+		t.Error("mise query did not cancel promptly")
+		// Still check the sentinel: a surviving descendant may be holding the
+		// output pipe open, rather than the runner merely being slow.
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("mise query remained blocked after cancellation")
+		}
 	}
 	time.Sleep(1200 * time.Millisecond)
 	if _, e := os.Stat(sentinel); !os.IsNotExist(e) {
