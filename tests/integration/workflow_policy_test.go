@@ -497,6 +497,64 @@ func policyNeeds(t *testing.T, lines []string) []string {
 	return []string{value}
 }
 
+func TestDependencyWorkflowChanges(t *testing.T) {
+	raw, jobs := workflowSections(t, "dependency-updates.yml")
+	job := policyJob(t, jobs, "update")
+	detect := policyStep(t, job, "Check dependency changes")
+	if id := policyField(t, detect, "        ", "id"); id != "changes" {
+		t.Fatalf("change output is not connected to downstream steps: %q", id)
+	}
+	previous := -1
+	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
+		index := strings.Index(raw, "      - name: "+name+"\n")
+		if index <= previous {
+			t.Fatalf("dependency step %q missing or out of order", name)
+		}
+		previous = index
+	}
+	for _, name := range []string{"Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
+		if condition := policyField(t, policyStep(t, job, name), "        ", "if"); condition != "steps.changes.outputs.changed == 'true'" {
+			t.Errorf("%s does not require dependency changes: %q", name, condition)
+		}
+	}
+	block := policyRun(t, detect)
+	for _, tc := range []struct {
+		name, path string
+		status     int
+		output     string
+	}{
+		{"unchanged", "", 0, "changed=false\n"},
+		{"manifest", "dependencies.conf", 0, "changed=true\n"},
+		{"completion", "config/shared/zsh/completion.zsh", 0, "changed=true\n"},
+		{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
+		{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
+		{"unexpected_tracked_only", "README.md", 1, ""},
+		{"unexpected_untracked_only", "unexpected.txt", 1, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, repo, _ := policyRepo(t)
+			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml"} {
+				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
+			}
+			policyGit(t, home, repo, "add", ".")
+			policyGit(t, home, repo, "commit", "-qm", "tracked dependency files")
+			if tc.path != "" {
+				policyWrite(t, filepath.Join(repo, tc.path), "changed\n")
+			}
+			output := filepath.Join(home, "output")
+			policyWrite(t, output, "")
+			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, append(policyEnv(home), "GITHUB_OUTPUT="+output), 5*time.Second)
+			if err != nil || got.Status != tc.status {
+				t.Fatalf("change detection: status=%d want=%d err=%v stderr=%s", got.Status, tc.status, err, got.Stderr)
+			}
+			data, err := os.ReadFile(output)
+			if err != nil || string(data) != tc.output {
+				t.Fatalf("change output=%q want=%q err=%v", data, tc.output, err)
+			}
+		})
+	}
+}
+
 func TestDependencyWorkflowPRBlock(t *testing.T) {
 	_, jobs := workflowSections(t, "dependency-updates.yml")
 	block := policyRun(t, policyStep(t, policyJob(t, jobs, "update"), "Create or refresh dependency update PR"))

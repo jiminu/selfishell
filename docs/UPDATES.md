@@ -112,7 +112,8 @@ discovery requires curl and Git. `--metadata FILE` applies saved metadata withou
 network access. Node and Python release lines remain a manual maintainer choice.
 All manifest and configuration edits are validated and staged before any file
 is replaced, and each replacement uses an atomic rename. The
-weekly workflow runs the same script and opens or refreshes
+weekly workflow runs the same script, skips shell tooling setup and the full
+verification suite when no pins change, and otherwise opens or refreshes
 `automation/dependency-updates` only when tracked files change. It never merges
 or publishes. Review upstream release notes, checksums, and CI before merging,
 then follow the [release procedure](RELEASING.md) to deliver the changes.
