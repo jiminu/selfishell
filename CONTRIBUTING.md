@@ -16,6 +16,14 @@ The root `mise.toml` selects the same Go version for local development; keep it
 in sync with `go.mod`. With mise installed, run `mise trust` and `mise install go`
 from the checkout before building.
 
+Source build scripts share `scripts/go-env.sh`: they require that exact Go
+version on `PATH`, disable automatic toolchain downloads and ignore caller
+Go settings, workspaces, build flags and cross-compilation targets. They build
+in module mode without CGO, module downloads or VCS stamping and preserve
+explicit compiler/module cache paths. The release builder selects its four
+targets explicitly. Dependency updates using an existing `--metadata` file
+still run without Go.
+
 ```bash
 bash scripts/build-cli.sh       # Build the host CLI at .build/selfishell
 bin/selfishell help            # Source launcher executes that existing binary

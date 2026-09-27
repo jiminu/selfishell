@@ -12,13 +12,8 @@ case "${*:-}" in
     ;;
 esac
 
-required="$(awk '$1 == "go" { print $2 }' go.mod)"
-export GOTOOLCHAIN=local
-if ! command -v go >/dev/null 2>&1 || [[ "$(go env GOVERSION)" != "go$required" ]]; then
-  printf 'Building the development CLI requires Go %s on PATH.\n' "$required" >&2
-  exit 1
-fi
-export CGO_ENABLED=0 GOAMD64=v1 GOARM64=v8.0
+source "$ROOT_DIR/scripts/go-env.sh"
+selfishell_prepare_go "$ROOT_DIR"
 host_os="$(go env GOHOSTOS)"
 host_arch="$(go env GOHOSTARCH)"
 case "$host_os-$host_arch" in
@@ -30,7 +25,7 @@ case "$host_os-$host_arch" in
 esac
 
 mkdir -p .build
-GOOS="$host_os" GOARCH="$host_arch" go build -trimpath -o .build/selfishell ./cmd/selfishell
+GOOS="$host_os" GOARCH="$host_arch" go build -trimpath -buildvcs=false -o .build/selfishell ./cmd/selfishell
 printf 'Built native development CLI: .build/selfishell (%s/%s)\n' "$host_os" "$host_arch"
 
 if [[ "${1:-}" == --all ]]; then
@@ -41,7 +36,7 @@ if [[ "${1:-}" == --all ]]; then
       if [[ "$target_os-$target_arch" == "$host_os-$host_arch" ]]; then
         cp .build/selfishell "$target"
       else
-        GOOS="$target_os" GOARCH="$target_arch" go build -trimpath -o "$target" ./cmd/selfishell
+        GOOS="$target_os" GOARCH="$target_arch" go build -trimpath -buildvcs=false -o "$target" ./cmd/selfishell
       fi
       printf 'Cross-build: %s/%s\n' "$target_os" "$target_arch"
     done

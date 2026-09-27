@@ -333,13 +333,15 @@ func (f *fixture) provision(ctx context.Context) error {
 	// selfishell-dev reads process-global HOME/XDG; keep it in a private child.
 	env := f.baseEnv(filepath.Join(f.home, ".local/bin") + ":" + getenv(f.env, "PATH", "/usr/bin:/bin"))
 	env = append(env, "MISE_CEILING_PATHS="+f.root, "MISE_OFFLINE=0")
-	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "GOPROXY", "GOSUMDB"} {
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "GOCACHE", "GOMODCACHE"} {
 		if v := f.env[key]; v != "" {
 			env = append(env, key+"="+v)
 		}
 	}
-	// `go run` is setup only; it never enters a timed sample.
-	spec := execSpec{"go", []string{"run", "./cmd/selfishell-dev", f.root, "benchmark-shell"}, f.root, env}
+	// Apply the same source-build policy inside the private child. This setup
+	// never enters a timed sample or reads the caller's Go workspace/config.
+	script := `source "$1/scripts/go-env.sh"; selfishell_prepare_go "$1"; exec go run -buildvcs=false ./cmd/selfishell-dev "$1" benchmark-shell`
+	spec := execSpec{"/bin/bash", []string{"-euc", script, "bash", f.root}, f.root, env}
 	_, e := execute(ctx, spec)
 	if e != nil {
 		return fmt.Errorf("private full provisioning failed: %w", e)

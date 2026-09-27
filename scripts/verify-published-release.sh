@@ -20,12 +20,14 @@ case "$repository" in
     ;;
 esac
 
-for required_command in gh curl go; do
+for required_command in gh curl; do
   command -v "$required_command" >/dev/null 2>&1 || {
     printf '%s is required to verify a published release.\n' "$required_command" >&2
     exit 1
   }
 done
+source "$ROOT_DIR/scripts/go-env.sh"
+selfishell_prepare_go "$ROOT_DIR"
 
 tag="v$version"
 release_root="${SELFISHELL_VERIFY_RELEASE_ROOT:-https://github.com/$repository/releases}"
@@ -33,7 +35,7 @@ raw_root="${SELFISHELL_VERIFY_RAW_ROOT:-https://raw.githubusercontent.com/$repos
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-published-release.XXXXXX")"
 trap 'rm -rf "$temporary_root"' EXIT HUP INT TERM
 transport_helper="$temporary_root/selfishell-dev"
-(cd "$ROOT_DIR" && GOTOOLCHAIN=local go build -o "$transport_helper" ./cmd/selfishell-dev)
+(cd "$ROOT_DIR" && go build -buildvcs=false -o "$transport_helper" ./cmd/selfishell-dev)
 selfishell_curl() { "$transport_helper" curl "$@"; }
 
 metadata="$(gh release view "$tag" --repo "$repository" \

@@ -420,15 +420,15 @@ done
   printf 'Dependency manifest not found: %s\n' "$manifest" >&2
   exit 1
 }
+if [[ -z "$metadata" ]]; then
+  source "$ROOT_DIR/scripts/go-env.sh"
+  selfishell_prepare_go "$ROOT_DIR"
+fi
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-dependency-update.XXXXXX")"
 trap cleanup EXIT HUP INT TERM
 if [[ -z "$metadata" ]]; then
-  command -v go >/dev/null 2>&1 || {
-    printf 'Go is required to discover dependency metadata; install the version pinned in go.mod or use --metadata FILE.\n' >&2
-    exit 1
-  }
   transport_helper="$temporary_dir/selfishell-dev"
-  (cd "$ROOT_DIR" && go build -o "$transport_helper" ./cmd/selfishell-dev)
+  (cd "$ROOT_DIR" && go build -buildvcs=false -o "$transport_helper" ./cmd/selfishell-dev)
   metadata="$temporary_dir/metadata"
   : >"$metadata"
   discover_metadata

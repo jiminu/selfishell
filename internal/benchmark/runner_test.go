@@ -191,17 +191,28 @@ func TestFullProvisionUsesCheckoutHelper(t *testing.T) {
 	home := filepath.Join(private, "home")
 	bin := filepath.Join(private, "bin")
 	log := filepath.Join(private, "helper.log")
-	for _, p := range []string{root, home, bin} {
+	for _, p := range []string{root, home, bin, filepath.Join(root, "scripts")} {
 		if e := os.MkdirAll(p, 0755); e != nil {
 			t.Fatal(e)
 		}
 	}
-	script := "#!/bin/sh\nprintf '%s\\n' \"$PWD|$*|$HOME|$XDG_DATA_HOME|$MISE_OFFLINE\" >" + log + "\n"
+	policy, err := os.ReadFile(filepath.Join(repositoryRoot(t), "scripts/go-env.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "scripts/go-env.sh"), policy, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/test\n\ngo 1.23.4\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cache, modules := filepath.Join(private, "go-cache"), filepath.Join(private, "go-modcache")
+	script := "#!/bin/sh\nif [ \"$*\" = 'env GOVERSION' ]; then printf '%s\\n' 'go1.23.4'; exit 0; fi\nprintf '%s\\n' \"$PWD|$*|$HOME|$XDG_DATA_HOME|$MISE_OFFLINE|$GOTOOLCHAIN|$GOENV|$GOWORK|$GOFLAGS|$GOOS|$GOARCH|$GOCACHE|$GOMODCACHE\" >" + log + "\n"
 	if e := os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0755); e != nil {
 		t.Fatal(e)
 	}
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	f := &fixture{options: options{root: root}, home: home, data: filepath.Join(home, ".local/share"), env: map[string]string{"PATH": "/usr/bin:/bin"}}
+	f := &fixture{options: options{root: root}, home: home, data: filepath.Join(home, ".local/share"), env: map[string]string{"PATH": bin + ":/usr/bin:/bin", "GOCACHE": cache, "GOMODCACHE": modules}}
 	if e := f.provision(context.Background()); e != nil {
 		t.Fatal(e)
 	}
@@ -209,7 +220,7 @@ func TestFullProvisionUsesCheckoutHelper(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, want := range []string{root + "|run ./cmd/selfishell-dev " + root + " benchmark-shell|" + home + "|" + filepath.Join(home, ".local/share") + "|0"} {
+	for _, want := range []string{root + "|run -buildvcs=false ./cmd/selfishell-dev " + root + " benchmark-shell|" + home + "|" + filepath.Join(home, ".local/share") + "|0|local|off|off||||" + cache + "|" + modules + "\n"} {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("helper routing: %s", data)
 		}

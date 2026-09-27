@@ -3,7 +3,8 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT_DIR"
-export GOTOOLCHAIN=local CGO_ENABLED=0
+source "$ROOT_DIR/scripts/go-env.sh"
+selfishell_prepare_go "$ROOT_DIR"
 
 # Build first so the pinned toolchain is checked before any Go command can fetch.
 bash scripts/build-cli.sh --all
