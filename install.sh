@@ -212,6 +212,20 @@ bootstrap_validate_link_path() {
   fi
 }
 
+bootstrap_validate_release_link() {
+  local link_path="$1"
+  local target version
+
+  bootstrap_validate_link_path "$link_path" || return 1
+  [[ -L "$link_path" ]] || return 0
+  target="$(readlink "$link_path")"
+  version="${target#releases/}"
+  if [[ "$target" != "releases/$version" ]] || ! bootstrap_version_is_valid "$version"; then
+    bootstrap_error "Refusing to replace foreign release link: $link_path"
+    return 1
+  fi
+}
+
 # The CLI link is replaced only when it already points at this installation.
 bootstrap_validate_cli_link() {
   local link_path="$1"
@@ -261,17 +275,28 @@ bootstrap_prune_releases() {
   local releases_dir="$1"
   local current_target="$2"
   local previous_target="$3"
-  local release_dir release_name
+  local release_dir release_name staging_dir staging_name staging_version staging_suffix
 
   current_target="${current_target##*/}"
   previous_target="${previous_target##*/}"
-  # Staging left by an interrupted install; a day-old one belongs to no running install.
-  find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.*.tmp.*' -mmin +1440 \
-    -exec rm -rf {} + 2>/dev/null || true
+  # Remove only old staging with a valid release version in its name.
+  while IFS= read -r -d '' staging_dir; do
+    staging_name="${staging_dir##*/}"
+    staging_version="${staging_name#.}"
+    staging_version="${staging_version%%.tmp.*}"
+    staging_suffix="${staging_name#*.tmp.}"
+    [[ -n "$staging_suffix" ]] || continue
+    bootstrap_version_is_valid "$staging_version" || continue
+    rm -rf "$staging_dir"
+  done < <(find "$releases_dir" -mindepth 1 -maxdepth 1 -type d -name '.*.tmp.*' -mmin +1440 -print0 2>/dev/null)
   for release_dir in "$releases_dir"/*; do
     [[ -d "$release_dir" && ! -L "$release_dir" ]] || continue
     release_name="${release_dir##*/}"
     [[ "$release_name" == "$current_target" || "$release_name" == "$previous_target" ]] && continue
+    bootstrap_version_is_valid "$release_name" || continue
+    [[ -f "$release_dir/VERSION" && ! -L "$release_dir/VERSION" && "$(<"$release_dir/VERSION")" == "$release_name" ]] || continue
+    [[ -d "$release_dir/bin" && ! -L "$release_dir/bin" ]] || continue
+    [[ -f "$release_dir/bin/selfishell" && ! -L "$release_dir/bin/selfishell" && -x "$release_dir/bin/selfishell" ]] || continue
     rm -rf "$release_dir"
     printf '%sRemoved inactive Selfishell release:%s %s\n' "$SELFISHELL_COLOR_GREEN" "$SELFISHELL_COLOR_RESET" "$release_name"
   done
@@ -400,8 +425,8 @@ main() {
   releases_dir="$share_dir/releases"
   release_dir="$releases_dir/$version"
   bin_dir="$prefix/bin"
-  bootstrap_validate_link_path "$share_dir/current"
-  bootstrap_validate_link_path "$share_dir/previous"
+  bootstrap_validate_release_link "$share_dir/current"
+  bootstrap_validate_release_link "$share_dir/previous"
   bootstrap_validate_cli_link "$bin_dir/selfishell" "$share_dir/current/bin/selfishell"
   if ! bootstrap_sfs_link_is_ours "$bin_dir/sfs"; then
     printf '%sLeaving %s in place; it is not the Selfishell sfs link.%s\n' \
@@ -436,6 +461,8 @@ main() {
     [[ ! -d "$nested_staging" ]] || rm -rf "$nested_staging"
   fi
 
+  bootstrap_validate_release_link "$share_dir/current"
+  bootstrap_validate_release_link "$share_dir/previous"
   [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
   [[ ! -L "$share_dir/previous" ]] || previous_target="$(readlink "$share_dir/previous")"
   current_version="${current_target##*/}"

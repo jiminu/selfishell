@@ -195,9 +195,13 @@ func TestNativeBootstrapExactAndDefault(t *testing.T) {
 	requireOK(t, f.run(t))
 	requireLink(t, filepath.Join(f.share, "current"), "releases/"+nextNativeVersion)
 	requireLink(t, filepath.Join(f.share, "previous"), "releases/"+nativeArchiveVersion)
-	mustFS(t, os.Mkdir(filepath.Join(f.share, "releases/0.0.1"), 0700))
+	unknownRelease := filepath.Join(f.share, "releases/0.0.1")
+	mustFS(t, os.Mkdir(unknownRelease, 0700))
+	mustFS(t, os.WriteFile(filepath.Join(unknownRelease, "personal"), []byte("keep me\n"), 0600))
 	requireOK(t, f.run(t, "--version", nextNativeVersion))
-	requireAbsent(t, filepath.Join(f.share, "releases/0.0.1"))
+	if got := string(readBytes(t, filepath.Join(unknownRelease, "personal"))); got != "keep me\n" {
+		t.Fatalf("unknown release changed: %q", got)
+	}
 	mustFS(t, os.Remove(filepath.Join(f.prefix, "bin/sfs")))
 	requireOK(t, f.run(t, "--version", nextNativeVersion))
 	requireLink(t, filepath.Join(f.prefix, "bin/sfs"), "selfishell")
@@ -292,6 +296,23 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 }
 
 func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
+	t.Run("foreign release links", func(t *testing.T) {
+		for _, name := range []string{"current", "previous"} {
+			t.Run(name, func(t *testing.T) {
+				f := newBootstrapFixture(t, nativeArchiveVersion)
+				mustFS(t, os.MkdirAll(f.share, 0700))
+				link := filepath.Join(f.share, name)
+				mustFS(t, os.Symlink("/personal", link))
+				before := homeSnapshot(t, f.home)
+				got := f.run(t, "--version", nativeArchiveVersion)
+				if got.Status == 0 {
+					t.Fatal("foreign release link accepted")
+				}
+				requireLink(t, link, "/personal")
+				assertHomeSnapshot(t, f.home, before)
+			})
+		}
+	})
 	t.Run("symlinked release", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		elsewhere := filepath.Join(f.home, "elsewhere")
@@ -417,12 +438,38 @@ cp -R "$staging" "$releases/$version"
 		releases := filepath.Join(f.share, "releases")
 		stale := filepath.Join(releases, ".9.9.9.tmp.stale")
 		fresh := filepath.Join(releases, ".9.9.9.tmp.fresh")
+		emptySuffix := filepath.Join(releases, ".9.9.9.tmp.")
+		newlineStage := filepath.Join(releases, ".9.9.9.tmp.fresh\npersonal")
+		foreignStage := filepath.Join(releases, ".personal.tmp.docs")
+		foreignRelease := filepath.Join(releases, "9.9.9")
+		obsoleteRelease := filepath.Join(releases, "0.9.0")
 		mustFS(t, os.Mkdir(stale, 0700))
 		mustFS(t, os.Mkdir(fresh, 0700))
+		mustFS(t, os.Mkdir(emptySuffix, 0700))
+		mustFS(t, os.Mkdir(newlineStage, 0700))
+		mustFS(t, os.Mkdir(foreignStage, 0700))
+		mustFS(t, os.Mkdir(foreignRelease, 0700))
+		mustFS(t, os.WriteFile(filepath.Join(foreignRelease, "personal"), []byte("keep me\n"), 0600))
+		mustFS(t, os.MkdirAll(filepath.Join(obsoleteRelease, "bin"), 0700))
+		mustFS(t, os.WriteFile(filepath.Join(obsoleteRelease, "VERSION"), []byte("0.9.0\n"), 0600))
+		mustFS(t, os.WriteFile(filepath.Join(obsoleteRelease, "bin/selfishell"), []byte("#!/bin/sh\n"), 0755))
 		old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		mustFS(t, os.Chtimes(stale, old, old))
+		mustFS(t, os.Chtimes(emptySuffix, old, old))
+		mustFS(t, os.Chtimes(newlineStage, old, old))
+		mustFS(t, os.Chtimes(foreignStage, old, old))
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion))
 		requireAbsent(t, stale)
+		if _, e := os.Stat(emptySuffix); e != nil {
+			t.Errorf("empty-suffix staging deleted: %v", e)
+		}
+		requireAbsent(t, obsoleteRelease)
+		if got := string(readBytes(t, filepath.Join(foreignRelease, "personal"))); got != "keep me\n" {
+			t.Fatalf("foreign release changed: %q", got)
+		}
+		if _, e := os.Stat(foreignStage); e != nil {
+			t.Fatalf("foreign staging deleted: %v", e)
+		}
 		info, e := os.Stat(fresh)
 		if e != nil || !info.IsDir() {
 			t.Fatalf("fresh stage removed: %v", e)

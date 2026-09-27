@@ -131,7 +131,7 @@ func (c CLI) update(args []string) int {
 		discovered := version == ""
 		if discovered {
 			var err error
-			version, err = (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(ctx)
+			version, err = c.latestReleaseVersion()
 			if err != nil {
 				c.error("Unable to determine the latest Selfishell release. Use --version VERSION to select one.")
 				return 1
@@ -165,6 +165,9 @@ func (c CLI) update(args []string) int {
 			if code := c.confirmRelease("Update Selfishell CLI to "+version+"?", o.yes, false); code != 0 {
 				return code
 			}
+			// Keep default signal handling while confirmation reads from the terminal.
+			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+			defer stop()
 			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).install(ctx, version)
 			if err != nil {
 				c.error(err.Error())

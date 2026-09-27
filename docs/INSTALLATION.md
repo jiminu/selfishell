@@ -161,6 +161,9 @@ selfishell uninstall --restore
 
 If a managed file has been modified since installation, Selfishell stops before
 removing anything so that it does not overwrite your changes.
+If a recorded backup is missing, `--restore` also stops before removal. Return
+the backup to the reported path and retry, or omit `--restore` to remove the
+managed configuration without restoring backups.
 
 ### Restore configuration and purge Selfishell
 

@@ -142,6 +142,93 @@ func TestInstallAndRestoreExistingResources(t *testing.T) {
 		t.Fatalf("restored %q", restored)
 	}
 }
+func TestUninstallRestoreRequiresRecordedBackup(t *testing.T) {
+	for _, retry := range []string{"restore", "without-restore"} {
+		t.Run(retry, func(t *testing.T) {
+			root := testRelease(t)
+			home := t.TempDir()
+			isolateHome(t, home)
+			paths, err := UserPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := paths.Config + "/zsh/aliases.zsh"
+			original := []byte("personal aliases\n")
+			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, original, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if code, _, stderr := testCLI(t, root, home, "install", "--skip-packages", "--yes"); code != 0 {
+				t.Fatalf("install: %s", stderr)
+			}
+			statePath := paths.Resources + "/aliases.state"
+			state, err := ReadState(statePath)
+			if err != nil || state.Backup == "-" {
+				t.Fatalf("recorded backup: %+v %v", state, err)
+			}
+			held := state.Backup + ".held"
+			if err := os.Rename(state.Backup, held); err != nil {
+				t.Fatal(err)
+			}
+			managedBytes, err := os.ReadFile(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			earlier := paths.Config + "/zsh/zshrc"
+			earlierBytes, err := os.ReadFile(earlier)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, dry := range []bool{true, false} {
+				args := []string{"uninstall", "--restore", "--yes"}
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				code, _, stderr := testCLI(t, root, home, args...)
+				if code != 1 || !strings.Contains(stderr, state.Backup) || !strings.Contains(stderr, "without --restore") {
+					t.Fatalf("missing backup accepted or unclear: status=%d stderr=%q", code, stderr)
+				}
+				for path, want := range map[string][]byte{target: managedBytes, earlier: earlierBytes} {
+					got, err := os.ReadFile(path)
+					if err != nil || !bytes.Equal(got, want) {
+						t.Fatalf("failed preflight changed %s: %q %v", path, got, err)
+					}
+				}
+				if _, err := os.Lstat(statePath); err != nil {
+					t.Fatalf("failed preflight lost state: %v", err)
+				}
+			}
+			if retry == "restore" {
+				if err := os.Rename(held, state.Backup); err != nil {
+					t.Fatal(err)
+				}
+				if code, _, stderr := testCLI(t, root, home, "uninstall", "--restore", "--yes"); code != 0 {
+					t.Fatalf("restore retry: %s", stderr)
+				}
+				got, err := os.ReadFile(target)
+				if err != nil || !bytes.Equal(got, original) {
+					t.Fatalf("original not restored: %q %v", got, err)
+				}
+			} else {
+				if code, _, stderr := testCLI(t, root, home, "uninstall", "--yes"); code != 0 {
+					t.Fatalf("uninstall without restore: %s", stderr)
+				}
+				if _, err := os.Lstat(target); !os.IsNotExist(err) {
+					t.Fatalf("managed target retained: %v", err)
+				}
+				got, err := os.ReadFile(held)
+				if err != nil || !bytes.Equal(got, original) {
+					t.Fatalf("held user backup changed: %q %v", got, err)
+				}
+			}
+			if _, err := os.Lstat(statePath); !os.IsNotExist(err) {
+				t.Fatalf("completed uninstall retained state: %v", err)
+			}
+		})
+	}
+}
 func testRelease(t *testing.T) string {
 	t.Helper()
 	cwd, _ := os.Getwd()
