@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestParseOptions(t *testing.T) {
@@ -257,8 +259,12 @@ func buildTestCLI(t *testing.T, root string) string {
 	if e := os.MkdirAll(filepath.Dir(path), 0755); e != nil {
 		t.Fatal(e)
 	}
+	if testutil.CopyCLI(t, path) {
+		return path
+	}
 	cmd := exec.Command("go", "build", "-o", path, "./cmd/selfishell")
 	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir(), "GOTOOLCHAIN=local", "GOCACHE="+testutil.GoCache(t), "GOPROXY=off")
 	output, e := cmd.CombinedOutput()
 	if e != nil {
 		t.Fatalf("build CLI: %v: %s", e, output)
@@ -488,7 +494,7 @@ func TestRunnerRelativePathsFromSeparateCWD(t *testing.T) {
 		}
 	}
 	outer := filepath.Join(caller, "outer-home")
-	env := []string{"HOME=" + outer, "GOCACHE=" + filepath.Join(caller, "go-cache"), "TMPDIR=tmp", "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=out/results.tsv", "SELFISHELL_BENCHMARK_ZPROF_FILE=out/startup.zprof"}
+	env := []string{"HOME=" + outer, "GOCACHE=" + testutil.GoCache(t), "TMPDIR=tmp", "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=out/results.tsv", "SELFISHELL_BENCHMARK_ZPROF_FILE=out/startup.zprof"}
 	cmd := exec.Command("bash", filepath.Join(source, "scripts/benchmark.sh"), "--mode", "base")
 	cmd.Dir = caller
 	cmd.Env = env

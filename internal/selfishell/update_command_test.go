@@ -849,12 +849,7 @@ func TestUpdateDoesNotSwallowInterruptDuringConfigurationTrust(t *testing.T) {
 		}
 	}
 	candidate := root + "/bin/selfishell"
-	build := exec.Command("go", "build", "-o", candidate, "./cmd/selfishell")
-	build.Dir = testRelease(t)
-	build.Env = append(os.Environ(), "GOTOOLCHAIN=local")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v %s", err, output)
-	}
+	buildNativeTestCLI(t, testRelease(t), home, candidate)
 	code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatal(stderr)

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 type signalBuffer struct {
@@ -39,14 +41,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 	if err := os.WriteFile(release+"/packages.conf", []byte("package ubuntu required apt demo\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	build := exec.Command("go", "build", "-o", release+"/bin/selfishell", "./cmd/selfishell")
-	build.Dir = source
-	build.Env = withEnvironment(Process{Env: os.Environ()}, map[string]string{
-		"HOME": home, "GOTOOLCHAIN": "local", "GOCACHE": home + "/.cache/go-build", "GOMODCACHE": home + "/go/pkg/mod", "GOPROXY": "off",
-	}).Env
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build test CLI: %v\n%s", err, output)
-	}
+	buildNativeTestCLI(t, source, home, release+"/bin/selfishell")
 	bin := fixture + "/fake-bin"
 	if err := os.MkdirAll(bin, 0700); err != nil {
 		t.Fatal(err)
@@ -134,4 +129,19 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 			t.Fatal("package child hung after SIGINT")
 		}
 	})
+}
+
+func buildNativeTestCLI(t *testing.T, source, home, target string) {
+	t.Helper()
+	if testutil.CopyCLI(t, target) {
+		return
+	}
+	build := exec.Command("go", "build", "-o", target, "./cmd/selfishell")
+	build.Dir = source
+	build.Env = withEnvironment(Process{Env: os.Environ()}, map[string]string{
+		"HOME": home, "GOTOOLCHAIN": "local", "GOCACHE": testutil.GoCache(t), "GOMODCACHE": home + "/go/pkg/mod", "GOPROXY": "off",
+	}).Env
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build test CLI: %v\n%s", err, output)
+	}
 }

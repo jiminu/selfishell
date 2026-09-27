@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/testutil"
+
 	"github.com/jiminu/selfishell/internal/pty"
 )
 
@@ -243,18 +245,8 @@ func TestMain(m *testing.M) {
 
 func testCLI(t *testing.T) (string, error) {
 	t.Helper()
-	if override := os.Getenv("SELFISHELL_TEST_CLI"); override != "" {
-		if !filepath.IsAbs(override) {
-			return "", fmt.Errorf("SELFISHELL_TEST_CLI must be absolute")
-		}
-		info, err := os.Stat(override)
-		if err != nil {
-			return "", fmt.Errorf("invalid SELFISHELL_TEST_CLI %s: %w", override, err)
-		}
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-			return "", fmt.Errorf("SELFISHELL_TEST_CLI is not executable: %s", override)
-		}
-		return override, nil
+	if override, err := testutil.CLIOverride(); override != "" || err != nil {
+		return override, err
 	}
 	testCLIOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "selfishell-test-cli-")

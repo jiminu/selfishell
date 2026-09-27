@@ -68,7 +68,7 @@ fi
 	}
 	env := []string{
 		"PATH=" + filepath.Join(home, "bin") + ":" + filepath.Join(runtime.GOROOT(), "bin") + ":/usr/bin:/bin:/usr/sbin:/sbin",
-		"GOTOOLCHAIN=local", "GOCACHE=" + filepath.Join(home, "go-cache"),
+		"GOTOOLCHAIN=local", "GOCACHE=" + testGoCache,
 		"MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "MISE_CACHE_DIR=" + filepath.Join(home, "mise-cache"), "MISE_CONFIG_DIR=" + filepath.Join(home, "mise-config"), "MISE_STATE_DIR=" + filepath.Join(home, "mise-state"),
 		"TEST_ASSETS=" + assets, "TEST_VERSION=" + version, "TEST_PRERELEASE=" + classification,
 		"SELFISHELL_VERIFY_RAW_ROOT=file://" + rawRoot, "SELFISHELL_VERIFY_RELEASE_ROOT=file://" + releaseRoot,
