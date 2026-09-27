@@ -205,10 +205,18 @@ var testCLIDir string
 var testGoCache string
 
 func TestMain(m *testing.M) {
-	// Share compiled packages across fixture builds, while keeping all cache
-	// writes outside the caller's HOME and removing them after this test process.
+	// Local runs own a temporary cache. CI can explicitly reuse its compiler
+	// cache; that caller-owned directory must survive this test process.
+	testGoCache = os.Getenv("SELFISHELL_TEST_GO_CACHE")
+	privateCache := testGoCache == ""
 	var err error
-	testGoCache, err = os.MkdirTemp("", "selfishell-test-go-cache-")
+	if privateCache {
+		testGoCache, err = os.MkdirTemp("", "selfishell-test-go-cache-")
+	} else if !filepath.IsAbs(testGoCache) {
+		err = fmt.Errorf("SELFISHELL_TEST_GO_CACHE must be absolute")
+	} else {
+		err = os.MkdirAll(testGoCache, 0700)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -227,7 +235,9 @@ func TestMain(m *testing.M) {
 		}
 		return true
 	})
-	os.RemoveAll(testGoCache)
+	if privateCache {
+		os.RemoveAll(testGoCache)
+	}
 	os.Exit(code)
 }
 
