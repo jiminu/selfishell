@@ -46,6 +46,8 @@ jobs:
           printf '%s\n' "$classification" >>"$GITHUB_OUTPUT"
           {
             printf '### CI change classification\n\n'
+            # Markdown fences are literal output.
+            # shellcheck disable=SC2016
             printf '```text\n%s\n```\n' "$classification"
           } >>"$GITHUB_STEP_SUMMARY"
 

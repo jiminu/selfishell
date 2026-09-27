@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -129,6 +131,130 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 			t.Fatal("package child hung after SIGINT")
 		}
 	})
+}
+
+func TestRealReleaseSignalHandlingIsScoped(t *testing.T) {
+	fixture, home := t.TempDir(), t.TempDir()
+	isolateHome(t, home)
+	share := fixture + "/selfishell"
+	release := share + "/releases/1.0.0"
+	if err := os.MkdirAll(release+"/bin", 0700); err != nil {
+		t.Fatal(err)
+	}
+	buildNativeTestCLI(t, testRelease(t), home, release+"/bin/selfishell")
+	if err := os.WriteFile(release+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
+		t.Fatal(err)
+	}
+	bin := fixture + "/fake-bin"
+	if err := os.MkdirAll(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin+"/curl", []byte(`#!/bin/sh
+if [ "$SELFISHELL_TEST_CURL_READY" = 1 ]; then
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = -o ]; then printf '2.0.0\n' >"$2"; exit 0; fi
+    shift
+  done
+  exit 90
+fi
+printf '%s\n' "$$" >"$SELFISHELL_TEST_CURL_PID"
+exec /bin/sleep 30
+`), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		signal os.Signal
+		prompt bool
+	}{
+		{"available metadata SIGINT", []string{"version", "--available"}, os.Interrupt, false},
+		{"update metadata SIGTERM", []string{"update", "--cli-only", "--yes"}, syscall.SIGTERM, false},
+		{"exact transfer SIGTERM", []string{"update", "--cli-only", "--version", "2.0.0", "--yes"}, syscall.SIGTERM, false},
+		{"confirmation after metadata keeps SIGINT", []string{"update", "--cli-only"}, os.Interrupt, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			temporary := t.TempDir()
+			pidFile := temporary + "/curl.pid"
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, release+"/bin/selfishell", tc.args...)
+			cmd.Env = withEnvironment(Process{Env: os.Environ()}, map[string]string{
+				"HOME": home, "PATH": bin + ":/usr/bin:/bin", "TMPDIR": temporary,
+				"SELFISHELL_RELEASE_ROOT":  "file:///selfishell-signal-fixture",
+				"SELFISHELL_TEST_CURL_PID": pidFile, "SELFISHELL_TEST_TTY": "1",
+				"SELFISHELL_TEST_CURL_READY": map[bool]string{true: "1", false: "0"}[tc.prompt],
+			}).Env
+			var output signalBuffer
+			cmd.Stdout, cmd.Stderr, cmd.WaitDelay = &output, &output, time.Second
+			stdin, err := cmd.StdinPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stdin.Close()
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan struct{})
+			var waitErr error
+			go func() { waitErr = cmd.Wait(); close(done) }()
+			pid := 0
+			t.Cleanup(func() {
+				if pid > 0 {
+					_ = syscall.Kill(pid, syscall.SIGKILL)
+				}
+				_ = cmd.Process.Kill()
+				cancel()
+				<-done
+			})
+			deadline := time.Now().Add(2 * time.Second)
+			ready := false
+			for time.Now().Before(deadline) {
+				if tc.prompt {
+					ready = strings.Contains(output.String(), "Update Selfishell CLI to 2.0.0?")
+				} else if data, err := os.ReadFile(pidFile); err == nil {
+					pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
+					ready = err == nil && pid > 0
+				}
+				if ready {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if !ready {
+				t.Fatalf("release phase did not start: %s", output.String())
+			}
+			if err := cmd.Process.Signal(tc.signal); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-done:
+				if waitErr == nil {
+					t.Fatalf("interrupted CLI reported success: %s", output.String())
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("CLI hung after signal")
+			}
+			if pid > 0 {
+				if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
+					t.Fatalf("transfer child was not canceled and reaped: pid=%d err=%v", pid, err)
+				}
+				pid = 0
+				_ = os.Remove(pidFile)
+			}
+			entries, err := os.ReadDir(temporary)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("interrupted release left temporary downloads: %v %v", entries, err)
+			}
+			current, err := os.Readlink(share + "/current")
+			if err != nil || current != "releases/1.0.0" {
+				t.Fatalf("interrupted release activated: %q %v", current, err)
+			}
+		})
+	}
 }
 
 func buildNativeTestCLI(t *testing.T, source, home, target string) {

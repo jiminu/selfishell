@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // CLI keeps output and release location explicit for isolated invocation tests.
@@ -23,6 +25,12 @@ func (c CLI) invocationContext() context.Context {
 		return c.Context
 	}
 	return context.Background()
+}
+
+func (c CLI) latestReleaseVersion() (string, error) {
+	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(ctx)
 }
 
 func (c CLI) error(message string) {
@@ -59,7 +67,7 @@ func (c CLI) Run(args []string) int {
 				return 0
 			case "--available":
 				if len(args) == 1 {
-					version, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(c.invocationContext())
+					version, err := c.latestReleaseVersion()
 					if err != nil {
 						c.error("Unable to determine the latest Selfishell release.")
 						return 1

@@ -116,7 +116,7 @@ unset _selfishell_fzf_bin
 
 if (($+functions[zinit])); then
   # Pinned to the commits recorded in dependencies.conf; keep the two in
-  # sync (see tests/common_zsh_test.bash).
+  # sync.
   # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
   if command -v fzf >/dev/null 2>&1 && _selfishell_zinit_plugin_ready Aloxaf/fzf-tab; then
     zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'

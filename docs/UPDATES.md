@@ -72,9 +72,12 @@ tracking/cache metadata; it does not list individual deletion candidates.
 
 The CLI phase downloads a versioned platform archive, verifies its SHA-256
 checksum, and switches `current` only after validation. It retains the active
-and previous releases, removing older inactive releases. Version discovery
-prefers the latest stable release; if none exists, it accepts the newest version
-tag only when that exact release's `VERSION` asset is published.
+and previous releases, removing only recognized older inactive releases.
+Unknown directories in `releases` and foreign `current` or `previous` links
+are preserved. An occupied release-link path or failure to save `previous`
+stops the update before activation, keeping the active release intact.
+Version discovery prefers the latest stable release; if none exists, it accepts
+the newest version tag only when that exact release's `VERSION` asset is published.
 If a freshly downloaded release activates but the following state commit
 fails, the active CLI can have changed even though `update` reports failure.
 Check `selfishell version` and rerun the update after resolving the state error.

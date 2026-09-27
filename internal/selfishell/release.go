@@ -261,11 +261,7 @@ func validReleaseDirectory(releases, version string) (string, error) {
 }
 
 func atomicReleaseLink(target, path string) error {
-	if info, err := os.Lstat(path); err == nil {
-		if info.Mode()&os.ModeSymlink == 0 {
-			return fmt.Errorf("occupied release link: %s", path)
-		}
-	} else if !os.IsNotExist(err) {
+	if err := releaseLinkReplaceable(path); err != nil {
 		return err
 	}
 	f, err := createRawTemp(path)
@@ -280,6 +276,25 @@ func atomicReleaseLink(target, path string) error {
 	}
 	defer os.Remove(name)
 	return os.Rename(name, path)
+}
+
+func releaseLinkReplaceable(path string) error {
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			return fmt.Errorf("occupied release link: %s", path)
+		}
+		target, err := os.Readlink(path)
+		if err != nil {
+			return err
+		}
+		version := strings.TrimPrefix(target, "releases/")
+		if target != "releases/"+version || !ValidReleaseVersion(version) {
+			return fmt.Errorf("foreign release link: %s", path)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func pruneInactiveReleases(l releaseLayout) {
@@ -357,8 +372,11 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		return "", err
 	}
 	// Preflight occupied user paths before contacting a release source.
-	if info, err := os.Lstat(l.current); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		return "", fmt.Errorf("This command requires a versioned Selfishell installation.")
+	if err := releaseLinkReplaceable(l.current); err != nil {
+		return "", err
+	}
+	if err := releaseLinkReplaceable(l.previous); err != nil {
+		return "", err
 	}
 	target := l.releases + "/" + version
 	if _, err := os.Lstat(target); err == nil {
@@ -454,9 +472,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 	}
 	if old != "releases/"+version {
 		if err := atomicReleaseLink(old, l.previous); err != nil {
-			if o.Process.Err != nil {
-				fmt.Fprintln(o.Process.Err, "selfishell: warning: Failed to update the previous release link; continuing.")
-			}
+			return "", fmt.Errorf("Failed to retain previous Selfishell release: %w", err)
 		}
 	}
 	if err := atomicReleaseLink("releases/"+version, l.current); err != nil {

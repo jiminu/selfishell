@@ -127,7 +127,10 @@ func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 		if e != nil {
 			return e
 		}
-		if hasBackup && present && !willRemove {
+		if !hasBackup {
+			return missingRestoreBackup(s.Backup)
+		}
+		if present && !willRemove {
 			return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
 		}
 	}
@@ -186,19 +189,20 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 		if e != nil {
 			return e
 		}
-		if backupPresent {
-			if m.dry {
-				m.say("Would restore: %s -> %s", s.Backup, s.Target)
-			} else {
-				if _, occupied, _ := exists(s.Target); occupied {
-					return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
-				}
-				if err = makeRawDir(rawParent(s.Target)); err != nil {
-					return err
-				}
-				if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
-					return err
-				}
+		if !backupPresent {
+			return missingRestoreBackup(s.Backup)
+		}
+		if m.dry {
+			m.say("Would restore: %s -> %s", s.Backup, s.Target)
+		} else {
+			if _, occupied, _ := exists(s.Target); occupied {
+				return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
+			}
+			if err = makeRawDir(rawParent(s.Target)); err != nil {
+				return err
+			}
+			if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
+				return err
 			}
 		}
 	}
@@ -209,6 +213,9 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 		return os.Remove(m.statePath(r))
 	}
 	return nil
+}
+func missingRestoreBackup(path string) error {
+	return fmt.Errorf("Recorded backup is missing: %s. Return it and retry, or uninstall without --restore.", path)
 }
 func preflightPurge(root string) error {
 	releases := filepath.Dir(root)
