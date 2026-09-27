@@ -100,6 +100,8 @@ type readResult struct {
 func measureShell(parent context.Context, cwd string, env []string) (float64, [3]float64, error) {
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
+	// Match the old pty.fork boundary: include PTY creation and sizing.
+	start := time.Now()
 	master, slave, err := pty.Open()
 	if err != nil {
 		return 0, [3]float64{}, err
@@ -116,7 +118,6 @@ func measureShell(parent context.Context, cwd string, env []string) (float64, [3
 	cmd.Stdout = slave
 	cmd.Stderr = slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
-	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		slave.Close()
 		return 0, [3]float64{}, err
