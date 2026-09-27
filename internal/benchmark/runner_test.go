@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -127,10 +129,16 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	cli := buildTestCLI(t, root)
 	private := t.TempDir()
 	results := filepath.Join(private, "results.tsv")
-	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=/usr/bin:/bin", "SELFISHELL_BENCHMARK_CLI=" + cli, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=" + results}
+	guardedCLI, guardLog := guardDiagnosticCLI(t, private, cli)
+	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=/usr/bin:/bin", "SELFISHELL_BENCHMARK_CLI=" + guardedCLI, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_RESULTS_FILE=" + results}
 	var out, err bytes.Buffer
 	if code := Run([]string{"--mode", "base", "--prompt", "--diagnostics"}, env, root, &out, &err); code != 0 {
 		t.Fatalf("exit %d: %s", code, err.String())
+	}
+	if data, e := os.ReadFile(guardLog); e == nil {
+		t.Fatalf("diagnostic reached guarded command: %s", data)
+	} else if !os.IsNotExist(e) {
+		t.Fatal(e)
 	}
 	for _, want := range []string{"Diagnostics: configured HOME", "cli-status exit=", "[SUMMARY] Managed paths:"} {
 		if !strings.Contains(out.String(), want) {
@@ -146,6 +154,9 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 		for _, line := range strings.Split(string(data), "\n") {
 			fields := strings.Split(line, "\t")
 			if len(fields) == 8 && fields[3] == metric {
+				if fields[1] != nativeArchitecture(runtime.GOOS, runtime.GOARCH) {
+					t.Fatalf("TSV architecture %q", fields[1])
+				}
 				for _, v := range fields[4:] {
 					number, e := strconv.ParseFloat(v, 64)
 					if e != nil || number <= 0 {
@@ -239,7 +250,20 @@ func TestRunnerSelectedHistoricalRootAndCLI(t *testing.T) {
 	if e := os.MkdirAll(filepath.Join(historical, "bin"), 0755); e != nil {
 		t.Fatal(e)
 	}
-	if e := os.Symlink(filepath.Join(source, "config"), filepath.Join(historical, "config")); e != nil {
+	copyConfig := exec.Command("/bin/cp", "-R", filepath.Join(source, "config"), filepath.Join(historical, "config"))
+	if output, e := copyConfig.CombinedOutput(); e != nil {
+		t.Fatalf("copy historical config: %v %s", e, output)
+	}
+	sentinel := filepath.Join(private, "historical-alias-loaded")
+	aliases := filepath.Join(historical, "config/shared/zsh/aliases.zsh")
+	file, e := os.OpenFile(aliases, os.O_APPEND|os.O_WRONLY, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = fmt.Fprintf(file, "\nprint -r -- selected > '%s'\n", sentinel); e != nil {
+		t.Fatal(e)
+	}
+	if e = file.Close(); e != nil {
 		t.Fatal(e)
 	}
 	log := filepath.Join(private, "legacy-cli-args")
@@ -262,6 +286,9 @@ func TestRunnerSelectedHistoricalRootAndCLI(t *testing.T) {
 	}
 	if string(data) != "version\nhelp\n" {
 		t.Fatalf("selected CLI calls: %q", data)
+	}
+	if content, e := os.ReadFile(sentinel); e != nil || string(content) != "selected\n" {
+		t.Fatalf("historical module not sourced: %q %v", content, e)
 	}
 }
 
@@ -349,4 +376,100 @@ func TestResultsAppend(t *testing.T) {
 	if f.resultErr != nil || len(lines) != 2 || !strings.Contains(lines[0], "\tcli-help\t1.000") || !strings.Contains(lines[1], "\tcli-version\t2.000") {
 		t.Fatalf("append: %q err=%v", data, f.resultErr)
 	}
+}
+
+func TestNativeArchitectureLabels(t *testing.T) {
+	for _, tc := range []struct{ goos, goarch, want string }{
+		{"darwin", "amd64", "x86_64"}, {"darwin", "arm64", "arm64"},
+		{"linux", "amd64", "x86_64"}, {"linux", "arm64", "aarch64"},
+	} {
+		if got := nativeArchitecture(tc.goos, tc.goarch); got != tc.want {
+			t.Errorf("%s/%s = %q, want %q", tc.goos, tc.goarch, got, tc.want)
+		}
+	}
+}
+
+func TestIntegrationQueryCancellationCleansDescendants(t *testing.T) {
+	home := t.TempDir()
+	bin := filepath.Join(home, ".local/bin")
+	if e := os.MkdirAll(bin, 0755); e != nil {
+		t.Fatal(e)
+	}
+	startedMarker := filepath.Join(home, "started")
+	sentinel := filepath.Join(home, "escaped")
+	script := fmt.Sprintf("#!/bin/sh\n/usr/bin/touch '%s'\n(/bin/sleep 1; /usr/bin/touch '%s') &\nwait\n", startedMarker, sentinel)
+	if e := os.WriteFile(filepath.Join(bin, "mise"), []byte(script), 0755); e != nil {
+		t.Fatal(e)
+	}
+	f := &fixture{options: options{mode: "full"}, home: home, data: filepath.Join(home, ".local/share"), interactivePath: bin, env: map[string]string{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, e := f.integrations(ctx); done <- e }()
+	deadline := time.After(2 * time.Second)
+	for {
+		if _, e := os.Stat(startedMarker); e == nil {
+			break
+		}
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatal("fake mise query did not start")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case e := <-done:
+		if !errors.Is(e, context.Canceled) {
+			t.Fatalf("stuck query cancellation: %v", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("mise query did not cancel promptly")
+	}
+	time.Sleep(1200 * time.Millisecond)
+	if _, e := os.Stat(sentinel); !os.IsNotExist(e) {
+		t.Fatal("mise query descendant survived cancellation")
+	}
+}
+
+// Test-only CLI wrapper keeps the real executable while blocking package,
+// privilege, login-shell, and download commands if --skip-packages regresses.
+func guardDiagnosticCLI(t *testing.T, private, realCLI string) (string, string) {
+	t.Helper()
+	bin := filepath.Join(private, "guard-bin")
+	if e := os.MkdirAll(bin, 0755); e != nil {
+		t.Fatal(e)
+	}
+	log := filepath.Join(private, "guard-called")
+	for _, name := range []string{"apt-get", "apt", "sudo", "chsh", "curl", "wget", "brew", "git"} {
+		body := fmt.Sprintf(`#!/bin/sh
+case %s in
+ brew) case "$1" in install|upgrade|update|tap|uninstall|reinstall) ;; *) exit 1;; esac ;;
+ git) case "$1" in --version) printf 'git version 2.50.0\n'; exit 0;; esac ;;
+esac
+printf '%%s\n' '%s' >> '%s'
+exit 97
+`, name, name, log)
+		if e := os.WriteFile(filepath.Join(bin, name), []byte(body), 0755); e != nil {
+			t.Fatal(e)
+		}
+	}
+	wrapper := filepath.Join(private, "guarded-selfishell")
+	body := fmt.Sprintf("#!/bin/sh\nexport PATH='%s':\"$PATH\"\nexec '%s' \"$@\"\n", bin, realCLI)
+	if e := os.WriteFile(wrapper, []byte(body), 0755); e != nil {
+		t.Fatal(e)
+	}
+	// Show the guard fails before the real CLI test uses it, then clear the log.
+	probe := exec.Command(filepath.Join(bin, "apt-get"), "update")
+	if e := probe.Run(); e == nil {
+		t.Fatal("package guard allowed apt-get")
+	}
+	if data, e := os.ReadFile(log); e != nil || !strings.Contains(string(data), "apt-get") {
+		t.Fatalf("guard probe: %q %v", data, e)
+	}
+	if e := os.Remove(log); e != nil {
+		t.Fatal(e)
+	}
+	return wrapper, log
 }

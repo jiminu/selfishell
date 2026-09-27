@@ -156,7 +156,11 @@ func run(ctx context.Context, o options, env map[string]string, source string, o
 		defer f.resultFile.Close()
 	}
 	fmt.Fprintf(out, "Selfishell benchmark (mode=%s, %d iterations, milliseconds per run)\nmetric\tmean\tp50\tp95\tmax\n", o.mode, o.iterations)
-	f.recordIntegration(f.integrations())
+	integrationSummary, e := f.integrations(ctx)
+	if e != nil {
+		return e
+	}
+	f.recordIntegration(integrationSummary)
 	if f.resultErr != nil {
 		return f.resultErr
 	}
@@ -368,11 +372,24 @@ func (f *fixture) appendResult(line string) {
 	if f.resultFile == nil || f.resultErr != nil {
 		return
 	}
-	_, f.resultErr = fmt.Fprintf(f.resultFile, "%s\t%s\t%s\t%s\n", platformName(), runtime.GOARCH, f.mode, line)
+	_, f.resultErr = fmt.Fprintf(f.resultFile, "%s\t%s\t%s\t%s\n", platformName(), nativeArchitecture(runtime.GOOS, runtime.GOARCH), f.mode, line)
 }
 func (f *fixture) record(line string) {
 	fmt.Fprintln(f.out, line)
 	f.appendResult(line)
+}
+func nativeArchitecture(goos, goarch string) string {
+	switch goarch {
+	case "amd64":
+		return "x86_64"
+	case "arm64":
+		if goos == "linux" {
+			return "aarch64"
+		}
+		return "arm64"
+	default:
+		return goarch
+	}
 }
 func platformName() string {
 	if runtime.GOOS == "darwin" {
@@ -388,13 +405,16 @@ func (f *fixture) recordIntegration(c string) {
 func (f *fixture) metric(label string, s Stats) {
 	f.record(fmt.Sprintf("%s\t%.3f\t%.3f\t%.3f\t%.3f", label, s.Mean, s.P50, s.P95, s.Max))
 }
-func (f *fixture) integrations() string {
+func (f *fixture) integrations(ctx context.Context) (string, error) {
 	names := []string{"starship", "fzf", "zoxide"}
 	parts := []string{"Interactive integrations:"}
 	for _, name := range names {
 		status := "absent"
 		if f.mode == "full" {
-			_, e := execute(context.Background(), execSpec{filepath.Join(f.home, ".local/bin/mise"), []string{"-C", f.home, "which", name}, f.home, f.shellEnv(false)})
+			_, e := execute(ctx, execSpec{filepath.Join(f.home, ".local/bin/mise"), []string{"-C", f.home, "which", name}, f.home, f.shellEnv(false)})
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
 			if e == nil {
 				status = "enabled"
 			}
@@ -406,7 +426,7 @@ func (f *fixture) integrations() string {
 		zinit = "enabled"
 	}
 	parts = append(parts, "zinit="+zinit)
-	return strings.Join(parts, " ")
+	return strings.Join(parts, " "), nil
 }
 func timedExecute(ctx context.Context, s execSpec) (float64, error) {
 	start := time.Now()
