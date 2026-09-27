@@ -931,23 +931,64 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 }
 
 func TestUpdateLSPFailureStopsBeforeCleanup(t *testing.T) {
-	root, home, log := updateCleanupFixture(t, false, false)
-	nvim := home + "/bin/nvim"
-	script, err := os.ReadFile(nvim)
-	if err != nil {
-		t.Fatal(err)
-	}
-	script = append(script, []byte("case \"$*\" in *mason-registry*) printf 'LSP install failed\\n' >&2; exit 9 ;; esac\n")...)
-	if err := os.WriteFile(nvim, script, 0755); err != nil {
-		t.Fatal(err)
-	}
-	code, out, stderr := commandResult(root, "update", "--tools-only", "--yes")
-	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "LSP install failed") {
-		t.Fatalf("LSP failure: %d %q %q", code, out, stderr)
-	}
-	calls, err := os.ReadFile(log)
-	if err != nil || strings.Contains(string(calls), "prune --tools") {
-		t.Fatalf("LSP failure pruned tools: %q %v", calls, err)
+	for _, mode := range []string{"failure", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			root, home, log := updateCleanupFixture(t, false, false)
+			nvim := home + "/bin/nvim"
+			script, err := os.ReadFile(nvim)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "cancel" {
+				script = append(script, []byte("case \"$*\" in *mason-registry*) printf started > \"$HOME/lsp-started\"; exec sleep 30 ;; esac\n")...)
+			} else {
+				script = append(script, []byte("case \"$*\" in *mason-registry*) printf 'LSP install failed\\n' >&2; exit 9 ;; esac\n")...)
+			}
+			if err := os.WriteFile(nvim, script, 0755); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var stdout, errors bytes.Buffer
+			cli := CLI{Root: root, Context: ctx, Out: &stdout, Err: &errors}
+			done := make(chan int, 1)
+			go func() { done <- cli.Run([]string{"update", "--tools-only", "--yes"}) }()
+			if mode == "cancel" {
+				deadline := time.Now().Add(5 * time.Second)
+				for time.Now().Before(deadline) {
+					if _, err := os.Stat(home + "/lsp-started"); err == nil {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				cancel()
+				if _, err := os.Stat(home + "/lsp-started"); err != nil {
+					<-done
+					t.Fatalf("LSP phase did not start: %v", err)
+				}
+			}
+			var code int
+			select {
+			case code = <-done:
+			case <-time.After(5 * time.Second):
+				cancel()
+				<-done
+				t.Fatal("LSP phase did not stop")
+			}
+			out, stderr := stdout.String(), errors.String()
+			wantError := "LSP install failed"
+			if mode == "cancel" {
+				wantError = "context canceled"
+			}
+			if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, wantError) {
+				t.Fatalf("LSP failure: %d %q %q", code, out, stderr)
+			}
+			calls, err := os.ReadFile(log)
+			if err != nil || strings.Contains(string(calls), "prune --tools") {
+				t.Fatalf("LSP failure pruned tools: %q %v", calls, err)
+			}
+
+		})
 	}
 }
 
