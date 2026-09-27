@@ -356,8 +356,8 @@ type execSpec struct {
 
 func execute(ctx context.Context, s execSpec) (string, error) {
 	cmd := exec.CommandContext(ctx, s.name, s.args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cleanup := configureCancellation(cmd)
+	defer cleanup()
 	cmd.Dir = s.dir
 	cmd.Env = s.env
 	output, e := cmd.CombinedOutput()
@@ -366,6 +366,26 @@ func execute(ctx context.Context, s execSpec) (string, error) {
 	}
 	return string(output), nil
 }
+
+func configureCancellation(cmd *exec.Cmd) func() {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	canceled := false
+	cmd.Cancel = func() error {
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		canceled = err == nil
+		return err
+	}
+	cmd.WaitDelay = 200 * time.Millisecond
+	return func() {
+		// Wait joins the cancellation callback before this cleanup runs.
+		// A fork can race the first group signal, so sweep after reaping the
+		// parent. WaitDelay bounds pipes inherited by a surviving child.
+		if canceled {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+	}
+}
+
 func (f *fixture) baseEnv(path string) []string {
 	return []string{
 		"HOME=" + f.home, "ZDOTDIR=" + f.home, "XDG_CONFIG_HOME=" + filepath.Join(f.home, ".config"), "XDG_DATA_HOME=" + f.data,
@@ -449,8 +469,8 @@ func (f *fixture) integrations(ctx context.Context) (string, error) {
 func timedExecute(ctx context.Context, s execSpec) (float64, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, s.name, s.args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cleanup := configureCancellation(cmd)
+	defer cleanup()
 	cmd.Dir = s.dir
 	cmd.Env = s.env
 	cmd.Stdout = io.Discard
