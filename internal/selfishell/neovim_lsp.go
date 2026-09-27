@@ -18,11 +18,13 @@ local ok, message = pcall(function()
   assert(updated, "Mason registry update failed: " .. vim.inspect(result))
   local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
   local pending = {}
-  for _, server in ipairs(require("config.languages").lsp) do
+  for _, specifier in ipairs(require("config.languages").lsp) do
+    local server, version = specifier:match("^([^@]+)@([^@]+)$")
+    assert(server and version, "Missing approved version for default LSP server: " .. specifier)
     local name = assert(mapping[server], "No Mason package for default LSP server: " .. server)
     local package = registry.get_package(name)
-    if not package:is_installed() or package:get_installed_version() ~= package:get_latest_version() then
-      table.insert(pending, name)
+    if not package:is_installed() or package:get_installed_version() ~= version then
+      table.insert(pending, name .. "@" .. version)
     end
   end
   if #pending > 0 then
@@ -40,7 +42,7 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 		return err
 	}
 	if dryRun {
-		fmt.Fprintln(o.Process.Out, "Would update default Neovim LSP servers.")
+		fmt.Fprintln(o.Process.Out, "Would update default Neovim LSP servers to this release's approved versions.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -49,10 +51,10 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers...")
+	fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers to approved versions...")
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
 		return fmt.Errorf("could not update default Neovim LSP servers: %w; retry with selfishell update --tools-only", err)
 	}
-	fmt.Fprintln(o.Process.Out, "Default Neovim LSP servers are up to date.")
+	fmt.Fprintln(o.Process.Out, "Default Neovim LSP servers match this release's approved versions.")
 	return nil
 }

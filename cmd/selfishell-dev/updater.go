@@ -15,6 +15,7 @@ import (
 )
 
 var numericToolVersion = regexp.MustCompile(`^[0-9]+(\.[0-9]+)*$`)
+var lspVersion = regexp.MustCompile(`^v?[0-9]+([.-][0-9]+)*$`)
 var pluginCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var downloadChecksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -97,6 +98,8 @@ func parseDependencyMetadata(data string) ([][]string, error) {
 			valid = len(fields) == 7 && downloadChecksum.MatchString(fields[6])
 		case "mise-tool":
 			valid = len(fields) == 3 && numericToolVersion.MatchString(fields[2])
+		case "lsp-server":
+			valid = len(fields) == 3 && lspVersion.MatchString(fields[2])
 		}
 		if !valid || strings.ContainsRune(line, '\x00') {
 			return nil, fmt.Errorf("invalid dependency metadata record: %s", fields[0])
@@ -122,7 +125,7 @@ func updateDependencies(ctx context.Context, p selfishell.Process, manifest, met
 	}
 	var updates [][]string
 	if metadata == "" {
-		updates, err = discoverDependencyUpdates(ctx, p, dependencies)
+		updates, err = discoverDependencyUpdates(ctx, p, dependencies, root)
 	} else {
 		var data []byte
 		data, err = os.ReadFile(metadata)
@@ -150,6 +153,16 @@ func updateDependencies(ctx context.Context, p selfishell.Process, manifest, met
 	}
 	lines := strings.SplitAfter(manifestEdit.before, "\n")
 	for _, update := range updates {
+		if update[0] == "lsp-server" {
+			edit, err := configuration("config/shared/nvim/lua/config/languages.lua")
+			if err != nil {
+				return err
+			}
+			if edit.after, err = updateLSPPin(edit.after, update[1], update[2]); err != nil {
+				return err
+			}
+			continue
+		}
 		if update[0] == "mise-tool" {
 			edit, err := configuration("config/shared/mise.toml")
 			if err != nil {
@@ -215,6 +228,76 @@ func updateDependencies(ctx context.Context, p selfishell.Process, manifest, met
 	}
 	manifestEdit.after = strings.Join(lines, "")
 	return commitDependencyEdits(ctx, edits)
+}
+
+var lspOpen = regexp.MustCompile(`^\s*lsp\s*=\s*\{\s*(?:--.*)?$`)
+var lspClose = regexp.MustCompile(`^\s*\},?\s*(?:--.*)?$`)
+var lspEntry = regexp.MustCompile(`^(\s*")([a-z][a-z0-9_]*)@([^"]+)(",?\s*(?:--.*)?)$`)
+
+// Parse only the simple, one-entry-per-line lsp array owned by Selfishell.
+func lspPins(data string) (map[string]string, error) {
+	pins := map[string]string{}
+	in, found, closed := false, false, false
+	for _, line := range strings.Split(data, "\n") {
+		if !in {
+			if lspOpen.MatchString(line) {
+				if found {
+					return nil, fmt.Errorf("duplicate lsp declaration")
+				}
+				found, in = true, true
+			}
+			continue
+		}
+		if lspClose.MatchString(line) {
+			in, closed = false, true
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "--") {
+			continue
+		}
+		parts := lspEntry.FindStringSubmatch(line)
+		if parts == nil || !lspVersion.MatchString(parts[3]) || pins[parts[2]] != "" {
+			return nil, fmt.Errorf("invalid or duplicate lsp declaration: %s", trimmed)
+		}
+		pins[parts[2]] = parts[3]
+	}
+	if !found || !closed || len(pins) == 0 {
+		return nil, fmt.Errorf("missing or incomplete lsp declaration")
+	}
+	return pins, nil
+}
+
+func updateLSPPin(data, server, candidate string) (string, error) {
+	pins, err := lspPins(data)
+	if err != nil {
+		return "", err
+	}
+	current := pins[server]
+	if current == "" {
+		return "", fmt.Errorf("no current lsp pin: %s", server)
+	}
+	if !newerToolVersion(strings.ReplaceAll(strings.TrimPrefix(candidate, "v"), "-", "."), strings.ReplaceAll(strings.TrimPrefix(current, "v"), "-", ".")) {
+		return data, nil
+	}
+	lines := strings.SplitAfter(data, "\n")
+	in := false
+	for index, line := range lines {
+		bare := strings.TrimSuffix(line, "\n")
+		if !in {
+			in = lspOpen.MatchString(bare)
+			continue
+		}
+		if lspClose.MatchString(bare) {
+			break
+		}
+		parts := lspEntry.FindStringSubmatch(bare)
+		if parts != nil && parts[2] == server {
+			lines[index] = strings.Replace(line, parts[1]+server+"@"+current+parts[4], parts[1]+server+"@"+candidate+parts[4], 1)
+			return strings.Join(lines, ""), nil
+		}
+	}
+	return "", fmt.Errorf("no current lsp pin: %s", server)
 }
 
 func updateMisePin(data, tool, candidate string) (string, error) {

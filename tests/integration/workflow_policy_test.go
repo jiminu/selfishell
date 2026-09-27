@@ -528,12 +528,13 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 		{"completion", "config/shared/zsh/completion.zsh", 0, "changed=true\n"},
 		{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
 		{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
+		{"lsp", "config/shared/nvim/lua/config/languages.lua", 0, "changed=true\n"},
 		{"unexpected_tracked_only", "README.md", 1, ""},
 		{"unexpected_untracked_only", "unexpected.txt", 1, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml"} {
+			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua"} {
 				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
 			}
 			policyGit(t, home, repo, "add", ".")
@@ -564,12 +565,13 @@ func TestDependencyWorkflowPRBlock(t *testing.T) {
 	}{{"skip_when_open", true, false}, {"create_when_absent", false, false}, {"reject_unexpected_path", false, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml"} {
+			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua"} {
 				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
 			}
 			policyGit(t, home, repo, "add", ".")
 			policyGit(t, home, repo, "commit", "-qm", "tracked workflow files")
 			policyWrite(t, filepath.Join(repo, "dependencies.conf"), classificationDeps("2222222222222222222222222222222222222222", "1.0"))
+			policyWrite(t, filepath.Join(repo, "config/shared/nvim/lua/config/languages.lua"), "return { lsp = { \"lua_ls@3.19.1\" } }\n")
 			if tc.unexpected {
 				policyWrite(t, filepath.Join(repo, "README.md"), "unrelated change\n")
 			}
@@ -652,7 +654,7 @@ exec /usr/bin/git "$@"
 				t.Errorf("unexpected publish operation: %s", calls)
 			}
 			staged := strings.TrimSpace(policyGit(t, home, repo, "show", "--format=", "--name-only", "HEAD"))
-			if staged != "dependencies.conf" {
+			if staged != "config/shared/nvim/lua/config/languages.lua\ndependencies.conf" {
 				t.Errorf("unexpected staged files: %q", staged)
 			}
 		})

@@ -121,6 +121,20 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := op.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+`
+local ok, message = pcall(function()
+  require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim" } })
+  local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
+  for _, specifier in ipairs(require("config.languages").lsp) do
+    local server, version = require("mason-core.package").Parse(specifier)
+    local package = require("mason-registry").get_package(mapping[server])
+    assert(version and package:get_installed_version() == version, "Wrong installed version for " .. specifier)
+  end
+end)
+if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
+`, "+qa"); err != nil {
+		t.Fatalf("approved LSP versions: %v\n%s", err, output.String())
+	}
 	runDefaultLSPSelection(t, root, nvim)
 	for _, probe := range []struct{ name, filename, content, marker string }{
 		{"terraform", "main.tf", "terraform { required_version = \">= 1.0\" }\n", "Neovim developer smoke: OK"},

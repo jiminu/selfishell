@@ -13,11 +13,12 @@ release provenance and preservation of existing files are security boundaries.
 - Existing configuration is backed up and tracked before managed replacement.
 - Shell startup never installs updates; release metadata can refresh in the
   background. See [update notices](UPDATES.md#status-and-update-notices).
-- LSP servers, including the defaults (lua_ls, pyright, bashls, jsonls,
-  yamlls, tombi, marksman), are not version-approved: they install from the
-  Mason registry at its current version on first use. Selfishell's update tools
-  phase refreshes only these defaults to the registry version; additional servers
-  and other Mason packages are updated manually with `:Mason`.
+- Default LSP server versions are approved in
+  `config/shared/nvim/lua/config/languages.lua`. Mason installs these pins on
+  first use, and Selfishell's update tools phase reconciles installed versions
+  with them. These pins select server versions, not immutable registry metadata
+  or transitive dependencies. Additional servers and other Mason packages remain
+  user-managed through `:Mason`.
 - Selfishell files are installed without root privileges. Apt may request `sudo`
   for system packages, and Homebrew follows its own privilege model.
 

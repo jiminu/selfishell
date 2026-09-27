@@ -46,15 +46,18 @@ default updates skip the entire phase.
 
 ### Neovim LSP servers
 
-The tools phase refreshes the Mason registry and updates only Selfishell's seven
-default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, and marksman.
-Missing servers are installed; servers already at the registry version are left
-alone. User-added servers and other Mason packages remain under `:Mason` control.
-The default servers follow the registry version, including when a different
-version was installed manually; they are not pinned to a Selfishell release.
+The tools phase refreshes the Mason registry and synchronizes only Selfishell's
+seven default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, and marksman.
+Their exact versions are pinned in
+`config/shared/nvim/lua/config/languages.lua` as `server@version` entries.
+Missing servers are installed; servers already at the approved version are left
+alone. A different installed version, including a newer manually installed one,
+is replaced with this release's pin. User-added servers and other Mason packages
+remain under `:Mason` control.
 
-Run `selfishell update --tools-only` to refresh them when the CLI release is
-already current. `--cli-only`, `--skip-packages`, and `--dry-run` do not run Mason.
+Run `selfishell update --tools-only` to reapply these pins when the CLI release is
+already current. New LSP pins arrive through dependency update PRs and Selfishell
+releases. `--cli-only`, `--skip-packages`, and `--dry-run` do not run Mason.
 Registry or server installation failures fail the update and skip mise cleanup;
 earlier tool and configuration changes may already have applied. Resolve the
 reported error and retry with `selfishell update --tools-only`.
@@ -126,7 +129,9 @@ exact defaults. Both manifests change through review and a Selfishell release.
 Project-local `mise.toml` files remain outside this lifecycle.
 
 Maintainers use `scripts/update-dependencies.sh` to discover upstream releases,
-calculate downloaded mise artifact checksums, and update mise tool pins. This
+calculate downloaded mise artifact checksums, and update mise tool and default
+LSP pins. LSP candidates come from the published Mason registry; only the servers
+declared in `config/shared/nvim/lua/config/languages.lua` are considered. This
 launcher builds the Go maintenance tool with the version pinned in `go.mod`;
 discovery requires curl and Git. `--metadata FILE` applies saved metadata without
 network access. Node and Python release lines remain a manual maintainer choice.

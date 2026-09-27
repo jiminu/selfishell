@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -9,12 +10,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
-func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, dependencies []selfishell.Dependency) ([][]string, error) {
+func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, dependencies []selfishell.Dependency, root string) ([][]string, error) {
+	language, err := os.ReadFile(filepath.Join(root, "config/shared/nvim/lua/config/languages.lua"))
+	if err != nil {
+		return nil, err
+	}
+	pins, err := lspPins(string(language))
+	if err != nil {
+		return nil, err
+	}
 	temporary, err := os.MkdirTemp("", "selfishell-dependency-discovery-*")
 	if err != nil {
 		return nil, err
@@ -149,5 +159,87 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 		}
 		record("mise-tool", tool[0], strings.TrimPrefix(strings.TrimPrefix(tag, "v"), "jq-"))
 	}
+	tag, err = latestTag("mason-org/mason-registry")
+	if err != nil {
+		return nil, err
+	}
+	archive := filepath.Join(temporary, "registry.json.zip")
+	transport := p
+	transport.Err = io.Discard
+	url := "https://github.com/mason-org/mason-registry/releases/download/" + tag + "/registry.json.zip"
+	if code, err := transport.Curl(ctx, "transfer", url, "-o", archive); err != nil {
+		return nil, err
+	} else if code != 0 {
+		return nil, fmt.Errorf("Mason registry download failed (exit %d)", code)
+	}
+	lspUpdates, err := lspRegistryUpdates(archive, pins)
+	if err != nil {
+		return nil, err
+	}
+	for _, update := range lspUpdates {
+		fmt.Fprintln(&metadata, update)
+	}
 	return parseDependencyMetadata(metadata.String())
+}
+
+func lspRegistryUpdates(archive string, pins map[string]string) ([]string, error) {
+	zipFile, err := zip.OpenReader(archive)
+	if err != nil {
+		return nil, err
+	}
+	defer zipFile.Close()
+	if len(zipFile.File) != 1 || zipFile.File[0].Name != "registry.json" || zipFile.File[0].UncompressedSize64 > 10<<20 {
+		return nil, fmt.Errorf("invalid Mason registry archive")
+	}
+	file, err := zipFile.File[0].Open()
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := io.ReadAll(io.LimitReader(file, 10<<20+1))
+	err = file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > 10<<20 {
+		return nil, fmt.Errorf("Mason registry too large")
+	}
+	var registry []struct {
+		Source struct {
+			ID string `json:"id"`
+		} `json:"source"`
+		Neovim struct {
+			LSPConfig string `json:"lspconfig"`
+		} `json:"neovim"`
+	}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return nil, fmt.Errorf("invalid Mason registry: %w", err)
+	}
+	versions := map[string]string{}
+	for _, entry := range registry {
+		server := entry.Neovim.LSPConfig
+		if pins[server] == "" {
+			continue
+		}
+		at := strings.LastIndexByte(entry.Source.ID, '@')
+		if at < 0 || !strings.HasPrefix(entry.Source.ID, "pkg:") || !lspVersion.MatchString(entry.Source.ID[at+1:]) || versions[server] != "" {
+			return nil, fmt.Errorf("invalid or duplicate Mason registry version for %s", server)
+		}
+		versions[server] = entry.Source.ID[at+1:]
+	}
+	servers := make([]string, 0, len(pins))
+	for server := range pins {
+		if versions[server] == "" {
+			return nil, fmt.Errorf("Mason registry missing %s", server)
+		}
+		servers = append(servers, server)
+	}
+	sort.Strings(servers)
+	updates := make([]string, 0, len(servers))
+	for _, server := range servers {
+		updates = append(updates, "lsp-server "+server+" "+versions[server])
+	}
+	return updates, nil
 }
