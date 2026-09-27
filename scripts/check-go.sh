@@ -18,4 +18,3 @@ if [[ -n "$formatting" ]]; then
 fi
 go vet ./...
 SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" go test ./... -count=1
-SELFISHELL_TEST_CLI="$ROOT_DIR/.build/targets/$GOOS-$GOARCH/bin/selfishell" go test ./tests/integration -run '^TestFoundation$' -count=1

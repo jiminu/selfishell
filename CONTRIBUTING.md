@@ -35,6 +35,13 @@ Tests use the current checkout. Integration tests live in `tests/integration`
 and cover updates, rollback, backup, restore and interrupted-operation recovery. `SELFISHELL_TEST_CLI` may select an existing native
 executable for focused Go test runs.
 
+Keep command parsing and shared failure cases focused; do not repeat basic
+help/version or successful reinstall checks in every lifecycle scenario. WSL
+shares Ubuntu's configuration implementation, so its configuration matrix covers
+install/restore with empty, existing and XDG homes. Release reproducibility checks
+combine a relocated source tree, changed mtimes, hostile build variables and a
+fresh cache; the shell builder is compared with those verified Go-built assets.
+
 Integration builds use a temporary Go cache by default. CI sets
 `SELFISHELL_TEST_GO_CACHE` to an absolute compiler-cache path to reuse restored
 builds; the test process leaves that caller-owned cache in place. Test homes and

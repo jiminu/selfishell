@@ -8,10 +8,7 @@ import (
 	"testing"
 )
 
-var configPlatforms = []string{"macos", "ubuntu", "ubuntu-wsl"}
-var configCases = []string{"empty", "existing", "custom", "changed-file", "changed-link", "changed-block", "pending", "late-preflight", "malformed-package"}
-
-func configScenarios(t *testing.T) {
+func TestConfig(t *testing.T) {
 	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -35,8 +32,14 @@ func configScenarios(t *testing.T) {
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
 	mustFS(t, os.WriteFile(procWSL, []byte("Linux microsoft WSL2\n"), 0600))
-	for _, platform := range configPlatforms {
-		for _, scenario := range configCases {
+	for _, platform := range []string{"macos", "ubuntu", "ubuntu-wsl"} {
+		scenarios := []string{"empty", "existing", "custom"}
+		// WSL shares Ubuntu's configuration implementation. Keep its complete
+		// install/restore paths; exercise common failures on macOS and Ubuntu.
+		if platform != "ubuntu-wsl" {
+			scenarios = append(scenarios, "changed-file", "changed-link", "changed-block", "pending", "late-preflight", "malformed-package")
+		}
+		for _, scenario := range scenarios {
 			t.Run(platform+"/"+scenario, func(t *testing.T) {
 				home := t.TempDir()
 				mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), packages, 0644))
@@ -91,11 +94,6 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		requireStatus(t, name, got, status)
 		return got
 	}
-	run("help", 0, "help")
-	run("version", 0, "version")
-	if !bytes.Equal(initial, mustSnapshot(t, home)) {
-		t.Fatal("help or version mutated HOME")
-	}
 	if scenario == "malformed-package" {
 		file := filepath.Join(release, "packages.conf")
 		f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
@@ -130,9 +128,12 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		}
 		return
 	}
-	dry := run("dry-run", 0, "install", "--skip-packages", "--dry-run", "--yes")
-	if !bytes.Equal(initial, dry.Home) {
-		t.Fatal("install dry-run mutated HOME")
+	roundTrip := scenario == "empty" || scenario == "existing" || scenario == "custom"
+	if roundTrip {
+		dry := run("dry-run", 0, "install", "--skip-packages", "--dry-run", "--yes")
+		if !bytes.Equal(initial, dry.Home) {
+			t.Fatal("install dry-run mutated HOME")
+		}
 	}
 	installed := run("install", 0, "install", "--skip-packages", "--yes")
 	for _, p := range []string{filepath.Join(state, "selfishell/configured"), filepath.Join(state, "selfishell/resources/user-zshrc.state")} {
@@ -143,12 +144,11 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 	if info, err := os.Lstat(filepath.Join(config, "nvim")); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("nvim link: %v %v", info, err)
 	}
-	reinstalled := run("reinstall", 0, "install", "--skip-packages", "--yes")
-	if !bytes.Equal(installed.Home, reinstalled.Home) {
-		t.Fatal("reinstall changed HOME")
-	}
-	if scenario == "purge" {
-		t.Fatal("purge needs dedicated prefix fixture")
+	if roundTrip {
+		reinstalled := run("reinstall", 0, "install", "--skip-packages", "--yes")
+		if !bytes.Equal(installed.Home, reinstalled.Home) {
+			t.Fatal("reinstall changed HOME")
+		}
 	}
 	changed := false
 	switch scenario {
@@ -248,8 +248,6 @@ func assertEmptyConfigRestored(t *testing.T, home, config, state string) {
 		}
 	}
 }
-
-func TestConfig(t *testing.T) { configScenarios(t) }
 
 func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 	builtCLI, err := testCLI(t)

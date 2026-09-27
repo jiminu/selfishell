@@ -306,14 +306,32 @@ func TestNativeReleaseArtifacts(t *testing.T) {
 }
 func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
 	first := nativeAssetDir(t)
-	second := t.TempDir()
+	copied := filepath.Join(t.TempDir(), "source with spaces")
+	mustFS(t, os.MkdirAll(copied, 0755))
+	for _, name := range []string{"cmd", "internal", "config"} {
+		mustFS(t, copyTree(filepath.Join(repoRoot(), name), filepath.Join(copied, name)))
+	}
+	for _, name := range []string{"go.mod", "packages.conf", "dependencies.conf"} {
+		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(copied, name)))
+	}
+	old := time.Unix(100000000, 0)
+	mustFS(t, filepath.WalkDir(copied, func(path string, d os.DirEntry, e error) error {
+		if e != nil {
+			return e
+		}
+		if d.Type().IsRegular() {
+			return os.Chtimes(path, old, old)
+		}
+		return nil
+	}))
+	second := filepath.Join(copied, "dist")
 	// Reproducibility must also hold after compiling with an empty cache.
 	t.Setenv("GOCACHE", t.TempDir())
 	t.Setenv("GOOS", "plan9")
 	t.Setenv("GOARCH", "386")
 	t.Setenv("GOFLAGS", "-tags=unapproved")
 	t.Setenv("CGO_ENABLED", "1")
-	mustFS(t, releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, second))
+	mustFS(t, releasebuild.Build(context.Background(), copied, nativeArchiveVersion, ""))
 	assertAssetSet(t, second, nativeArchiveVersion)
 	for _, name := range append(releaseAssetNames(nativeArchiveVersion), "SHA256SUMS", "VERSION") {
 		a, e := os.ReadFile(filepath.Join(first, name))
@@ -324,40 +342,6 @@ func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
 			t.Errorf("not reproducible: %s", name)
 		}
 	}
-}
-func TestProductionNativeBuilderContract(t *testing.T) {
-	home := t.TempDir()
-	first := filepath.Join(home, "first")
-	second := filepath.Join(home, "second")
-	for _, out := range []string{first, second} {
-		if out == second {
-			time.Sleep(time.Second)
-		}
-		cmd := exec.Command("bash", filepath.Join(repoRoot(), "scripts/build-release.sh"), "--version", "0.2.2", "--output", out)
-		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":/usr/bin:/bin:/usr/sbin:/sbin", "GOTOOLCHAIN=local", "GOCACHE="+testGoCache)
-		if b, e := cmd.CombinedOutput(); e != nil {
-			t.Fatalf("production builder: %v %s", e, b)
-		}
-	}
-	assertAssetSet(t, first, "0.2.2")
-	assertAssetSet(t, second, "0.2.2")
-	for _, name := range releaseAssetNames("0.2.2") {
-		a, e := os.ReadFile(filepath.Join(first, name))
-		mustFS(t, e)
-		b, e := os.ReadFile(filepath.Join(second, name))
-		mustFS(t, e)
-		if !bytes.Equal(a, b) {
-			t.Errorf("native archive not reproducible: %s", name)
-		}
-	}
-	a, e := os.ReadFile(filepath.Join(first, "SHA256SUMS"))
-	mustFS(t, e)
-	b, e := os.ReadFile(filepath.Join(second, "SHA256SUMS"))
-	mustFS(t, e)
-	if !bytes.Equal(a, b) {
-		t.Error("native checksums differ")
-	}
-	assertConfigPayload(t, filepath.Join(first, "selfishell-0.2.2-linux-amd64.tar.gz"), "0.2.2", true)
 }
 func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
 	privateNativeHome(t)
@@ -430,6 +414,13 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 		t.Fatalf("relative output: %v %s", e, b)
 	}
 	assertAssetSet(t, ownedOut, nativeArchiveVersion)
+	// The shell entrypoint must produce the same release as the Go builder.
+	expected := nativeAssetDir(t)
+	for _, name := range append(releaseAssetNames(nativeArchiveVersion), "SHA256SUMS", "VERSION") {
+		if !bytes.Equal(readBytes(t, filepath.Join(expected, name)), readBytes(t, filepath.Join(ownedOut, name))) {
+			t.Errorf("shell builder output differs: %s", name)
+		}
+	}
 }
 
 func TestWrongNativeToolchain(t *testing.T) {
@@ -445,39 +436,6 @@ func TestWrongNativeToolchain(t *testing.T) {
 	}
 	if _, e := os.Lstat(out); !os.IsNotExist(e) {
 		t.Fatalf("wrong toolchain created output: %v", e)
-	}
-}
-
-func TestNativeReleaseIgnoresSourcePathAndMtime(t *testing.T) {
-	privateNativeHome(t)
-	copied := filepath.Join(t.TempDir(), "source with spaces")
-	mustFS(t, os.MkdirAll(copied, 0755))
-	for _, name := range []string{"cmd", "internal", "config"} {
-		mustFS(t, copyTree(filepath.Join(repoRoot(), name), filepath.Join(copied, name)))
-	}
-	for _, name := range []string{"go.mod", "packages.conf", "dependencies.conf"} {
-		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(copied, name)))
-	}
-	old := time.Unix(100000000, 0)
-	mustFS(t, filepath.WalkDir(copied, func(path string, d os.DirEntry, e error) error {
-		if e != nil {
-			return e
-		}
-		if d.Type().IsRegular() {
-			return os.Chtimes(path, old, old)
-		}
-		return nil
-	}))
-	out := filepath.Join(copied, "dist")
-	mustFS(t, releasebuild.Build(context.Background(), copied, nativeArchiveVersion, ""))
-	for _, name := range append(releaseAssetNames(nativeArchiveVersion), "SHA256SUMS", "VERSION") {
-		a, e := os.ReadFile(filepath.Join(nativeAssetDir(t), name))
-		mustFS(t, e)
-		b, e := os.ReadFile(filepath.Join(out, name))
-		mustFS(t, e)
-		if !bytes.Equal(a, b) {
-			t.Errorf("source path/mtime altered %s", name)
-		}
 	}
 }
 

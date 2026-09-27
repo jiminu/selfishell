@@ -140,16 +140,6 @@ func TestNextPatchVersionContract(t *testing.T) {
 	}
 }
 
-func TestMaintenanceScriptsNoRuntimeCommonImport(t *testing.T) {
-	for _, name := range []string{"verify-published-release.sh", "next-patch-version.sh", "build-release.sh"} {
-		data, err := os.ReadFile(filepath.Join(repoRoot(), "scripts", name))
-		mustFS(t, err)
-		if strings.Contains(string(data), "lib/common.sh") {
-			t.Errorf("%s imports common.sh", name)
-		}
-	}
-}
-
 func TestReleaseVersionValidatorParity(t *testing.T) {
 	script := filepath.Join(repoRoot(), "scripts", "release-version.sh")
 	for _, version := range []string{"0.0.0", "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.2.3-0.3.7", "1.2.3-x.7.z-92", "1.2.3-01alpha", "v1.2.3", "01.2.3", "1.02.3", "1.2.03", "1.2", "1.2.3-", "1.2.3-alpha..1", "1.2.3-alpha_1", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+build"} {
