@@ -90,6 +90,8 @@ Rollback exchanges `current` and `previous` without network access. It restores
 only the CLI, leaving configuration and tools unchanged. Reapplying an older
 environment may require downloading tool versions removed by cleanup. Select
 an exact retained version with `selfishell rollback VERSION`.
+If either release link is occupied by a user path, or the active release cannot
+be saved as `previous`, rollback stops before changing `current`.
 
 Release changes do not take a lock, so run one `selfishell update`,
 `selfishell rollback`, or bootstrap `install.sh` at a time. Overlapping runs can

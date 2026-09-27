@@ -25,6 +25,15 @@ type Process struct {
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
 // It does not create a new process group, which would break foreground TTY reads.
 func (p Process) Run(ctx context.Context, name string, args ...string) (int, error) {
+	return p.run(ctx, false, name, args...)
+}
+
+// runCLI lets the continuation cancel and reap its own package child before exiting.
+func (p Process) runCLI(ctx context.Context, name string, args ...string) (int, error) {
+	return p.run(ctx, true, name, args...)
+}
+
+func (p Process) run(ctx context.Context, forwardCancel bool, name string, args ...string) (int, error) {
 	// Propagate transfer limits to tools that start Git themselves,
 	// including Neovim plugin sync.
 	env := p.environment()
@@ -68,6 +77,11 @@ func (p Process) Run(ctx context.Context, name string, args ...string) (int, err
 		cmd.Env = p.Env
 	}
 	cmd.WaitDelay = time.Second
+	if forwardCancel {
+		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		// Outlast the continuation's own one-second wait for child pipes.
+		cmd.WaitDelay = 5 * time.Second
+	}
 	err := cmd.Run()
 	if err == nil {
 		return 0, nil

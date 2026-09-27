@@ -52,6 +52,11 @@ occupied target. Dry-run writes nothing. `update --tools-only --skip-packages`
 reapplies current configuration without network access; ordinary default
 update is a no-op when already current. Rollback uses retained files offline.
 
+A full update runs the newly activated CLI for its tools/configuration phase.
+Cancellation sends that CLI SIGTERM and gives it up to five seconds to cancel
+and reap its direct child. Ordinary child commands still use immediate
+cancellation. Children keep the foreground process group for terminal input.
+
 An existing user file with the same bytes as a managed default is backed up
 before adoption and preserved on restore.
 Three operational limits remain intentional. Optional Apt failures warn

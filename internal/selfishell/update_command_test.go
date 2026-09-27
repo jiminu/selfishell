@@ -53,6 +53,34 @@ func commandResult(root string, args ...string) (int, string, string) {
 	return code, out.String(), err.String()
 }
 
+type rollbackMutationReader struct {
+	mutate func()
+	answer *strings.Reader
+}
+
+func (r *rollbackMutationReader) Read(p []byte) (int, error) {
+	if r.mutate != nil {
+		mutate := r.mutate
+		r.mutate = nil
+		mutate()
+	}
+	return r.answer.Read(p)
+}
+
+func retainedRollbackRelease(t *testing.T, releases string) {
+	t.Helper()
+	target := releases + "/2.0.0"
+	if err := os.MkdirAll(target+"/bin", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target+"/VERSION", []byte("2.0.0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUpdateAndRollbackArguments(t *testing.T) {
 	root := isolatedUpdateHome(t)
 	for _, tc := range []struct {
@@ -178,6 +206,15 @@ func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 	previous, _ := os.Readlink(share + "/previous")
 	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
 		t.Fatalf("links: %s %s", current, previous)
+	}
+	code, out, stderr = commandResult(root, "rollback", "--yes")
+	if code != 0 || !strings.Contains(out, "rolled back to 1.0.0") {
+		t.Fatalf("return rollback: %d %q %q", code, out, stderr)
+	}
+	current, _ = os.Readlink(share + "/current")
+	previous, _ = os.Readlink(share + "/previous")
+	if current != "releases/1.0.0" || previous != "releases/2.0.0" {
+		t.Fatalf("return links: %s %s", current, previous)
 	}
 	data, _ := os.ReadFile(state)
 	if string(data) != "1\n" {
@@ -363,6 +400,105 @@ func TestRollbackRejectsWrongVersionAndOccupiedCurrent(t *testing.T) {
 	data, _ := os.ReadFile(share + "/current")
 	if string(data) != "foreign" {
 		t.Fatalf("occupied current overwritten: %q", data)
+	}
+}
+
+func TestRollbackExplicitVersionPreservesOccupiedPrevious(t *testing.T) {
+	for _, kind := range []string{"file", "foreign link"} {
+		t.Run(kind, func(t *testing.T) {
+			op, share, releases := releaseFixture(t)
+			isolateMiseForHome(t, os.Getenv("HOME"))
+			retainedRollbackRelease(t, releases)
+			previous := share + "/previous"
+			if kind == "file" {
+				if err := os.WriteFile(previous, []byte("user data\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Symlink("/personal", previous); err != nil {
+				t.Fatal(err)
+			}
+			code, out, stderr := commandResult(op.Root, "rollback", "2.0.0", "--yes")
+			if code != 1 || strings.Contains(out, "rolled back") || stderr == "" {
+				t.Fatalf("occupied previous: %d %q %q", code, out, stderr)
+			}
+			if current, err := os.Readlink(share + "/current"); err != nil || current != "releases/1.0.0" {
+				t.Fatalf("current changed: %q, %v", current, err)
+			}
+			if kind == "file" {
+				if data, err := os.ReadFile(previous); err != nil || string(data) != "user data\n" {
+					t.Fatalf("previous changed: %q, %v", data, err)
+				}
+			} else if link, err := os.Readlink(previous); err != nil || link != "/personal" {
+				t.Fatalf("previous changed: %q, %v", link, err)
+			}
+		})
+	}
+}
+
+func TestRollbackRestoresPreviousWhenCurrentActivationFails(t *testing.T) {
+	for _, retained := range []bool{false, true} {
+		name := "no previous"
+		if retained {
+			name = "existing previous"
+		}
+		t.Run(name, func(t *testing.T) {
+			op, share, releases := releaseFixture(t)
+			isolateMiseForHome(t, os.Getenv("HOME"))
+			retainedRollbackRelease(t, releases)
+			if retained {
+				if err := os.Symlink("releases/2.0.0", share+"/previous"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("SELFISHELL_TEST_TTY", "1")
+			reader := &rollbackMutationReader{answer: strings.NewReader("y\n"), mutate: func() {
+				if err := os.Remove(share + "/current"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(share+"/current", []byte("user data\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}}
+			var out, stderr bytes.Buffer
+			code := (CLI{Root: op.Root, In: reader, Out: &out, Err: &stderr}).Run([]string{"rollback", "2.0.0"})
+			if code != 1 || strings.Contains(out.String(), "rolled back") || stderr.Len() == 0 {
+				t.Fatalf("failed activation: %d %q %q", code, out.String(), stderr.String())
+			}
+			if data, err := os.ReadFile(share + "/current"); err != nil || string(data) != "user data\n" {
+				t.Fatalf("current user file changed: %q, %v", data, err)
+			}
+			previous, err := os.Readlink(share + "/previous")
+			if retained {
+				if err != nil || previous != "releases/2.0.0" {
+					t.Fatalf("previous not restored: %q, %v", previous, err)
+				}
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("new previous left after failure: %q, %v", previous, err)
+			}
+		})
+	}
+}
+
+func TestRollbackLatePreviousConflictKeepsCurrent(t *testing.T) {
+	op, share, releases := releaseFixture(t)
+	isolateMiseForHome(t, os.Getenv("HOME"))
+	retainedRollbackRelease(t, releases)
+	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	reader := &rollbackMutationReader{answer: strings.NewReader("y\n"), mutate: func() {
+		if err := os.WriteFile(share+"/previous", []byte("user data\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	var out, stderr bytes.Buffer
+	code := (CLI{Root: op.Root, In: reader, Out: &out, Err: &stderr}).Run([]string{"rollback", "2.0.0"})
+	if code != 1 || strings.Contains(out.String(), "rolled back") || stderr.Len() == 0 {
+		t.Fatalf("late previous conflict: %d %q %q", code, out.String(), stderr.String())
+	}
+	if current, err := os.Readlink(share + "/current"); err != nil || current != "releases/1.0.0" {
+		t.Fatalf("current changed: %q, %v", current, err)
+	}
+	if data, err := os.ReadFile(share + "/previous"); err != nil || string(data) != "user data\n" {
+		t.Fatalf("previous user file changed: %q, %v", data, err)
 	}
 }
 

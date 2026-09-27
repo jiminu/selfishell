@@ -181,7 +181,7 @@ func (c CLI) update(args []string) int {
 				if o.skip {
 					argv = append(argv, "--skip-packages")
 				}
-				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err}).Run(ctx, target+"/bin/selfishell", argv...)
+				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err}).runCLI(ctx, target+"/bin/selfishell", argv...)
 				if err != nil {
 					c.error(err.Error())
 					return code
