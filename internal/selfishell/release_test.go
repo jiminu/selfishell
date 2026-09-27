@@ -609,25 +609,52 @@ func TestReleaseInstallSameVersionPreservesPreviousLink(t *testing.T) {
 }
 
 func TestReleaseInstallPreflightsWholeArchiveBeforeFilesystemMutation(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"../sentinel", "", 0, "overwrite", 0600})
-	sentinel := filepath.Dir(share) + "/sentinel"
-	os.WriteFile(sentinel, []byte("original\n"), 0600)
-	os.Symlink("releases/0.9.0", share+"/previous")
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
-		t.Fatal("accepted traversal archive")
-	}
-	data, _ := os.ReadFile(sentinel)
-	if string(data) != "original\n" {
-		t.Fatalf("outside sentinel changed: %q", data)
-	}
-	current, _ := os.Readlink(share + "/current")
-	previous, _ := os.Readlink(share + "/previous")
-	if current != "releases/1.0.0" || previous != "releases/0.9.0" {
-		t.Fatalf("links changed: %q, %q", current, previous)
-	}
-	if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
-		t.Fatalf("created invalid target: %v", err)
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%t", existing), func(t *testing.T) {
+			op, share, releases := releaseFixture(t)
+			publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"../sentinel", "", 0, "overwrite", 0600})
+			if existing {
+				writeTestFile(t, releases+"/2.0.0/VERSION", "2.0.0\n", 0600)
+				writeTestFile(t, releases+"/2.0.0/bin/selfishell", "winner binary\n", 0755)
+			}
+			downloads := t.TempDir()
+			t.Setenv("TMPDIR", downloads)
+			sentinel := filepath.Dir(share) + "/sentinel"
+			os.WriteFile(sentinel, []byte("original\n"), 0600)
+			os.Symlink("releases/0.9.0", share+"/previous")
+			if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+				t.Fatal("accepted traversal archive")
+			}
+			data, _ := os.ReadFile(sentinel)
+			if string(data) != "original\n" {
+				t.Fatalf("outside sentinel changed: %q", data)
+			}
+			current, _ := os.Readlink(share + "/current")
+			previous, _ := os.Readlink(share + "/previous")
+			if current != "releases/1.0.0" || previous != "releases/0.9.0" {
+				t.Fatalf("links changed: %q, %q", current, previous)
+			}
+			if _, err := os.Lstat(releases + "/2.0.0"); !existing && !os.IsNotExist(err) {
+				t.Fatalf("created invalid target: %v", err)
+			}
+
+			if existing && readTestFile(t, releases+"/2.0.0/bin/selfishell") != "winner binary\n" {
+				t.Fatal("replaced existing release")
+			}
+			entries, err := os.ReadDir(releases)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if strings.Contains(entry.Name(), ".tmp.") {
+					t.Fatalf("left staging path: %s", entry.Name())
+				}
+			}
+			entries, err = os.ReadDir(downloads)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("left download paths: %v %v", entries, err)
+			}
+		})
 	}
 }
 
