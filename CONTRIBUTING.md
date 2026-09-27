@@ -12,6 +12,9 @@ Go **1.27.1** is pinned in `go.mod` for development and CI. The installed
 product does not need Go. The build uses `GOTOOLCHAIN=local` and fails if that
 version is unavailable. Zsh, ShellCheck, shfmt and Neovim are needed for the
 repository gate.
+The root `mise.toml` selects the same Go version for local development; keep it
+in sync with `go.mod`. With mise installed, run `mise trust` and `mise install go`
+from the checkout before building.
 
 ```bash
 bash scripts/build-cli.sh       # Build the host CLI at .build/selfishell
