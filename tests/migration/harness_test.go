@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/pty"
 )
 
 type capture struct {
@@ -433,7 +435,7 @@ func capturePTYStreams(home, executable string, args []string, extraEnv []string
 		return capture{}, err
 	}
 	defer os.RemoveAll(tmp)
-	master, slave, err := openPTY()
+	master, slave, err := pty.Open()
 	if err != nil {
 		return capture{}, err
 	}
