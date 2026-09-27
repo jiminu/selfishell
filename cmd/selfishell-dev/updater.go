@@ -100,6 +100,8 @@ func parseDependencyMetadata(data string) ([][]string, error) {
 			valid = len(fields) == 3 && numericToolVersion.MatchString(fields[2])
 		case "lsp-server":
 			valid = len(fields) == 3 && lspVersion.MatchString(fields[2])
+		case "go-toolchain":
+			valid = len(fields) == 3 && fields[1] == "go" && goPatchVersion.MatchString(fields[2])
 		}
 		if !valid || strings.ContainsRune(line, '\x00') {
 			return nil, fmt.Errorf("invalid dependency metadata record: %s", fields[0])
@@ -153,6 +155,20 @@ func updateDependencies(ctx context.Context, p selfishell.Process, manifest, met
 	}
 	lines := strings.SplitAfter(manifestEdit.before, "\n")
 	for _, update := range updates {
+		if update[0] == "go-toolchain" {
+			mod, err := configuration("go.mod")
+			if err != nil {
+				return err
+			}
+			mise, err := configuration("mise.toml")
+			if err != nil {
+				return err
+			}
+			if err := updateGoToolchain(mod, mise, update[2]); err != nil {
+				return err
+			}
+			continue
+		}
 		if update[0] == "lsp-server" {
 			edit, err := configuration("config/shared/nvim/lua/config/languages.lua")
 			if err != nil {

@@ -32,16 +32,46 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 	defer os.RemoveAll(temporary)
 	var metadata strings.Builder
 	record := func(fields ...string) { fmt.Fprintln(&metadata, strings.Join(fields, " ")) }
+	mod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil, err
+	}
+	currentGo, err := goToolchainVersion(string(mod))
+	if err != nil {
+		return nil, err
+	}
+	var goReleases bytes.Buffer
+	goTransport := p
+	goTransport.Out, goTransport.Err = &goReleases, io.Discard
+	if code, err := goTransport.Curl(ctx, "metadata", "https://go.dev/dl/?mode=json"); err != nil {
+		return nil, err
+	} else if code != 0 {
+		return nil, fmt.Errorf("Go release lookup failed (exit %d)", code)
+	}
+	goPatch, err := latestGoPatch(goReleases.Bytes(), currentGo)
+	if err != nil {
+		return nil, err
+	}
+	record("go-toolchain", "go", goPatch)
 	latestTag := func(repository string) (string, error) {
 		args := []string{"-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28"}
+		transport := p
+		authorized := false
 		for _, value := range p.Env {
 			if token, ok := strings.CutPrefix(value, "GH_TOKEN="); ok && token != "" {
-				args = append(args, "-H", "Authorization: Bearer "+token)
+				if strings.ContainsAny(token, "\r\n\x00") {
+					return "", fmt.Errorf("invalid GitHub token")
+				}
+				// curl reads the private header from stdin; credentials stay out of argv.
+				transport.In = strings.NewReader("Authorization: Bearer " + token + "\n")
+				authorized = true
 			}
+		}
+		if authorized {
+			args = append(args, "-H", "@-")
 		}
 		args = append(args, "https://api.github.com/repos/"+repository+"/releases/latest")
 		var output bytes.Buffer
-		transport := p
 		transport.Out, transport.Err = &output, io.Discard
 		if code, err := transport.Curl(ctx, "metadata", args...); err != nil {
 			return "", err

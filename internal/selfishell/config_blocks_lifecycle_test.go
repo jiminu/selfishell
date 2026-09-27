@@ -107,6 +107,88 @@ func blockEqual(t *testing.T, path string, want []byte) {
 	}
 }
 
+func TestMissingActiveUserBlockCanBeReinstalledAndUninstalled(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		removed bool
+		command []string
+	}{
+		{"install edited rc", false, []string{"install", "--skip-packages", "--yes"}},
+		{"tools update edited rc", false, []string{"update", "--tools-only", "--skip-packages", "--yes"}},
+		{"install deleted rc", true, []string{"install", "--skip-packages", "--yes"}},
+		{"tools update deleted rc", true, []string{"update", "--tools-only", "--skip-packages", "--yes"}},
+		{"uninstall edited rc", false, []string{"uninstall", "--yes"}},
+		{"uninstall deleted rc", true, []string{"uninstall", "--yes"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, home, paths := blockHome(t, "macos")
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			target := home + "/.zshrc"
+			personal := []byte("alias personal='yes'\n")
+			if tc.removed {
+				if err := os.Remove(target); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				blockWrite(t, target, personal)
+			}
+			blockOK(t, root, tc.command...)
+			if tc.command[0] == "uninstall" {
+				if tc.removed {
+					if _, err := os.Lstat(target); !os.IsNotExist(err) {
+						t.Fatalf("recreated deleted rc: %v", err)
+					}
+				} else {
+					blockEqual(t, target, personal)
+				}
+				if _, err := os.Lstat(paths.Resources + "/user-zshrc.state"); !os.IsNotExist(err) {
+					t.Fatalf("retained state: %v", err)
+				}
+				return
+			}
+			data := blockRead(t, target)
+			view, err := inspectBlock("user-zshrc", data)
+			if err != nil || view.status != "intact" {
+				t.Fatalf("block not restored: %s %v", view.status, err)
+			}
+			if !tc.removed && !bytes.Contains(data, personal) {
+				t.Fatalf("personal content lost: %q", data)
+			}
+			if blockState(t, paths, "user-zshrc").Status != "active" {
+				t.Fatal("active state not restored")
+			}
+		})
+	}
+}
+
+func TestStatusDoesNotBlockOnReplacedUserRCFIFO(t *testing.T) {
+	root, home, _ := blockHome(t, "macos")
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	target := home + "/.zshrc"
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(target, 0600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() { code, _, _ := blockRun(t, root, "", "status"); done <- code }()
+	select {
+	case code := <-done:
+		if code != 1 {
+			t.Fatalf("status accepted FIFO: %d", code)
+		}
+	case <-time.After(2 * time.Second):
+		// Release the old implementation's blocking reader before failing.
+		fd, err := syscall.Open(target, syscall.O_WRONLY|syscall.O_NONBLOCK, 0)
+		if err == nil {
+			syscall.Close(fd)
+		}
+		<-done
+		t.Fatal("status blocked reading a user rc FIFO")
+	}
+}
+
 func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
 	ambient := t.TempDir()
 	bin := filepath.Join(ambient, "bin")

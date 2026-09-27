@@ -296,7 +296,6 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 			return err
 		}
 	}
-	c.defaultShell(dry, yes)
 	if err := writeAtomic(paths.State+"/configured", []byte("1\n"), 0600); err != nil {
 		return err
 	}
@@ -307,6 +306,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	if err := writeAtomic(paths.State+"/ghostty", []byte(value), 0600); err != nil {
 		return err
 	}
+	c.defaultShell(dry, yes)
 	if m.unchanged > 0 {
 		fmt.Fprintf(c.Out, "%d items unchanged.\n", m.unchanged)
 	}

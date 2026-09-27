@@ -2,12 +2,14 @@ package selfishell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 )
+
+var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
 
 func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	paths, err := UserPaths()
@@ -35,8 +37,8 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	for _, record := range records {
 		if e := m.preflightUninstall(record, restore); e != nil {
 			c.error(e.Error())
-			if record.State.Status == "pending" && !strings.Contains(e.Error(), "An interrupted install left this unfinished") {
-				c.error("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
+			if record.State.Status == "pending" && !errors.Is(e, errInterruptedInstall) {
+				c.error(errInterruptedInstall.Error())
 			}
 			failed = true
 		}
@@ -107,19 +109,21 @@ func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 			willRemove = true
 		}
 	case "block":
-		if !present || !info.Mode().IsRegular() {
+		if present && !info.Mode().IsRegular() {
 			return fmt.Errorf("Managed block path changed type; preserving it: %s", s.Target)
 		}
-		data, e := os.ReadFile(s.Target)
-		if e != nil {
-			return e
-		}
-		view, e := inspectBlock(r.Name, data)
-		if e != nil {
-			return e
-		}
-		if view.status != "intact" || view.checksum != s.Checksum {
-			return blockConflictError(r)
+		if present {
+			data, e := os.ReadFile(s.Target)
+			if e != nil {
+				return e
+			}
+			view, e := inspectBlock(r.Name, data)
+			if e != nil {
+				return e
+			}
+			if view.status != "absent" && (view.status != "intact" || view.checksum != s.Checksum) {
+				return blockConflictError(r)
+			}
 		}
 	}
 	if restore && s.Backup != "-" {
@@ -135,7 +139,7 @@ func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 		}
 	}
 	if s.Status == "pending" {
-		return fmt.Errorf("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
+		return errInterruptedInstall
 	}
 	return nil
 }
@@ -151,7 +155,7 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 	if s.Kind == "block" {
 		if m.dry {
 			m.say("Would remove Selfishell block: %s", s.Target)
-		} else {
+		} else if present {
 			data, e := os.ReadFile(s.Target)
 			if e != nil {
 				return e
@@ -160,13 +164,15 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			if e != nil {
 				return e
 			}
-			pending := s
-			pending.Status = "pending"
-			if err = m.save(r, pending); err != nil {
-				return err
-			}
-			if err = m.write(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
-				return err
+			if view.status == "intact" {
+				pending := s
+				pending.Status = "pending"
+				if err = m.save(r, pending); err != nil {
+					return err
+				}
+				if err = m.write(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
+					return err
+				}
 			}
 		}
 	} else if present {

@@ -277,6 +277,17 @@ func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 	}
 }
 
+func TestUpdateDryRunLabelsCurrentToolsPreview(t *testing.T) {
+	root, home, _ := updateCleanupFixture(t, false, false)
+	code, out, stderr := commandResult(root, "update", "--version", "2.0.0", "--dry-run", "--yes")
+	if code != 0 || !strings.Contains(out, "Would update Selfishell CLI to 2.0.0") || !strings.Contains(out, "Tools and configuration preview uses the running release (1.0.0)") {
+		t.Fatalf("preview: %d %q %q", code, out, stderr)
+	}
+	if _, err := os.Lstat(home + "/mise-calls"); !os.IsNotExist(err) {
+		t.Fatalf("dry-run invoked mise: %v", err)
+	}
+}
+
 func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	op, share, _ := releaseFixture(t)
 	isolateMiseForHome(t, os.Getenv("HOME"))

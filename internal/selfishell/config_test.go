@@ -319,7 +319,7 @@ func TestUninstallMalformedBlockExplainsPreservation(t *testing.T) {
 	if code, _, err := testCLI(t, root, home, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("install: %s", err)
 	}
-	os.WriteFile(filepath.Join(home, ".zshrc"), []byte("user changed shell config\n"), 0600)
+	os.WriteFile(filepath.Join(home, ".zshrc"), []byte("# >>> Selfishell initialize >>>\nuser changed shell config\n"), 0600)
 	code, _, err := testCLI(t, root, home, "uninstall", "--restore", "--yes")
 	want := "selfishell: Cannot manage the Selfishell user-zshrc block in: " + home + "/.zshrc\n" +
 		"selfishell: Preserving the file. Remove conflicting Selfishell markers and retry.\n" +

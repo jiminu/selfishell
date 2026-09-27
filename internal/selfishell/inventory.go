@@ -290,7 +290,12 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool)
 				return false
 			}
 		}
-		changes, _, ok := runInventory("", append(os.Environ(), "GIT_DIR=.git", "GIT_WORK_TREE=.", "GIT_OPTIONAL_LOCKS=0"), "git", "-C", target, "status", "--porcelain", "--untracked-files=no")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		var changesOut, changesErr bytes.Buffer
+		p := Process{Out: &changesOut, Err: &changesErr, Env: withEnvironment(Process{Env: os.Environ()}, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"}).Env, repoScopedGit: true}
+		code, err := p.Run(ctx, "git", "-C", target, "status", "--porcelain", "--untracked-files=no")
+		changes, ok := changesOut.String(), err == nil && code == 0
 		return ok && strings.TrimSpace(changes) == ""
 	}
 	return false

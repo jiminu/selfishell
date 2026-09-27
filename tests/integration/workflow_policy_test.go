@@ -505,14 +505,14 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 		t.Fatalf("change output is not connected to downstream steps: %q", id)
 	}
 	previous := -1
-	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
+	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
 		index := strings.Index(raw, "      - name: "+name+"\n")
 		if index <= previous {
 			t.Fatalf("dependency step %q missing or out of order", name)
 		}
 		previous = index
 	}
-	for _, name := range []string{"Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
+	for _, name := range []string{"Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
 		if condition := policyField(t, policyStep(t, job, name), "        ", "if"); condition != "steps.changes.outputs.changed == 'true'" {
 			t.Errorf("%s does not require dependency changes: %q", name, condition)
 		}
@@ -529,12 +529,14 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 		{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
 		{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
 		{"lsp", "config/shared/nvim/lua/config/languages.lua", 0, "changed=true\n"},
+		{"go_toolchain", "go.mod", 0, "changed=true\n"},
+		{"development_mise", "mise.toml", 0, "changed=true\n"},
 		{"unexpected_tracked_only", "README.md", 1, ""},
 		{"unexpected_untracked_only", "unexpected.txt", 1, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua"} {
+			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua", "go.mod", "mise.toml"} {
 				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
 			}
 			policyGit(t, home, repo, "add", ".")
@@ -556,6 +558,36 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 	}
 }
 
+func TestGoSecurityTargetsAndFailure(t *testing.T) {
+	raw, jobs := workflowSections(t, "go-security.yml")
+	if strings.Contains(raw, "pull_request:") || strings.Contains(raw, "  push:") {
+		t.Fatal("scheduled security scanning must not add work to ordinary PR/push CI")
+	}
+	block := policyRun(t, policyStep(t, policyJob(t, jobs, "vulnerabilities"), "Check supported targets"))
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failure=%t", fail), func(t *testing.T) {
+			home := t.TempDir()
+			scanner := filepath.Join(home, "go-security-bin/govulncheck")
+			policyWrite(t, scanner, "#!/bin/sh\nprintf '%s/%s %s %s\\n' \"$GOOS\" \"$GOARCH\" \"$CGO_ENABLED\" \"$*\" >>\"$SCAN_LOG\"\n[ \"$FAIL_SCAN\" != true ] || exit 3\n")
+			if err := os.Chmod(scanner, 0700); err != nil {
+				t.Fatal(err)
+			}
+			log := filepath.Join(home, "scans")
+			env := append(policyEnv(home), "RUNNER_TEMP="+home, "SCAN_LOG="+log, fmt.Sprintf("FAIL_SCAN=%t", fail))
+			got, err := runCommandIn(home, home, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 5*time.Second)
+			wantStatus := 0
+			want := "linux/amd64 0 ./...\nlinux/arm64 0 ./...\ndarwin/amd64 0 ./...\ndarwin/arm64 0 ./...\n"
+			if fail {
+				wantStatus, want = 3, "linux/amd64 0 ./...\n"
+			}
+			data, readErr := os.ReadFile(log)
+			if err != nil || got.Status != wantStatus || readErr != nil || string(data) != want {
+				t.Fatalf("scan status=%d want=%d err=%v log=%q read=%v", got.Status, wantStatus, err, data, readErr)
+			}
+		})
+	}
+}
+
 func TestDependencyWorkflowPRBlock(t *testing.T) {
 	_, jobs := workflowSections(t, "dependency-updates.yml")
 	block := policyRun(t, policyStep(t, policyJob(t, jobs, "update"), "Create or refresh dependency update PR"))
@@ -565,7 +597,7 @@ func TestDependencyWorkflowPRBlock(t *testing.T) {
 	}{{"skip_when_open", true, false}, {"create_when_absent", false, false}, {"reject_unexpected_path", false, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua"} {
+			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua", "go.mod", "mise.toml"} {
 				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
 			}
 			policyGit(t, home, repo, "add", ".")

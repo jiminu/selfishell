@@ -19,6 +19,7 @@ type releaseOperation struct {
 	Process Process
 	// promote permits an operation-local failure fixture for the rename boundary.
 	promote func(source, target string) error
+	link    func(target, path string) error
 }
 
 // compareReleaseVersions follows SemVer precedence for accepted release versions.
@@ -298,9 +299,20 @@ func releaseLinkReplaceable(path string) error {
 }
 
 func pruneInactiveReleases(l releaseLayout) {
-	current, _ := os.Readlink(l.current)
-	previous, _ := os.Readlink(l.previous)
-	keep := map[string]bool{filepath.Base(current): true, filepath.Base(previous): true}
+	current, err := os.Readlink(l.current)
+	if err != nil || !validReleaseLinkTarget(current) {
+		return
+	}
+	keep := map[string]bool{filepath.Base(current): true}
+	previous, err := os.Readlink(l.previous)
+	if err == nil {
+		if !validReleaseLinkTarget(previous) {
+			return
+		}
+		keep[filepath.Base(previous)] = true
+	} else if !os.IsNotExist(err) {
+		return
+	}
 	entries, err := os.ReadDir(l.releases)
 	if err != nil {
 		return
@@ -327,6 +339,11 @@ func pruneInactiveReleases(l releaseLayout) {
 	}
 }
 
+func validReleaseLinkTarget(target string) bool {
+	version := strings.TrimPrefix(target, "releases/")
+	return target == "releases/"+version && ValidReleaseVersion(version)
+}
+
 func selectedChecksum(data []byte, name string) (string, error) {
 	var selected string
 	for _, line := range strings.Split(string(data), "\n") {
@@ -346,7 +363,7 @@ func selectedChecksum(data []byte, name string) (string, error) {
 				return "", fmt.Errorf("conflicting checksums for %s", name)
 			}
 			selected = value
-		} else if strings.Contains(line, name) {
+		} else if len(fields) == 1 && fields[0] == name || len(fields) >= 2 && strings.TrimPrefix(fields[1], "*") == name {
 			return "", fmt.Errorf("malformed checksum for %s", name)
 		}
 	}
@@ -470,12 +487,33 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 	if err != nil {
 		return "", err
 	}
+	previous, previousErr := os.Readlink(l.previous)
+	if previousErr != nil && !os.IsNotExist(previousErr) {
+		return "", fmt.Errorf("Failed to retain previous Selfishell release: %w", previousErr)
+	}
+	link := o.link
+	if link == nil {
+		link = atomicReleaseLink
+	}
 	if old != "releases/"+version {
-		if err := atomicReleaseLink(old, l.previous); err != nil {
+		if err := link(old, l.previous); err != nil {
 			return "", fmt.Errorf("Failed to retain previous Selfishell release: %w", err)
 		}
 	}
-	if err := atomicReleaseLink("releases/"+version, l.current); err != nil {
+	if err := link("releases/"+version, l.current); err != nil {
+		if old != "releases/"+version {
+			var restoreErr error
+			if got, readErr := os.Readlink(l.previous); readErr != nil || got != old {
+				restoreErr = fmt.Errorf("previous release link changed during activation")
+			} else if previousErr == nil {
+				restoreErr = atomicReleaseLink(previous, l.previous)
+			} else {
+				restoreErr = os.Remove(l.previous)
+			}
+			if restoreErr != nil && o.Process.Err != nil {
+				fmt.Fprintln(o.Process.Err, "selfishell: warning: Failed to restore the previous release link: "+restoreErr.Error())
+			}
+		}
 		return "", fmt.Errorf("Failed to activate Selfishell %s: %w", version, err)
 	}
 	pruneInactiveReleases(l)

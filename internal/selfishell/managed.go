@@ -1,13 +1,12 @@
 package selfishell
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"strings"
+	"time"
 )
 
 type managed struct {
@@ -53,12 +52,7 @@ func (m *managed) state(r Resource) (State, bool, error) {
 func (m *managed) save(r Resource, s State) error { return WriteState(m.statePath(r), s) }
 func (m *managed) say(format string, args ...any) { fmt.Fprintf(m.c.Out, format+"\n", args...) }
 func (m *managed) backup(path string) (string, error) {
-	var out bytes.Buffer
-	code, err := (Process{Out: &out, Err: m.c.Err}).Run(context.Background(), "date", "+%Y%m%d%H%M%S")
-	if err != nil || code != 0 {
-		return "", fmt.Errorf("could not generate backup timestamp")
-	}
-	base := path + ".backup." + strings.TrimSpace(out.String())
+	base := path + ".backup." + time.Now().Format("20060102150405")
 	candidate := base
 	for n := 1; ; n++ {
 		_, present, e := exists(candidate)
@@ -433,7 +427,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		}
 		m.say("Backed up modified managed block: %s -> %s", r.Target, conflict)
 	}
-	if has && view.status != "intact" && (s.Status != "pending" || view.status != "absent") {
+	if has && view.status != "intact" && view.status != "absent" {
 		return blockConflictError(r)
 	}
 	if preflight {

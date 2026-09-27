@@ -77,6 +77,8 @@ Preserve these lifecycle invariants:
 - write state through a temporary file and atomic rename;
 - retain the original backup path across idempotent reinstalls;
 - checksum managed regular files;
+- repair wholly absent blocks without replacing surrounding user content;
+  retain malformed-marker and changed-path-type protections;
 - treat a replaced link, changed file, or changed path type as user data;
 - preflight the full uninstall resource set before removing any resource;
 - run required user-owned loader and block-target preflights before package or
@@ -145,6 +147,10 @@ Automated dependency discovery may open a review PR but must never auto-merge
 or auto-publish a release. A maintainer reviews and merges
 `automation/dependency-updates`, then runs the normal manual release process
 described below.
+Go toolchain patch discovery updates `go.mod` and root `mise.toml` together
+within the current release line; selecting a new line remains a maintainer
+choice. Run vulnerability scans in the dedicated scheduled
+workflow, keeping network-dependent scanning outside the ordinary local gate.
 
 ## Release Rules
 

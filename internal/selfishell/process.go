@@ -16,10 +16,11 @@ import (
 // Process passes files through unchanged, so an interactive child keeps its
 // terminal. It never constructs shell source from arguments.
 type Process struct {
-	In       io.Reader
-	Out, Err io.Writer
-	Dir      string
-	Env      []string
+	In            io.Reader
+	Out, Err      io.Writer
+	Dir           string
+	Env           []string
+	repoScopedGit bool
 }
 
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
@@ -34,6 +35,7 @@ func (p Process) runCLI(ctx context.Context, name string, args ...string) (int, 
 }
 
 func (p Process) run(ctx context.Context, forwardCancel bool, name string, args ...string) (int, error) {
+	inheritedEnv := p.Env == nil
 	// Propagate transfer limits to tools that start Git themselves,
 	// including Neovim plugin sync.
 	env := p.environment()
@@ -56,15 +58,34 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 			set["GIT_HTTP_LOW_SPEED_TIME"] = duration
 		}
 		if len(set) != 0 {
-			if p.Env == nil && p.Dir != "" {
-				if pwd, err := filepath.Abs(p.Dir); err == nil {
-					set["PWD"] = pwd // exec.Command updates PWD only while Env is nil.
-				}
-			}
 			p = withEnvironment(p, set)
 		}
 	}
-	if p.Env != nil && !strings.ContainsRune(name, os.PathSeparator) {
+	if inheritedEnv && p.Dir != "" {
+		if pwd, err := filepath.Abs(p.Dir); err == nil {
+			p = withEnvironment(p, map[string]string{"PWD": pwd}) // exec.Command updates PWD only while Env is nil.
+		}
+	}
+	{
+		// Installer children can start Git indirectly. Repository selection
+		// belongs to the operation, never to the invoking shell's workspace.
+		blocked := map[string]bool{
+			"GIT_DIR": true, "GIT_WORK_TREE": true, "GIT_INDEX_FILE": true,
+			"GIT_COMMON_DIR": true, "GIT_OBJECT_DIRECTORY": true,
+			"GIT_ALTERNATE_OBJECT_DIRECTORIES": true, "GIT_NAMESPACE": true,
+			"GIT_PREFIX": true, "GIT_CEILING_DIRECTORIES": true,
+			"GIT_GRAFT_FILE": true, "GIT_REPLACE_REF_BASE": true,
+		}
+		clean := make([]string, 0, len(p.environment()))
+		for _, item := range p.environment() {
+			key, _, _ := strings.Cut(item, "=")
+			if !blocked[key] || (p.repoScopedGit && (key == "GIT_DIR" || key == "GIT_WORK_TREE")) {
+				clean = append(clean, item)
+			}
+		}
+		p.Env = clean
+	}
+	if !strings.ContainsRune(name, os.PathSeparator) {
 		path, err := p.lookPath(name)
 		if err != nil {
 			return 127, err
@@ -117,7 +138,7 @@ func (p Process) lookPath(name string) (string, error) {
 		}
 	}
 	for _, dir := range filepath.SplitList(path) {
-		if dir == "" {
+		if !filepath.IsAbs(dir) {
 			continue
 		}
 		candidate := filepath.Join(dir, name)

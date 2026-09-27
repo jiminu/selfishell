@@ -37,7 +37,7 @@ func TestConfig(t *testing.T) {
 		// WSL shares Ubuntu's configuration implementation. Keep its complete
 		// install/restore paths; exercise common failures on macOS and Ubuntu.
 		if platform != "ubuntu-wsl" {
-			scenarios = append(scenarios, "changed-file", "changed-link", "changed-block", "pending", "late-preflight", "malformed-package")
+			scenarios = append(scenarios, "changed-file", "changed-link", "changed-block", "absent-block", "pending", "late-preflight", "malformed-package")
 		}
 		for _, scenario := range scenarios {
 			t.Run(platform+"/"+scenario, func(t *testing.T) {
@@ -160,8 +160,15 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		mustFS(t, os.Symlink(filepath.Join(config, "starship.toml"), filepath.Join(config, "nvim")))
 		changed = true
 	case "changed-block":
-		mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("user changed shell config\n"), 0600))
+		mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("# >>> Selfishell initialize >>>\nuser changed shell config\n"), 0600))
 		changed = true
+	case "absent-block":
+		zshrc := filepath.Join(home, ".zshrc")
+		mustFS(t, os.WriteFile(zshrc, []byte("export PERSONAL=kept\r\n"), 0600))
+		run("restore missing block", 0, "install", "--skip-packages", "--yes")
+		if data, err := os.ReadFile(zshrc); err != nil || !bytes.Contains(data, []byte("# >>> Selfishell initialize >>>")) || !bytes.Contains(data, []byte("export PERSONAL=kept\r\n")) {
+			t.Fatalf("missing block was not restored around personal content: %v %q", err, data)
+		}
 	case "pending":
 		p := filepath.Join(state, "selfishell/resources/user-nvim.state")
 		raw, err := os.ReadFile(p)
@@ -284,7 +291,7 @@ func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 	fields[2] = []byte("pending")
 	mustFS(t, os.WriteFile(state, bytes.Join(fields, []byte("\n")), 0600))
 	vimrc := filepath.Join(home, ".vimrc")
-	mustFS(t, os.WriteFile(vimrc, []byte("user vimrc\n"), 0600))
+	mustFS(t, os.WriteFile(vimrc, []byte("\" >>> Selfishell vimrc >>>\nuser vimrc\n"), 0600))
 	before := mustSnapshot(t, home)
 	got, err := captureCommand(home, cli, []string{"uninstall", "--yes"}, env)
 	if err != nil {
