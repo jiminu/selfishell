@@ -441,9 +441,6 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 	if hex.EncodeToString(hash.Sum(nil)) != expected {
 		return "", fmt.Errorf("Checksum mismatch for %s.", name)
 	}
-	if _, err := scanReleaseArchive(archive); err != nil {
-		return "", err
-	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -476,6 +473,9 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		} else if err != nil {
 			return "", err
 		}
+	} else if _, err := scanReleaseArchive(archive); err != nil {
+		// Reusing a release skips extraction, but must still validate the download.
+		return "", err
 	}
 	if _, err := validReleaseDirectory(l.releases, version); err != nil {
 		return "", fmt.Errorf("Existing release is incomplete: %s: %w", target, err)
