@@ -100,6 +100,13 @@ func runInventory(dir string, env []string, name string, args ...string) (string
 	defer cancel()
 	return runInventoryContext(ctx, dir, env, name, args...)
 }
+
+func inventoryGitHead(dir string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return (&PackageOperation{}).gitHead(ctx, dir)
+}
+
 func runInventoryContext(ctx context.Context, dir string, env []string, name string, args ...string) (string, string, bool) {
 	var out, stderr bytes.Buffer
 	p := Process{Out: &out, Err: &stderr, Dir: dir, Env: env}
@@ -285,8 +292,8 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool)
 			return false
 		}
 		if dep.Checksum != "-" {
-			out, _, ok := runInventory("", nil, "git", "-C", target, "rev-parse", "HEAD")
-			if !ok || strings.TrimSpace(out) != dep.Checksum {
+			head, err := inventoryGitHead(target)
+			if err != nil || head != dep.Checksum {
 				return false
 			}
 		}
