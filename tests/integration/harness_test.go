@@ -202,8 +202,17 @@ var testCLIOnce sync.Once
 var testCLIPath string
 var testCLIErr error
 var testCLIDir string
+var testGoCache string
 
 func TestMain(m *testing.M) {
+	// Share compiled packages across fixture builds, while keeping all cache
+	// writes outside the caller's HOME and removing them after this test process.
+	var err error
+	testGoCache, err = os.MkdirTemp("", "selfishell-test-go-cache-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	code := m.Run()
 	if testCLIDir != "" {
 		os.RemoveAll(testCLIDir)
@@ -218,6 +227,7 @@ func TestMain(m *testing.M) {
 		}
 		return true
 	})
+	os.RemoveAll(testGoCache)
 	os.Exit(code)
 }
 
@@ -252,7 +262,7 @@ func testCLI(t *testing.T) (string, error) {
 		defer cancel()
 		cmd := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-o", testCLIPath, "./cmd/selfishell")
 		cmd.Dir = repoRoot()
-		cmd.Env = withEnv(baseEnv(dir, filepath.Join(dir, "tmp")), "GOTOOLCHAIN=local", "GOCACHE="+filepath.Join(dir, "go-cache"), "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
+		cmd.Env = withEnv(baseEnv(dir, filepath.Join(dir, "tmp")), "GOTOOLCHAIN=local", "GOCACHE="+testGoCache, "GOOS="+runtime.GOOS, "GOARCH="+runtime.GOARCH)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.WaitDelay = 500 * time.Millisecond
 		cmd.Cancel = func() error {

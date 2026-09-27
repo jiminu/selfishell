@@ -52,7 +52,7 @@ func privateNativeHome(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	for key, path := range map[string]string{
-		"HOME": home, "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data"), "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CACHE_HOME": filepath.Join(home, "cache"), "MISE_DATA_DIR": filepath.Join(home, "mise-data"), "MISE_CACHE_DIR": filepath.Join(home, "mise-cache"), "MISE_CONFIG_DIR": filepath.Join(home, "mise-config"), "MISE_STATE_DIR": filepath.Join(home, "mise-state"), "GOCACHE": filepath.Join(home, "go-cache"),
+		"HOME": home, "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data"), "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CACHE_HOME": filepath.Join(home, "cache"), "MISE_DATA_DIR": filepath.Join(home, "mise-data"), "MISE_CACHE_DIR": filepath.Join(home, "mise-cache"), "MISE_CONFIG_DIR": filepath.Join(home, "mise-config"), "MISE_STATE_DIR": filepath.Join(home, "mise-state"), "GOCACHE": testGoCache,
 	} {
 		t.Setenv(key, path)
 	}
@@ -307,6 +307,8 @@ func TestNativeReleaseArtifacts(t *testing.T) {
 func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
 	first := nativeAssetDir(t)
 	second := t.TempDir()
+	// Reproducibility must also hold after compiling with an empty cache.
+	t.Setenv("GOCACHE", t.TempDir())
 	t.Setenv("GOOS", "plan9")
 	t.Setenv("GOARCH", "386")
 	t.Setenv("GOFLAGS", "-tags=unapproved")
@@ -332,7 +334,7 @@ func TestProductionNativeBuilderContract(t *testing.T) {
 			time.Sleep(time.Second)
 		}
 		cmd := exec.Command("bash", filepath.Join(repoRoot(), "scripts/build-release.sh"), "--version", "0.2.2", "--output", out)
-		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":/usr/bin:/bin:/usr/sbin:/sbin", "GOTOOLCHAIN=local", "GOCACHE="+filepath.Join(home, "go-cache"))
+		cmd.Env = append(baseEnv(home, t.TempDir()), "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":/usr/bin:/bin:/usr/sbin:/sbin", "GOTOOLCHAIN=local", "GOCACHE="+testGoCache)
 		if b, e := cmd.CombinedOutput(); e != nil {
 			t.Fatalf("production builder: %v %s", e, b)
 		}
@@ -388,7 +390,7 @@ func TestNativeBuilderCLIOptions(t *testing.T) {
 	mustFS(t, os.Symlink(filepath.Join(runtime.GOROOT(), "bin", "go"), filepath.Join(toolBin, "go")))
 	toolPath := toolBin + string(os.PathListSeparator) + "/usr/bin:/bin"
 	toolEnv := []string{
-		"PATH=" + toolPath, "GOTOOLCHAIN=local", "GOCACHE=" + filepath.Join(home, "go-cache"),
+		"PATH=" + toolPath, "GOTOOLCHAIN=local", "GOCACHE=" + testGoCache,
 		"MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "MISE_CACHE_DIR=" + filepath.Join(home, "mise-cache"),
 		"MISE_CONFIG_DIR=" + filepath.Join(home, "mise-config"), "MISE_STATE_DIR=" + filepath.Join(home, "mise-state"),
 	}
