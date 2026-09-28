@@ -281,6 +281,8 @@ func TestDoctorPlugins(t *testing.T) {
 			if name != "missing" {
 				mustFS(t, os.MkdirAll(plugin, 0700))
 				runGit(plugin, "init", "--quiet")
+				// Fixture commits must not leave background maintenance racing HOME snapshots.
+				runGit(plugin, "config", "maintenance.auto", "false")
 				runGit(plugin, "config", "user.email", "test@example.com")
 				runGit(plugin, "config", "user.name", "test")
 				mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("first\n"), 0600))
