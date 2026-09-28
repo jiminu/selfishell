@@ -135,12 +135,11 @@ func (o *PackageOperation) runNvim(ctx context.Context, root, nvim, mise string,
 	var log bytes.Buffer
 	p.Out, p.Err = &log, &log
 	code, err := p.Run(ctx, name, args...)
-	o.Process.progress.rememberOutput(log.String())
 	if err := ctx.Err(); err != nil {
 		return log.String(), err
 	}
 	if err != nil || code != 0 {
-		if log.Len() != 0 && (o.Process.progress == nil || !o.Process.progress.logFailed) {
+		if log.Len() != 0 {
 			o.Process.progress.pause()
 			fmt.Fprint(o.Process.Err, log.String())
 		}
@@ -343,7 +342,7 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			return fmt.Errorf("Could not install Neovim plugins: %w", err)
 		}
 		verificationError := func(err error) error {
-			if syncLog != "" && (o.Process.progress == nil || !o.Process.progress.logFailed) {
+			if syncLog != "" {
 				o.Process.progress.pause()
 				fmt.Fprint(o.Process.Err, syncLog)
 			}

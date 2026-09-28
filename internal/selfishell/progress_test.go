@@ -14,9 +14,9 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(t, home)
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: filepath.Join(home, "state")})
+	state := filepath.Join(home, "state")
+	ui := newProgress(&out, &stderr, Paths{State: state})
 	ui.compact = true
-	defer ui.finish()
 	p := Process{Out: &out, Err: &stderr, progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'; printf 'tool detail\\n' >&2")
@@ -24,15 +24,8 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	if err != nil || code != 0 || strings.Contains(out.String()+stderr.String(), "tool chatter") {
 		t.Fatalf("capture: %d %v %q %q", code, err, out.String(), stderr.String())
 	}
-	if ui.log == nil {
-		t.Fatal("no log")
-	}
-	data, err := os.ReadFile(ui.log.Name())
-	if err != nil || !strings.Contains(string(data), "successful tool chatter") || !strings.Contains(string(data), "tool detail") {
-		t.Fatalf("log: %q %v", data, err)
-	}
-	if info, err := ui.log.Stat(); err != nil || info.Mode().Perm() != 0600 {
-		t.Fatalf("log must be private: %v %v", info, err)
+	if _, err := os.Stat(filepath.Join(state, "logs")); !os.IsNotExist(err) {
+		t.Fatalf("successful command created logs: %v", err)
 	}
 	var query bytes.Buffer
 	q := p
@@ -52,6 +45,13 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
 	if code != 7 || err != nil || !strings.Contains(stderr.String(), "failure detail") || strings.Contains(stderr.String(), "successful tool chatter") {
 		t.Fatalf("failure output: %d %v %q", code, err, stderr.String())
+	}
+	ui.finish()
+	if strings.Contains(out.String(), "Log:") {
+		t.Fatalf("summary advertised a log: %q", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(state, "logs")); !os.IsNotExist(err) {
+		t.Fatalf("failed command created logs: %v", err)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestProgressPlainOutputDoesNotCreateLogs(t *testing.T) {
 	}
 }
 
-func TestProgressLogFailureFallsBackToVisibleToolOutput(t *testing.T) {
+func TestProgressIgnoresOccupiedLogPath(t *testing.T) {
 	isolateHome(t, t.TempDir())
 	var out, stderr bytes.Buffer
 	state := t.TempDir()
@@ -102,13 +102,13 @@ func TestProgressLogFailureFallsBackToVisibleToolOutput(t *testing.T) {
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
-	code, err := (Process{Out: &out, Err: &stderr, progress: ui}).Run(context.Background(), "/bin/sh", "-c", "printf visible")
-	if code != 0 || err != nil || !strings.Contains(out.String(), "visible") || !strings.Contains(stderr.String(), "Could not open operation log") || ui.stop != nil {
-		t.Fatalf("hidden output without a log: %d %v %q %q", code, err, out.String(), stderr.String())
+	code, err := (Process{Out: &out, Err: &stderr, progress: ui}).Run(context.Background(), "/bin/sh", "-c", "printf successful")
+	if code != 0 || err != nil || strings.Contains(out.String()+stderr.String(), "successful") {
+		t.Fatalf("successful output should stay hidden: %d %v %q %q", code, err, out.String(), stderr.String())
 	}
-	ui.stage("Next tool")
-	if ui.stop != nil {
-		t.Fatal("spinner restarted over fallback tool output")
+	code, err = (Process{Out: &out, Err: &stderr, progress: ui}).Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
+	if code != 7 || err != nil || !strings.Contains(stderr.String(), "failure detail") || strings.Contains(stderr.String(), "Could not open operation log") {
+		t.Fatalf("failure output: %d %v %q", code, err, stderr.String())
 	}
 	data, _ := os.ReadFile(filepath.Join(state, "logs"))
 	if string(data) != "user data" {
@@ -118,6 +118,18 @@ func TestProgressLogFailureFallsBackToVisibleToolOutput(t *testing.T) {
 	_, err = op.runNvim(context.Background(), "", "/bin/sh", "", "-c", "printf 'nvim failed\\n' >&2; exit 1")
 	if err == nil || strings.Count(stderr.String(), "nvim failed") != 1 {
 		t.Fatalf("Neovim error must appear once: %v %q", err, stderr.String())
+	}
+}
+
+func TestProgressFailureOutputIsBounded(t *testing.T) {
+	var out, stderr bytes.Buffer
+	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
+	ui.compact = true
+	defer ui.finish()
+	ui.stage("Synchronizing tools")
+	code, err := (Process{Out: &out, Err: &stderr, progress: ui}).Run(context.Background(), "/bin/sh", "-c", "head -c 16384 /dev/zero | tr '\\000' x; printf 'failure detail\\n' >&2; exit 7")
+	if code != 7 || err != nil || !strings.HasSuffix(stderr.String(), "failure detail\n") || len(stderr.String()) > 8192 {
+		t.Fatalf("unbounded failure output: %d %v %d %q", code, err, stderr.Len(), stderr.String())
 	}
 }
 

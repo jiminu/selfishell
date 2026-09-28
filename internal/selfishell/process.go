@@ -25,6 +25,23 @@ type Process struct {
 	foreground    bool // Commands which can prompt retain their terminal streams.
 }
 
+// outputTail bounds hidden tool output while retaining failure diagnostics.
+type outputTail struct{ data []byte }
+
+func (t *outputTail) Write(p []byte) (int, error) {
+	n := len(p)
+	if n >= 8192 {
+		t.data = append(t.data[:0], p[n-8192:]...)
+		return n, nil
+	}
+	if excess := len(t.data) + n - 8192; excess > 0 {
+		copy(t.data, t.data[excess:])
+		t.data = t.data[:len(t.data)-excess]
+	}
+	t.data = append(t.data, p...)
+	return n, nil
+}
+
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
 // It does not create a new process group, which would break foreground TTY reads.
 func (p Process) Run(ctx context.Context, name string, args ...string) (int, error) {
@@ -100,19 +117,16 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 		cmd.Env = p.Env
 	}
 	cmd.WaitDelay = time.Second
-	var captured *os.File
-	var logOffset int64
+	var captured *outputTail
 	if p.progress != nil && p.progress.compact {
 		if p.foreground || forwardCancel {
 			p.progress.pause()
 		} else if p.Out == p.progress.out && p.Err == p.progress.stderr {
-			if p.progress.stop == nil && p.progress.label != "" && !p.progress.logFailed {
+			if p.progress.stop == nil && p.progress.label != "" {
 				p.progress.stage(p.progress.label)
 			}
-			captured, logOffset = p.progress.capture()
-			if captured != nil {
-				cmd.Stdout, cmd.Stderr = captured, captured
-			}
+			captured = &outputTail{}
+			cmd.Stdout, cmd.Stderr = captured, captured
 		}
 	}
 	if forwardCancel {
@@ -122,7 +136,8 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	}
 	err := cmd.Run()
 	if err != nil && captured != nil {
-		p.progress.failedOutput(logOffset)
+		p.progress.pause()
+		_, _ = p.progress.stderr.Write(captured.data)
 	}
 	if err == nil {
 		return 0, nil

@@ -38,13 +38,13 @@ In an interactive terminal, install and update show the current phase on one
 line, then list completed tool and configuration changes together. Success labels
 are green, warnings and skipped actions yellow, and dry-run previews cyan.
 `NO_COLOR=1` disables colors. Redirected output, CI, and `TERM=dumb` use ordinary
-lines without animation; dry runs do not create logs or state.
+lines without animation; dry runs do not create state.
 
-Detailed output from non-interactive tool commands is saved in a private,
-uniquely named file under `${XDG_STATE_HOME:-~/.local/state}/selfishell/logs/`.
-The final output includes the log path when a log was created. Failures show
-the failing command's last output immediately, followed by any changes already
-completed. These logs can be removed when no longer needed.
+Detailed output from non-interactive tool commands is kept in memory only while
+each command runs. Successful output is discarded. Failures show recent command
+output immediately, followed by any changes already completed. Ordinary tool
+commands show at most the last 8 KiB; Neovim may show its full failure output.
+Install and update do not create operation log files.
 Apt, Homebrew bootstrap/cask installation, and login-shell changes keep their
 normal terminal output so password prompts and installer questions stay visible.
 
