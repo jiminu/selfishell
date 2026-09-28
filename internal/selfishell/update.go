@@ -172,15 +172,24 @@ func (c CLI) update(args []string) int {
 			if code := c.confirmRelease("Update Selfishell CLI to "+version+"?", o.yes, false); code != 0 {
 				return code
 			}
+			paths, err := UserPaths()
+			if err != nil {
+				c.error(err.Error())
+				return 1
+			}
+			c.progress = newProgress(c.Out, c.Err, paths)
+			defer c.progress.finish()
+			c.progress.stage("Downloading and verifying Selfishell " + version)
 			// Keep default signal handling while confirmation reads from the terminal.
 			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).install(ctx, version)
+			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}).install(ctx, version)
 			if err != nil {
 				c.error(err.Error())
 				return 1
 			}
 			if o.mode == "all" {
+				c.progress.pause()
 				argv := []string{"update", "--continue-after-cli-update"}
 				if o.yes {
 					argv = append(argv, "--yes")
@@ -189,14 +198,16 @@ func (c CLI) update(args []string) int {
 					argv = append(argv, "--skip-packages")
 				}
 				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err}).runCLI(ctx, target+"/bin/selfishell", argv...)
+				if code != 0 || err != nil {
+					c.report("Tools", "Activated Selfishell CLI: %s -> %s", active, version)
+				}
 				if err != nil {
 					c.error(err.Error())
 					return code
 				}
 				return code
 			}
-			fmt.Fprintln(c.Out)
-			fmt.Fprintf(c.Out, "Selfishell updated: %s -> %s\n", active, version)
+			c.complete(fmt.Sprintf("Selfishell updated: %s -> %s", active, version))
 			return 0
 		}
 	}
@@ -205,20 +216,22 @@ func (c CLI) update(args []string) int {
 			return code
 		}
 	}
-	if o.continuation {
-		l, err := installedReleaseLayout(c.Root)
-		if err == nil {
-			previous, _ := os.Readlink(l.previous)
-			from, to := filepath.Base(previous), filepath.Base(c.Root)
-			fmt.Fprintln(c.Out)
-			if previous == "" || from == to {
-				fmt.Fprintf(c.Out, "Selfishell updated to %s.\n", to)
-			} else {
-				fmt.Fprintf(c.Out, "Selfishell updated: %s -> %s\n", from, to)
-			}
-		}
-	}
+
 	return 0
+}
+
+func (c CLI) completeUpdate() {
+	layout, err := installedReleaseLayout(c.Root)
+	if err != nil {
+		return
+	}
+	previous, _ := os.Readlink(layout.previous)
+	from, to := filepath.Base(previous), filepath.Base(c.Root)
+	if previous == "" || from == to {
+		c.complete("Selfishell updated to " + to + ".")
+	} else {
+		c.complete("Selfishell updated: " + from + " -> " + to)
+	}
 }
 
 func (c CLI) updateTools(o updateOptions) int {
@@ -234,6 +247,9 @@ func (c CLI) updateTools(o updateOptions) int {
 			return 1
 		}
 		fmt.Fprintln(c.Out, "Selfishell configuration is not installed; skipping tools and configuration.")
+		if o.continuation {
+			c.completeUpdate()
+		}
 		return 0
 	}
 	if err != nil {
@@ -287,7 +303,12 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.error(err.Error())
 		return 1
 	}
-	operation := &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err}}
+	if !o.dry {
+		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		prepared.m.c.progress = c.progress
+		defer c.progress.finish()
+	}
+	operation := &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
 	if !o.skip {
 		phaseCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, o.dry)
@@ -307,7 +328,7 @@ func (c CLI) updateTools(o updateOptions) int {
 		operation.reportSkippedOptional()
 	}
 	if o.skip {
-		fmt.Fprintln(c.Out, "Skipping package and tool installation.")
+		c.report("Notes", "Skipping package and tool installation.")
 	}
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
@@ -331,11 +352,13 @@ func (c CLI) updateTools(o updateOptions) int {
 			return 1
 		}
 		toolsCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
+		c.progress.stage("Synchronizing Neovim language servers")
 		if err := operation.UpdateDefaultLSP(toolsCtx, c.Root, prepared.paths, o.dry); err != nil {
 			stop()
 			c.error(err.Error())
 			return 1
 		}
+		c.progress.stage("Cleaning up unused tool versions")
 		pruneErr := operation.PruneMise(toolsCtx, c.Root, prepared.paths, packages, platform, o.dry)
 		canceled := toolsCtx.Err()
 		stop()
@@ -344,7 +367,7 @@ func (c CLI) updateTools(o updateOptions) int {
 				c.error(canceled.Error())
 				return 1
 			}
-			fmt.Fprintln(c.Err, "selfishell: warning: Could not prune unused mise versions; tools and configuration were synchronized.")
+			operation.warn("Could not prune unused mise versions; tools and configuration were synchronized.")
 		}
 		if canceled != nil {
 			c.error(canceled.Error())
@@ -358,7 +381,12 @@ func (c CLI) updateTools(o updateOptions) int {
 	if o.dry {
 		fmt.Fprintln(c.Out, "Tool/configuration dry run complete.")
 	} else if !o.continuation {
-		fmt.Fprintln(c.Out, "Selfishell tools and configuration synchronized.")
+		c.complete("Selfishell tools and configuration synchronized.")
+	} else {
+		c.completeUpdate()
+	}
+	if !o.dry && prepared.m.unchanged > 0 && c.progress.compact {
+		c.report("Notes", "%d configuration items unchanged.", prepared.m.unchanged)
 	}
 	return 0
 }

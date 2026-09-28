@@ -96,9 +96,14 @@ func (c CLI) install(args []string) int {
 		c.error(err.Error())
 		return 1
 	}
+	if !dry {
+		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		prepared.m.c.progress = c.progress
+		defer c.progress.finish()
+	}
 	var operation *PackageOperation
 	if !skip {
-		operation = &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err}}
+		operation = &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
 		err = func() error {
 			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -231,8 +236,30 @@ func (c CLI) prepareConfig(platform string, dry, yes, update bool) (preparedConf
 
 // applyConfig also serves the later tools-only update without install-only finalization.
 func (c CLI) applyManagedResources(p *preparedConfig) error {
+	parent := c.invocationContext()
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	c.Context = ctx
+	defer func() { stop() }()
+	defer c.progress.pause()
+	if c.progress != nil {
+		// Conflict prompts keep normal terminal interrupt handling. Resume the
+		// configuration context after input, including a changed target after preflight.
+		c.progress.suspendSignals = func() func() {
+			stop()
+			return func() {
+				ctx, stop = signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+				c.Context = ctx
+				c.progress.stage("Applying configuration")
+			}
+		}
+		defer func() { c.progress.suspendSignals = nil }()
+	}
+	c.progress.stage("Applying configuration")
 	m, paths, resources := &p.m, p.paths, p.resources
 	for _, r := range resources {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if r.Name == "zsh-interactive" && !m.dry {
 			same := false
 			source, e := os.ReadFile(r.Source)
@@ -253,12 +280,12 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 	if !m.dry {
 		c.trustMise()
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *PackageOperation) error {
 	if skip {
-		fmt.Fprintln(c.Out, "Skipping package and tool installation.")
+		c.report("Notes", "Skipping package and tool installation.")
 	}
 	if err := c.applyManagedResources(&p); err != nil {
 		return err
@@ -289,7 +316,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		if err := writeOnce(miseGlobal, nil); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.Out, "Created user mise config: %s\n", miseGlobal)
+		c.report("Configuration", "Created user mise config: %s", miseGlobal)
 	}
 	if !skip {
 		if err := c.installNeovim(operation, paths, dry); err != nil {
@@ -308,13 +335,14 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	c.defaultShell(dry, yes)
 	if m.unchanged > 0 {
-		fmt.Fprintf(c.Out, "%d items unchanged.\n", m.unchanged)
+		c.report("Notes", "%d items unchanged.", m.unchanged)
 	}
-	fmt.Fprintln(c.Out, "Selfishell configuration installed.")
+	c.complete("Selfishell configuration installed.")
 	return nil
 }
 
 func (c CLI) installNeovim(operation *PackageOperation, paths Paths, dry bool) error {
+	c.progress.stage("Synchronizing Neovim plugins")
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return operation.InstallNeovimPlugins(ctx, c.Root, paths, envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
@@ -322,6 +350,8 @@ func (c CLI) installNeovim(operation *PackageOperation, paths Paths, dry bool) e
 func writeOnce(path string, data []byte) error { return createRawOnce(path, data) }
 func (c CLI) interactive() bool                { return IsTerminal(c.In) || os.Getenv("SELFISHELL_TEST_TTY") != "" }
 func (c CLI) readAnswer() (string, error) {
+	resume := c.progress.prompt()
+	defer resume()
 	if c.In == nil {
 		return "", io.EOF
 	}

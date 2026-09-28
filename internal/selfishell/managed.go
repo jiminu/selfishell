@@ -50,7 +50,7 @@ func (m *managed) state(r Resource) (State, bool, error) {
 	return s, e == nil, e
 }
 func (m *managed) save(r Resource, s State) error { return WriteState(m.statePath(r), s) }
-func (m *managed) say(format string, args ...any) { fmt.Fprintf(m.c.Out, format+"\n", args...) }
+func (m *managed) say(format string, args ...any) { m.c.report("Configuration", format, args...) }
 func (m *managed) backup(path string) (string, error) {
 	base := path + ".backup." + time.Now().Format("20060102150405")
 	candidate := base
@@ -140,6 +140,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 				if m.yes || !m.c.interactive() {
 					return fmt.Errorf("Managed file was modified; preserving it: %s", r.Target)
 				}
+				m.c.progress.pause()
 				fmt.Fprintf(m.c.Out, "Managed file was modified: %s. Overwrite with default config? [y/N] ", r.Target)
 				answer, _ := m.c.readAnswer()
 				if affirmative(answer) {
@@ -402,6 +403,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 			if m.yes || !m.c.interactive() {
 				return fmt.Errorf("Managed block was modified; preserving it: %s", r.Target)
 			}
+			m.c.progress.pause()
 			fmt.Fprintf(m.c.Out, "Managed block was modified: %s. Overwrite the Selfishell block? [y/N] ", r.Target)
 			answer, _ := m.c.readAnswer()
 			if affirmative(answer) {

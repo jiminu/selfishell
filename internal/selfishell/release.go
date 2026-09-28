@@ -511,6 +511,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 				restoreErr = os.Remove(l.previous)
 			}
 			if restoreErr != nil && o.Process.Err != nil {
+				o.Process.progress.pause()
 				fmt.Fprintln(o.Process.Err, "selfishell: warning: Failed to restore the previous release link: "+restoreErr.Error())
 			}
 		}

@@ -33,6 +33,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			continue
 		}
 		var err error
+		c.progress.stage("Synchronizing " + pair.manager + " packages")
 		switch pair.manager {
 		case "apt":
 			err = o.InstallApt(ctx, pair.requirement, dry, names...)

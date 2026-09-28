@@ -43,6 +43,7 @@ func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 		return nil
 	}
 	color, reset := o.color(o.Process.Out, "\x1b[36m")
+	o.Process.progress.pause()
 	fmt.Fprintf(o.Process.Out, "%sInstalling Homebrew%s\n", color, reset)
 	var script bytes.Buffer
 	p := o.Process
@@ -54,8 +55,10 @@ func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 	if code != 0 {
 		return fmt.Errorf("Homebrew installer download exited with status %d", code)
 	}
-	if err := o.run(ctx, "/bin/bash", "-c", script.String()); err != nil {
-		return err
+	p = o.Process
+	p.foreground = true
+	if code, err := p.Run(ctx, "/bin/bash", "-c", script.String()); err != nil || code != 0 {
+		return fmt.Errorf("Homebrew installer failed (exit %d): %v", code, err)
 	}
 	if o.brewPath() == "" {
 		o.activateBrew()
@@ -157,6 +160,7 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 		p.Env = os.Environ()
 	}
 	p.Env = append(append([]string{}, p.Env...), "HOMEBREW_NO_ASK=1")
+	p.foreground = manager == "cask"
 	code, err := p.Run(ctx, "brew", args...)
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -170,6 +174,9 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 	}
 	for _, name := range missing {
 		installed[name] = true
+	}
+	if o.Process.progress != nil {
+		o.report("Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
 	}
 	return nil
 }

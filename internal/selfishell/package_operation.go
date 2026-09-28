@@ -30,6 +30,10 @@ type PackageOperation struct {
 }
 
 func (o *PackageOperation) warn(message string) {
+	o.Process.progress.pause()
+	if o.Process.progress != nil && o.Process.progress.compact {
+		o.Process.progress.events = append(o.Process.progress.events, progressEvent{"Notes", "Warning: " + message})
+	}
 	color, reset := o.color(o.Process.Err, "\x1b[33m")
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
 }
@@ -39,16 +43,9 @@ func (o *PackageOperation) reportSkippedOptional() {
 	}
 }
 func (o *PackageOperation) color(stream io.Writer, code string) (string, string) {
-	noColor := os.Getenv("NO_COLOR")
-	if o.Process.Env != nil {
-		noColor = ""
-		for _, entry := range o.Process.Env {
-			if strings.HasPrefix(entry, "NO_COLOR=") {
-				noColor = strings.TrimPrefix(entry, "NO_COLOR=")
-			}
-		}
-	}
-	if noColor != "" || !IsTerminal(stream) {
+	env := o.Process.environment()
+	ci := envValue(env, "CI")
+	if envValue(env, "NO_COLOR") != "" || envValue(env, "TERM") == "dumb" || (ci != "" && ci != "false") || !IsTerminal(stream) {
 		return "", ""
 	}
 	return code, "\x1b[0m"
@@ -128,10 +125,20 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 		}
 	}
 	apt := func(args ...string) error {
+		p := o.Process
+		p.foreground = true
+		name := "apt-get"
 		if privileged {
-			return o.run(ctx, "sudo", append([]string{"apt-get"}, args...)...)
+			name, args = "sudo", append([]string{"apt-get"}, args...)
 		}
-		return o.run(ctx, "apt-get", args...)
+		code, err := p.Run(ctx, name, args...)
+		if err != nil {
+			return err
+		}
+		if code != 0 {
+			return fmt.Errorf("%s exited with status %d", name, code)
+		}
+		return nil
 	}
 	if !o.aptUpdated {
 		if err := apt("update"); err != nil {
@@ -170,6 +177,9 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 			return ctx.Err()
 		}
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s apt packages: %s", requirement, strings.Join(available, " ")), available)
+	}
+	if o.Process.progress != nil {
+		o.report("Installed apt packages: %s", strings.Join(available, " "))
 	}
 	return nil
 }
