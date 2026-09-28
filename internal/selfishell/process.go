@@ -21,6 +21,8 @@ type Process struct {
 	Dir           string
 	Env           []string
 	repoScopedGit bool
+	progress      *operationProgress
+	foreground    bool // Commands which can prompt retain their terminal streams.
 }
 
 // Run cancels and reaps its direct child. WaitDelay bounds inherited pipe waits.
@@ -98,12 +100,30 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 		cmd.Env = p.Env
 	}
 	cmd.WaitDelay = time.Second
+	var captured *os.File
+	var logOffset int64
+	if p.progress != nil && p.progress.compact {
+		if p.foreground || forwardCancel {
+			p.progress.pause()
+		} else if p.Out == p.progress.out && p.Err == p.progress.stderr {
+			if p.progress.stop == nil && p.progress.label != "" && !p.progress.logFailed {
+				p.progress.stage(p.progress.label)
+			}
+			captured, logOffset = p.progress.capture()
+			if captured != nil {
+				cmd.Stdout, cmd.Stderr = captured, captured
+			}
+		}
+	}
 	if forwardCancel {
 		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 		// Outlast the continuation's own one-second wait for child pipes.
 		cmd.WaitDelay = 5 * time.Second
 	}
 	err := cmd.Run()
+	if err != nil && captured != nil {
+		p.progress.failedOutput(logOffset)
+	}
 	if err == nil {
 		return 0, nil
 	}

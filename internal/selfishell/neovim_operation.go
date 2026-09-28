@@ -135,11 +135,13 @@ func (o *PackageOperation) runNvim(ctx context.Context, root, nvim, mise string,
 	var log bytes.Buffer
 	p.Out, p.Err = &log, &log
 	code, err := p.Run(ctx, name, args...)
+	o.Process.progress.rememberOutput(log.String())
 	if err := ctx.Err(); err != nil {
 		return log.String(), err
 	}
 	if err != nil || code != 0 {
-		if log.Len() != 0 {
+		if log.Len() != 0 && (o.Process.progress == nil || !o.Process.progress.logFailed) {
+			o.Process.progress.pause()
 			fmt.Fprint(o.Process.Err, log.String())
 		}
 		if err != nil {
@@ -236,7 +238,7 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 	if previously {
 		verb = "Updated"
 	}
-	fmt.Fprintf(o.Process.Out, "%s approved lazy.nvim revision: %s\n", verb, dep.Version)
+	o.report("%s approved lazy.nvim revision: %s", verb, dep.Version)
 	return nil
 }
 
@@ -253,7 +255,9 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 		return err
 	}
 	if dryRun {
-		fmt.Fprintln(o.Process.Out, "Would sync declared Neovim plugins.\nWould sync lazy.nvim bootstrap repository.\nWould update installed Tree-sitter parsers.")
+		for _, line := range []string{"Would sync declared Neovim plugins.", "Would sync lazy.nvim bootstrap repository.", "Would update installed Tree-sitter parsers."} {
+			o.report("%s", line)
+		}
 		return nil
 	}
 	if err := o.loadDependencies(manifest); err != nil {
@@ -339,7 +343,8 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			return fmt.Errorf("Could not install Neovim plugins: %w", err)
 		}
 		verificationError := func(err error) error {
-			if syncLog != "" {
+			if syncLog != "" && (o.Process.progress == nil || !o.Process.progress.logFailed) {
+				o.Process.progress.pause()
 				fmt.Fprint(o.Process.Err, syncLog)
 			}
 			return err
@@ -361,6 +366,9 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 				return verificationError(fmt.Errorf("Neovim plugin revision does not match after sync: %s", dep.Name))
 			}
 		}
+	}
+	if !synced && o.Process.progress != nil {
+		o.report("Synchronized declared Neovim plugins.")
 	}
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", `+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end`, "+qa"); err != nil {
 		if ctx.Err() != nil {

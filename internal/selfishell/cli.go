@@ -18,6 +18,7 @@ type CLI struct {
 	In       io.Reader
 	Out, Err io.Writer
 	Context  context.Context
+	progress *operationProgress
 }
 
 func (c CLI) invocationContext() context.Context {
@@ -34,6 +35,7 @@ func (c CLI) latestReleaseVersion() (string, error) {
 }
 
 func (c CLI) error(message string) {
+	c.progress.pause()
 	prefix := "selfishell:"
 	if os.Getenv("NO_COLOR") == "" && IsTerminal(c.Err) {
 		prefix = "\x1b[31mselfishell:\x1b[0m"

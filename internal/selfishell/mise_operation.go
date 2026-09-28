@@ -86,7 +86,7 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 		return err
 	}
 	if dryRun {
-		fmt.Fprintf(o.Process.Out, "Would sync %s mise tools: %s\n", requirement, strings.Join(names, " "))
+		o.report("Would sync %s mise tools: %s", requirement, strings.Join(names, " "))
 		return nil
 	}
 	mise, err := o.miseCommand(paths)
@@ -119,6 +119,9 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 	}
 	if err != nil || code != 0 {
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s mise tools: %s", requirement, strings.Join(names, " ")), names)
+	}
+	if o.Process.progress != nil {
+		o.report("Synchronized mise tools: %s", strings.Join(names, " "))
 	}
 	return nil
 }

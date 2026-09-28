@@ -12,6 +12,10 @@ selfishell install
 
 `selfishell install` sets up the complete development environment.
 
+Installation shows the current phase and finishes with a grouped change summary.
+See [progress output and logs](UPDATES.md#tools-and-configuration) for details,
+including plain output in CI and how to inspect tool failures.
+
 ## Reinstallation
 
 Before removing an old installation, keep a separate copy of personal

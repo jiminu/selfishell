@@ -1169,7 +1169,7 @@ func TestUpdateCancelsBlockedContinuationAndPreservesFailure(t *testing.T) {
 	cancel()
 	select {
 	case code := <-done:
-		if code != 130 || strings.Contains(out.String(), "Selfishell updated") {
+		if code != 130 || strings.Contains(out.String(), "Selfishell updated") || !strings.Contains(out.String(), "Activated Selfishell CLI: 1.0.0 -> 2.0.0") {
 			t.Fatalf("canceled child: %d %q %q", code, out.String(), stderr.String())
 		}
 	case <-time.After(3 * time.Second):

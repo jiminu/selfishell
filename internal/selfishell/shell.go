@@ -24,9 +24,10 @@ func (c CLI) trustMise() {
 			return
 		}
 	}
-	(Process{Dir: c.Root + "/config/shared"}).Run(context.Background(), binary, "trust", link)
+	(Process{Dir: c.Root + "/config/shared"}).Run(c.invocationContext(), binary, "trust", link)
 }
 func (c CLI) defaultShell(dry, yes bool) {
+	c.progress.pause()
 	if filepath.Base(os.Getenv("SHELL")) == "zsh" {
 		return
 	}
@@ -50,12 +51,12 @@ func (c CLI) defaultShell(dry, yes bool) {
 	}
 	if selected == "" {
 		if _, e := exec.LookPath("zsh"); e == nil {
-			fmt.Fprintln(c.Out, "Zsh is not listed in /etc/shells; the login shell was not changed.")
+			c.report("Notes", "Zsh is not listed in /etc/shells; the login shell was not changed.")
 		}
 		return
 	}
 	if dry {
-		fmt.Fprintf(c.Out, "Would set login shell to: %s\n", selected)
+		c.report("Configuration", "Would set login shell to: %s", selected)
 		return
 	}
 	if !yes {
@@ -71,7 +72,7 @@ func (c CLI) defaultShell(dry, yes bool) {
 	terminal := envDefault("SELFISHELL_TEST_TERMINAL", "/dev/tty")
 	tty, e := os.Open(terminal)
 	if e != nil {
-		fmt.Fprintf(c.Out, "To use Zsh as your login shell, run: chsh -s %s\n", selected)
+		c.report("Notes", "To use Zsh as your login shell, run: chsh -s %s", selected)
 		return
 	}
 	defer tty.Close()
@@ -82,8 +83,8 @@ func (c CLI) defaultShell(dry, yes bool) {
 	}
 	code, e = (Process{In: tty, Out: c.Out, Err: c.Err}).Run(context.Background(), "chsh", "-s", selected, strings.TrimSpace(userOut.String()))
 	if e == nil && code == 0 {
-		fmt.Fprintf(c.Out, "Set login shell to: %s\n", selected)
+		c.report("Configuration", "Set login shell to: %s", selected)
 	} else {
-		fmt.Fprintln(c.Out, "Could not set login shell to Zsh.")
+		c.report("Notes", "Could not set login shell to Zsh.")
 	}
 }
