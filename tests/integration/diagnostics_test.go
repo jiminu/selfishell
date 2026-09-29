@@ -594,8 +594,13 @@ func TestStatusRollbackMetadata(t *testing.T) {
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
 	before := mustSnapshot(t, home)
-	for _, tc := range []struct{ name, rollback, version, expected string }{
-		{"none", "", "", "none"}, {"valid", "releases/1.0.0", "1.0.0\n", "1.0.0"}, {"corrupt", "releases/1.0.0", "wrong\n", "invalid"}, {"missing", "releases/9.0.0", "", "invalid"},
+	// The header accepts exactly what `selfishell rollback` would restore.
+	for _, tc := range []struct {
+		name, rollback, version, expected string
+		occupied                          bool
+	}{
+		{"none", "", "", "none", false}, {"valid", "releases/1.0.0", "1.0.0\n", "1.0.0", false}, {"corrupt", "releases/1.0.0", "wrong\n", "invalid", false}, {"missing", "releases/9.0.0", "", "invalid", false},
+		{"foreign", "foreign/1.0.0", "1.0.0\n", "invalid", false}, {"occupied", "", "1.0.0\n", "invalid", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			previous := filepath.Join(share, "previous")
@@ -603,21 +608,30 @@ func TestStatusRollbackMetadata(t *testing.T) {
 			if tc.rollback != "" {
 				mustFS(t, os.Symlink(tc.rollback, previous))
 			}
+			if tc.occupied {
+				mustFS(t, os.WriteFile(previous, []byte("releases/1.0.0\n"), 0600))
+			}
 			_ = os.Remove(filepath.Join(old, "VERSION"))
 			if tc.version != "" {
 				mustFS(t, os.WriteFile(filepath.Join(old, "VERSION"), []byte(tc.version), 0600))
 			}
+			retained := mustSnapshot(t, share)
 			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			got, e := captureCommand(home, entry, []string{"status"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "CLI", got, 1)
-			if !bytes.Contains(got.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
-				t.Fatalf("CLI rollback: %q", got.Stdout)
-			}
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("CLI mutated HOME")
+			for _, command := range []string{"status", "doctor"} {
+				got, e := captureCommand(home, entry, []string{command}, env)
+				if e != nil {
+					t.Fatal(e)
+				}
+				requireStatus(t, command, got, 1)
+				if !bytes.Contains(got.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
+					t.Fatalf("%s rollback: %q", command, got.Stdout)
+				}
+				if !bytes.Equal(before, got.Home) {
+					t.Fatalf("%s mutated HOME", command)
+				}
+				if !bytes.Equal(retained, mustSnapshot(t, share)) {
+					t.Fatalf("%s changed retained releases", command)
+				}
 			}
 		})
 	}
@@ -664,30 +678,62 @@ func TestDoctorXcodeStub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := t.TempDir()
-	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, cli)
-	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
-	tools := fixtureTools(t, root)
-	for name, body := range map[string]string{"brew": "#!/bin/sh\nexit 0\n", "xcode-select": "#!/bin/sh\nexit 2\n", "gcc": "#!/bin/sh\nprintf 'stub compiler\\n'\n"} {
-		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
-	}
-	home := filepath.Join(root, "home")
-	mustFS(t, os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700))
-	mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
-	before := mustSnapshot(t, home)
-	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64"}
-	got, e := captureCommand(home, entry, []string{"doctor"}, env)
-	if e != nil {
-		t.Fatal(e)
-	}
-	requireStatus(t, "CLI", got, 1)
-	if !bytes.Contains(got.Stdout, []byte("Xcode Command Line Tools are not installed")) || bytes.Contains(got.Stdout, []byte("[OK] C compiler")) {
-		t.Fatalf("compiler guard: %s", got.Stdout)
-	}
-	if !bytes.Equal(before, got.Home) {
-		t.Fatal("CLI mutated HOME")
+	const (
+		works  = "#!/bin/sh\nprintf 'stub compiler\\n'\n"
+		broken = "#!/bin/sh\nprintf 'license not accepted\\n' >&2\nexit 69\n"
+	)
+	for _, tc := range []struct {
+		name, xcode, gcc, clang string
+		brew                    bool
+		status                  int
+		want, reject            []string
+	}{
+		{"xcode_missing", "exit 2", works, "", true, 1, []string{"Xcode Command Line Tools are not installed"}, []string{"[OK] C compiler"}},
+		{"gcc", "exit 0", works, "", true, 0, []string{"[OK] C compiler: gcc (stub compiler)", "4 checks passed\n"}, []string{"[ERROR]"}},
+		{"clang_after_gcc_fails", "exit 0", broken, works, true, 0, []string{"[OK] C compiler: clang (stub compiler)", "4 checks passed\n"}, []string{"[ERROR]"}},
+		{"all_fail", "exit 0", broken, broken, true, 1, []string{"[ERROR] C compiler: gcc and clang failed to run", "Run 'gcc --version'", "3 checks passed, 1 failed"}, []string{"[OK] C compiler", "license not accepted"}},
+		{"none", "exit 0", "", "", true, 1, []string{"[ERROR] C compiler: gcc or clang was not found", "3 checks passed, 1 failed"}, []string{"failed to run"}},
+		{"earlier_failure_kept", "exit 0", works, "", false, 1, []string{"[ERROR] Package manager: brew was not found", "[OK] C compiler: gcc", "3 checks passed, 1 failed"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			release := filepath.Join(root, "release")
+			copyCLIFixture(t, release, cli)
+			entry := filepath.Join(release, "bin/selfishell")
+			mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+			tools := fixtureTools(t, root)
+			bodies := map[string]string{"xcode-select": "#!/bin/sh\n" + tc.xcode + "\n", "gcc": tc.gcc, "clang": tc.clang}
+			if tc.brew {
+				bodies["brew"] = "#!/bin/sh\nexit 0\n"
+			}
+			for name, body := range bodies {
+				if body != "" {
+					mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
+				}
+			}
+			home := filepath.Join(root, "home")
+			mustFS(t, os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700))
+			mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
+			before := mustSnapshot(t, home)
+			env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64"}
+			got, e := captureCommand(home, entry, []string{"doctor", "--verbose"}, env)
+			if e != nil {
+				t.Fatal(e)
+			}
+			requireStatus(t, "CLI", got, tc.status)
+			for _, want := range tc.want {
+				requireContains(t, got.Stdout, want)
+			}
+			for _, reject := range tc.reject {
+				if bytes.Contains(got.Stdout, []byte(reject)) {
+					t.Fatalf("unexpected %q: %s", reject, got.Stdout)
+				}
+			}
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("CLI mutated HOME")
+			}
+		})
 	}
 }
 

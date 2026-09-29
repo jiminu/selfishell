@@ -65,23 +65,15 @@ func rollbackStatusVersion(root string) string {
 	if filepath.Base(releases) != "releases" {
 		return "none"
 	}
-	previous := filepath.Join(filepath.Dir(releases), "previous")
-	link, err := os.Readlink(previous)
-	if err != nil {
+	link, err := os.Readlink(filepath.Join(filepath.Dir(releases), "previous"))
+	if os.IsNotExist(err) {
 		return "none"
 	}
-	version := filepath.Base(link)
-	release := filepath.Join(releases, version)
-	info, err := os.Lstat(release)
-	if err != nil || !info.IsDir() {
+	if err != nil {
 		return "invalid"
 	}
-	data, err := os.ReadFile(filepath.Join(release, "VERSION"))
-	if err != nil || strings.TrimRight(strings.ReplaceAll(string(data), "\x00", ""), "\n") != version {
-		return "invalid"
-	}
-	cli, err := os.Stat(filepath.Join(release, "bin/selfishell"))
-	if err != nil || cli.Mode().Perm()&0111 == 0 {
+	version, err := retainedRelease(releases, link)
+	if err != nil {
 		return "invalid"
 	}
 	return version

@@ -141,16 +141,25 @@ func (c CLI) doctor(args []string) int {
 	return result
 }
 func (c CLI) doctorCompiler(platform string, result int, system *diagnosticGroup) int {
+	// A compiler counts only if it runs; a failed candidate falls through to the next.
+	var broken []string
 	for _, name := range []string{"gcc", "clang"} {
-		if commandExists(name) {
-			out, _, ok := runInventory("", nil, name, "--version")
-			if !ok {
-				out = ""
-			}
-			first, _, _ := strings.Cut(out, "\n")
-			system.say("32", "OK", fmt.Sprintf("C compiler: %s (%s)", name, first))
-			return result
+		if !commandExists(name) {
+			continue
 		}
+		out, _, ok := runInventory("", nil, name, "--version")
+		if !ok {
+			broken = append(broken, name)
+			continue
+		}
+		first, _, _ := strings.Cut(out, "\n")
+		system.say("32", "OK", fmt.Sprintf("C compiler: %s (%s)", name, first))
+		return result
+	}
+	if len(broken) != 0 {
+		system.say("31", "ERROR", "C compiler: "+strings.Join(broken, " and ")+" failed to run (required for compiling Tree-sitter parsers)")
+		fmt.Fprintf(c.Out, "        Run '%s' to see the error.\n", c.bold(broken[0]+" --version"))
+		return 1
 	}
 	system.say("31", "ERROR", "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)")
 	if platform == "macos" {

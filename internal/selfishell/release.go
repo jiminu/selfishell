@@ -261,6 +261,19 @@ func validReleaseDirectory(releases, version string) (string, error) {
 	return dir, nil
 }
 
+// retainedRelease validates a previous-release link target exactly as
+// rollback accepts it: releases/<version> naming a complete release.
+func retainedRelease(releases, link string) (string, error) {
+	version := strings.TrimPrefix(link, "releases/")
+	if link != "releases/"+version || !ValidReleaseVersion(version) {
+		return "", fmt.Errorf("invalid retained release link: %s", link)
+	}
+	if _, err := validReleaseDirectory(releases, version); err != nil {
+		return "", err
+	}
+	return version, nil
+}
+
 func atomicReleaseLink(target, path string) error {
 	if err := releaseLinkReplaceable(path); err != nil {
 		return err
