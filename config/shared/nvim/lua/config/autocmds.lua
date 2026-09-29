@@ -42,10 +42,14 @@ local function ensure_parser_installed(buf, lang)
     if not installed then
       if not notified_failures[lang] then
         notified_failures[lang] = true
+        -- Neovim bundles a few parsers (lua, vimdoc, ...) that keep highlighting.
+        local ok, bundled = pcall(vim.treesitter.language.add, lang)
         vim.notify(
           "Selfishell: Tree-sitter failed to install '"
             .. lang
-            .. "'; highlighting won't be available until it succeeds. Will retry the next time a "
+            .. "'; "
+            .. (ok and bundled and "Neovim's bundled parser stays in use" or "highlighting won't be available")
+            .. " until it succeeds. Will retry the next time a "
             .. lang
             .. " file is opened.",
           vim.log.levels.WARN
