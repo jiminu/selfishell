@@ -37,10 +37,22 @@ contract.
 ## Publish
 
 Publish only a commit that is already merged and pushed to the documented
-release branch, currently `main`. The normal PR CI should be green before the
-release tag is created; the Release workflow reruns the repository checks on
-Linux and macOS before publication and rejects a tag whose commit is not in
-`main` history.
+release branch, currently `main`. Require a successful `ci.yml` push run for that
+exact commit before creating the release tag. PR or manually dispatched CI runs
+do not satisfy this requirement. The Release workflow waits for the latest
+matching main push run and requires its conclusion to be `success`; a missing,
+failed, cancelled, or skipped run blocks publication. If no run is found yet,
+wait for main CI and rerun the failed Release workflow.
+
+The workflow also reruns the repository checks on Linux and macOS and rejects a
+tag whose commit is not in `main` history. These release checks remain necessary
+because ordinary CI selects some checks according to the changed files.
+
+To check the main CI prerequisite without creating a tag:
+
+```bash
+bash scripts/verify-release-ci.sh jiminu/selfishell "$(git rev-parse HEAD)"
+```
 
 Before tagging, require a clean worktree, confirm `HEAD` is the intended pushed
 `origin/main` commit, and verify that `v<version>` does not already exist locally
@@ -70,8 +82,9 @@ dot-separated SemVer identifiers made of ASCII letters, digits, and hyphens;
 numeric identifiers must not contain leading zeroes.
 
 The Release workflow validates the pushed tag, runs the full verification
-suite on Linux and macOS, builds the six-file asset set once, and transfers the
-same artifact ID to native smoke jobs on both hosts and the publisher. Both
+suite on Linux and macOS, builds the six-file asset set once without restoring or
+saving a Go build cache, and transfers the same artifact ID to native smoke jobs
+on both hosts and the publisher. Both
 smokes must pass before the publisher verifies the exact file set, `VERSION`
 and checksums, generates GitHub Artifact Attestations, and creates the GitHub
 Release with all archives,

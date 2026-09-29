@@ -10,7 +10,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ci:
+    name: Require successful main CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Wait for this commit's main push CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: bash scripts/verify-release-ci.sh "$REPOSITORY" "$(git rev-parse HEAD)"
+
   verify:
+    needs: ci
     name: Verify release (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -69,7 +89,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - name: Require release commit on main
         run: |

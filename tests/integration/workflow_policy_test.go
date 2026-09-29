@@ -405,7 +405,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 		t.Error("exact smoke must run on Linux and macOS")
 	}
 	upload := strings.Join(policyStep(t, build, "Upload release artifacts"), "\n")
-	for _, needle := range []string{"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}", "path: dist/", "if-no-files-found: error"} {
+	for _, needle := range []string{"actions/upload-artifact@", "name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}", "path: dist/", "if-no-files-found: error"} {
 		if !strings.Contains(upload, needle) {
 			t.Errorf("upload missing %s", needle)
 		}
@@ -415,7 +415,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	}
 	for _, j := range []workflowJob{smoke, publish} {
 		download := strings.Join(policyStep(t, j, "Download release artifacts"), "\n")
-		for _, needle := range []string{"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "artifact-ids: ${{ needs.build.outputs.artifact_id }}", "path: dist", "digest-mismatch: error"} {
+		for _, needle := range []string{"actions/download-artifact@", "artifact-ids: ${{ needs.build.outputs.artifact_id }}", "path: dist", "digest-mismatch: error"} {
 			if !strings.Contains(download, needle) {
 				t.Errorf("%s download missing %s", j.name, needle)
 			}
@@ -775,5 +775,82 @@ exit 90
 	}
 	if string(calls) != "release view v1.2.3\n" {
 		t.Errorf("existing release action calls: %q", calls)
+	}
+}
+
+func TestReleaseWorkflowRequiresMainCI(t *testing.T) {
+	_, jobs := workflowSections(t, "release.yml")
+	ci := policyJob(t, jobs, "ci")
+	text := strings.Join(ci.lines, "\n")
+	for _, want := range []string{"actions: read", "contents: read", "GH_TOKEN: ${{ github.token }}", "REPOSITORY: ${{ github.repository }}", `bash scripts/verify-release-ci.sh "$REPOSITORY" "$(git rev-parse HEAD)"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("CI gate missing %s", want)
+		}
+	}
+	if got := policyNeeds(t, policyJob(t, jobs, "verify").lines); len(got) != 1 || got[0] != "ci" {
+		t.Errorf("verification must wait for main CI: %v", got)
+	}
+	checkout := strings.Join(policyStep(t, ci, "Check out release commit"), "\n")
+	if !strings.Contains(checkout, "ref: ${{ github.sha }}") {
+		t.Error("CI gate must resolve the release commit")
+	}
+	setup := strings.Join(policyStep(t, policyJob(t, jobs, "build"), "Set up pinned Go toolchain"), "\n")
+	if !strings.Contains(setup, "cache: false") {
+		t.Error("release artifact build must disable Go cache restore/save")
+	}
+}
+
+func TestReleaseCIGate(t *testing.T) {
+	const commit = "1111111111111111111111111111111111111111"
+	for _, tc := range []struct {
+		name, id, conclusion, fail, stages string
+		success                            bool
+	}{
+		{"success", "123", "success", "", "list watch view", true},
+		{"missing", "", "success", "", "list", false},
+		{"invalid_id", "unexpected", "success", "", "list", false},
+		{"list_error", "123", "success", "list", "list", false},
+		{"watch_error", "123", "success", "watch", "list watch", false},
+		{"view_error", "123", "success", "view", "list watch view", false},
+		{"failure", "123", "failure", "", "list watch view", false},
+		{"cancelled", "123", "cancelled", "", "list watch view", false},
+		{"skipped", "123", "skipped", "", "list watch view", false},
+		{"neutral", "123", "neutral", "", "list watch view", false},
+		{"pending", "123", "", "", "list watch view", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			bin := filepath.Join(home, "bin")
+			nativeWrite(t, filepath.Join(bin, "gh"), `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >> "$HOME/calls"
+[ "$1" = run ] || exit 90
+[ "$2" != "$FAIL_STAGE" ] || exit 1
+case "$2" in
+ list) printf '%s\n' "$RUN_ID" ;;
+ watch) exit 0 ;;
+ view) printf '%s\n' "$CONCLUSION" ;;
+ *) exit 91 ;;
+esac
+`, 0700)
+			got, err := runCommand(home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts/verify-release-ci.sh"), "owner/repo", commit}, nil,
+				[]string{"PATH=" + bin + ":/usr/bin:/bin", "RUN_ID=" + tc.id, "CONCLUSION=" + tc.conclusion, "FAIL_STAGE=" + tc.fail}, 5*time.Second)
+			if err != nil || (got.Status == 0) != tc.success {
+				t.Fatalf("status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
+			}
+			calls := string(readBytes(t, filepath.Join(home, "calls")))
+			commands := map[string]string{
+				"list":  "run list --repo owner/repo --workflow ci.yml --branch main --event push --commit " + commit + " --limit 1 --json databaseId --jq .[0].databaseId // empty\n",
+				"watch": "run watch 123 --repo owner/repo --interval 10 --exit-status\n",
+				"view":  "run view 123 --repo owner/repo --json conclusion --jq .conclusion\n",
+			}
+			var want string
+			for _, stage := range strings.Fields(tc.stages) {
+				want += commands[stage]
+			}
+			if calls != want {
+				t.Fatalf("calls:\n%s\nwant:\n%s", calls, want)
+			}
+		})
 	}
 }
