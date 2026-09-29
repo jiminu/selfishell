@@ -50,6 +50,23 @@ func TestNativeGitCompletionInitializesWithoutZinit(t *testing.T) {
 		t.Fatalf("dump: %v %d bytes", err, len(data))
 	}
 }
+
+// mise skips the first prompt's full hook-env only when PATH is unchanged
+// since activation, so Zinit's $ZPFX/bin must be added before it.
+func TestNativeZinitLoadsBeforeMiseActivation(t *testing.T) {
+	home := nativeHome(t)
+	nativeWrite(t, filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh"), `path=("$HOME/zpfx/bin" $path)
+zinit() { return 0; }
+`, 0600)
+	bin := filepath.Join(filepath.Dir(home), "bin")
+	nativeWrite(t, filepath.Join(bin, "mise"), `#!/bin/sh
+[ "$*" = 'activate zsh' ] || exit 1
+printf '%s\n' 'typeset -g SELFISHELL_TEST_ACTIVATION_PATH="$PATH"'
+`, 0700)
+	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; [[ -n "$SELFISHELL_TEST_ACTIVATION_PATH" ]] || exit 10; (( ${path[(I)$HOME/zpfx/bin]} )) || exit 11; [[ "$PATH" == "$SELFISHELL_TEST_ACTIVATION_PATH" ]] || exit 12`,
+		"PATH="+bin+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon())
+	nativeQuiet(t, r)
+}
 func TestNativeZinitStartup(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
