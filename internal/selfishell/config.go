@@ -30,7 +30,7 @@ Options:
   --help     Show this help
 `
 
-func (c CLI) install(args []string) int {
+func (c CLI) install(args []string) (result int) {
 	skip, dry, yes := false, false, false
 	for _, arg := range args {
 		switch arg {
@@ -91,6 +91,11 @@ func (c CLI) install(args []string) int {
 			return 1
 		}
 	}
+	defer func() {
+		if result != 0 && !dry {
+			c.retryHint("selfishell install", skip)
+		}
+	}()
 	prepared, err := c.prepareConfig(platform, dry, yes, false)
 	if err != nil {
 		c.error(err.Error())
@@ -129,6 +134,14 @@ func (c CLI) install(args []string) int {
 	}
 	return 0
 }
+
+func (c CLI) retryHint(command string, skipPackages bool) {
+	if skipPackages {
+		command += " --skip-packages"
+	}
+	fmt.Fprintf(c.Err, "After resolving the error, retry with: %s\n", command)
+}
+
 func (c CLI) uninstall(args []string) int {
 	restore, purge, dry, yes := false, false, false, false
 	for _, arg := range args {
@@ -285,7 +298,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 
 func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *PackageOperation) error {
 	if skip {
-		c.report("Notes", "Skipping package and tool installation.")
+		c.report("Notes", reportWarning, "Skipping package and tool installation.")
 	}
 	if err := c.applyManagedResources(&p); err != nil {
 		return err
@@ -316,7 +329,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		if err := writeOnce(miseGlobal, nil); err != nil {
 			return err
 		}
-		c.report("Configuration", "Created user mise config: %s", miseGlobal)
+		c.report("Configuration", reportSuccess, "Created user mise config: %s", miseGlobal)
 	}
 	if !skip {
 		if err := c.installNeovim(operation, paths, dry); err != nil {
@@ -335,7 +348,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	c.defaultShell(dry, yes)
 	if m.unchanged > 0 {
-		c.report("Notes", "%d items unchanged.", m.unchanged)
+		c.report("Notes", reportInfo, "%d items unchanged.", m.unchanged)
 	}
 	c.complete("Selfishell configuration installed.")
 	return nil

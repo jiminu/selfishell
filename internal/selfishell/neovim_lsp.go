@@ -49,7 +49,7 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 		return err
 	}
 	if dryRun {
-		o.report("Would update default Neovim LSP servers to this release's approved versions.")
+		o.report(reportPreview, "Would update default Neovim LSP servers to this release's approved versions.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -62,8 +62,8 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 		fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers to approved versions...")
 	}
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
-		return fmt.Errorf("could not update default Neovim LSP servers: %w; retry with selfishell update --tools-only", err)
+		return fmt.Errorf("could not update default Neovim LSP servers: %w", err)
 	}
-	o.report("Default Neovim LSP servers match this release's approved versions.")
+	o.report(reportSuccess, "Neovim LSP servers: approved versions")
 	return nil
 }

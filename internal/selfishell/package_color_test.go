@@ -123,7 +123,7 @@ func TestProgressPlainTerminalModes(t *testing.T) {
 			ui := newProgress(slave, slave, Paths{State: t.TempDir()})
 			ui.stage("Applying configuration")
 			c := CLI{Out: slave, Err: slave, progress: ui}
-			c.report("Configuration", "Updated managed file: example.zsh")
+			c.report("Configuration", reportSuccess, "Updated managed file: example.zsh")
 			c.error("example failure")
 			c.complete("Complete")
 			ui.finish()
@@ -190,7 +190,7 @@ func TestProgressTerminalFailure(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatalf("successful tool: %d %v", code, err)
 	}
-	c.report("Tools", "Installed example tool")
+	c.report("Tools", reportSuccess, "Installed example tool")
 	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
 	if code != 7 || err != nil {
 		t.Fatalf("failed tool: %d %v", code, err)

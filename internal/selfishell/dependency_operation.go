@@ -26,7 +26,7 @@ func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manif
 		return err
 	}
 	if dryRun {
-		o.report("Would sync %s direct package: %s", requirement, name)
+		o.report(reportPreview, "Would sync %s direct package: %s", requirement, name)
 		return nil
 	}
 	if err := o.loadDependencies(manifest); err != nil {
@@ -128,7 +128,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 		}
 		if exists {
 			if o.validDirect(ctx, dep, target, false) {
-				o.report("Externally installed; preserving: %s", target)
+				o.report(reportInfo, "Externally installed; preserving: %s", target)
 				return nil
 			}
 			return fmt.Errorf("An existing %s is not a usable %s installation; leaving it in place.", target, dep.Name)
@@ -229,7 +229,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	if owned && oldVersion != dep.Version {
 		verb = "Updated"
 	}
-	o.report("%s approved dependency: %s %s", verb, dep.Name, dep.Version)
+	o.report(reportSuccess, "%s approved dependency: %s %s", verb, dep.Name, dep.Version)
 	return nil
 }
 

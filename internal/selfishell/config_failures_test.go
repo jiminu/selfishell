@@ -25,6 +25,38 @@ func failureResource(t *testing.T, root, name string) Resource {
 	return Resource{}
 }
 
+func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"install", []string{"install", "--yes"}, "selfishell install"},
+		{"install-config-only", []string{"install", "--yes", "--skip-packages"}, "selfishell install --skip-packages"},
+		{"update", []string{"update", "--tools-only", "--yes"}, "selfishell update --tools-only"},
+		{"update-config-only", []string{"update", "--tools-only", "--skip-packages"}, "selfishell update --tools-only --skip-packages"},
+		{"after-cli-update", []string{"update", "--continue-after-cli-update", "--skip-packages"}, "selfishell update --tools-only --skip-packages"},
+		{"install-dry-run", []string{"install", "--skip-packages", "--dry-run"}, ""},
+		{"update-dry-run", []string{"update", "--tools-only", "--skip-packages", "--dry-run"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+			blockWrite(t, paths.Resources+"/vimrc.state", []byte("invalid\n"))
+			code, _, stderr := blockRun(t, root, "", tc.args...)
+			if code != 1 || !strings.Contains(stderr, "vimrc.state") {
+				t.Fatalf("expected configuration failure: %d %q", code, stderr)
+			}
+			if tc.want == "" {
+				if strings.Contains(stderr, "retry with:") {
+					t.Fatalf("dry run suggested a mutating retry: %q", stderr)
+				}
+			} else if strings.Count(stderr, "retry with:") != 1 || !strings.Contains(stderr, "retry with: "+tc.want+"\n") {
+				t.Fatalf("missing scoped retry %q: %q", tc.want, stderr)
+			}
+		})
+	}
+}
+
 func TestManagedMalformedStateStopsInstallWithoutMutation(t *testing.T) {
 	root, home, paths := blockHome(t, "macos")
 	blockOK(t, root, "install", "--skip-packages", "--yes")

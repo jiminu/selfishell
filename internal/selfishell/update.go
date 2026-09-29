@@ -199,7 +199,7 @@ func (c CLI) update(args []string) int {
 				}
 				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err}).runCLI(ctx, target+"/bin/selfishell", argv...)
 				if code != 0 || err != nil {
-					c.report("Tools", "Activated Selfishell CLI: %s -> %s", active, version)
+					c.report("Tools", reportSuccess, "Activated Selfishell CLI: %s -> %s", active, version)
 				}
 				if err != nil {
 					c.error(err.Error())
@@ -234,7 +234,7 @@ func (c CLI) completeUpdate() {
 	}
 }
 
-func (c CLI) updateTools(o updateOptions) int {
+func (c CLI) updateTools(o updateOptions) (result int) {
 	paths, err := UserPaths()
 	if err != nil {
 		c.error(err.Error())
@@ -256,6 +256,11 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.error("Could not read Selfishell configured marker: " + err.Error())
 		return 1
 	}
+	defer func() {
+		if result != 0 && !o.dry {
+			c.retryHint("selfishell update --tools-only", o.skip)
+		}
+	}()
 	packages, err := ReadPackages(c.Root + "/packages.conf")
 	if err != nil {
 		return c.diagnosticError(err)
@@ -286,9 +291,6 @@ func (c CLI) updateTools(o updateOptions) int {
 				return 1
 			}
 		}
-	}
-	if code := c.confirmRelease("Synchronize Selfishell packages and configuration (including unused mise version cleanup unless --skip-packages)?", o.yes, o.dry); code != 0 {
-		return code
 	}
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
@@ -328,7 +330,7 @@ func (c CLI) updateTools(o updateOptions) int {
 		operation.reportSkippedOptional()
 	}
 	if o.skip {
-		c.report("Notes", "Skipping package and tool installation.")
+		c.report("Notes", reportWarning, "Skipping package and tool installation.")
 	}
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
@@ -386,7 +388,7 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.completeUpdate()
 	}
 	if !o.dry && prepared.m.unchanged > 0 && c.progress.compact {
-		c.report("Notes", "%d configuration items unchanged.", prepared.m.unchanged)
+		c.report("Notes", reportInfo, "%d configuration items unchanged.", prepared.m.unchanged)
 	}
 	return 0
 }

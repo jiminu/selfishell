@@ -51,12 +51,12 @@ func (c CLI) defaultShell(dry, yes bool) {
 	}
 	if selected == "" {
 		if _, e := exec.LookPath("zsh"); e == nil {
-			c.report("Notes", "Zsh is not listed in /etc/shells; the login shell was not changed.")
+			c.report("Notes", reportWarning, "Zsh is not listed in /etc/shells; the login shell was not changed.")
 		}
 		return
 	}
 	if dry {
-		c.report("Configuration", "Would set login shell to: %s", selected)
+		c.report("Configuration", reportPreview, "Would set login shell to: %s", selected)
 		return
 	}
 	if !yes {
@@ -72,7 +72,7 @@ func (c CLI) defaultShell(dry, yes bool) {
 	terminal := envDefault("SELFISHELL_TEST_TERMINAL", "/dev/tty")
 	tty, e := os.Open(terminal)
 	if e != nil {
-		c.report("Notes", "To use Zsh as your login shell, run: chsh -s %s", selected)
+		c.report("Notes", reportInfo, "To use Zsh as your login shell, run: chsh -s %s", selected)
 		return
 	}
 	defer tty.Close()
@@ -83,8 +83,8 @@ func (c CLI) defaultShell(dry, yes bool) {
 	}
 	code, e = (Process{In: tty, Out: c.Out, Err: c.Err}).Run(context.Background(), "chsh", "-s", selected, strings.TrimSpace(userOut.String()))
 	if e == nil && code == 0 {
-		c.report("Configuration", "Set login shell to: %s", selected)
+		c.report("Configuration", reportSuccess, "Set login shell to: %s", selected)
 	} else {
-		c.report("Notes", "Could not set login shell to Zsh.")
+		c.report("Notes", reportWarning, "Could not set login shell to Zsh.")
 	}
 }

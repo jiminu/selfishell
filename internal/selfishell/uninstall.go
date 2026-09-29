@@ -154,7 +154,7 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 	}
 	if s.Kind == "block" {
 		if m.dry {
-			m.say("Would remove Selfishell block: %s", s.Target)
+			m.say(reportPreview, "Would remove Selfishell block: %s", s.Target)
 		} else if present {
 			data, e := os.ReadFile(s.Target)
 			if e != nil {
@@ -178,9 +178,9 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 	} else if present {
 		if m.dry {
 			if s.Kind == "link" {
-				m.say("Would remove managed link: %s", s.Target)
+				m.say(reportPreview, "Would remove managed link: %s", s.Target)
 			} else {
-				m.say("Would remove managed file: %s", s.Target)
+				m.say(reportPreview, "Would remove managed file: %s", s.Target)
 			}
 		} else if m.removePath != nil {
 			if err = m.removePath(s.Target); err != nil {
@@ -199,7 +199,7 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			return missingRestoreBackup(s.Backup)
 		}
 		if m.dry {
-			m.say("Would restore: %s -> %s", s.Backup, s.Target)
+			m.say(reportPreview, "Would restore: %s -> %s", s.Backup, s.Target)
 		} else {
 			if _, occupied, _ := exists(s.Target); occupied {
 				return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)

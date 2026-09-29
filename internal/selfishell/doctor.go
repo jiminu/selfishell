@@ -27,9 +27,18 @@ func platformSupported(name string) bool {
 }
 func commandExists(name string) bool { _, err := exec.LookPath(name); return err == nil }
 func (c CLI) doctor(args []string) int {
-	if len(args) > 0 {
-		c.error("doctor does not accept arguments")
-		return 2
+	verbose := false
+	for _, arg := range args {
+		switch arg {
+		case "--verbose":
+			verbose = true
+		case "help", "--help", "-h":
+			fmt.Fprintln(c.Out, "Usage: selfishell doctor [--verbose]")
+			return 0
+		default:
+			c.error("Unknown doctor option: " + arg)
+			return 2
+		}
 	}
 	platform := DetectPlatform()
 	paths, err := UserPaths()
@@ -38,15 +47,16 @@ func (c CLI) doctor(args []string) int {
 	}
 	fmt.Fprint(c.Out, "Selfishell doctor\n\n")
 	result := 0
+	system := diagnosticGroup{c: c, verbose: verbose}
 	_, configuredErr := os.Stat(paths.State + "/configured")
 	configured := configuredErr == nil
 	if platformSupported(platform.Name) {
 		if configured {
 			c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
 		}
-		c.sayDiagnostic("32", "OK", "Platform: "+platformLabel(platform.Name))
+		system.say("32", "OK", "Platform: "+platformLabel(platform.Name))
 	} else {
-		c.sayDiagnostic("31", "ERROR", "Platform: "+platformLabel(platform.Name))
+		system.say("31", "ERROR", "Platform: "+platformLabel(platform.Name))
 		switch platform.Name {
 		case "unsupported-wsl":
 			fmt.Fprintln(c.Out, "        Only Ubuntu on WSL is currently supported.")
@@ -58,9 +68,9 @@ func (c CLI) doctor(args []string) int {
 		result = 1
 	}
 	if platform.Arch == "amd64" || platform.Arch == "arm64" {
-		c.sayDiagnostic("32", "OK", "Architecture: "+platform.Arch)
+		system.say("32", "OK", "Architecture: "+platform.Arch)
 	} else {
-		c.sayDiagnostic("31", "ERROR", "Architecture: "+platform.Arch+" (supported: amd64, arm64)")
+		system.say("31", "ERROR", "Architecture: "+platform.Arch+" (supported: amd64, arm64)")
 		result = 1
 	}
 	manager := "unknown"
@@ -70,29 +80,31 @@ func (c CLI) doctor(args []string) int {
 		manager = "apt-get"
 	}
 	if manager == "unknown" {
-		c.sayDiagnostic("31", "ERROR", "Package manager: unavailable for this platform")
+		system.say("31", "ERROR", "Package manager: unavailable for this platform")
 	} else if commandExists(manager) {
-		c.sayDiagnostic("32", "OK", "Package manager: "+manager)
+		system.say("32", "OK", "Package manager: "+manager)
 	} else {
-		c.sayDiagnostic("31", "ERROR", "Package manager: "+manager+" was not found")
+		system.say("31", "ERROR", "Package manager: "+manager+" was not found")
 		fmt.Fprintf(c.Out, "        Run '%s' to set up the supported toolchain.\n", c.bold("selfishell install"))
 		result = 1
 	}
 	if !configured || !platformSupported(platform.Name) {
+		system.summary(platform)
 		return result
 	}
 	if platform.Name == "macos" {
 		_, _, ok := runInventory("", nil, "xcode-select", "-p")
 		if !ok {
-			c.sayDiagnostic("31", "ERROR", "C compiler: Xcode Command Line Tools are not installed (required for compiling Tree-sitter parsers)")
+			system.say("31", "ERROR", "C compiler: Xcode Command Line Tools are not installed (required for compiling Tree-sitter parsers)")
 			fmt.Fprintf(c.Out, "        Install them by running: %s\n", c.bold("xcode-select --install"))
 			result = 1
 		} else {
-			result = c.doctorCompiler(platform.Name, result)
+			result = c.doctorCompiler(platform.Name, result, &system)
 		}
 	} else {
-		result = c.doctorCompiler(platform.Name, result)
+		result = c.doctorCompiler(platform.Name, result, &system)
 	}
+	system.summary(platform)
 	packages, err := diagnosticPackages(c.Root, platform.Name)
 	if err != nil {
 		return c.diagnosticError(err)
@@ -101,28 +113,34 @@ func (c CLI) doctor(args []string) int {
 	if err != nil {
 		return c.diagnosticError(err)
 	}
+	present, requiredMissing, optionalMissing := 0, 0, 0
 	for _, p := range packages {
 		tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
 		if e != nil {
 			return c.diagnosticError(e)
 		}
 		if tool.Installed == "missing" {
+			c.missingTool(p)
 			if p.Requirement == "required" {
-				c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Tool: %s is missing (%s)", p.Name, p.Manager))
+				requiredMissing++
 				result = 1
 			} else {
-				c.sayDiagnostic("36", "INFO", fmt.Sprintf("Optional tool: %s is not installed (%s)", p.Name, p.Manager))
+				optionalMissing++
 			}
 		} else {
-			c.sayDiagnostic("32", "OK", fmt.Sprintf("Tool: %s %s (%s)", p.Name, tool.Installed, tool.Source))
+			present++
+			if verbose {
+				c.sayDiagnostic("32", "OK", fmt.Sprintf("Tool: %s %s (%s)", p.Name, tool.Installed, tool.Source))
+			}
 		}
 	}
+	c.toolsSummary(present, requiredMissing, optionalMissing)
 	if err := c.doctorPlugins(paths, inventory.dependencies); err {
 		result = 1
 	}
 	return result
 }
-func (c CLI) doctorCompiler(platform string, result int) int {
+func (c CLI) doctorCompiler(platform string, result int, system *diagnosticGroup) int {
 	for _, name := range []string{"gcc", "clang"} {
 		if commandExists(name) {
 			out, _, ok := runInventory("", nil, name, "--version")
@@ -130,11 +148,11 @@ func (c CLI) doctorCompiler(platform string, result int) int {
 				out = ""
 			}
 			first, _, _ := strings.Cut(out, "\n")
-			c.sayDiagnostic("32", "OK", fmt.Sprintf("C compiler: %s (%s)", name, first))
+			system.say("32", "OK", fmt.Sprintf("C compiler: %s (%s)", name, first))
 			return result
 		}
 	}
-	c.sayDiagnostic("31", "ERROR", "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)")
+	system.say("31", "ERROR", "C compiler: gcc or clang was not found (required for compiling Tree-sitter parsers)")
 	if platform == "macos" {
 		fmt.Fprintf(c.Out, "        Install Xcode Command Line Tools by running: %s\n", c.bold("xcode-select --install"))
 	} else {
@@ -181,16 +199,44 @@ func (c CLI) doctorPlugins(paths Paths, dependencies []Dependency) bool {
 	reported := false
 	if len(dirty) > 0 {
 		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d modified locally (%s)", len(dirty), strings.Join(dirty, " ")))
-		fmt.Fprintf(c.Out, "        Run '%s' to reset it to the approved revision.\n", c.bold("selfishell update --tools-only"))
 		reported = true
 	}
 	if len(drifted) > 0 {
 		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d at an unapproved revision (%s)", len(drifted), strings.Join(drifted, " ")))
-		fmt.Fprintf(c.Out, "        Run '%s' to reset it to the approved revision.\n", c.bold("selfishell update --tools-only"))
 		reported = true
 	}
-	if !reported {
+	if reported {
+		c.diagnosticHint("Restore the approved Zsh plugin revisions with:", "selfishell update --tools-only")
+	} else {
 		c.sayDiagnostic("32", "OK", "Zsh plugins: provisioned")
 	}
 	return reported
+}
+
+// diagnosticGroup keeps successful system checks concise without hiding failures.
+type diagnosticGroup struct {
+	c              CLI
+	verbose        bool
+	passed, failed int
+}
+
+func (d *diagnosticGroup) say(color, label, message string) {
+	if label == "OK" {
+		d.passed++
+		if !d.verbose {
+			return
+		}
+	} else {
+		d.failed++
+	}
+	d.c.sayDiagnostic(color, label, message)
+}
+
+func (d *diagnosticGroup) summary(platform Platform) {
+	message := fmt.Sprintf("System: %s (%s), %d checks passed", platformLabel(platform.Name), platform.Arch, d.passed)
+	if d.failed == 0 {
+		d.c.sayDiagnostic("32", "OK", message)
+	} else {
+		d.c.sayDiagnostic("31", "ERROR", fmt.Sprintf("%s, %d failed", message, d.failed))
+	}
 }

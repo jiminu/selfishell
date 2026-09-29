@@ -20,7 +20,19 @@ type operationProgress struct {
 	suspendSignals func() func()
 }
 
-type progressEvent struct{ section, message string }
+type reportTone string
+
+const (
+	reportSuccess reportTone = "32"
+	reportWarning reportTone = "33"
+	reportPreview reportTone = "36"
+	reportInfo    reportTone = ""
+)
+
+type progressEvent struct {
+	section, message string
+	tone             reportTone
+}
 
 func newProgress(out, stderr io.Writer, paths Paths) *operationProgress {
 	return &operationProgress{out: out, stderr: stderr,
@@ -81,42 +93,25 @@ func (p *operationProgress) stage(label string) {
 	}()
 }
 
-// statusText restores the shell CLI's green actions, yellow skips/conflicts,
-// and cyan previews. Only the label is colored; paths retain the default color.
-func statusText(message string, color bool) string {
-	if !color {
-		return message
-	}
-	code := ""
-	for _, prefix := range []string{"Installed", "Updated", "Activated", "Added", "Linked", "Backed up", "Removed", "Restored", "Created", "Set login shell", "Synchronized", "Cleaned up", "Selfishell", "✓"} {
-		if strings.HasPrefix(message, prefix) {
-			code = "32"
-			break
-		}
-	}
-	if strings.HasPrefix(message, "Would ") {
-		code = "36"
-	}
-	if strings.HasPrefix(message, "Skipped ") || strings.HasPrefix(message, "Skipping ") || strings.HasPrefix(message, "Conflict:") || strings.HasPrefix(message, "Warning:") || strings.HasPrefix(message, "Could not ") {
-		code = "33"
-	}
-	if code == "" {
+// statusText colors the outcome label while leaving details in the default color.
+func statusText(message string, color bool, tone reportTone) string {
+	if !color || tone == reportInfo {
 		return message
 	}
 	label, detail, found := strings.Cut(message, ":")
 	if found {
-		return "\x1b[" + code + "m" + label + ":\x1b[0m" + detail
+		return "\x1b[" + string(tone) + "m" + label + ":\x1b[0m" + detail
 	}
-	return "\x1b[" + code + "m" + message + "\x1b[0m"
+	return "\x1b[" + string(tone) + "m" + message + "\x1b[0m"
 }
 
-func (c CLI) report(section, format string, args ...any) {
+func (c CLI) report(section string, tone reportTone, format string, args ...any) {
 	message := fmt.Sprintf(format, args...)
 	if c.progress != nil && c.progress.compact {
-		c.progress.events = append(c.progress.events, progressEvent{section, message})
+		c.progress.events = append(c.progress.events, progressEvent{section, message, tone})
 		return
 	}
-	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out)))
+	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out), tone))
 }
 
 func (c CLI) complete(message string) {
@@ -124,16 +119,16 @@ func (c CLI) complete(message string) {
 		c.progress.completion = message
 		return
 	}
-	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out)))
+	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out), reportSuccess))
 }
 
-func (o *PackageOperation) report(format string, args ...any) {
+func (o *PackageOperation) report(tone reportTone, format string, args ...any) {
 	if o.Process.progress != nil && o.Process.progress.compact {
-		o.Process.progress.events = append(o.Process.progress.events, progressEvent{"Tools", fmt.Sprintf(format, args...)})
+		o.Process.progress.events = append(o.Process.progress.events, progressEvent{"Tools", fmt.Sprintf(format, args...), tone})
 		return
 	}
 	color, _ := o.color(o.Process.Out, "\x1b[32m")
-	fmt.Fprintln(o.Process.Out, statusText(fmt.Sprintf(format, args...), color != ""))
+	fmt.Fprintln(o.Process.Out, statusText(fmt.Sprintf(format, args...), color != "", tone))
 }
 
 func (p *operationProgress) finish() {
@@ -143,7 +138,7 @@ func (p *operationProgress) finish() {
 	p.pause()
 	if p.compact {
 		if p.completion != "" {
-			fmt.Fprintln(p.out, statusText("✓ "+p.completion, p.color))
+			fmt.Fprintln(p.out, statusText("✓ "+p.completion, p.color, reportSuccess))
 		} else if len(p.events) > 0 {
 			fmt.Fprintln(p.out, "Completed changes before stopping:")
 		}
@@ -161,11 +156,29 @@ func (p *operationProgress) finish() {
 				if p.config != "" {
 					message = strings.ReplaceAll(message, p.config+"/", "")
 				}
-				if p.home != "" {
-					message = strings.ReplaceAll(message, p.home+"/", "~/")
-				}
-				fmt.Fprintln(p.out, "  "+statusText(message, p.color))
+				message = displayHome(message, p.home)
+				fmt.Fprintln(p.out, "  "+strings.ReplaceAll(statusText(message, p.color, event.tone), "\n", "\n  "))
 			}
 		}
 	}
+}
+
+// wrapWords breaks only between items, retaining each exact tool/version pin.
+func wrapWords(words []string, width int) string {
+	var out strings.Builder
+	column := 0
+	for _, word := range words {
+		if column > 0 {
+			if column+2+len(word) > width {
+				out.WriteByte('\n')
+				column = 0
+			} else {
+				out.WriteString("  ")
+				column += 2
+			}
+		}
+		out.WriteString(word)
+		column += len(word)
+	}
+	return out.String()
 }

@@ -15,7 +15,7 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 		return err
 	}
 	if dryRun {
-		o.report("Would sync declared Zsh plugins.")
+		o.report(reportPreview, "Would sync declared Zsh plugins.")
 		return nil
 	}
 	if err := o.loadDependencies(manifest); err != nil {
@@ -118,7 +118,7 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 		}
 		if moved {
 			os.RemoveAll(previous)
-			o.report("Updated Zsh plugin: %s", dep.Name)
+			o.report(reportSuccess, "Updated Zsh plugin: %s", dep.Name)
 		}
 	}
 	return nil

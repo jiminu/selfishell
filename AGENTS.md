@@ -77,6 +77,9 @@ Preserve these lifecycle invariants:
 - write state through a temporary file and atomic rename;
 - retain the original backup path across idempotent reinstalls;
 - checksum managed regular files;
+- synchronize update tools and configuration without a blanket confirmation;
+  ask only before overwriting locally modified managed files or blocks, retaining
+  conflict backups and the `--yes`/non-interactive preservation behavior;
 - repair wholly absent blocks without replacing surrounding user content;
   retain malformed-marker and changed-path-type protections;
 - treat a replaced link, changed file, or changed path type as user data;
@@ -123,6 +126,10 @@ Installer-owned mise operations run from the release's `config/shared`
 directory so a caller's project cannot override approved tool versions.
 Status and doctor query installed versions, not merely configured requests;
 an orphaned mise shim does not count as an external tool installation.
+After completed setup, status diagnoses missing installation records for the
+current platform's required resources, respecting the saved Ghostty choice.
+Continue inspecting every existing tracked record, including records from other
+platforms. Missing optional tools remain informational in both detail and summary.
 
 Successful tool/configuration updates prune unused mise versions by default,
 scoped to the current platform's declared mise tools. Preserve current pins
