@@ -222,7 +222,7 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
-		if err := c.applyManagedResources(&prepared, nil); err != nil {
+		if err := c.applyManagedResources(&prepared); err != nil {
 			t.Fatal(err)
 		}
 		t.Fatal("configuration continued after interrupt")

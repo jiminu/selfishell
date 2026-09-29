@@ -248,7 +248,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update bool) (preparedConf
 }
 
 // applyConfig also serves the later tools-only update without install-only finalization.
-func (c CLI) applyManagedResources(p *preparedConfig, operation *PackageOperation) error {
+func (c CLI) applyManagedResources(p *preparedConfig) error {
 	parent := c.invocationContext()
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	c.Context = ctx
@@ -291,7 +291,7 @@ func (c CLI) applyManagedResources(p *preparedConfig, operation *PackageOperatio
 		}
 	}
 	if !m.dry {
-		c.trustMise(operation)
+		c.trustMise()
 	}
 	return ctx.Err()
 }
@@ -300,7 +300,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	if skip {
 		c.report("Notes", reportWarning, "Skipping package and tool installation.")
 	}
-	if err := c.applyManagedResources(&p, operation); err != nil {
+	if err := c.applyManagedResources(&p); err != nil {
 		return err
 	}
 	m, paths, miseGlobal, ghostty := &p.m, p.paths, p.miseGlobal, p.ghostty

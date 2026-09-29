@@ -21,8 +21,6 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 		}
 	}
 	manifest := envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")
-	o.brewBothKinds = len(groups["required:formula"])+len(groups["optional:formula"]) != 0 &&
-		len(groups["required:cask"])+len(groups["optional:cask"]) != 0
 	for _, pair := range []struct{ requirement, manager string }{
 		{"required", "apt"}, {"optional", "apt"},
 		{"required", "formula"}, {"optional", "formula"},

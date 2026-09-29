@@ -10,12 +10,10 @@ import (
 	"strings"
 )
 
-// trustMise skips a link that operation already trusted and that has not
-// changed since.
-func (c CLI) trustMise(operation *PackageOperation) {
+func (c CLI) trustMise() {
 	link := envDefault("XDG_CONFIG_HOME", os.Getenv("HOME")+"/.config") + "/mise/conf.d/selfishell.toml"
 	info, present, _ := exists(link)
-	if !present || !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) || operation.miseConfigTrusted(link) {
+	if !present || !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
 		return
 	}
 	binary, e := exec.LookPath("mise")

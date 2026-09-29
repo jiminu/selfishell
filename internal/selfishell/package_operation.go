@@ -25,8 +25,6 @@ type PackageOperation struct {
 	aptUpdated                        bool
 	brewFormulae, brewCasks           map[string]bool
 	brewFormulaeReady, brewCasksReady bool
-	brewBothKinds                     bool       // the first Homebrew inventory also lists the other kind
-	miseTrusted                       string     // miseTrustKey of the last successful managed config trust
 	miseNvim, miseNvimKey             string     // last successful "mise which nvim" and its mise/root
 	uid                               func() int // package-private test seam; nil uses os.Geteuid.
 	brewLocations                     []string   // package-private test seam; nil uses standard macOS locations.

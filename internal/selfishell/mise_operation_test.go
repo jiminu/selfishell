@@ -2,9 +2,7 @@ package selfishell
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -18,7 +16,6 @@ func miseFixture(t *testing.T) (*PackageOperation, Paths, string, string) {
 	writeTestFile(t, bin+"/mise", `#!/bin/sh
 printf '%s|%s|%s|%s|%s\n' "$PWD" "$MISE_GLOBAL_CONFIG_FILE" "${MISE_OFFLINE-unset}" "$MISE_TRUSTED_CONFIG_PATHS" "$*" >> "$MISE_LOG"
 case "$*" in
-  'trust '*) exit "${TRUST_EXIT:-0}" ;;
   *'install --dry-run-code'*) exit "${DRY_CODE_EXIT:-1}" ;;
   *'install '* ) exit "${INSTALL_EXIT:-0}" ;;
 esac
@@ -153,50 +150,5 @@ func TestMiseTrustsExistingManagedConfigLink(t *testing.T) {
 	data, _ := os.ReadFile(home + "/mise.log")
 	if !strings.Contains(string(data), "trust "+link) {
 		t.Fatalf("managed config not trusted: %s", data)
-	}
-}
-
-func TestMiseTrustRunsOncePerOperationUntilTheConfigChanges(t *testing.T) {
-	for _, failing := range []bool{false, true} {
-		t.Run(fmt.Sprintf("failing=%v", failing), func(t *testing.T) {
-			op, paths, root, home := miseFixture(t)
-			managed := paths.Config + "/mise/selfishell.toml"
-			writeTestFile(t, managed, "[tools]\n", 0600)
-			link := home + "/.config/mise/conf.d/selfishell.toml"
-			if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(managed, link); err != nil {
-				t.Fatal(err)
-			}
-			t.Setenv("PATH", home+"/bin:/usr/bin:/bin") // the configuration phase resolves mise from PATH
-			op.Process.Env = append(op.Process.Env, "DRY_CODE_EXIT=0")
-			if failing {
-				t.Setenv("TRUST_EXIT", "1")
-				op.Process.Env = append(op.Process.Env, "TRUST_EXIT=1")
-			}
-			trusts := func() int { return strings.Count(readTestFile(t, home+"/mise.log"), "|trust "+link+"\n") }
-			for _, requirement := range []string{"required", "optional"} {
-				if err := op.InstallMise(context.Background(), root, paths, requirement, false, "node@24.18.0"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			CLI{Root: root}.trustMise(op)
-			if failing {
-				// A failed trust is retried by every later caller, as before.
-				if got := trusts(); got != 3 {
-					t.Fatalf("failed trust retries %d, want 3", got)
-				}
-				return
-			}
-			if got := trusts(); got != 1 {
-				t.Fatalf("unchanged config trusted %d times", got)
-			}
-			writeTestFile(t, managed, "[tools]\nnode = \"24.18.0\"\n", 0600)
-			CLI{Root: root}.trustMise(op)
-			if got := trusts(); got != 2 {
-				t.Fatalf("changed config was not trusted again: %d", got)
-			}
-		})
 	}
 }

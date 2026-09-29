@@ -336,7 +336,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.error(err.Error())
 		return 1
 	}
-	if err := c.applyManagedResources(&prepared, operation); err != nil {
+	if err := c.applyManagedResources(&prepared); err != nil {
 		c.error(err.Error())
 		return 1
 	}
