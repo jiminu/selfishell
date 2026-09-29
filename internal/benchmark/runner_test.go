@@ -155,7 +155,7 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	} else if !os.IsNotExist(e) {
 		t.Fatal(e)
 	}
-	for _, want := range []string{"Diagnostics: configured HOME", "cli-status exit=", "[SUMMARY] Managed paths:"} {
+	for _, want := range []string{"Diagnostics: configured HOME", "cli-status exit=", "[OK] Configuration:"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q", want)
 		}

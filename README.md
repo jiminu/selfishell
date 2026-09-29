@@ -54,12 +54,14 @@ and the Neovim workflow.
 
 | Command | Use it to |
 | --- | --- |
-| `selfishell status` | Show installed tools, managed resources, and CLI/rollback version. |
-| `selfishell doctor` | Diagnose the current installation. |
+| `selfishell status` | Summarize tools and managed resources, list problems, and show CLI/rollback version. |
+| `selfishell doctor` | Summarize system and tool checks, listing problems individually. |
 | `selfishell version --available` | Check the latest published release. |
 | `selfishell update` | Update the CLI, tools, and configuration. |
 | `selfishell rollback` | Return to the previous retained release offline. |
 | `selfishell uninstall --restore --dry-run` | Preview restoring backed-up configuration. |
+
+Add `--verbose` to `status` or `doctor` to include every healthy item.
 
 `sfs` is the optional short alias for `selfishell`; an existing `sfs` from
 another program is left in place. See

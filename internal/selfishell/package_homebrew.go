@@ -176,7 +176,7 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 		installed[name] = true
 	}
 	if o.Process.progress != nil {
-		o.report("Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
+		o.report(reportSuccess, "Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
 	}
 	return nil
 }

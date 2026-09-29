@@ -50,7 +50,9 @@ func (m *managed) state(r Resource) (State, bool, error) {
 	return s, e == nil, e
 }
 func (m *managed) save(r Resource, s State) error { return WriteState(m.statePath(r), s) }
-func (m *managed) say(format string, args ...any) { m.c.report("Configuration", format, args...) }
+func (m *managed) say(tone reportTone, format string, args ...any) {
+	m.c.report("Configuration", tone, format, args...)
+}
 func (m *managed) backup(path string) (string, error) {
 	base := path + ".backup." + time.Now().Format("20060102150405")
 	candidate := base
@@ -130,8 +132,8 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		if s.Status == "active" || backup == "-" || backupPresent {
 			if m.dry {
 				if !preflight {
-					m.say("Conflict: modified managed file: %s", r.Target)
-					m.say("Would require an overwrite or skip decision.")
+					m.say(reportWarning, "Conflict: modified managed file: %s", r.Target)
+					m.say(reportPreview, "Would require an overwrite or skip decision.")
 				}
 				return nil
 			}
@@ -154,7 +156,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 				return nil
 			}
 			if action == "skip" {
-				m.say("Skipped modified managed file: %s", r.Target)
+				m.say(reportWarning, "Skipped modified managed file: %s", r.Target)
 				return nil
 			}
 			conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
@@ -167,7 +169,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 			if err = copyPreserve(r.Target, conflict); err != nil {
 				return err
 			}
-			m.say("Backed up modified managed file: %s -> %s", r.Target, conflict)
+			m.say(reportSuccess, "Backed up modified managed file: %s -> %s", r.Target, conflict)
 		}
 	}
 	if preflight {
@@ -188,7 +190,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		verb = "Updated"
 	}
 	if m.dry {
-		m.say("Would %s managed file: %s", map[bool]string{true: "update", false: "install"}[active], r.Target)
+		m.say(reportPreview, "Would %s managed file: %s", map[bool]string{true: "update", false: "install"}[active], r.Target)
 		return nil
 	}
 	if err = m.save(r, State{"file", "pending", r.Target, "-", backup, sourceChecksum}); err != nil {
@@ -213,7 +215,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	if err = m.save(r, State{"file", "active", r.Target, "-", backup, sourceChecksum}); err != nil {
 		return err
 	}
-	m.say("%s managed file: %s", verb, r.Target)
+	m.say(reportSuccess, "%s managed file: %s", verb, r.Target)
 	return nil
 }
 func copyPreserve(source, target string) error {
@@ -280,7 +282,7 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 		return nil
 	}
 	if m.dry {
-		m.say("Would link: %s -> %s", r.Target, r.Source)
+		m.say(reportPreview, "Would link: %s -> %s", r.Target, r.Source)
 		return nil
 	}
 	if err = m.save(r, State{"link", "pending", r.Target, r.Source, backup, "-"}); err != nil {
@@ -337,7 +339,7 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 	if err = m.save(r, State{"link", "active", r.Target, r.Source, backup, "-"}); err != nil {
 		return err
 	}
-	m.say("Linked: %s -> %s", r.Target, r.Source)
+	m.say(reportSuccess, "Linked: %s -> %s", r.Target, r.Source)
 	return nil
 }
 func (m *managed) installBlock(r Resource, preflight bool) error {
@@ -394,7 +396,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 	if has && view.status == "intact" && view.checksum != s.Checksum {
 		if m.dry {
 			if !preflight {
-				m.say("Would preserve modified managed block: %s", r.Target)
+				m.say(reportPreview, "Would preserve modified managed block: %s", r.Target)
 			}
 			return nil
 		}
@@ -417,7 +419,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 			return nil
 		}
 		if action == "skip" {
-			m.say("Skipped modified managed block: %s", r.Target)
+			m.say(reportWarning, "Skipped modified managed block: %s", r.Target)
 			return nil
 		}
 		conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
@@ -427,7 +429,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		if err = copyPreserve(r.Target, conflict); err != nil {
 			return err
 		}
-		m.say("Backed up modified managed block: %s -> %s", r.Target, conflict)
+		m.say(reportSuccess, "Backed up modified managed block: %s -> %s", r.Target, conflict)
 	}
 	if has && view.status != "intact" && view.status != "absent" {
 		return blockConflictError(r)
@@ -437,7 +439,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 	}
 	if view.status == "intact" {
 		if m.dry {
-			m.say("Would update Selfishell block: %s", r.Target)
+			m.say(reportPreview, "Would update Selfishell block: %s", r.Target)
 			return nil
 		}
 		if err = m.save(r, State{"block", "pending", r.Target, "-", "-", view.checksum}); err != nil {
@@ -446,7 +448,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		data = spliceBlock(data, view, content)
 	} else {
 		if m.dry {
-			m.say("Would add Selfishell block: %s", r.Target)
+			m.say(reportPreview, "Would add Selfishell block: %s", r.Target)
 			return nil
 		}
 		if err = m.save(r, State{"block", "pending", r.Target, "-", "-", expected}); err != nil {
@@ -465,9 +467,9 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 		return err
 	}
 	if view.status == "intact" {
-		m.say("Updated Selfishell block: %s", r.Target)
+		m.say(reportSuccess, "Updated Selfishell block: %s", r.Target)
 	} else {
-		m.say("Added Selfishell block: %s", r.Target)
+		m.say(reportSuccess, "Added Selfishell block: %s", r.Target)
 	}
 	return nil
 }

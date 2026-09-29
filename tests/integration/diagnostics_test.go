@@ -142,24 +142,24 @@ func TestDiagnostics(t *testing.T) {
 			expected := map[string]string{
 				"status-empty":                                 "Selfishell configuration is not installed.",
 				"status-help":                                  "Usage: selfishell status [--verbose]",
-				"doctor-unconfigured":                          "[OK] Platform: Ubuntu",
+				"doctor-unconfigured":                          "[ERROR] System: Ubuntu",
 				"doctor-unsupported":                           "[ERROR] Platform: Unsupported Linux distribution",
 				"doctor-unsupported-architecture":              "[ERROR] Architecture: mips64",
-				"doctor-ubuntu-wsl":                            "[OK] Platform: Ubuntu on WSL",
-				"status-ghostty-user-override":                 "[OK] " + filepath.Join(home, "link"),
-				"status-pending":                               "[PENDING] " + filepath.Join(home, "vimrc"),
-				"status-changed-file":                          "[CHANGED] " + filepath.Join(home, "vimrc"),
-				"status-file-replaced-by-same-content-symlink": "[CHANGED] " + filepath.Join(home, "vimrc"),
-				"status-changed-link":                          "[CHANGED] " + filepath.Join(home, "link"),
-				"status-changed-block":                         "[CHANGED] " + filepath.Join(home, ".vimrc"),
+				"doctor-ubuntu-wsl":                            "[ERROR] System: Ubuntu on WSL",
+				"status-ghostty-user-override":                 "[OK] Configuration: 1 paths intact",
+				"status-pending":                               "[PENDING] ~/vimrc",
+				"status-changed-file":                          "[CHANGED] ~/vimrc",
+				"status-file-replaced-by-same-content-symlink": "[CHANGED] ~/vimrc",
+				"status-changed-link":                          "[CHANGED] ~/link",
+				"status-changed-block":                         "[CHANGED] ~/.vimrc",
 				"status-malformed-and-good":                    "[MALFORMED]",
 			}[tc.name]
 			if expected == "" || !bytes.Contains(got.Stdout, []byte(expected)) {
 				t.Fatalf("missing diagnostic %q: %s", expected, got.Stdout)
 			}
 
-			if tc.name == "status-malformed-and-good" && (!strings.Contains(string(got.Stdout), "[MALFORMED]") || !strings.Contains(string(got.Stdout), "[OK]")) {
-				t.Fatalf("status did not list both resources: %s", got.Stdout)
+			if tc.name == "status-malformed-and-good" && (!strings.Contains(string(got.Stdout), "[MALFORMED]") || !strings.Contains(string(got.Stdout), "Configuration: 1 intact, 1 issues")) {
+				t.Fatalf("status did not account for both resources: %s", got.Stdout)
 			}
 		})
 	}
@@ -194,12 +194,17 @@ func TestConfiguredDiagnostics(t *testing.T) {
 		args   []string
 		status int
 	}{
-		{"status", []string{"status"}, 0}, {"status-verbose", []string{"status", "--verbose"}, 0}, {"doctor", []string{"doctor"}, 0},
+		{"status", []string{"status"}, 0}, {"status-verbose", []string{"status", "--verbose"}, 0}, {"doctor", []string{"doctor"}, 0}, {"doctor-verbose", []string{"doctor", "--verbose"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := filepath.Join(root, "home")
 			mustFS(t, os.RemoveAll(home))
 			mustFS(t, os.MkdirAll(home, 0700))
+			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
+			if e != nil {
+				t.Fatal(e)
+			}
+			requireStatus(t, "configuration fixture", setup, 0)
 			state := filepath.Join(home, ".local/state/selfishell")
 			mustFS(t, os.MkdirAll(filepath.Join(state, "resources"), 0700))
 			mustFS(t, os.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
@@ -214,16 +219,27 @@ func TestConfiguredDiagnostics(t *testing.T) {
 			}
 			requireStatus(t, "CLI", got, tc.status)
 			requireContains(t, got.Stdout, "Selfishell configuration is installed.")
-			if tc.name == "doctor" {
-				requireContains(t, got.Stdout, "[OK] Tool: git 2.0")
+			if strings.HasPrefix(tc.name, "doctor") {
 				requireContains(t, got.Stdout, "Optional tool: optional is not installed")
+				requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
+				if tc.name == "doctor-verbose" {
+					requireContains(t, got.Stdout, "[OK] Tool: git 2.0")
+					requireContains(t, got.Stdout, "[OK] C compiler:")
+				} else if bytes.Contains(got.Stdout, []byte("[OK] Tool: git")) || bytes.Contains(got.Stdout, []byte("[OK] C compiler:")) {
+					t.Fatalf("healthy details were not collapsed: %s", got.Stdout)
+				}
 			} else {
-				requireContains(t, got.Stdout, "[OK] "+filepath.Join(home, "link"))
+				requireContains(t, got.Stdout, "Configuration: 31 paths intact")
+				requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
 				if tc.name == "status-verbose" {
+					requireContains(t, got.Stdout, "[OK] ~/link")
 					requireContains(t, got.Stdout, "[TOOL] git | Installed: 2.0")
 					requireContains(t, got.Stdout, "[TOOL] optional | Installed: missing")
 				} else {
-					requireContains(t, got.Stdout, "Managed paths: 1 | Tools: 1 present, 1 missing")
+					requireContains(t, got.Stdout, "Optional tool: optional is not installed")
+					if bytes.Contains(got.Stdout, []byte("[OK] ~/link")) {
+						t.Fatalf("healthy path was not collapsed: %s", got.Stdout)
+					}
 				}
 			}
 			if !bytes.Equal(before, got.Home) {
@@ -265,7 +281,7 @@ func TestDoctorPlugins(t *testing.T) {
 		}
 		return strings.TrimSpace(string(result.Stdout))
 	}
-	for _, name := range []string{"missing", "clean", "detached", "packed", "fallback", "unborn", "broken", "invalid-config", "drift", "dirty", "untracked"} {
+	for _, name := range []string{"missing", "clean", "detached", "packed", "fallback", "unborn", "broken", "invalid-config", "drift", "dirty", "untracked", "mixed"} {
 		t.Run(name, func(t *testing.T) {
 			home := filepath.Join(root, "home")
 			mustFS(t, os.RemoveAll(home))
@@ -312,11 +328,21 @@ func TestDoctorPlugins(t *testing.T) {
 					mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("second\n"), 0600))
 					runGit(plugin, "commit", "--quiet", "-am", "second")
 				}
-				if name == "dirty" {
+				if name == "dirty" || name == "mixed" {
 					mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
 				}
 			}
 			mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
+			if name == "mixed" {
+				other := filepath.Join(home, ".local/share/zinit/plugins/test---other")
+				runGit(root, "clone", "--quiet", plugin, other)
+				runGit(other, "config", "maintenance.auto", "false")
+				f, e := os.OpenFile(filepath.Join(release, "dependencies.conf"), os.O_APPEND|os.O_WRONLY, 0600)
+				mustFS(t, e)
+				_, e = fmt.Fprintf(f, "zsh-plugin test/other %s all all - - - -\n", strings.Repeat("0", 40))
+				mustFS(t, e)
+				mustFS(t, f.Close())
+			}
 			trace := filepath.Join(root, "git-trace")
 			mustFS(t, os.WriteFile(trace, nil, 0600))
 			diagnosticEnv := append(append([]string{}, env...), "GIT_TRACE="+trace, "GIT_DIR="+root+"/foreign", "GIT_WORK_TREE="+root+"/foreign")
@@ -342,8 +368,15 @@ func TestDoctorPlugins(t *testing.T) {
 				"untracked":      "Zsh plugins: 1 modified locally (test/plugin)",
 				"drift":          "Zsh plugins: 1 at an unapproved revision (test/plugin)",
 				"dirty":          "Zsh plugins: 1 modified locally (test/plugin)",
+				"mixed":          "Zsh plugins: 1 modified locally (test/plugin)",
 			}[name]
 			requireContains(t, got.Stdout, expected)
+			if name == "mixed" {
+				requireContains(t, got.Stdout, "Zsh plugins: 1 at an unapproved revision (test/other)")
+				if strings.Count(string(got.Stdout), "selfishell update --tools-only") != 1 {
+					t.Fatalf("repeated plugin repair hint: %s", got.Stdout)
+				}
+			}
 			calls, err := os.ReadFile(trace)
 			mustFS(t, err)
 			wantHeads := 0
@@ -538,7 +571,7 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 	for _, tc := range []struct {
 		command string
 		status  int
-	}{{"status", 0}, {"doctor", 1}} {
+	}{{"status", 1}, {"doctor", 1}} {
 		t.Run(tc.command, func(t *testing.T) {
 			got, e := captureCommand(home, entry, []string{tc.command}, env)
 			if e != nil {
@@ -597,9 +630,14 @@ func TestStatusInstalledResource(t *testing.T) {
 	mustFS(t, os.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
 	before := mustSnapshot(t, home)
 	plain := run("plain", []string{"status"}, 0)
+	requireContains(t, plain.Stdout, "[OK] Configuration:")
+	verbose := run("verbose", []string{"status", "--verbose"}, 0)
 	for _, name := range []string{"zsh/zshrc", "vim/vimrc", "nvim/init.lua"} {
-		if !bytes.Contains(plain.Stdout, []byte(name)) {
-			t.Fatalf("status missing %s", name)
+		if !bytes.Contains(verbose.Stdout, []byte(name)) {
+			t.Fatalf("verbose status missing %s", name)
+		}
+		if bytes.Contains(plain.Stdout, []byte(name)) {
+			t.Fatalf("healthy path shown in compact status: %s", plain.Stdout)
 		}
 	}
 	if bytes.Contains(plain.Stdout, []byte("config.toml")) {
@@ -624,7 +662,7 @@ func TestStatusInstalledResource(t *testing.T) {
 	mustFS(t, e)
 	mustFS(t, f.Close())
 	changed := run("changed Neovim", []string{"status"}, 1)
-	if !bytes.Contains(changed.Stdout, []byte("[CHANGED] "+nvim)) {
+	if !bytes.Contains(changed.Stdout, []byte("[CHANGED] ~/.config/selfishell/nvim/init.lua")) {
 		t.Fatalf("modified Neovim not reported: %s", changed.Stdout)
 	}
 	if _, e := os.Stat(filepath.Join(root, "curl-calls")); e == nil {
@@ -659,7 +697,7 @@ func TestStatusListsUnknownTrackedResources(t *testing.T) {
 		t.Fatal(e)
 	}
 	requireStatus(t, "unknown tracked", got, 1)
-	if !bytes.Contains(got.Stdout, []byte("[CHANGED] "+target)) || !bytes.Contains(got.Stdout, []byte("[MALFORMED] "+filepath.Join(state, "unknown-bad.state"))) || !bytes.Contains(got.Stdout, []byte("Managed paths: 2")) {
+	if !bytes.Contains(got.Stdout, []byte("[CHANGED] ~/personal")) || !bytes.Contains(got.Stdout, []byte("[MALFORMED] ~/.local/state/selfishell/resources/unknown-bad.state")) || !bytes.Contains(got.Stdout, []byte("Configuration: 0 intact, 2 issues")) {
 		t.Fatalf("incomplete tracked resource report: %s", got.Stdout)
 	}
 	if !bytes.Equal(before, got.Home) {

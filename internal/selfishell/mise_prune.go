@@ -77,7 +77,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return nil
 	}
 	if dryRun {
-		o.report("Would prune unused mise versions for: %s (keeping current and tracked project versions, not rollback-only versions).", strings.Join(tools, " "))
+		o.report(reportPreview, "Would prune unused mise versions for: %s (keeping current and tracked project versions, not rollback-only versions).", strings.Join(tools, " "))
 		return nil
 	}
 	if len(o.SkippedOptional) != 0 {
@@ -168,7 +168,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return fmt.Errorf("mise prune exited %d", code)
 	}
 	if o.Process.progress != nil {
-		o.report("Cleaned up unused mise versions.")
+		o.report(reportSuccess, "Cleaned up unused mise versions.")
 	}
 	return nil
 }

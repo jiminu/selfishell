@@ -18,7 +18,7 @@ func (c CLI) marker(color, label string) string {
 	return label
 }
 func (c CLI) sayDiagnostic(color, label, message string) {
-	fmt.Fprintf(c.Out, "%s %s\n", c.marker(color, "["+label+"]"), message)
+	fmt.Fprintf(c.Out, "%s %s\n", c.marker(color, "["+label+"]"), displayHome(message, os.Getenv("HOME")))
 }
 func (c CLI) bold(value string) string {
 	if os.Getenv("NO_COLOR") == "" && IsTerminal(c.Out) {
@@ -27,7 +27,7 @@ func (c CLI) bold(value string) string {
 	return value
 }
 func (c CLI) diagnosticError(err error) int {
-	c.error(err.Error())
+	c.error(displayHome(err.Error(), os.Getenv("HOME")))
 	var invalid invalidPackageNameError
 	if errors.As(err, &invalid) {
 		return 2
@@ -110,9 +110,12 @@ func (c CLI) status(args []string) int {
 		version = strings.TrimRight(strings.ReplaceAll(string(data), "\x00", ""), "\n")
 	}
 	fmt.Fprintf(c.Out, "[CLI] Current: %s | Rollback: %s\n", version, rollbackStatusVersion(c.Root))
-	result, present, missing, count := 0, 0, 0, 0
+	result, present, requiredMissing, optionalMissing, count, intact := 0, 0, 0, 0, 0, 0
+	changedPaths, recordIssues := false, false
+	configured := false
 	platform := DetectPlatform()
 	if info, e := os.Stat(paths.State + "/configured"); e == nil && info.Mode().IsRegular() {
+		configured = true
 		c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
 		packages, e := diagnosticPackages(c.Root, platform.Name)
 		if e != nil {
@@ -128,9 +131,12 @@ func (c CLI) status(args []string) int {
 				return c.diagnosticError(e)
 			}
 			if tool.Installed == "missing" {
-				missing++
+				c.missingTool(p)
 				if p.Requirement == "required" {
+					requiredMissing++
 					result = 1
+				} else {
+					optionalMissing++
 				}
 			} else {
 				present++
@@ -143,6 +149,17 @@ func (c CLI) status(args []string) int {
 	resources, err := ManagedResources(c.Root)
 	if err != nil {
 		return c.diagnosticError(err)
+	}
+	expected := map[string]bool{}
+	if configured && platformSupported(platform.Name) {
+		choice, _ := os.ReadFile(paths.State + "/ghostty")
+		selected, e := ResourcesForPlatform(c.Root, platform.Name, string(choice) == "1\n")
+		if e != nil {
+			return c.diagnosticError(e)
+		}
+		for _, r := range selected {
+			expected[r.Name] = true
+		}
 	}
 	names := make([]string, 0, len(resources))
 	known := map[string]bool{}
@@ -171,15 +188,23 @@ func (c CLI) status(args []string) int {
 		statePath := paths.Resources + "/" + name + ".state"
 		state, e := ReadState(statePath)
 		if errors.Is(e, fs.ErrNotExist) {
+			if expected[name] {
+				count++
+				recordIssues = true
+				c.sayDiagnostic("31", "MISSING", "Installation record: "+statePath)
+				result = 1
+			}
 			continue
 		}
 		count++
 		if e != nil {
+			recordIssues = true
 			c.sayDiagnostic("31", "MALFORMED", statePath)
 			result = 1
 			continue
 		}
 		if state.Status != "active" {
+			recordIssues = true
 			c.sayDiagnostic("33", "PENDING", state.Target)
 			result = 1
 			continue
@@ -188,22 +213,31 @@ func (c CLI) status(args []string) int {
 		case "link":
 			target, e := os.Readlink(state.Target)
 			if e == nil && target == state.Reference {
-				c.sayDiagnostic("32", "OK", state.Target+" -> "+state.Reference)
+				intact++
+				if verbose {
+					c.sayDiagnostic("32", "OK", state.Target+" -> "+state.Reference)
+				}
 			} else {
+				changedPaths = true
 				c.sayDiagnostic("33", "CHANGED", state.Target)
 				result = 1
 			}
 		case "file":
 			checksum, e := Checksum(context.Background(), state.Target)
 			if e == nil && checksum == state.Checksum {
-				c.sayDiagnostic("32", "OK", state.Target)
+				intact++
+				if verbose {
+					c.sayDiagnostic("32", "OK", state.Target)
+				}
 			} else {
+				changedPaths = true
 				c.sayDiagnostic("33", "CHANGED", state.Target)
 				result = 1
 			}
 		case "block":
 			label := blockLabel(name)
 			if label == "" {
+				changedPaths = true
 				c.sayDiagnostic("33", "CHANGED", state.Target)
 				result = 1
 				continue
@@ -213,20 +247,36 @@ func (c CLI) status(args []string) int {
 			if e == nil {
 				view, ve := inspectBlock(name, data)
 				if ve == nil && view.status == "intact" && view.checksum == state.Checksum {
-					c.sayDiagnostic("32", "OK", suffix)
+					intact++
+					if verbose {
+						c.sayDiagnostic("32", "OK", suffix)
+					}
 					continue
 				}
 			}
+			changedPaths = true
 			c.sayDiagnostic("33", "CHANGED", suffix)
 			result = 1
 		}
 	}
 	if count == 0 {
 		fmt.Fprintln(c.Out, "Selfishell configuration is not installed.")
+		c.diagnosticHint("Set up the Selfishell environment with:", "selfishell install")
 		return 1
 	}
-	if !verbose {
-		c.sayDiagnostic("36", "SUMMARY", fmt.Sprintf("Managed paths: %d | Tools: %d present, %d missing", count, present, missing))
+	if intact == count {
+		c.sayDiagnostic("32", "OK", fmt.Sprintf("Configuration: %d paths intact", intact))
+	} else {
+		c.sayDiagnostic("33", "WARN", fmt.Sprintf("Configuration: %d intact, %d issues", intact, count-intact))
+	}
+	if recordIssues {
+		c.diagnosticHint("Review installation records and existing backups before reinstalling.", "")
+	}
+	if changedPaths {
+		c.diagnosticHint("Review changed configuration before synchronizing with:", "selfishell update --tools-only --skip-packages")
+	}
+	if configured {
+		c.toolsSummary(present, requiredMissing, optionalMissing)
 	}
 	return result
 }
@@ -244,4 +294,63 @@ func blockLabel(name string) string {
 		return "Selfishell ghostty"
 	}
 	return ""
+}
+
+func (c CLI) missingTool(p Package) {
+	if p.Requirement == "required" {
+		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Tool: %s is missing (%s)", p.Name, p.Manager))
+	} else {
+		c.sayDiagnostic("36", "INFO", fmt.Sprintf("Optional tool: %s is not installed (%s)", p.Name, p.Manager))
+	}
+}
+
+func (c CLI) toolsSummary(present, requiredMissing, optionalMissing int) {
+	message := fmt.Sprintf("Tools: %d present", present)
+	color, label := "32", "OK"
+	if requiredMissing > 0 {
+		color, label = "31", "ERROR"
+		message += fmt.Sprintf(", %d required missing", requiredMissing)
+	}
+	if optionalMissing > 0 {
+		if requiredMissing == 0 {
+			color, label = "36", "INFO"
+		}
+		message += fmt.Sprintf(", %d optional not installed", optionalMissing)
+	}
+	c.sayDiagnostic(color, label, message)
+	if requiredMissing+optionalMissing > 0 {
+		c.diagnosticHint("Synchronize missing tools with:", "selfishell update --tools-only")
+	}
+}
+
+func (c CLI) diagnosticHint(message, command string) {
+	c.sayDiagnostic("36", "INFO", message)
+	if command != "" {
+		fmt.Fprintf(c.Out, "       %s\n", c.bold(command))
+	}
+}
+
+// displayHome changes presentation only, preserving literal paths for operations.
+func displayHome(message, home string) string {
+	prefix := strings.TrimRight(home, "/") + "/"
+	if prefix == "/" {
+		return message
+	}
+	var out strings.Builder
+	offset := 0
+	for {
+		index := strings.Index(message[offset:], prefix)
+		if index < 0 {
+			out.WriteString(message[offset:])
+			return out.String()
+		}
+		index += offset
+		out.WriteString(message[offset:index])
+		if index == 0 || strings.ContainsRune(" \t\r\n\"'(", rune(message[index-1])) {
+			out.WriteString("~/")
+		} else {
+			out.WriteString(prefix)
+		}
+		offset = index + len(prefix)
+	}
 }

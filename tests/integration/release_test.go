@@ -413,10 +413,13 @@ func TestToolsOnlyOverwritesChangedSourceWithConflictBackupAndChecksum(t *testin
 	before, err := os.ReadFile(state)
 	mustFS(t, err)
 	mustFS(t, os.WriteFile(target, []byte("user_modified_vimrc\n"), 0600))
-	updated, err := runCommand(home, []string{share + "/current/bin/selfishell", "update", "--tools-only", "--skip-packages"}, []byte("y\ny\n"), append(env, "SELFISHELL_TEST_TTY=1"), 20*time.Second)
+	updated, err := runCommand(home, []string{share + "/current/bin/selfishell", "update", "--tools-only", "--skip-packages"}, []byte("y\n"), append(env, "SELFISHELL_TEST_TTY=1"), 20*time.Second)
 	mustFS(t, err)
 	if updated.Status != 0 || !bytes.Contains(updated.Stdout, []byte("Selfishell tools and configuration synchronized")) {
 		t.Fatalf("changed source: %d %q %q", updated.Status, updated.Stdout, updated.Stderr)
+	}
+	if bytes.Count(updated.Stdout, []byte("[y/N]")) != 1 || !bytes.Contains(updated.Stdout, []byte("Managed file was modified:")) {
+		t.Fatalf("expected only the modified-file prompt: %q", updated.Stdout)
 	}
 	source, err := os.ReadFile(share + "/releases/2.0.0/config/shared/vimrc")
 	mustFS(t, err)

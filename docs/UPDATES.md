@@ -17,6 +17,12 @@ is needed on the user's machine.
 | `selfishell update --skip-packages` | Update the CLI, then apply configuration if the release changed. |
 | `selfishell update --tools-only --skip-packages` | Reapply current configuration without network access. |
 
+Tools and configuration synchronize without a separate confirmation. If a
+managed file or Selfishell block was modified locally, update asks whether to
+overwrite it or skip it. An accepted overwrite backs up the local content first.
+Changes outside Selfishell blocks are preserved without prompting. `--yes` and
+non-interactive execution preserve modified managed content and report an error.
+
 Add `--yes` for non-interactive confirmation or `--dry-run` to preview the
 selected phases without changing tools, configuration, or the active release.
 When the CLI would change, the tools preview uses the running release's manifest;
@@ -28,7 +34,7 @@ release newer than the latest one, such as a prerelease, is kept.
 
 A successful update reports the version transition, such as
 `Selfishell updated: 1.2.10 -> 1.2.14`; release notes are on GitHub.
-If the tools/configuration phase is declined or fails, the CLI may already have
+If the tools/configuration phase fails, the CLI may already have
 switched: check `selfishell version` for the active release. Tools-only updates
 finish with `Selfishell tools and configuration synchronized.`
 

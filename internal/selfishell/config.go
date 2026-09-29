@@ -285,7 +285,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 
 func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *PackageOperation) error {
 	if skip {
-		c.report("Notes", "Skipping package and tool installation.")
+		c.report("Notes", reportWarning, "Skipping package and tool installation.")
 	}
 	if err := c.applyManagedResources(&p); err != nil {
 		return err
@@ -316,7 +316,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		if err := writeOnce(miseGlobal, nil); err != nil {
 			return err
 		}
-		c.report("Configuration", "Created user mise config: %s", miseGlobal)
+		c.report("Configuration", reportSuccess, "Created user mise config: %s", miseGlobal)
 	}
 	if !skip {
 		if err := c.installNeovim(operation, paths, dry); err != nil {
@@ -335,7 +335,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	c.defaultShell(dry, yes)
 	if m.unchanged > 0 {
-		c.report("Notes", "%d items unchanged.", m.unchanged)
+		c.report("Notes", reportInfo, "%d items unchanged.", m.unchanged)
 	}
 	c.complete("Selfishell configuration installed.")
 	return nil

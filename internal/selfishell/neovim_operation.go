@@ -237,7 +237,7 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 	if previously {
 		verb = "Updated"
 	}
-	o.report("%s approved lazy.nvim revision: %s", verb, dep.Version)
+	o.report(reportSuccess, "%s approved lazy.nvim revision: %s", verb, dep.Version)
 	return nil
 }
 
@@ -255,7 +255,7 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 	}
 	if dryRun {
 		for _, line := range []string{"Would sync declared Neovim plugins.", "Would sync lazy.nvim bootstrap repository.", "Would update installed Tree-sitter parsers."} {
-			o.report("%s", line)
+			o.report(reportPreview, "%s", line)
 		}
 		return nil
 	}
@@ -367,7 +367,7 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 		}
 	}
 	if !synced && o.Process.progress != nil {
-		o.report("Synchronized declared Neovim plugins.")
+		o.report(reportSuccess, "Synchronized Neovim plugins: approved revisions")
 	}
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", `+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end`, "+qa"); err != nil {
 		if ctx.Err() != nil {

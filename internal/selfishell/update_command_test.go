@@ -706,7 +706,7 @@ func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
 	t.Setenv("SELFISHELL_TEST_TTY", "1")
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, In: strings.NewReader("y\nn\n"), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only"})
+	code := (CLI{Root: root, In: strings.NewReader("n\n"), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only"})
 	if code == 0 || !strings.Contains(out.String(), "Managed file was modified") || strings.Contains(out.String(), "synchronized") {
 		t.Fatalf("prompt/package order: %d %q %q", code, out.String(), stderr.String())
 	}
@@ -750,7 +750,8 @@ func TestToolsPhaseRequiredPackageFailureLeavesConfigurationUnchanged(t *testing
 	t.Setenv("PATH", tools+":/usr/bin:/bin")
 	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
-	code, out, stderr := commandResult(root, "update", "--tools-only", "--yes")
+	t.Setenv("SELFISHELL_TEST_TTY", "")
+	code, out, stderr := commandResult(root, "update", "--tools-only")
 	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "Could not update apt package indexes") {
 		t.Fatalf("required: %d %q %q", code, out, stderr)
 	}
@@ -1288,10 +1289,13 @@ func TestUpdateInteractiveManagedFileOverwriteAndSkip(t *testing.T) {
 				answer = "y"
 			}
 			var out, errOut bytes.Buffer
-			cli := CLI{Root: root, In: strings.NewReader("y\n" + answer + "\n"), Out: &out, Err: &errOut}
+			cli := CLI{Root: root, In: strings.NewReader(answer + "\n"), Out: &out, Err: &errOut}
 			code = cli.Run([]string{"update", "--tools-only", "--skip-packages"})
 			if code != 0 {
 				t.Fatalf("interactive: %d %q %q", code, out.String(), errOut.String())
+			}
+			if strings.Count(out.String(), "[y/N]") != 1 || !strings.Contains(out.String(), "Managed file was modified:") {
+				t.Fatalf("expected only the modified-file prompt: %q", out.String())
 			}
 			if _, err := os.Stat(later); err != nil {
 				t.Fatal("later resource not applied")
@@ -1312,6 +1316,43 @@ func TestUpdateInteractiveManagedFileOverwriteAndSkip(t *testing.T) {
 				}
 			} else if string(got) != "personal completion\n" || !bytes.Equal(stateBefore, stateAfter) {
 				t.Fatal("skipped resource/state changed")
+			}
+		})
+	}
+}
+
+func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		interactive bool
+		newDefaults bool
+	}{
+		{"unchanged-interactive", true, false},
+		{"unchanged-noninteractive", false, false},
+		{"new-defaults-interactive", true, true},
+		{"new-defaults-noninteractive", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+			tty := ""
+			if tc.interactive {
+				tty = "1"
+			}
+			t.Setenv("SELFISHELL_TEST_TTY", tty)
+			state := blockState(t, paths, "zsh-common")
+			source := root + "/config/shared/zsh/common.zsh"
+			want := blockRead(t, source)
+			if tc.newDefaults {
+				want = append(want, []byte("\n# updated release defaults\n")...)
+				blockWrite(t, source, want)
+			}
+			code, out, stderr := blockRun(t, root, "", "update", "--tools-only", "--skip-packages")
+			if code != 0 || stderr != "" || !strings.Contains(out, "Selfishell tools and configuration synchronized.") || strings.Contains(out, "[y/N]") {
+				t.Fatalf("unmodified configuration: code=%d out=%q errors=%q", code, out, stderr)
+			}
+			blockEqual(t, state.Target, want)
+			if _, err := os.Lstat(paths.State + "/backups"); !os.IsNotExist(err) {
+				t.Fatalf("unmodified configuration required a conflict backup: %v", err)
 			}
 		})
 	}

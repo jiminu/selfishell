@@ -15,11 +15,22 @@ selfishell doctor
 selfishell status
 ```
 
-`status` reports tools from the environment as Selfishell-managed, Homebrew,
-apt, external, or missing. Package-manager versions are reported without an
-exact approved version because those repositories control resolution. It
-returns nonzero when required tools are missing or managed configuration is
-missing or changed. It does not modify files or check the network.
+`status` and `doctor` summarize healthy groups and list missing tools or other
+problems individually. Use `selfishell status --verbose` for every managed path
+and each tool's installed version, source, and approved version. Use
+`selfishell doctor --verbose` for individual system checks and installed tools.
+
+Tool sources include Selfishell-managed, Homebrew, apt, external, or missing.
+Package-manager versions are reported without an exact approved version because
+those repositories control resolution. `status` returns nonzero when required
+tools are missing or managed configuration is missing or changed. Optional
+missing tools remain informational, including in the summary. Problem groups
+include a next step, and paths beneath the current home directory use `~`.
+Diagnostics do not modify files or check the network.
+
+After completed setup, `status` also reports missing installation records for
+configuration required on the current platform, including Ghostty when enabled.
+Keep existing backups and review the reported records before reinstalling.
 
 ## Restricted Network
 
