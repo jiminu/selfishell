@@ -1,10 +1,6 @@
-# Zinit contributes additional definitions, but standard completion does not
-# depend on it being installed.
-ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
-
-if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
-  source "$ZINIT_HOME/zinit.zsh"
-
+# Zinit (loaded by common.zsh) contributes additional definitions, but
+# standard completion does not depend on it being installed.
+if (( $+functions[zinit] )); then
   if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
     # Pinned to the commit recorded for zsh-users/zsh-completions in
     # dependencies.conf; keep the two in sync.

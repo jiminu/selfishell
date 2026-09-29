@@ -47,6 +47,13 @@ _selfishell_zinit_plugin_ready() {
   [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}/.git" ]]
 }
 
+# Load Zinit before mise: it prepends $ZPFX/bin, and a PATH change after
+# `mise activate` makes the first prompt rerun a full hook-env.
+ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
+if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
+  source "$ZINIT_HOME/zinit.zsh"
+fi
+
 source "$SELFISHELL_COMMON_DIR/runtime.zsh"
 source "$SELFISHELL_COMMON_DIR/history.zsh"
 source "$SELFISHELL_COMMON_DIR/completion.zsh"
