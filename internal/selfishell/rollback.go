@@ -52,12 +52,7 @@ func (c CLI) rollback(args []string) int {
 			c.error(err.Error())
 			return 1
 		}
-		requested = strings.TrimPrefix(link, "releases/")
-		if link != "releases/"+requested || !ValidReleaseVersion(requested) {
-			c.error("Retained previous release is invalid: " + filepath.Base(link))
-			return 1
-		}
-		if _, err := validReleaseDirectory(l.releases, requested); err != nil {
+		if requested, err = retainedRelease(l.releases, link); err != nil {
 			c.error("Retained previous release is invalid: " + filepath.Base(link))
 			return 1
 		}
