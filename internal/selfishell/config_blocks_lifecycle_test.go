@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,6 +105,33 @@ func blockEqual(t *testing.T, path string, want []byte) {
 	t.Helper()
 	if got := blockRead(t, path); !bytes.Equal(got, want) {
 		t.Fatalf("%s: got %q want %q", path, got, want)
+	}
+}
+
+func TestManagedBlockAtEOFWithoutNewline(t *testing.T) {
+	for _, name := range []string{"user-zshrc", "user-zprofile", "user-vimrc", "user-ghostty", "user-zshenv"} {
+		for _, update := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/update=%t", name, update), func(t *testing.T) {
+				platform := "macos"
+				if name == "user-zshenv" {
+					platform = "ubuntu"
+				}
+				root, _, paths := blockHome(t, platform)
+				blockOK(t, root, "install", "--skip-packages", "--yes")
+				r := failureResource(t, root, name)
+				content, err := blockContent(name, paths.Config)
+				if err != nil {
+					t.Fatal(err)
+				}
+				personal := []byte("# personal content\n")
+				blockWrite(t, r.Target, append(bytes.Clone(personal), bytes.TrimSuffix(content, []byte("\n"))...))
+				if update {
+					blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+				}
+				blockOK(t, root, "uninstall", "--yes")
+				blockEqual(t, r.Target, personal)
+			})
+		}
 	}
 }
 

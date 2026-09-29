@@ -169,6 +169,15 @@ If a recorded backup is missing, `--restore` also stops before removal. Return
 the backup to the reported path and retry, or omit `--restore` to remove the
 managed configuration without restoring backups.
 
+If restoration is interrupted, rerun `selfishell uninstall --restore` with the
+same or a newer CLI. A path already restored is left untouched, including any
+subsequent personal edits. Finish this recovery before installing again. A
+backup whose destination is occupied is preserved rather than overwritten.
+
+Without `--restore`, uninstall keeps original backups and prints their paths.
+These installation backups sit beside the original paths with a
+`.backup.<timestamp>` suffix (and a collision suffix when needed).
+
 ### Restore configuration and purge Selfishell
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and

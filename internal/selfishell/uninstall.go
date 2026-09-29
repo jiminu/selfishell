@@ -74,6 +74,9 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 	s := record.State
 	r := record.Resource
+	if s.Status == "restoring" {
+		return preflightRestore(s, restore)
+	}
 	info, present, err := exists(s.Target)
 	if err != nil {
 		return err
@@ -148,6 +151,9 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 	if err := m.preflightUninstall(record, restore); err != nil {
 		return err
 	}
+	if s.Status == "restoring" {
+		return m.finishRestore(r, s)
+	}
 	info, present, err := exists(s.Target)
 	if err != nil {
 		return err
@@ -204,6 +210,59 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			if _, occupied, _ := exists(s.Target); occupied {
 				return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
 			}
+			// Journal the restore before moving the backup. A retry must never
+			// mistake the restored user path for a managed path to remove.
+			s.Status = "restoring"
+			if err = m.save(r, s); err != nil {
+				return err
+			}
+			return m.finishRestore(r, s)
+		}
+	}
+	if !restore && s.Backup != "-" {
+		m.say(reportInfo, "Original backup location: %s", s.Backup)
+	}
+	return m.forgetResource(r)
+}
+
+func interruptedRestore(target string) error {
+	return fmt.Errorf("An interrupted restore is unfinished for: %s. Run 'selfishell uninstall --restore' before installing again.", target)
+}
+
+func preflightRestore(s State, restore bool) error {
+	_, targetPresent, err := exists(s.Target)
+	if err != nil {
+		return err
+	}
+	_, backupPresent, err := exists(s.Backup)
+	if err != nil {
+		return err
+	}
+	if backupPresent {
+		if targetPresent {
+			return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
+		}
+		if !restore {
+			return interruptedRestore(s.Target)
+		}
+	} else if !targetPresent {
+		return fmt.Errorf("Restore target and recorded backup are both missing: %s; %s. Return the backup and retry 'selfishell uninstall --restore'.", s.Target, s.Backup)
+	}
+	return nil
+}
+
+func (m *managed) finishRestore(r Resource, s State) error {
+	if err := preflightRestore(s, true); err != nil {
+		return err
+	}
+	_, backupPresent, err := exists(s.Backup)
+	if err != nil {
+		return err
+	}
+	if backupPresent {
+		if m.dry {
+			m.say(reportPreview, "Would restore: %s -> %s", s.Backup, s.Target)
+		} else {
 			if err = makeRawDir(rawParent(s.Target)); err != nil {
 				return err
 			}
@@ -211,7 +270,13 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 				return err
 			}
 		}
+	} else if m.dry {
+		m.say(reportPreview, "Would clear completed restore record: %s", s.Target)
 	}
+	return m.forgetResource(r)
+}
+
+func (m *managed) forgetResource(r Resource) error {
 	if !m.dry {
 		if m.removeState != nil {
 			return m.removeState(m.statePath(r))
