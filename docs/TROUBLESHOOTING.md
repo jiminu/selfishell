@@ -20,6 +20,12 @@ problems individually. Use `selfishell status --verbose` for every managed path
 and each tool's installed version, source, and approved version. Use
 `selfishell doctor --verbose` for individual system checks and installed tools.
 
+Both commands start with the current CLI and rollback versions. `status` checks
+managed configuration integrity and tool installation. `doctor` checks platform,
+architecture, package manager, compiler availability, installed tools, and Zsh
+plugin checkouts. Use `status` to inspect configuration changes and `doctor` to
+diagnose environment prerequisites and plugin problems.
+
 Tool sources include Selfishell-managed, Homebrew, apt, external, or missing.
 Package-manager versions are reported without an exact approved version because
 those repositories control resolution. `status` returns nonzero when required

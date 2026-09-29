@@ -87,6 +87,14 @@ func rollbackStatusVersion(root string) string {
 	return version
 }
 
+func (c CLI) diagnosticHeader() {
+	version := "unknown"
+	if data, e := os.ReadFile(filepath.Join(c.Root, "VERSION")); e == nil {
+		version = strings.TrimRight(strings.ReplaceAll(string(data), "\x00", ""), "\n")
+	}
+	fmt.Fprintf(c.Out, "[CLI] Current: %s | Rollback: %s\n", version, rollbackStatusVersion(c.Root))
+}
+
 func (c CLI) status(args []string) int {
 	verbose := false
 	for _, arg := range args {
@@ -105,11 +113,7 @@ func (c CLI) status(args []string) int {
 	if err != nil {
 		return c.diagnosticError(err)
 	}
-	version := "unknown"
-	if data, e := os.ReadFile(filepath.Join(c.Root, "VERSION")); e == nil {
-		version = strings.TrimRight(strings.ReplaceAll(string(data), "\x00", ""), "\n")
-	}
-	fmt.Fprintf(c.Out, "[CLI] Current: %s | Rollback: %s\n", version, rollbackStatusVersion(c.Root))
+	c.diagnosticHeader()
 	result, present, requiredMissing, optionalMissing, count, intact := 0, 0, 0, 0, 0, 0
 	changedPaths, recordIssues := false, false
 	configured := false
