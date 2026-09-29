@@ -37,10 +37,13 @@ contract.
 ## Publish
 
 Publish only a commit that is already merged and pushed to the documented
-release branch, currently `main`. The normal PR CI should be green before the
-release tag is created; the Release workflow reruns the repository checks on
-Linux and macOS before publication and rejects a tag whose commit is not in
-`main` history.
+release branch, currently `main`. The normal main CI should be green before the
+release tag is created. The Release workflow then calls the complete CI workflow
+for the tagged commit, including the Ubuntu, macOS and Neovim E2E jobs that
+ordinary CI skips when a push changes only documentation, and rejects a tag
+whose commit is not in `main` history. Any failed CI job blocks publication.
+Rerun failed Release jobs for a transient failure; otherwise fix `main` and
+release a new patch version, because release tags are never moved.
 
 Before tagging, require a clean worktree, confirm `HEAD` is the intended pushed
 `origin/main` commit, and verify that `v<version>` does not already exist locally
@@ -69,9 +72,10 @@ A stable tag uses `v<major>.<minor>.<patch>`. A suffix such as
 dot-separated SemVer identifiers made of ASCII letters, digits, and hyphens;
 numeric identifiers must not contain leading zeroes.
 
-The Release workflow validates the pushed tag, runs the full verification
-suite on Linux and macOS, builds the six-file asset set once, and transfers the
-same artifact ID to native smoke jobs on both hosts and the publisher. Both
+The Release workflow validates the pushed tag, runs the full CI workflow on Linux
+and macOS, builds the six-file asset set once without restoring or
+saving a Go build cache, and transfers the same artifact ID to native smoke jobs
+on both hosts and the publisher. Both
 smokes must pass before the publisher verifies the exact file set, `VERSION`
 and checksums, generates GitHub Artifact Attestations, and creates the GitHub
 Release with all archives,

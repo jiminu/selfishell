@@ -10,45 +10,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify release (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+  ci:
+    name: Full CI
+    # Run every CI job for the tagged commit. A main push run may have skipped
+    # E2E jobs because its own diff changed only documentation.
+    uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - name: Check out release commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Set up pinned Go toolchain
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install shell tooling (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck shfmt zsh
-
-      - name: Install shell tooling (macOS)
-        if: runner.os == 'macOS'
-        run: brew install shellcheck shfmt
-
-      - name: Run verification suite
-        run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
 
   build:
-    needs: verify
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -69,7 +40,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - name: Require release commit on main
         run: |

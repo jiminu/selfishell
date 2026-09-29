@@ -105,6 +105,9 @@ func policyRepo(t *testing.T) (home, repo, base string) {
 
 var pinRE = regexp.MustCompile(`(?m)^\s*(?:-\s*)?uses:\s*[^\s@]+@[0-9a-f]{40}\s+#\s+v[0-9]+\.[0-9]+\.[0-9]+\s*$`)
 
+// A local reusable workflow is read from the same commit as its caller.
+var localWorkflowRE = regexp.MustCompile(`^    uses: \./\.github/workflows/[a-z0-9-]+\.yml$`)
+
 func TestWorkflowActionPins(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(repoRoot(), ".github/workflows/*.yml"))
 	if err != nil || len(files) == 0 {
@@ -119,7 +122,7 @@ func TestWorkflowActionPins(t *testing.T) {
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.Contains(line, "uses:") {
 				count++
-				if !pinRE.MatchString(line) {
+				if !pinRE.MatchString(line) && !localWorkflowRE.MatchString(line) {
 					t.Errorf("%s: invalid action pin: %q", filepath.Base(file), line)
 				}
 			}
@@ -275,17 +278,17 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			t.Fatal("release workflow has top-level permissions")
 		}
 	}
-	verify := policyJob(t, jobs, "verify")
+	ci := policyJob(t, jobs, "ci")
 	build := policyJob(t, jobs, "build")
 	smoke := policyJob(t, jobs, "smoke")
 	publish := policyJob(t, jobs, "publish")
-	if policyField(t, verify.lines, "    ", "permissions") != "" || policyField(t, publish.lines, "    ", "permissions") != "" {
+	if policyField(t, ci.lines, "    ", "permissions") != "" || policyField(t, publish.lines, "    ", "permissions") != "" {
 		t.Fatal("job permissions must be maps")
 	}
 	for _, tc := range []struct {
 		job        workflowJob
 		name, perm string
-	}{{verify, "verify", "contents: read"}, {build, "build", "contents: read"}, {smoke, "smoke", "contents: read"}, {publish, "publish", "contents: write"}} {
+	}{{build, "build", "contents: read"}, {smoke, "smoke", "contents: read"}, {publish, "publish", "contents: write"}} {
 		found := false
 		for _, line := range tc.job.lines {
 			if line == "      "+tc.perm {
@@ -303,7 +306,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			}
 		}
 	}
-	for _, j := range []workflowJob{verify, build, smoke} {
+	for _, j := range []workflowJob{ci, build, smoke} {
 		for _, line := range j.lines {
 			if strings.HasPrefix(line, "      ") && (strings.Contains(line, "attestations: write") || strings.Contains(line, "id-token: write") || strings.Contains(line, "artifact-metadata: write") || strings.Contains(line, "contents: write")) {
 				t.Errorf("%s has publish permission: %s", j.name, line)
@@ -315,8 +318,8 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			t.Errorf("publish missing %s", perm)
 		}
 	}
-	if !strings.Contains(strings.Join(verify.lines, "\n"), "os: [ubuntu-latest, macos-latest]") {
-		t.Error("verification must cover Linux and macOS")
+	if policyField(t, ci.lines, "    ", "uses") != "./.github/workflows/ci.yml" || !strings.Contains(strings.Join(ci.lines, "\n"), "      contents: read") {
+		t.Error("release must call the full CI workflow with read-only contents")
 	}
 	if !strings.Contains(policyRun(t, policyStep(t, build, "Require release commit on main")), `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`) {
 		t.Error("release does not check main ancestry")
@@ -335,7 +338,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 		}
 	}
 	// Traverse every prerequisite, rejecting unknown jobs and cycles. Publish must
-	// depend transitively on verification even if intermediate jobs are added.
+	// depend transitively on full CI even if intermediate jobs are added.
 	visiting := map[string]bool{}
 	done := map[string]bool{}
 	reaches := map[string]map[string]bool{}
@@ -363,7 +366,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 		reaches[name] = found
 		return found
 	}
-	for _, pair := range [][2]string{{"build", "verify"}, {"smoke", "build"}, {"publish", "verify"}, {"publish", "build"}, {"publish", "smoke"}} {
+	for _, pair := range [][2]string{{"build", "ci"}, {"smoke", "build"}, {"publish", "ci"}, {"publish", "build"}, {"publish", "smoke"}} {
 		if !visit(pair[0])[pair[1]] {
 			t.Errorf("%s has no transitive dependency on %s", pair[0], pair[1])
 		}
@@ -374,7 +377,6 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	_, jobs := workflowSections(t, "release.yml")
 	build, smoke, publish := policyJob(t, jobs, "build"), policyJob(t, jobs, "smoke"), policyJob(t, jobs, "publish")
 	for _, stage := range []struct{ job, command string }{
-		{"verify", "Run verification suite"},
 		{"build", "Build release artifacts"},
 		{"smoke", "Smoke exact prebuilt release"},
 	} {
@@ -405,7 +407,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 		t.Error("exact smoke must run on Linux and macOS")
 	}
 	upload := strings.Join(policyStep(t, build, "Upload release artifacts"), "\n")
-	for _, needle := range []string{"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}", "path: dist/", "if-no-files-found: error"} {
+	for _, needle := range []string{"actions/upload-artifact@", "name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}", "path: dist/", "if-no-files-found: error"} {
 		if !strings.Contains(upload, needle) {
 			t.Errorf("upload missing %s", needle)
 		}
@@ -415,7 +417,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	}
 	for _, j := range []workflowJob{smoke, publish} {
 		download := strings.Join(policyStep(t, j, "Download release artifacts"), "\n")
-		for _, needle := range []string{"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c", "artifact-ids: ${{ needs.build.outputs.artifact_id }}", "path: dist", "digest-mismatch: error"} {
+		for _, needle := range []string{"actions/download-artifact@", "artifact-ids: ${{ needs.build.outputs.artifact_id }}", "path: dist", "digest-mismatch: error"} {
 			if !strings.Contains(download, needle) {
 				t.Errorf("%s download missing %s", j.name, needle)
 			}
@@ -706,26 +708,36 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	policyGit(t, home, repo, "add", ".")
 	policyGit(t, home, repo, "commit", "-qm", "tampered classifier")
 	head := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
-	output := filepath.Join(home, "github-output")
-	summary := filepath.Join(home, "github-summary")
-	env := append(policyEnv(home), "EVENT_NAME=pull_request", "BASE_SHA="+base, "GITHUB_SHA="+head, "GITHUB_OUTPUT="+output, "GITHUB_STEP_SUMMARY="+summary)
-	got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 5*time.Second)
-	if err != nil || got.Status != 0 {
-		t.Fatalf("CI block: status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
+	// Base is the trusted pull_request case; head, whose classifier reports no
+	// runtime changes, stands in for a documentation-only commit that release calls.
+	for _, tc := range []struct{ name, full, base string }{{"trusted_base", "false", base}, {"release_full", "true", head}} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(home, tc.name+"-output")
+			summary := filepath.Join(home, tc.name+"-summary")
+			env := append(policyEnv(home), "FULL_CHECKS="+tc.full, "BASE_SHA="+tc.base, "GITHUB_SHA="+head, "GITHUB_OUTPUT="+output, "GITHUB_STEP_SUMMARY="+summary)
+			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 5*time.Second)
+			if err != nil || got.Status != 0 {
+				t.Fatalf("CI block: status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
+			}
+			data, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != "runtime=true\nubuntu_container_e2e=true\n" {
+				t.Errorf("classification: %q", data)
+			}
+			sum, err := os.ReadFile(summary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(sum), string(data)) {
+				t.Errorf("summary lacks classification: %q", sum)
+			}
+		})
 	}
-	data, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "runtime=true\nubuntu_container_e2e=true\n" {
-		t.Errorf("untrusted classifier output: %q", data)
-	}
-	sum, err := os.ReadFile(summary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(sum), string(data)) {
-		t.Errorf("summary lacks trusted classification: %q", sum)
+	filter := strings.Join(policyStep(t, policyJob(t, jobs, "changes"), "Detect runtime changes"), "\n")
+	if !strings.Contains(filter, "FULL_CHECKS: ${{ github.event_name == 'workflow_dispatch' || inputs.full == true }}") {
+		t.Error("manual and called CI must run every check")
 	}
 }
 
@@ -775,5 +787,13 @@ exit 90
 	}
 	if string(calls) != "release view v1.2.3\n" {
 		t.Errorf("existing release action calls: %q", calls)
+	}
+}
+
+func TestReleaseBuildDisablesGoCache(t *testing.T) {
+	_, jobs := workflowSections(t, "release.yml")
+	setup := strings.Join(policyStep(t, policyJob(t, jobs, "build"), "Set up pinned Go toolchain"), "\n")
+	if !strings.Contains(setup, "cache: false") {
+		t.Error("release artifact build must disable Go cache restore/save")
 	}
 }

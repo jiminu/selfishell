@@ -6,6 +6,14 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  # Release calls every check for the tagged commit; path filters apply only to
+  # ordinary pushes and PRs.
+  workflow_call:
+    inputs:
+      full:
+        description: Run every check regardless of changed files.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -32,9 +40,9 @@ jobs:
         id: filter
         env:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          EVENT_NAME: ${{ github.event_name }}
+          FULL_CHECKS: ${{ github.event_name == 'workflow_dispatch' || inputs.full == true }}
         run: |
-          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+          if [[ "$FULL_CHECKS" == true ]]; then
             classification=$'runtime=true\nubuntu_container_e2e=true'
           else
             # Use the base revision so a PR cannot change the classifier to skip its own E2E checks.
