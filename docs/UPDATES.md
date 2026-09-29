@@ -198,8 +198,10 @@ then follow the [release procedure](RELEASING.md) to deliver the changes.
 without checking the network or available Apt/Homebrew updates. Use
 `selfishell version --available` to check the latest release.
 
-Interactive Zsh reads the installed `VERSION` and displays a cached notice for
-newer releases. Metadata refreshes in the background at most once per day;
+Interactive Zsh checks once before the first prompt, reads the installed
+`VERSION`, and displays a cached notice for newer releases. Settings anywhere
+outside the marked loader block, including below it, are applied before this
+check. Metadata refreshes in the background at most once per day;
 startup does not wait for a CLI process or network request, and notices never
 install updates. Configure notices in `~/.zshrc`, outside the marked loader block:
 

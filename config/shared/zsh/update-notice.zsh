@@ -245,6 +245,15 @@ _selfishell_update_notice() {
   fi
 }
 
-if [[ -o interactive ]]; then
+_selfishell_update_notice_once() {
+  add-zsh-hook -d precmd _selfishell_update_notice_once
   _selfishell_update_notice
+  return 0
+}
+
+if [[ -o interactive ]]; then
+  # Read personal settings below the loader block before displaying a notice
+  # or scheduling a refresh. Remove the hook before the next prompt.
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _selfishell_update_notice_once
 fi

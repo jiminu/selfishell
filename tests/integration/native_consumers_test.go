@@ -301,7 +301,7 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 	}
 	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "status"))
 	f.env = append(f.env, "MISE_OFFLINE=1")
-	zsh := fullUbuntuCommand(t, f, f.home, 45*time.Second, "zsh", "-d", "-i", "-c", `for tool in starship fzf zoxide; do [[ "${commands[$tool]}" == "$MISE_DATA_DIR/installs/"* ]] || exit 1; done; (( $+functions[prompt_starship_precmd] && $+functions[fzf-file-widget] && $+functions[__zoxide_z] ))`)
+	zsh := fullUbuntuCommand(t, f, f.home, 45*time.Second, "zsh", "-d", "-i", "-c", `for tool in starship fzf zoxide; do [[ "${commands[$tool]}" == "$MISE_DATA_DIR/installs/"* ]] || exit 1; done; [[ "${_comps[age]}" == _age ]] || exit 2; (( $+functions[prompt_starship_precmd] && $+functions[fzf-file-widget] && $+functions[__zoxide_z] ))`)
 	requireOK(t, zsh)
 	vim := fullUbuntuCommand(t, f, f.home, 45*time.Second, "vim", "--not-a-term", "-c", "if !&number || !&relativenumber | cquit 1 | endif", "-c", "q")
 	requireOK(t, vim)
