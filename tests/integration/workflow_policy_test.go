@@ -11,6 +11,7 @@ import (
 )
 
 func TestCIChangeClassification(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name            string
 		files           map[string]string
@@ -109,6 +110,7 @@ var pinRE = regexp.MustCompile(`(?m)^\s*(?:-\s*)?uses:\s*[^\s@]+@[0-9a-f]{40}\s+
 var localWorkflowRE = regexp.MustCompile(`^    uses: \./\.github/workflows/[a-z0-9-]+\.yml$`)
 
 func TestWorkflowActionPins(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob(filepath.Join(repoRoot(), ".github/workflows/*.yml"))
 	if err != nil || len(files) == 0 {
 		t.Fatalf("workflow glob: %v, %d", err, len(files))
@@ -133,6 +135,7 @@ func TestWorkflowActionPins(t *testing.T) {
 	}
 }
 func TestDependabotTracksGitHubActions(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile(filepath.Join(repoRoot(), ".github/dependabot.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -272,6 +275,7 @@ func policyField(t *testing.T, lines []string, indent, key string) string {
 	return vals[0]
 }
 func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
+	t.Parallel()
 	raw, jobs := workflowSections(t, "release.yml")
 	for _, line := range strings.Split(raw, "\n") {
 		if strings.HasPrefix(line, "permissions:") {
@@ -374,6 +378,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 }
 
 func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")
 	build, smoke, publish := policyJob(t, jobs, "build"), policyJob(t, jobs, "smoke"), policyJob(t, jobs, "publish")
 	for _, stage := range []struct{ job, command string }{
@@ -447,6 +452,7 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 }
 
 func TestCIExactPrebuiltSmoke(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "ci.yml")
 	shell := policyJob(t, jobs, "shell")
 	if !strings.Contains(strings.Join(shell.lines, "\n"), `'["ubuntu-latest","macos-latest"]'`) {
@@ -500,6 +506,7 @@ func policyNeeds(t *testing.T, lines []string) []string {
 }
 
 func TestDependencyWorkflowChanges(t *testing.T) {
+	t.Parallel()
 	raw, jobs := workflowSections(t, "dependency-updates.yml")
 	job := policyJob(t, jobs, "update")
 	detect := policyStep(t, job, "Check dependency changes")
@@ -561,6 +568,7 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 }
 
 func TestGoSecurityTargetsAndFailure(t *testing.T) {
+	t.Parallel()
 	raw, jobs := workflowSections(t, "go-security.yml")
 	if strings.Contains(raw, "pull_request:") || strings.Contains(raw, "  push:") {
 		t.Fatal("scheduled security scanning must not add work to ordinary PR/push CI")
@@ -591,6 +599,7 @@ func TestGoSecurityTargetsAndFailure(t *testing.T) {
 }
 
 func TestDependencyWorkflowPRBlock(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "dependency-updates.yml")
 	block := policyRun(t, policyStep(t, policyJob(t, jobs, "update"), "Create or refresh dependency update PR"))
 	for _, tc := range []struct {
@@ -696,6 +705,7 @@ exec /usr/bin/git "$@"
 }
 
 func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "ci.yml")
 	block := policyRun(t, policyStep(t, policyJob(t, jobs, "changes"), "Detect runtime changes"))
 	home, repo, _ := policyRepo(t)
@@ -742,6 +752,7 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 }
 
 func TestReleaseWorkflowMainAncestryAndImmutableGuard(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")
 	build := policyJob(t, jobs, "build")
 	publish := policyJob(t, jobs, "publish")
@@ -791,6 +802,7 @@ exit 90
 }
 
 func TestReleaseBuildDisablesGoCache(t *testing.T) {
+	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")
 	setup := strings.Join(policyStep(t, policyJob(t, jobs, "build"), "Set up pinned Go toolchain"), "\n")
 	if !strings.Contains(setup, "cache: false") {

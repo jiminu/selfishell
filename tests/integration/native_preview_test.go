@@ -42,11 +42,13 @@ func previewRun(t *testing.T, home, dir, code, word, realpath, path string) capt
 	return r
 }
 func TestNativeFzfTabPreviewsWaitForPlugin(t *testing.T) {
+	t.Parallel()
 	home := previewFixture(t)
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; zstyle -L ':fzf-tab:complete:*' fzf-preview || true`, "PATH="+filepath.Join(home, "bin")+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon())
 	nativeQuiet(t, r)
 }
 func TestNativeFzfTabPreviewContexts(t *testing.T) {
+	t.Parallel()
 	home := previewFixture(t)
 	commands := previewCommands(t, home)
 	if len(commands) != 6 {
@@ -54,6 +56,7 @@ func TestNativeFzfTabPreviewContexts(t *testing.T) {
 	}
 }
 func TestNativeFzfTabPreviewFallbacks(t *testing.T) {
+	t.Parallel()
 	home := previewFixture(t)
 	commands := previewCommands(t, home)
 	sandbox := filepath.Join(home, "sandbox", "a dir")
@@ -97,6 +100,7 @@ func gitPreview(t *testing.T, home, repo string, args ...string) string {
 	return string(r.Stdout)
 }
 func TestNativeFzfTabGitPreviews(t *testing.T) {
+	t.Parallel()
 	home := previewFixture(t)
 	commands := previewCommands(t, home)
 	repo := filepath.Join(home, "a repository")

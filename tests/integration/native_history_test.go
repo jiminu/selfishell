@@ -11,6 +11,7 @@ import (
 )
 
 func TestNativeHistoryConfiguration(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; print -rl -- "file=$HISTFILE" "sizes=$HISTSIZE,$SAVEHIST"; for option in EXTENDED_HISTORY INC_APPEND_HISTORY_TIME HIST_IGNORE_SPACE HIST_REDUCE_BLANKS; do print -r -- "option=$option:$options[$option]"; done; /bin/sh -c 'printf "export=%s\n" "$HISTFILE"'`, "SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/shared/zsh/history.zsh"))
 	lines := strings.Split(strings.TrimSpace(string(r.Stdout)), "\n")

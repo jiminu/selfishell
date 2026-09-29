@@ -67,6 +67,7 @@ func refreshSuppliedChecksums(t *testing.T, dir string) {
 	mustFS(t, os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(sums.String()), 0644))
 }
 func TestPrebuiltSmokeRejectsWrongCPUAndPayload(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, want string
 		change     func(*testing.T, map[string]archiveMember)
@@ -103,6 +104,7 @@ func TestPrebuiltSmokeRejectsWrongCPUAndPayload(t *testing.T) {
 }
 
 func TestMinimalSmokeDoctorRequiresMissingMiseDiagnosis(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		got    capture

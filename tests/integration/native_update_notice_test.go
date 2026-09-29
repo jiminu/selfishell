@@ -43,6 +43,7 @@ func nativeAbsent(t *testing.T, path string) {
 }
 
 func TestNativeNoticeHonorsSettingsAfterLoaderOnce(t *testing.T) {
+	t.Parallel()
 	for _, enabled := range []string{"0", "1"} {
 		t.Run(enabled, func(t *testing.T) {
 			home := nativeHome(t)
@@ -69,6 +70,7 @@ for hook in $precmd_functions; do "$hook"; done`
 	}
 }
 func TestNativeNoticeReadsInstalledVersionFile(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	release := filepath.Join(filepath.Dir(home), "releases/1.2.3")
 	nativeWrite(t, filepath.Join(release, "VERSION"), "1.2.3\n", 0600)
@@ -79,6 +81,7 @@ func TestNativeNoticeReadsInstalledVersionFile(t *testing.T) {
 	}
 }
 func TestNativeNoticeDefersCurrentVersionLookup(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin, cache := nativeNoticeCLI(t, home)
 	root := filepath.Dir(home)
@@ -130,6 +133,7 @@ print -r -- "current4=$(command wc -l <"$SELFISHELL_CURRENT_CALLS" | command tr 
 	nativeAbsent(t, filepath.Join(cache, "available-version"))
 }
 func TestNativeNoticeSemanticVersionVectors(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	fixture := filepath.Join(repoRoot(), "tests/fixtures/version-precedence.txt")
 	file, e := os.Open(fixture)
@@ -170,6 +174,7 @@ func TestNativeNoticeSemanticVersionVectors(t *testing.T) {
 	}
 }
 func TestNativeNoticeCacheAndRefresh(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin, cache := nativeNoticeCLI(t, home)
 	nativeWrite(t, filepath.Join(cache, "available-version"), "1.1.0\n", 0600)
@@ -204,6 +209,7 @@ func TestNativeNoticeCacheAndRefresh(t *testing.T) {
 	nativeAbsent(t, filepath.Join(cache, "update-check.lock"))
 }
 func TestNativeNoticeLockRecovery(t *testing.T) {
+	t.Parallel()
 	rows := []struct{ meta, age, ttl, expected string }{
 		{"timestamp", "-700", "600", "refreshed"}, {"timestamp", "0", "600", "held"}, {"absent", "stale", "600", "refreshed"}, {"absent", "fresh", "600", "held"}, {"pid", "stale", "600", "refreshed"}, {"corrupt", "stale", "600", "refreshed"}, {"corrupt", "fresh", "600", "held"}, {"zero", "stale", "600", "refreshed"}, {"zero", "fresh", "600", "held"}, {"unreadable", "stale", "600", "refreshed"}, {"timestamp", "100000", "600", "held"}, {"timestamp", "-700", "abc", "refreshed"}, {"timestamp", "-700", "-100", "refreshed"}, {"timestamp", "-700", "1.5", "refreshed"}, {"timestamp", "-700", "0", "refreshed"}, {"timestamp", "-700", "empty", "refreshed"}, {"timestamp", "-2", "0", "held"}, {"timestamp", "-5", "2", "refreshed"},
 	}
@@ -263,6 +269,7 @@ func TestNativeNoticeLockRecovery(t *testing.T) {
 	}
 }
 func TestNativeNoticeFailedLookupClearsLock(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	cache := filepath.Join(home, ".cache/selfishell")
 	mustFS(t, os.MkdirAll(cache, 0700))
@@ -273,6 +280,7 @@ func TestNativeNoticeFailedLookupClearsLock(t *testing.T) {
 	nativeAbsent(t, filepath.Join(cache, "update-check.lock"))
 }
 func TestNativeNoticeUndatableLock(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	r := nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; if result="$(_selfishell_update_lock_stale_since "$SELFISHELL_LOCK" 600 99999999999)"; then print -r -- "DETERMINED:$result"; else print PRESERVED; fi`, "SELFISHELL_LOCK="+filepath.Join(home, "no-such-lock-dir"))
 	if string(r.Stdout) != "PRESERVED\n" || len(r.Stderr) != 0 {
@@ -292,6 +300,7 @@ func nativeAssertNoTemp(t *testing.T, cache string) {
 	}
 }
 func TestNativeNoticeWriteFailureCleansTemp(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses unwritable-directory permission semantics")
 	}
@@ -337,6 +346,7 @@ exec /bin/rm "$@"
 	nativeAssertNoTemp(t, cache)
 }
 func TestNativeNoticeMoveFailureCleansTemp(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin, cache := nativeNoticeCLI(t, home)
 	moves := filepath.Join(filepath.Dir(home), "move-calls")

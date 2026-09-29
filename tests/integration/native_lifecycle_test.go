@@ -139,12 +139,14 @@ func smokePrebuiltArchive(t *testing.T, dir, version string) {
 	requireAbsent(t, f.share)
 }
 func TestNativeBuiltArchiveSmoke(t *testing.T) {
+	t.Parallel()
 	dir := nativeAssetDir(t)
 	assertAssetSet(t, dir, nativeArchiveVersion)
 	smokePrebuiltArchive(t, dir, nativeArchiveVersion)
 }
 
 func TestNativeGoToGoExactUpdateRollbackRestore(t *testing.T) {
+	t.Parallel()
 	f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
 	original := []byte("alias mine='kept'\r\n")
 	setupAndCheck(t, f, nativeArchiveVersion, original)
@@ -170,6 +172,7 @@ func TestNativeGoToGoExactUpdateRollbackRestore(t *testing.T) {
 }
 
 func TestPrebuiltSmokeRejectsBadInputs(t *testing.T) {
+	t.Parallel()
 	// Execute the entrypoint as a child so t.Setenv cannot mask parent variables.
 	for _, tc := range []struct {
 		name, dir, version string
@@ -191,6 +194,7 @@ func TestPrebuiltSmokeRejectsBadInputs(t *testing.T) {
 }
 
 func TestNativeCompleteReleaseLifecycle(t *testing.T) {
+	t.Parallel()
 	f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
 	bin := filepath.Join(f.home, "fakebin")
 	mustFS(t, os.Mkdir(bin, 0700))
@@ -259,6 +263,7 @@ func TestNativeCompleteReleaseLifecycle(t *testing.T) {
 }
 
 func TestPrebuiltSmokeRejectsCorruptedArchive(t *testing.T) {
+	t.Parallel()
 	source := nativeAssetDir(t)
 	dir := t.TempDir()
 	for _, name := range append(releaseAssetNames(nativeArchiveVersion), "SHA256SUMS", "VERSION") {
@@ -279,6 +284,7 @@ func TestPrebuiltSmokeRejectsCorruptedArchive(t *testing.T) {
 }
 
 func TestPrebuiltSmokeConsumesSuppliedArbitraryVersion(t *testing.T) {
+	t.Parallel()
 	dir := nativeVersionAssets(t, nextNativeVersion)
 	cmd := exec.Command(os.Args[0], "-test.run=^TestExactReleaseSmoke$", "-test.count=1", "-test.v")
 	cmd.Env = append(os.Environ(),

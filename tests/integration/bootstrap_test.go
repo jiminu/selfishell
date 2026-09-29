@@ -32,7 +32,6 @@ func nativeVersionAssets(t *testing.T, version string) string {
 	if version == nativeArchiveVersion {
 		return nativeAssetDir(t)
 	}
-	privateNativeHome(t)
 	value, _ := extraNative.LoadOrStore(version, &nativeAssetFixture{})
 	holder := value.(*nativeAssetFixture)
 	holder.once.Do(func() {
@@ -180,6 +179,7 @@ func assertHomeSnapshot(t *testing.T, home string, before []byte) {
 }
 
 func TestNativeBootstrapExactAndDefault(t *testing.T) {
+	t.Parallel()
 	f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
 	f.latest(t, nextNativeVersion)
 	// Force the host asset selector; no other target archive is offered.
@@ -212,6 +212,7 @@ func TestNativeBootstrapExactAndDefault(t *testing.T) {
 }
 
 func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
+	t.Parallel()
 	t.Run("latest prerelease", func(t *testing.T) {
 		f := newBootstrapFixture(t, prereleaseNativeVersion)
 		tags := filepath.Join(f.home, "tags.json")
@@ -296,6 +297,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 }
 
 func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
+	t.Parallel()
 	t.Run("foreign release links", func(t *testing.T) {
 		for _, name := range []string{"current", "previous"} {
 			t.Run(name, func(t *testing.T) {
@@ -396,6 +398,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 }
 
 func TestNativeBootstrapStagingAndTermination(t *testing.T) {
+	t.Parallel()
 	t.Run("termination", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		bin := filepath.Join(f.home, "fakebin")
@@ -478,6 +481,7 @@ cp -R "$staging" "$releases/$version"
 }
 
 func TestNativeBootstrapPathGuidance(t *testing.T) {
+	t.Parallel()
 	f := newBootstrapFixture(t, nativeArchiveVersion)
 	got := f.run(t, "--version", nativeArchiveVersion)
 	requireOK(t, got)
@@ -489,6 +493,7 @@ func TestNativeBootstrapPathGuidance(t *testing.T) {
 // The helper remains intentionally executable as a process: the smoke interface
 // must consume the exact bytes supplied by its caller.
 func TestExactReleaseSmoke(t *testing.T) {
+	t.Parallel()
 	dir, version := os.Getenv("SELFISHELL_TEST_RELEASE_DIR"), os.Getenv("SELFISHELL_TEST_RELEASE_VERSION")
 	if dir == "" && version == "" {
 		t.Skip("set SELFISHELL_TEST_RELEASE_DIR and SELFISHELL_TEST_RELEASE_VERSION to smoke prebuilt assets")
@@ -508,6 +513,7 @@ func TestExactReleaseSmoke(t *testing.T) {
 func validSmokeVersion(v string) bool { return selfishell.ValidReleaseVersion(v) }
 
 func TestNativeBootstrapSetupAndPurge(t *testing.T) {
+	t.Parallel()
 	t.Run("explicit setup and dry run", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes"))
