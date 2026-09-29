@@ -84,7 +84,7 @@ func Build(ctx context.Context, root, version, output string) error {
 			return err
 		}
 		binary := filepath.Join(stage, "selfishell-"+target.goos+"-"+target.arch)
-		cmd := exec.CommandContext(ctx, goPath, "build", "-trimpath", "-buildvcs=false", "-ldflags=-buildid=", "-o", binary, "./cmd/selfishell")
+		cmd := exec.CommandContext(ctx, goPath, "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", binary, "./cmd/selfishell")
 		cmd.Dir = root
 		cmd.Env = append(append([]string{}, env...), "GOOS="+target.goos, "GOARCH="+target.arch)
 		if output, err := cmd.CombinedOutput(); err != nil {
