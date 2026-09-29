@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -417,6 +418,35 @@ func TestProcessInheritedEnvironmentUpdatesPWDForDir(t *testing.T) {
 		}
 	}
 	t.Fatal("child PWD missing")
+}
+
+func TestProbeParallelBoundsConcurrencyAndRunsEveryIndexOnce(t *testing.T) {
+	const n = 3*probeLimit + 1
+	var active, peak atomic.Int32
+	seen := make([]atomic.Int32, n)
+	// Each probe waits for a full batch, so a sequential runner fails here.
+	deadline := time.Now().Add(5 * time.Second)
+	probeParallel(n, func(i int) {
+		now := active.Add(1)
+		defer active.Add(-1)
+		for current := peak.Load(); now > current; current = peak.Load() {
+			if peak.CompareAndSwap(current, now) {
+				break
+			}
+		}
+		for peak.Load() < probeLimit && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		seen[i].Add(1)
+	})
+	if got := peak.Load(); got != probeLimit {
+		t.Fatalf("peak concurrency %d, want %d", got, probeLimit)
+	}
+	for i := range seen {
+		if got := seen[i].Load(); got != 1 {
+			t.Fatalf("probe %d ran %d times", i, got)
+		}
+	}
 }
 
 func TestGitChildIgnoresInheritedRepositorySelectors(t *testing.T) {

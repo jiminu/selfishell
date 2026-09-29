@@ -97,6 +97,71 @@ func TestNeovimPreservesDirtyCheckout(t *testing.T) {
 	}
 }
 
+func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
+	op, paths, root, manifest, home, head := neovimFixture(t)
+	lines := fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s/lazy-source - - -\n", head, home)
+	var plugins []string
+	for i := range 2*probeLimit + 2 {
+		name := fmt.Sprintf("plugin%02d", i)
+		lines += fmt.Sprintf("nvim-plugin demo/%s %s all all %s/sources/%s - - -\n", name, head, home, name)
+		plugins = append(plugins, home+"/data/nvim/lazy/"+name)
+		gitCommand(t, home, "clone", "-q", home+"/lazy-source", plugins[i])
+	}
+	writeTestFile(t, manifest, lines, 0600)
+	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(home + "/nvim.log"); err != nil {
+		t.Fatal(err)
+	}
+	// Earlier failures win regardless of which concurrent check finishes first.
+	writeTestFile(t, plugins[3]+"/init.lua", "dirty 3\n", 0600)
+	if err := os.RemoveAll(plugins[6] + "/.git"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(plugins[6]+"/.git", 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, plugins[9]+"/init.lua", "dirty 9\n", 0600)
+	if err := os.RemoveAll(plugins[12]); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, plugins[12], "user data", 0600)
+	lazy := home + "/data/selfishell/nvim/lazy/lazy.nvim"
+	writeTestFile(t, lazy+"/user-file", "keep", 0600)
+	stdin := strings.NewReader("terminal input")
+	op.Process.In = stdin
+	for _, step := range []struct {
+		want string
+		fix  func()
+	}{
+		{"lazy.nvim checkout was modified; preserving it: " + lazy, func() { os.Remove(lazy + "/user-file") }},
+		{"Neovim plugin checkout was modified; preserving it: " + plugins[3] + ".", func() { gitCommand(t, plugins[3], "checkout", "--", ".") }},
+		{"Could not inspect Neovim plugin checkout: " + plugins[6] + ":", func() { os.RemoveAll(plugins[6]) }},
+		{"Neovim plugin checkout was modified; preserving it: " + plugins[9] + ".", func() { gitCommand(t, plugins[9], "checkout", "--", ".") }},
+		{"Neovim plugin path is not an approved Git checkout; preserving it: " + plugins[12], nil},
+	} {
+		for range 3 {
+			err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
+			if err == nil || !strings.Contains(err.Error(), step.want) {
+				t.Fatalf("want %q, got %v", step.want, err)
+			}
+		}
+		if step.fix != nil {
+			step.fix()
+		}
+	}
+	if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
+		t.Fatalf("ran nvim despite a failed check: %v", err)
+	}
+	if got := readTestFile(t, plugins[12]); got != "user data" {
+		t.Fatalf("preserved path changed: %q", got)
+	}
+	if stdin.Len() != len("terminal input") {
+		t.Fatal("a concurrent check read the caller's stdin")
+	}
+}
+
 func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 	op, paths, root, manifest, home, _ := neovimFixture(t)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, true); err != nil {
@@ -167,7 +232,7 @@ func TestLazyRevisionUpdateReportsAndPreservesStaleTemporaryPath(t *testing.T) {
 	dep.Version = newHead
 	stale := target + ".tmp.stale"
 	writeTestFile(t, stale+"/marker", "stale", 0600)
-	if err := op.installLazy(context.Background(), paths, dep); err != nil {
+	if err := op.installLazy(context.Background(), paths, dep, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != newHead {
@@ -203,7 +268,7 @@ func TestLazyPreviousCheckoutCleanupFailureWarnsAfterActivation(t *testing.T) {
 		}
 		return os.RemoveAll(path)
 	}
-	if err := op.installLazy(context.Background(), paths, dep); err != nil {
+	if err := op.installLazy(context.Background(), paths, dep, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != dep.Version {
@@ -228,7 +293,7 @@ func TestLazyStageCleanupFailureWarnsAlongsideCheckoutFailure(t *testing.T) {
 		}
 		return os.RemoveAll(path)
 	}
-	if err := op.installLazy(context.Background(), paths, dep); err == nil {
+	if err := op.installLazy(context.Background(), paths, dep, nil); err == nil {
 		t.Fatal("unavailable approved revision accepted")
 	}
 	if warning := op.Process.Err.(*bytes.Buffer).String(); !strings.Contains(warning, "injected stage cleanup failure") || !strings.Contains(warning, "staging path") {
@@ -259,7 +324,7 @@ func TestLazyRejectsDirtyMalformedAndBlockedParent(t *testing.T) {
 	}
 	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
 	writeTestFile(t, target, "user data", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0]); err == nil || !strings.Contains(err.Error(), "preserving") {
+	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "preserving") {
 		t.Fatalf("malformed target accepted: %v", err)
 	}
 	if err := os.Remove(target); err != nil {
@@ -267,7 +332,7 @@ func TestLazyRejectsDirtyMalformedAndBlockedParent(t *testing.T) {
 	}
 	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
 	writeTestFile(t, target+"/init.lua", "dirty\n", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0]); err == nil || !strings.Contains(err.Error(), "modified") {
+	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "modified") {
 		t.Fatalf("dirty lazy accepted: %v", err)
 	}
 	if got, _ := os.ReadFile(target + "/init.lua"); string(got) != "dirty\n" {
@@ -277,7 +342,7 @@ func TestLazyRejectsDirtyMalformedAndBlockedParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, home+"/data/selfishell/nvim/lazy", "blocked", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0]); err == nil || !strings.Contains(err.Error(), "Could not create Neovim plugin directory") {
+	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "Could not create Neovim plugin directory") {
 		t.Fatalf("blocked parent: %v", err)
 	}
 }
@@ -288,7 +353,7 @@ func TestNeovimUsesManagedMiseResolutionAndExec(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
-printf '%s|%s|%s|%s\n' "$PWD" "$MISE_GLOBAL_CONFIG_FILE" "$*" "$HOME" >> "$MISE_LOG"
+printf '%s|%s|%s|%s\n' "$PWD" "$MISE_GLOBAL_CONFIG_FILE" "$(printf '%s' "$*" | tr '\n' ' ')" "$HOME" >> "$MISE_LOG"
 if [ "$3" = which ]; then printf '%s\n' "$MANAGED_NVIM"; exit 0; fi
 if [ "$3" = exec ]; then shift 4; "$@"; exit; fi
 `, 0755)
@@ -301,8 +366,11 @@ case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
+	if err := op.UpdateDefaultLSP(context.Background(), root, paths, false); err != nil {
+		t.Fatal(err)
+	}
 	log, _ := os.ReadFile(home + "/mise.log")
-	if !strings.Contains(string(log), "which nvim") || strings.Count(string(log), "exec -- "+managedNvim) != 2 || !strings.Contains(string(log), root+"/config/shared/mise.toml") {
+	if strings.Count(string(log), "which nvim") != 1 || strings.Count(string(log), "exec -- "+managedNvim) != 3 || !strings.Contains(string(log), root+"/config/shared/mise.toml") {
 		t.Fatalf("mise resolution/exec: %s", log)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(log)), "\n") {
@@ -310,6 +378,37 @@ case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "
 			t.Fatalf("inherited caller project cwd: %s", line)
 		}
 	}
+}
+
+func TestNeovimMiseResolutionReusesOnlyAnExecutableSuccess(t *testing.T) {
+	op, paths, root, _, home, _ := neovimFixture(t)
+	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
+printf '%s\n' "$*" >> "$MISE_LOG"
+[ "$3" = which ] && [ -f "$HOME/which-ok" ] && printf '%s\n' "$MANAGED_NVIM"
+[ -f "$HOME/which-ok" ]
+`, 0755)
+	managed := home + "/managed/nvim"
+	writeTestFile(t, managed, "#!/bin/sh\n", 0755)
+	op.Process.Env = append(op.Process.Env, "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managed)
+	resolve := func(want string, calls int) {
+		t.Helper()
+		nvim, _, err := op.nvimCommand(context.Background(), root, paths)
+		if err != nil || nvim != want {
+			t.Fatalf("resolved %q %v, want %q", nvim, err, want)
+		}
+		if got := strings.Count(readTestFile(t, home+"/mise.log"), "which nvim"); got != calls {
+			t.Fatalf("which calls %d, want %d", got, calls)
+		}
+	}
+	resolve(home+"/bin/nvim", 1)
+	resolve(home+"/bin/nvim", 2) // a failed resolution is retried
+	writeTestFile(t, home+"/which-ok", "", 0600)
+	resolve(managed, 3)
+	resolve(managed, 3)
+	if err := os.Remove(managed); err != nil {
+		t.Fatal(err)
+	}
+	resolve(home+"/bin/nvim", 4)
 }
 
 func TestNeovimVerificationFailureSurfacesSyncLog(t *testing.T) {
@@ -353,7 +452,7 @@ func TestLazyRejectsGitDirectorySymlink(t *testing.T) {
 	if err := os.Symlink(home+"/lazy-source/.git", target+"/.git"); err != nil {
 		t.Fatal(err)
 	}
-	if err := op.installLazy(context.Background(), paths, deps[0]); err == nil || !strings.Contains(err.Error(), "preserving") {
+	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "preserving") {
 		t.Fatalf("linked git metadata accepted: %v", err)
 	}
 }
@@ -370,7 +469,7 @@ func TestLazyPreservesUntrackedUserFile(t *testing.T) {
 	}
 	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
 	writeTestFile(t, target+"/user-file", "keep", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0]); err == nil || !strings.Contains(err.Error(), "modified") {
+	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "modified") {
 		t.Fatalf("untracked file accepted: %v", err)
 	}
 	if data, _ := os.ReadFile(target + "/user-file"); string(data) != "keep" {

@@ -1,8 +1,10 @@
 package selfishell
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,18 +29,42 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 	if err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("Zinit is not installed: %s", script)
 	}
+	var plugins []Dependency
 	for _, dep := range o.dependencies {
-		if dep.Kind != "zsh-plugin" {
-			continue
+		if dep.Kind == "zsh-plugin" {
+			plugins = append(plugins, dep)
 		}
+	}
+	pluginDir := func(dep Dependency) string {
+		return dataHome + "/zinit/plugins/" + strings.ReplaceAll(dep.Name, "/", "---")
+	}
+	// Check checkouts concurrently up to the first invalid name, then act on
+	// the results in declaration order.
+	probed := len(plugins)
+	for index, dep := range plugins {
+		if !validPluginName(dep.Name) {
+			probed = index
+			break
+		}
+	}
+	valid := make([]bool, probed)
+	probeParallel(probed, func(index int) {
+		valid[index] = o.validZinitPlugin(ctx, pluginDir(plugins[index]), plugins[index].Version)
+	})
+	replaced := map[string]bool{}
+	for index, dep := range plugins {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if !validPluginName(dep.Name) {
 			return fmt.Errorf("invalid Zinit plugin name: %s", dep.Name)
 		}
-		target := dataHome + "/zinit/plugins/" + strings.ReplaceAll(dep.Name, "/", "---")
-		if o.validZinitPlugin(ctx, target, dep.Version) {
+		target := pluginDir(dep)
+		if replaced[target] {
+			// An earlier entry resolving to the same checkout changed it.
+			valid[index] = o.validZinitPlugin(ctx, target, dep.Version)
+		}
+		if valid[index] {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -116,6 +142,7 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 			}
 			return err
 		}
+		replaced[target] = true
 		if moved {
 			os.RemoveAll(previous)
 			o.report(reportSuccess, "Updated Zsh plugin: %s", dep.Name)
@@ -136,10 +163,13 @@ func (o *PackageOperation) validZinitPlugin(ctx context.Context, target, version
 	if git, err := os.Stat(target + "/.git"); err != nil || !git.IsDir() {
 		return false
 	}
-	head, err := o.commandOutput(ctx, "git", "-C", target, "rev-parse", "HEAD")
+	head, err := o.gitHead(ctx, target)
 	if err != nil || head != version {
 		return false
 	}
-	status, err := o.commandOutput(ctx, "git", "-C", target, "status", "--porcelain")
-	return err == nil && status == ""
+	var out bytes.Buffer
+	p := o.Process
+	p.In, p.Out, p.Err = nil, &out, io.Discard // may run as a concurrent probe
+	code, err := p.Run(ctx, "git", "-C", target, "status", "--porcelain")
+	return err == nil && code == 0 && strings.TrimSpace(out.String()) == ""
 }

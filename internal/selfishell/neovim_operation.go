@@ -51,7 +51,7 @@ func (o *PackageOperation) gitHead(ctx context.Context, dir string) (string, err
 	}
 	p := o.gitRepositoryProcess()
 	var out, stderr bytes.Buffer
-	p.Out, p.Err = &out, &stderr
+	p.In, p.Out, p.Err = nil, &out, &stderr // may run as a concurrent probe
 	code, err := p.Run(ctx, "git", "-C", dir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
@@ -69,7 +69,7 @@ func (o *PackageOperation) gitTrackedChanges(ctx context.Context, dir string, ex
 func (o *PackageOperation) gitChanges(ctx context.Context, dir string, excludeTags, includeUntracked bool) (string, error) {
 	p := o.gitRepositoryProcess()
 	var out, stderr bytes.Buffer
-	p.Out, p.Err = &out, &stderr
+	p.In, p.Out, p.Err = nil, &out, &stderr // may run as a concurrent probe
 	args := []string{"-C", dir, "status", "--porcelain"}
 	if !includeUntracked {
 		args = append(args, "--untracked-files=no")
@@ -103,14 +103,12 @@ func nvimPluginPath(paths Paths, dep Dependency) (string, error) {
 func (o *PackageOperation) nvimCommand(ctx context.Context, root string, paths Paths) (string, string, error) {
 	mise, _ := o.miseCommand(paths)
 	if mise != "" {
-		resolved, err := o.miseOutput(ctx, o.miseProcess(root, false), mise, "-C", root+"/config/shared", "which", "nvim")
+		resolved, err := o.miseWhichNvim(ctx, root, mise)
 		if err := ctx.Err(); err != nil {
 			return "", "", err
 		}
-		if err == nil {
-			if info, err := os.Stat(resolved); err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
-				return resolved, mise, nil
-			}
+		if err == nil && executableFile(resolved) {
+			return resolved, mise, nil
 		}
 	}
 	if path, err := o.Process.lookPath("nvim"); err == nil {
@@ -118,10 +116,30 @@ func (o *PackageOperation) nvimCommand(ctx context.Context, root string, paths P
 	}
 	home := envValue(o.Process.environment(), "HOME")
 	path := home + "/.local/bin/nvim"
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
+	if executableFile(path) {
 		return path, mise, nil
 	}
 	return "", mise, fmt.Errorf("Could not locate Neovim after installing the development environment.")
+}
+
+// miseWhichNvim reuses this operation's last resolution only while it is
+// still an executable file; a failed resolution is never reused.
+func (o *PackageOperation) miseWhichNvim(ctx context.Context, root, mise string) (string, error) {
+	key := mise + "\x00" + root
+	if o.miseNvim != "" && o.miseNvimKey == key && executableFile(o.miseNvim) {
+		return o.miseNvim, nil
+	}
+	resolved, err := o.miseOutput(ctx, o.miseProcess(root, false), mise, "-C", root+"/config/shared", "which", "nvim")
+	o.miseNvim, o.miseNvimKey = "", ""
+	if err == nil && executableFile(resolved) {
+		o.miseNvim, o.miseNvimKey = resolved, key
+	}
+	return resolved, err
+}
+
+func executableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0
 }
 
 func (o *PackageOperation) runNvim(ctx context.Context, root, nvim, mise string, args ...string) (string, error) {
@@ -151,7 +169,42 @@ func (o *PackageOperation) runNvim(ctx context.Context, root, nvim, mise string,
 	return log.String(), nil
 }
 
-func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dependency) error {
+// gitStatus holds a dirty check that ran in a concurrent batch ahead of the
+// sequential scan consuming it.
+type gitStatus struct {
+	changes string
+	err     error
+}
+
+// gitCheckout reports whether dir and its .git are real directories.
+func gitCheckout(dir string) bool {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	git, err := os.Lstat(dir + "/.git")
+	return err == nil && git.IsDir()
+}
+
+// pluginPathError preserves an existing plugin path that is not a real
+// directory holding a real .git directory.
+func pluginPathError(path string) error {
+	if exists, err := present(path); err != nil || !exists {
+		return err
+	}
+	entry, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	git, err := os.Lstat(path + "/.git")
+	if !entry.IsDir() || err != nil || !git.IsDir() {
+		return fmt.Errorf("Neovim plugin path is not an approved Git checkout; preserving it: %s", path)
+	}
+	return nil
+}
+
+// installLazy uses inspected, when non-nil, as the checkout's dirty check.
+func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dependency, inspected *gitStatus) error {
 	if !gitHashPattern.MatchString(dep.Version) {
 		return fmt.Errorf("Invalid approved lazy.nvim revision: %s", dep.Version)
 	}
@@ -168,7 +221,12 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 		if !info.IsDir() || err != nil || !git.IsDir() {
 			return fmt.Errorf("lazy.nvim path is not an approved Git checkout; preserving it: %s", target)
 		}
-		changes, err := o.gitChanges(ctx, target, false, true)
+		var changes string
+		if inspected != nil {
+			changes, err = inspected.changes, inspected.err
+		} else {
+			changes, err = o.gitChanges(ctx, target, false, true)
+		}
 		if err != nil {
 			return err
 		}
@@ -281,50 +339,72 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 	if err != nil {
 		return err
 	}
-	if err := o.installLazy(ctx, paths, *lazy); err != nil {
-		return err
+	// Validate plugin paths in declaration order up to the first failure, run
+	// the dirty checks (and lazy.nvim's) concurrently, then report exactly as
+	// the sequential scan did: lazy.nvim, each plugin, then the path failure.
+	type pluginCheck struct {
+		path, version string
+		git           bool
+		status        gitStatus
 	}
 	declared := map[string]bool{}
-	synced := true
+	var checks []pluginCheck
+	var invalid error
 	for _, dep := range deps {
 		path, err := nvimPluginPath(paths, dep)
 		if err != nil {
-			return err
+			invalid = err
+			break
 		}
 		declared[filepath.Base(path)] = true
 		if dep.Name == "folke/lazy.nvim" {
 			continue
 		}
-		if exists, err := present(path); err != nil {
-			return err
-		} else if exists {
-			entry, err := os.Lstat(path)
-			if err != nil {
-				return err
-			}
-			git, err := os.Lstat(path + "/.git")
-			if !entry.IsDir() || err != nil || !git.IsDir() {
-				return fmt.Errorf("Neovim plugin path is not an approved Git checkout; preserving it: %s", path)
-			}
+		if invalid = pluginPathError(path); invalid != nil {
+			break
 		}
 		info, err := os.Stat(path + "/.git")
-		if err == nil && info.IsDir() {
-			changes, err := o.gitTrackedChanges(ctx, path, true)
-			if err != nil {
-				return fmt.Errorf("Could not inspect Neovim plugin checkout: %s: %w", path, err)
+		checks = append(checks, pluginCheck{path: path, version: dep.Version, git: err == nil && info.IsDir()})
+	}
+	lazyPath, _ := nvimPluginPath(paths, *lazy)
+	var lazyStatus *gitStatus
+	if gitCheckout(lazyPath) {
+		lazyStatus = &gitStatus{}
+	}
+	probeParallel(len(checks)+1, func(i int) {
+		if i < len(checks) {
+			if check := &checks[i]; check.git {
+				check.status.changes, check.status.err = o.gitTrackedChanges(ctx, check.path, true)
 			}
-			if changes != "" {
-				return fmt.Errorf("Neovim plugin checkout was modified; preserving it: %s. Remove it, then retry to restore the approved revision.", path)
-			}
+		} else if lazyStatus != nil {
+			lazyStatus.changes, lazyStatus.err = o.gitChanges(ctx, lazyPath, false, true)
 		}
-		if err != nil || !info.IsDir() {
+	})
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := o.installLazy(ctx, paths, *lazy, lazyStatus); err != nil {
+		return err
+	}
+	synced := true
+	for _, check := range checks {
+		if !check.git {
 			synced = false
 			continue
 		}
-		head, err := o.gitHead(ctx, path)
-		if err != nil || head != dep.Version {
+		if check.status.err != nil {
+			return fmt.Errorf("Could not inspect Neovim plugin checkout: %s: %w", check.path, check.status.err)
+		}
+		if check.status.changes != "" {
+			return fmt.Errorf("Neovim plugin checkout was modified; preserving it: %s. Remove it, then retry to restore the approved revision.", check.path)
+		}
+		head, err := o.gitHead(ctx, check.path)
+		if err != nil || head != check.version {
 			synced = false
 		}
+	}
+	if invalid != nil {
+		return invalid
 	}
 	lazyDir := strings.TrimSuffix(paths.Data, "/selfishell") + "/nvim/lazy"
 	entries, err := os.ReadDir(lazyDir)

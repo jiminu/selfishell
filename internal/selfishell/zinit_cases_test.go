@@ -236,6 +236,71 @@ func TestZinitFailedReprovisionRestoresPreviousCheckout(t *testing.T) {
 	}
 }
 
+func TestZinitChecksConcurrentlyAndProvisionsInDeclarationOrder(t *testing.T) {
+	op, paths, manifest, home, head, names := zinitFixtureSetup(t, 4)
+	deps, err := ReadDependencies(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, dep := range deps {
+		target := pluginTarget(home, dep.Name)
+		os.MkdirAll(filepath.Dir(target), 0700)
+		gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
+		revision := dep.Version
+		if index == 1 {
+			revision = head // outdated
+		}
+		gitCommand(t, target, "checkout", "--quiet", "--detach", revision)
+		if index == 3 {
+			writeTestFile(t, target+"/marker", "edited", 0600) // dirty
+		}
+	}
+	stdin := strings.NewReader("terminal input")
+	op.Process.In = stdin
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	want := "ice cloneonly ver" + deps[1].Version + "\nlight " + names[1] + "\nice cloneonly ver" + deps[3].Version + "\nlight " + names[3] + "\n"
+	if got := readTestFile(t, home+"/zinit.log"); got != want {
+		t.Fatalf("provisioning order:\n%s\nwant:\n%s", got, want)
+	}
+	if out := output(op); strings.Index(out, "Updated Zsh plugin: "+names[1]) > strings.Index(out, "Updated Zsh plugin: "+names[3]) {
+		t.Fatalf("reports out of order: %q", out)
+	}
+	if stdin.Len() != len("terminal input") {
+		t.Fatal("a concurrent check read the caller's stdin")
+	}
+	for _, dep := range deps {
+		if got := gitCommand(t, pluginTarget(home, dep.Name), "rev-parse", "HEAD"); got != dep.Version {
+			t.Fatalf("%s at %s", dep.Name, got)
+		}
+	}
+}
+
+func TestZinitOrderingAcrossInvalidNamesAndSharedCheckouts(t *testing.T) {
+	op, paths, manifest, home, head, _ := zinitFixtureSetup(t, 2)
+	deps, err := ReadDependencies(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := deps[1].Version
+	// Two names resolve to one checkout; the second must see the first's work.
+	shared := pluginTarget(home, "a/b---c")
+	os.MkdirAll(filepath.Dir(shared), 0700)
+	gitCommand(t, filepath.Dir(shared), "clone", "--quiet", home+"/repo", shared)
+	gitCommand(t, shared, "checkout", "--quiet", "--detach", next)
+	writeTestFile(t, manifest, fmt.Sprintf("zsh-plugin a/b---c %s all all %s - - -\nzsh-plugin a---b/c %s all all %s - - -\nzsh-plugin invalid %s all all %s - - -\n", head, home+"/repo", next, home+"/repo", head, home+"/repo"), 0600)
+	if err := installPlugins(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "invalid Zinit plugin name: invalid") {
+		t.Fatalf("invalid name: %v", err)
+	}
+	if got := readTestFile(t, home+"/zinit.log"); strings.Count(got, "light ") != 2 {
+		t.Fatalf("earlier entries were not provisioned before the invalid name: %q", got)
+	}
+	if got := gitCommand(t, shared, "rev-parse", "HEAD"); got != next {
+		t.Fatalf("shared checkout kept a stale check: %s", got)
+	}
+}
+
 func TestZinitDryRunAndCancellation(t *testing.T) {
 	op, paths, manifest, home, _, _ := zinitFixtureSetup(t, 1)
 	os.Remove(home + "/data/zinit/zinit.git/zinit.zsh")

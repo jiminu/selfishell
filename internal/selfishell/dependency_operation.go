@@ -425,7 +425,7 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, targ
 			return false
 		}
 		if dep.Checksum != "-" {
-			head, err := o.commandOutput(ctx, "git", "-C", target, "rev-parse", "HEAD")
+			head, err := o.gitHead(ctx, target)
 			if err != nil || head != dep.Checksum {
 				return false
 			}
