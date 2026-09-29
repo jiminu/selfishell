@@ -38,6 +38,13 @@ If the tools/configuration phase fails, the CLI may already have
 switched: check `selfishell version` for the active release. Tools-only updates
 finish with `Selfishell tools and configuration synchronized.`
 
+Completed changes remain in place if a later step fails. After resolving the
+reported error, retry a failed installation with `selfishell install`, or a failed
+tools/configuration update with `selfishell update --tools-only`. These failures
+print the retry command and retain `--skip-packages` when it was selected. A plain
+`selfishell update` can exit as already up to date after the CLI has switched, so
+use `--tools-only` to retry the remaining environment synchronization.
+
 ## Tools and configuration
 
 In an interactive terminal, install and update show the current phase on one

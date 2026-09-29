@@ -30,7 +30,7 @@ Options:
   --help     Show this help
 `
 
-func (c CLI) install(args []string) int {
+func (c CLI) install(args []string) (result int) {
 	skip, dry, yes := false, false, false
 	for _, arg := range args {
 		switch arg {
@@ -91,6 +91,11 @@ func (c CLI) install(args []string) int {
 			return 1
 		}
 	}
+	defer func() {
+		if result != 0 && !dry {
+			c.retryHint("selfishell install", skip)
+		}
+	}()
 	prepared, err := c.prepareConfig(platform, dry, yes, false)
 	if err != nil {
 		c.error(err.Error())
@@ -129,6 +134,14 @@ func (c CLI) install(args []string) int {
 	}
 	return 0
 }
+
+func (c CLI) retryHint(command string, skipPackages bool) {
+	if skipPackages {
+		command += " --skip-packages"
+	}
+	fmt.Fprintf(c.Err, "After resolving the error, retry with: %s\n", command)
+}
+
 func (c CLI) uninstall(args []string) int {
 	restore, purge, dry, yes := false, false, false, false
 	for _, arg := range args {

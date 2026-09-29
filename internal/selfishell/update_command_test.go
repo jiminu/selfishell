@@ -755,6 +755,9 @@ func TestToolsPhaseRequiredPackageFailureLeavesConfigurationUnchanged(t *testing
 	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "Could not update apt package indexes") {
 		t.Fatalf("required: %d %q %q", code, out, stderr)
 	}
+	if !strings.Contains(stderr, "retry with: selfishell update --tools-only\n") {
+		t.Fatalf("missing tools retry guidance: %q", stderr)
+	}
 	if _, err := os.Lstat(home + "/.zshrc"); !os.IsNotExist(err) {
 		t.Fatalf("package failure applied configuration: %v", err)
 	}
@@ -983,6 +986,9 @@ func TestUpdateLSPFailureStopsBeforeCleanup(t *testing.T) {
 			}
 			if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, wantError) {
 				t.Fatalf("LSP failure: %d %q %q", code, out, stderr)
+			}
+			if strings.Count(stderr, "selfishell update --tools-only") != 1 || !strings.Contains(stderr, "retry with: selfishell update --tools-only\n") {
+				t.Fatalf("expected one retry hint: %q", stderr)
 			}
 			calls, err := os.ReadFile(log)
 			if err != nil || strings.Contains(string(calls), "prune --tools") {

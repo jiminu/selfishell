@@ -234,7 +234,7 @@ func (c CLI) completeUpdate() {
 	}
 }
 
-func (c CLI) updateTools(o updateOptions) int {
+func (c CLI) updateTools(o updateOptions) (result int) {
 	paths, err := UserPaths()
 	if err != nil {
 		c.error(err.Error())
@@ -256,6 +256,11 @@ func (c CLI) updateTools(o updateOptions) int {
 		c.error("Could not read Selfishell configured marker: " + err.Error())
 		return 1
 	}
+	defer func() {
+		if result != 0 && !o.dry {
+			c.retryHint("selfishell update --tools-only", o.skip)
+		}
+	}()
 	packages, err := ReadPackages(c.Root + "/packages.conf")
 	if err != nil {
 		return c.diagnosticError(err)
