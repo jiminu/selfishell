@@ -105,6 +105,9 @@ func policyRepo(t *testing.T) (home, repo, base string) {
 
 var pinRE = regexp.MustCompile(`(?m)^\s*(?:-\s*)?uses:\s*[^\s@]+@[0-9a-f]{40}\s+#\s+v[0-9]+\.[0-9]+\.[0-9]+\s*$`)
 
+// A local reusable workflow is read from the same commit as its caller.
+var localWorkflowRE = regexp.MustCompile(`^    uses: \./\.github/workflows/[a-z0-9-]+\.yml$`)
+
 func TestWorkflowActionPins(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(repoRoot(), ".github/workflows/*.yml"))
 	if err != nil || len(files) == 0 {
@@ -119,7 +122,7 @@ func TestWorkflowActionPins(t *testing.T) {
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.Contains(line, "uses:") {
 				count++
-				if !pinRE.MatchString(line) {
+				if !pinRE.MatchString(line) && !localWorkflowRE.MatchString(line) {
 					t.Errorf("%s: invalid action pin: %q", filepath.Base(file), line)
 				}
 			}
@@ -275,17 +278,17 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			t.Fatal("release workflow has top-level permissions")
 		}
 	}
-	verify := policyJob(t, jobs, "verify")
+	ci := policyJob(t, jobs, "ci")
 	build := policyJob(t, jobs, "build")
 	smoke := policyJob(t, jobs, "smoke")
 	publish := policyJob(t, jobs, "publish")
-	if policyField(t, verify.lines, "    ", "permissions") != "" || policyField(t, publish.lines, "    ", "permissions") != "" {
+	if policyField(t, ci.lines, "    ", "permissions") != "" || policyField(t, publish.lines, "    ", "permissions") != "" {
 		t.Fatal("job permissions must be maps")
 	}
 	for _, tc := range []struct {
 		job        workflowJob
 		name, perm string
-	}{{verify, "verify", "contents: read"}, {build, "build", "contents: read"}, {smoke, "smoke", "contents: read"}, {publish, "publish", "contents: write"}} {
+	}{{build, "build", "contents: read"}, {smoke, "smoke", "contents: read"}, {publish, "publish", "contents: write"}} {
 		found := false
 		for _, line := range tc.job.lines {
 			if line == "      "+tc.perm {
@@ -303,7 +306,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			}
 		}
 	}
-	for _, j := range []workflowJob{verify, build, smoke} {
+	for _, j := range []workflowJob{ci, build, smoke} {
 		for _, line := range j.lines {
 			if strings.HasPrefix(line, "      ") && (strings.Contains(line, "attestations: write") || strings.Contains(line, "id-token: write") || strings.Contains(line, "artifact-metadata: write") || strings.Contains(line, "contents: write")) {
 				t.Errorf("%s has publish permission: %s", j.name, line)
@@ -315,8 +318,8 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			t.Errorf("publish missing %s", perm)
 		}
 	}
-	if !strings.Contains(strings.Join(verify.lines, "\n"), "os: [ubuntu-latest, macos-latest]") {
-		t.Error("verification must cover Linux and macOS")
+	if policyField(t, ci.lines, "    ", "uses") != "./.github/workflows/ci.yml" || !strings.Contains(strings.Join(ci.lines, "\n"), "      contents: read") {
+		t.Error("release must call the full CI workflow with read-only contents")
 	}
 	if !strings.Contains(policyRun(t, policyStep(t, build, "Require release commit on main")), `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`) {
 		t.Error("release does not check main ancestry")
@@ -335,7 +338,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 		}
 	}
 	// Traverse every prerequisite, rejecting unknown jobs and cycles. Publish must
-	// depend transitively on verification even if intermediate jobs are added.
+	// depend transitively on full CI even if intermediate jobs are added.
 	visiting := map[string]bool{}
 	done := map[string]bool{}
 	reaches := map[string]map[string]bool{}
@@ -363,7 +366,7 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 		reaches[name] = found
 		return found
 	}
-	for _, pair := range [][2]string{{"build", "verify"}, {"smoke", "build"}, {"publish", "verify"}, {"publish", "build"}, {"publish", "smoke"}} {
+	for _, pair := range [][2]string{{"build", "ci"}, {"smoke", "build"}, {"publish", "ci"}, {"publish", "build"}, {"publish", "smoke"}} {
 		if !visit(pair[0])[pair[1]] {
 			t.Errorf("%s has no transitive dependency on %s", pair[0], pair[1])
 		}
@@ -374,7 +377,6 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	_, jobs := workflowSections(t, "release.yml")
 	build, smoke, publish := policyJob(t, jobs, "build"), policyJob(t, jobs, "smoke"), policyJob(t, jobs, "publish")
 	for _, stage := range []struct{ job, command string }{
-		{"verify", "Run verification suite"},
 		{"build", "Build release artifacts"},
 		{"smoke", "Smoke exact prebuilt release"},
 	} {
@@ -706,26 +708,36 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	policyGit(t, home, repo, "add", ".")
 	policyGit(t, home, repo, "commit", "-qm", "tampered classifier")
 	head := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
-	output := filepath.Join(home, "github-output")
-	summary := filepath.Join(home, "github-summary")
-	env := append(policyEnv(home), "EVENT_NAME=pull_request", "BASE_SHA="+base, "GITHUB_SHA="+head, "GITHUB_OUTPUT="+output, "GITHUB_STEP_SUMMARY="+summary)
-	got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 5*time.Second)
-	if err != nil || got.Status != 0 {
-		t.Fatalf("CI block: status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
+	// Base is the trusted pull_request case; head, whose classifier reports no
+	// runtime changes, stands in for a documentation-only commit that release calls.
+	for _, tc := range []struct{ name, full, base string }{{"trusted_base", "false", base}, {"release_full", "true", head}} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(home, tc.name+"-output")
+			summary := filepath.Join(home, tc.name+"-summary")
+			env := append(policyEnv(home), "FULL_CHECKS="+tc.full, "BASE_SHA="+tc.base, "GITHUB_SHA="+head, "GITHUB_OUTPUT="+output, "GITHUB_STEP_SUMMARY="+summary)
+			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 5*time.Second)
+			if err != nil || got.Status != 0 {
+				t.Fatalf("CI block: status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
+			}
+			data, err := os.ReadFile(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != "runtime=true\nubuntu_container_e2e=true\n" {
+				t.Errorf("classification: %q", data)
+			}
+			sum, err := os.ReadFile(summary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(sum), string(data)) {
+				t.Errorf("summary lacks classification: %q", sum)
+			}
+		})
 	}
-	data, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "runtime=true\nubuntu_container_e2e=true\n" {
-		t.Errorf("untrusted classifier output: %q", data)
-	}
-	sum, err := os.ReadFile(summary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(sum), string(data)) {
-		t.Errorf("summary lacks trusted classification: %q", sum)
+	filter := strings.Join(policyStep(t, policyJob(t, jobs, "changes"), "Detect runtime changes"), "\n")
+	if !strings.Contains(filter, "FULL_CHECKS: ${{ github.event_name == 'workflow_dispatch' || inputs.full == true }}") {
+		t.Error("manual and called CI must run every check")
 	}
 }
 
@@ -778,79 +790,10 @@ exit 90
 	}
 }
 
-func TestReleaseWorkflowRequiresMainCI(t *testing.T) {
+func TestReleaseBuildDisablesGoCache(t *testing.T) {
 	_, jobs := workflowSections(t, "release.yml")
-	ci := policyJob(t, jobs, "ci")
-	text := strings.Join(ci.lines, "\n")
-	for _, want := range []string{"actions: read", "contents: read", "GH_TOKEN: ${{ github.token }}", "REPOSITORY: ${{ github.repository }}", `bash scripts/verify-release-ci.sh "$REPOSITORY" "$(git rev-parse HEAD)"`} {
-		if !strings.Contains(text, want) {
-			t.Errorf("CI gate missing %s", want)
-		}
-	}
-	if got := policyNeeds(t, policyJob(t, jobs, "verify").lines); len(got) != 1 || got[0] != "ci" {
-		t.Errorf("verification must wait for main CI: %v", got)
-	}
-	checkout := strings.Join(policyStep(t, ci, "Check out release commit"), "\n")
-	if !strings.Contains(checkout, "ref: ${{ github.sha }}") {
-		t.Error("CI gate must resolve the release commit")
-	}
 	setup := strings.Join(policyStep(t, policyJob(t, jobs, "build"), "Set up pinned Go toolchain"), "\n")
 	if !strings.Contains(setup, "cache: false") {
 		t.Error("release artifact build must disable Go cache restore/save")
-	}
-}
-
-func TestReleaseCIGate(t *testing.T) {
-	const commit = "1111111111111111111111111111111111111111"
-	for _, tc := range []struct {
-		name, id, conclusion, fail, stages string
-		success                            bool
-	}{
-		{"success", "123", "success", "", "list watch view", true},
-		{"missing", "", "success", "", "list", false},
-		{"invalid_id", "unexpected", "success", "", "list", false},
-		{"list_error", "123", "success", "list", "list", false},
-		{"watch_error", "123", "success", "watch", "list watch", false},
-		{"view_error", "123", "success", "view", "list watch view", false},
-		{"failure", "123", "failure", "", "list watch view", false},
-		{"cancelled", "123", "cancelled", "", "list watch view", false},
-		{"skipped", "123", "skipped", "", "list watch view", false},
-		{"neutral", "123", "neutral", "", "list watch view", false},
-		{"pending", "123", "", "", "list watch view", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home := t.TempDir()
-			bin := filepath.Join(home, "bin")
-			nativeWrite(t, filepath.Join(bin, "gh"), `#!/bin/sh
-set -eu
-printf '%s\n' "$*" >> "$HOME/calls"
-[ "$1" = run ] || exit 90
-[ "$2" != "$FAIL_STAGE" ] || exit 1
-case "$2" in
- list) printf '%s\n' "$RUN_ID" ;;
- watch) exit 0 ;;
- view) printf '%s\n' "$CONCLUSION" ;;
- *) exit 91 ;;
-esac
-`, 0700)
-			got, err := runCommand(home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts/verify-release-ci.sh"), "owner/repo", commit}, nil,
-				[]string{"PATH=" + bin + ":/usr/bin:/bin", "RUN_ID=" + tc.id, "CONCLUSION=" + tc.conclusion, "FAIL_STAGE=" + tc.fail}, 5*time.Second)
-			if err != nil || (got.Status == 0) != tc.success {
-				t.Fatalf("status=%d err=%v stderr=%s", got.Status, err, got.Stderr)
-			}
-			calls := string(readBytes(t, filepath.Join(home, "calls")))
-			commands := map[string]string{
-				"list":  "run list --repo owner/repo --workflow ci.yml --branch main --event push --commit " + commit + " --limit 1 --json databaseId --jq .[0].databaseId // empty\n",
-				"watch": "run watch 123 --repo owner/repo --interval 10 --exit-status\n",
-				"view":  "run view 123 --repo owner/repo --json conclusion --jq .conclusion\n",
-			}
-			var want string
-			for _, stage := range strings.Fields(tc.stages) {
-				want += commands[stage]
-			}
-			if calls != want {
-				t.Fatalf("calls:\n%s\nwant:\n%s", calls, want)
-			}
-		})
 	}
 }

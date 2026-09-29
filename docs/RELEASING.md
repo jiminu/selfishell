@@ -37,22 +37,13 @@ contract.
 ## Publish
 
 Publish only a commit that is already merged and pushed to the documented
-release branch, currently `main`. Require a successful `ci.yml` push run for that
-exact commit before creating the release tag. PR or manually dispatched CI runs
-do not satisfy this requirement. The Release workflow waits for the latest
-matching main push run and requires its conclusion to be `success`; a missing,
-failed, cancelled, or skipped run blocks publication. If no run is found yet,
-wait for main CI and rerun the failed Release workflow.
-
-The workflow also reruns the repository checks on Linux and macOS and rejects a
-tag whose commit is not in `main` history. These release checks remain necessary
-because ordinary CI selects some checks according to the changed files.
-
-To check the main CI prerequisite without creating a tag:
-
-```bash
-bash scripts/verify-release-ci.sh jiminu/selfishell "$(git rev-parse HEAD)"
-```
+release branch, currently `main`. The normal main CI should be green before the
+release tag is created. The Release workflow then calls the complete CI workflow
+for the tagged commit, including the Ubuntu, macOS and Neovim E2E jobs that
+ordinary CI skips when a push changes only documentation, and rejects a tag
+whose commit is not in `main` history. Any failed CI job blocks publication.
+Rerun failed Release jobs for a transient failure; otherwise fix `main` and
+release a new patch version, because release tags are never moved.
 
 Before tagging, require a clean worktree, confirm `HEAD` is the intended pushed
 `origin/main` commit, and verify that `v<version>` does not already exist locally
@@ -81,8 +72,8 @@ A stable tag uses `v<major>.<minor>.<patch>`. A suffix such as
 dot-separated SemVer identifiers made of ASCII letters, digits, and hyphens;
 numeric identifiers must not contain leading zeroes.
 
-The Release workflow validates the pushed tag, runs the full verification
-suite on Linux and macOS, builds the six-file asset set once without restoring or
+The Release workflow validates the pushed tag, runs the full CI workflow on Linux
+and macOS, builds the six-file asset set once without restoring or
 saving a Go build cache, and transfers the same artifact ID to native smoke jobs
 on both hosts and the publisher. Both
 smokes must pass before the publisher verifies the exact file set, `VERSION`
