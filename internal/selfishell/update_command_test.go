@@ -1124,9 +1124,11 @@ func TestUpdateDoesNotSwallowInterruptDuringConfigurationTrust(t *testing.T) {
 	var childPID int
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
+		// The redirection creates the marker before printf writes the PID.
 		if data, err := os.ReadFile(marker); err == nil {
-			childPID, _ = strconv.Atoi(strings.TrimSpace(string(data)))
-			break
+			if childPID, _ = strconv.Atoi(strings.TrimSpace(string(data))); childPID > 0 {
+				break
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
