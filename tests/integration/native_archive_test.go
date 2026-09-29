@@ -245,6 +245,9 @@ func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte,
 		if f.Machine != want {
 			t.Errorf("ELF machine %v want %v", f.Machine, want)
 		}
+		if _, e := f.DWARF(); e == nil {
+			t.Error("release binary retains DWARF debug data")
+		}
 	case "macos":
 		f, e := macho.Open(path)
 		mustFS(t, e)
@@ -255,6 +258,9 @@ func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte,
 		}
 		if f.Cpu != want {
 			t.Errorf("Mach-O CPU %v want %v", f.Cpu, want)
+		}
+		if _, e := f.DWARF(); e == nil {
+			t.Error("release binary retains DWARF debug data")
 		}
 	}
 	info, e := buildinfo.ReadFile(path)
