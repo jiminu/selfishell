@@ -3,6 +3,7 @@ package selfishell
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func TestManagedMalformedStateStopsInstallWithoutMutation(t *testing.T) {
 		"unknown-kind":     strings.Replace(valid, "file\n", "bogus\n", 1),
 		"unknown-status":   strings.Replace(valid, "active\n", "bogus\n", 1),
 		"empty-target":     strings.Replace(valid, r.Target, "", 1),
-		"version":          strings.Replace(valid, "2\n", "3\n", 1),
+		"version":          strings.Replace(valid, "2\n", "99\n", 1),
 		"no-final-newline": strings.TrimSuffix(valid, "\n"),
 	}
 	for name, data := range cases {
@@ -852,6 +853,211 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 		t.Fatalf("backup identity changed: %q", got)
 	}
 	_ = home
+}
+
+func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
+	for _, backup := range []bool{false, true} {
+		for _, outcome := range []string{"write-failed", "write-completed", "user-edited"} {
+			name := fmt.Sprintf("backup=%t/%s", backup, outcome)
+			t.Run(name, func(t *testing.T) {
+				changed := outcome == "user-edited"
+				root, _, paths := blockHome(t, "macos")
+				r := failureResource(t, root, "vimrc")
+				original := []byte("personal original\n")
+				if backup {
+					blockWrite(t, r.Target, original)
+				}
+				blockOK(t, root, "install", "--skip-packages", "--yes")
+				before := blockRead(t, r.Target)
+				saved := blockState(t, paths, r.Name).Backup
+				// Use a separate source; testRelease may be shared by other tests.
+				r.Source = filepath.Join(t.TempDir(), "new-vimrc")
+				updated := append(bytes.Clone(before), []byte("\" new release\n")...)
+				blockWrite(t, r.Source, updated)
+				var out bytes.Buffer
+				m := managed{c: CLI{Root: root, Out: &out}, paths: paths, yes: true,
+					atomicWrite: func(path string, data []byte, mode os.FileMode) error {
+						if outcome == "write-completed" {
+							if err := writeAtomic(path, data, mode); err != nil {
+								return err
+							}
+						}
+						return errors.New("injected interruption before active state commit")
+					}}
+				if err := m.installFile(r, false); err == nil {
+					t.Fatal("expected update failure")
+				}
+				want := before
+				if outcome == "write-completed" {
+					want = updated
+				}
+				blockEqual(t, r.Target, want)
+				if changed {
+					blockWrite(t, r.Target, []byte("personal edit after failure\n"))
+				}
+				retry := managed{c: CLI{Root: root, Out: &out}, paths: paths, yes: true}
+				for _, preflight := range []bool{true, false} {
+					err := retry.installFile(r, preflight)
+					if changed {
+						if err == nil || !strings.Contains(err.Error(), "modified") {
+							t.Fatalf("edit was not protected: %v", err)
+						}
+						blockEqual(t, r.Target, []byte("personal edit after failure\n"))
+					} else if err != nil {
+						t.Fatalf("retry preflight=%t: %v", preflight, err)
+					}
+				}
+				if !changed {
+					blockEqual(t, r.Target, updated)
+					if state := blockState(t, paths, r.Name); state.Status != "active" || state.Backup != saved {
+						t.Fatalf("retry state: %+v", state)
+					}
+				}
+				if backup {
+					blockEqual(t, saved, original)
+				}
+			})
+		}
+	}
+}
+
+func TestRestoreStateRemovalFailureCanRetryUninstall(t *testing.T) {
+	for _, kind := range []string{"file", "directory", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			root, _, paths := blockHome(t, "macos")
+			r := failureResource(t, root, "user-nvim")
+			if kind == "file" {
+				r = failureResource(t, root, "vimrc")
+				blockWrite(t, r.Target, []byte("personal original\n"))
+			} else if kind == "directory" {
+				blockWrite(t, r.Target+"/init.lua", []byte("personal original\n"))
+			} else {
+				if err := os.MkdirAll(filepath.Dir(r.Target), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("personal-nvim", r.Target); err != nil {
+					t.Fatal(err)
+				}
+			}
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			state := blockState(t, paths, r.Name)
+			var out bytes.Buffer
+			m := managed{c: CLI{Root: root, Out: &out}, paths: paths,
+				removeState: func(string) error { return errors.New("injected state removal failure") }}
+			if err := m.removeResource(ResourceState{Resource: r, State: state}, true); err == nil {
+				t.Fatal("expected state removal failure")
+			}
+			before, err := os.Lstat(r.Target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			blockOK(t, root, "uninstall", "--restore", "--dry-run")
+			blockOK(t, root, "uninstall", "--restore", "--yes")
+			after, err := os.Lstat(r.Target)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatalf("restored user path changed: %v", err)
+			}
+			if _, err := os.Lstat(paths.Resources + "/" + r.Name + ".state"); !os.IsNotExist(err) {
+				t.Fatalf("state remains: %v", err)
+			}
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, root, "uninstall", "--restore", "--yes")
+		})
+	}
+}
+
+func TestInterruptedRestorePreflightAndRetry(t *testing.T) {
+	for _, situation := range []string{"before-move", "occupied", "both-missing", "after-move-user-edit"} {
+		t.Run(situation, func(t *testing.T) {
+			root, _, paths := blockHome(t, "macos")
+			r := failureResource(t, root, "user-starship")
+			original := []byte("personal config\n")
+			blockWrite(t, r.Target, original)
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			state := blockState(t, paths, r.Name)
+			if err := os.Remove(r.Target); err != nil {
+				t.Fatal(err)
+			}
+			state.Status = "restoring"
+			statePath := paths.Resources + "/" + r.Name + ".state"
+			if err := WriteState(statePath, state); err != nil {
+				t.Fatal(err)
+			}
+			switch situation {
+			case "occupied":
+				blockWrite(t, r.Target, []byte("late occupant\n"))
+			case "both-missing":
+				if err := os.Remove(state.Backup); err != nil {
+					t.Fatal(err)
+				}
+			case "after-move-user-edit":
+				if err := moveBackupNoReplace(state.Backup, r.Target); err != nil {
+					t.Fatal(err)
+				}
+				blockWrite(t, r.Target, []byte("personal edit after restore\n"))
+			}
+			before := blockRead(t, statePath)
+			// Install must not adopt or back up a restore that has not finished.
+			code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes")
+			if code != 1 || !strings.Contains(stderr, "selfishell uninstall --restore") {
+				t.Fatalf("install did not explain recovery: %d %q", code, stderr)
+			}
+			blockEqual(t, statePath, before)
+			if situation == "occupied" || situation == "both-missing" {
+				// A later restore conflict must prevent removal of every resource.
+				intact := paths.Config + "/zsh/common.zsh"
+				managedBytes := blockRead(t, intact)
+				code, _, stderr = blockRun(t, root, "", "uninstall", "--restore", "--yes")
+				if code != 1 {
+					t.Fatalf("unsafe restore accepted: %q", stderr)
+				}
+				blockEqual(t, intact, managedBytes)
+				blockEqual(t, statePath, before)
+				if situation == "occupied" {
+					blockEqual(t, r.Target, []byte("late occupant\n"))
+					blockEqual(t, state.Backup, original)
+				}
+				return
+			}
+			if situation == "before-move" {
+				code, _, _ = blockRun(t, root, "", "uninstall", "--yes")
+				if code != 1 {
+					t.Fatal("pending restore silently abandoned")
+				}
+			}
+			blockOK(t, root, "uninstall", "--restore", "--dry-run")
+			blockEqual(t, statePath, before)
+			if situation == "before-move" {
+				blockEqual(t, state.Backup, original)
+				if _, err := os.Lstat(r.Target); !os.IsNotExist(err) {
+					t.Fatalf("dry-run restored target: %v", err)
+				}
+			}
+			blockOK(t, root, "uninstall", "--restore", "--yes")
+			want := original
+			if situation == "after-move-user-edit" {
+				want = []byte("personal edit after restore\n")
+			}
+			blockEqual(t, r.Target, want)
+			if _, err := os.Lstat(statePath); !os.IsNotExist(err) {
+				t.Fatalf("restore record remains: %v", err)
+			}
+		})
+	}
+}
+
+func TestUninstallReportsRetainedOriginalBackup(t *testing.T) {
+	root, _, paths := blockHome(t, "macos")
+	r := failureResource(t, root, "user-starship")
+	original := []byte("personal starship config\n")
+	blockWrite(t, r.Target, original)
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	backup := blockState(t, paths, r.Name).Backup
+	out := blockOK(t, root, "uninstall", "--yes")
+	if !strings.Contains(out, backup) {
+		t.Fatalf("backup location not reported: %s", out)
+	}
+	blockEqual(t, backup, original)
 }
 
 func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {

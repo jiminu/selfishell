@@ -94,6 +94,9 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	if has && (s.Kind != "file" || s.Target != r.Target) {
 		return fmt.Errorf("State conflict for managed file: %s", r.Name)
 	}
+	if has && s.Status == "restoring" {
+		return interruptedRestore(s.Target)
+	}
 	info, present, err := exists(r.Target)
 	if err != nil {
 		return err
@@ -193,7 +196,13 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		m.say(reportPreview, "Would %s managed file: %s", map[bool]string{true: "update", false: "install"}[active], r.Target)
 		return nil
 	}
-	if err = m.save(r, State{"file", "pending", r.Target, "-", backup, sourceChecksum}); err != nil {
+	// Keep the accepted pre-write bytes recognizable if the atomic write fails.
+	// A completed write is recognized separately by sourceChecksum on retry.
+	pendingChecksum := sourceChecksum
+	if has && current != "" {
+		pendingChecksum = current
+	}
+	if err = m.save(r, State{"file", "pending", r.Target, "-", backup, pendingChecksum}); err != nil {
 		return err
 	}
 	if backup != "-" {
@@ -236,6 +245,9 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 	}
 	if has && (s.Kind != "link" || s.Target != r.Target) {
 		return fmt.Errorf("State conflict for managed link: %s", r.Name)
+	}
+	if has && s.Status == "restoring" {
+		return interruptedRestore(s.Target)
 	}
 	info, present, err := exists(r.Target)
 	if err != nil {

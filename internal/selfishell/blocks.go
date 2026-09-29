@@ -62,7 +62,10 @@ func inspectBlock(name string, data []byte) (blockView, error) {
 			beginCount++
 			start = offset
 		}
-		offset += len(line) + 1
+		offset += len(line)
+		if offset < len(data) {
+			offset++ // The final line need not have a newline.
+		}
 		if bytes.Equal(line, endMarker) {
 			endCount++
 			finish = offset
@@ -83,7 +86,13 @@ func inspectBlock(name string, data []byte) (blockView, error) {
 	if beginCount != 1 || endCount != 1 || related != 2 || finish <= start || finish > len(data) {
 		return blockView{status: "malformed"}, nil
 	}
-	checksum, err := checksumBytes(data[start:finish])
+	block := data[start:finish]
+	if !bytes.HasSuffix(block, []byte("\n")) {
+		// Treat the closing marker at EOF like a terminated line, without
+		// changing the slice boundaries used to preserve surrounding bytes.
+		block = append(bytes.Clone(block), '\n')
+	}
+	checksum, err := checksumBytes(block)
 	return blockView{status: "intact", start: start, end: finish, checksum: checksum}, err
 }
 func spliceBlock(data []byte, view blockView, replacement []byte) []byte {

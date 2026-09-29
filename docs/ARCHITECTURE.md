@@ -67,13 +67,36 @@ A failure after activation requires checking `selfishell version` before retry.
 
 ## Managed-state format
 
-State format v2 has seven newline-terminated fields in order:
+State formats v2 and v3 have seven newline-terminated fields in order:
 version, kind, status, target, reference, backup, checksum. Reads preserve field
 bytes and empty optional fields. Trailing lines after the seventh field are
 ignored; a write emits exactly seven lines. Invalid version/kind/status, an
 empty target, a missing field terminator, or NUL bytes
 are rejected. Writers reject embedded line breaks and NUL rather than producing
 a record whose fields cannot be represented faithfully.
+
+New transient records use v3. A pending file update retains the accepted
+pre-write checksum, so failure before replacement can be retried; the source
+checksum also recognizes a replacement completed before the active state was
+saved. Changes made by the user after the failed write still require conflict
+handling. Initial installation retains its backup-before-adoption behavior.
+
+The v3 `restoring` status is written after removing the managed file or link,
+before exclusively moving its original backup home. If the backup still exists,
+retry requires an empty target. If only the target exists, retry removes the
+record without touching that now user-owned path. If both paths are absent,
+recovery stops; if both are occupied, neither is overwritten. Finish an
+interrupted restore with `selfishell uninstall --restore` before reinstalling.
+
+Completed `active` records retain v2 representation for compatibility with older
+CLI rollback releases. Readers accept existing v2 records. An older CLI rejects
+v3 transient records safely; complete the interrupted operation with the newer
+CLI before rolling back.
+
+Managed block checksums treat a closing marker at EOF without a final newline
+as the same line with a newline. Removal still uses the actual byte boundaries
+and preserves surrounding user content; marker and block-body edits remain
+subject to the normal conflict checks.
 
 A missing record is distinct from a malformed record and from an I/O failure.
 State symlinks, directories and special files are rejected. Writes validate

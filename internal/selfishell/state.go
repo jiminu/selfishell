@@ -14,11 +14,16 @@ import (
 var ErrMalformedState = errors.New("malformed managed state")
 
 // State retains the six payload fields of Bash's seven-line v2 record.
-// In particular, Backup survives pending -> active and repeated installations.
+// V3 transient records distinguish an interrupted restore and retain accepted
+// pre-write checksums. Completed records use v2 for rollback compatibility.
 type State struct{ Kind, Status, Target, Reference, Backup, Checksum string }
 
 func (s State) fields() []string {
-	return []string{"2", s.Kind, s.Status, s.Target, s.Reference, s.Backup, s.Checksum}
+	version := "3"
+	if s.Status == "active" {
+		version = "2"
+	}
+	return []string{version, s.Kind, s.Status, s.Target, s.Reference, s.Backup, s.Checksum}
 }
 
 func (s State) validate() error {
@@ -29,6 +34,10 @@ func (s State) validate() error {
 	}
 	switch s.Status {
 	case "pending", "active":
+	case "restoring":
+		if s.Kind == "block" || s.Backup == "" || s.Backup == "-" || s.Backup == s.Target {
+			return ErrMalformedState
+		}
 	default:
 		return ErrMalformedState
 	}
@@ -51,10 +60,13 @@ func ReadState(path string) (State, error) {
 		return State{}, err
 	}
 	fields := strings.SplitN(string(data), "\n", 8)
-	if len(fields) != 8 || fields[0] != "2" || bytes.IndexByte(data, 0) >= 0 {
+	if len(fields) != 8 || (fields[0] != "2" && fields[0] != "3") || bytes.IndexByte(data, 0) >= 0 {
 		return State{}, fmt.Errorf("%w: %s", ErrMalformedState, path)
 	}
 	state := State{Kind: fields[1], Status: fields[2], Target: fields[3], Reference: fields[4], Backup: fields[5], Checksum: fields[6]}
+	if fields[0] == "2" && state.Status == "restoring" {
+		return State{}, fmt.Errorf("%w: %s", ErrMalformedState, path)
+	}
 	if err := state.validate(); err != nil {
 		return State{}, fmt.Errorf("%w: %s", err, path)
 	}

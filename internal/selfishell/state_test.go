@@ -30,9 +30,11 @@ func TestReadState(t *testing.T) {
 		valid         bool
 	}{
 		{"valid", valid, true}, {"extra-lines", valid + "ignored\n", true},
+		{"v3", strings.Replace(valid, "2\n", "3\n", 1), true},
 		{"empty", "", false}, {"short", "2\n", false}, {"no-final-LF", strings.TrimSuffix(valid, "\n"), false},
 		{"CRLF", strings.ReplaceAll(valid, "\n", "\r\n"), false},
-		{"version", strings.Replace(valid, "2\n", "3\n", 1), false},
+		{"version", strings.Replace(valid, "2\n", "99\n", 1), false},
+		{"v2-restoring", strings.Replace(valid, "pending\n", "restoring\n", 1), false},
 		{"kind", strings.Replace(valid, "file\n", "directory\n", 1), false},
 		{"status", strings.Replace(valid, "pending\n", "done\n", 1), false},
 		{"target", strings.Replace(valid, "/home/a file", "", 1), false},
@@ -59,6 +61,39 @@ func TestReadState(t *testing.T) {
 	state, err := ReadState(path)
 	if err != nil || state.Target != " target \\name" || state.Reference != "" || state.Backup != "" || state.Checksum != "" {
 		t.Fatalf("empty optional/literal fields: %+v %v", state, err)
+	}
+}
+
+func TestStateTransientVersionAndRestoreValidation(t *testing.T) {
+	path := t.TempDir() + "/resource.state"
+	state := stateFixture()
+	for _, status := range []string{"pending", "restoring", "active"} {
+		state.Status = status
+		if err := WriteState(path, state); err != nil {
+			t.Fatal(err)
+		}
+		version := "3\n"
+		if status == "active" {
+			version = "2\n"
+		}
+		data := blockRead(t, path)
+		if !bytes.HasPrefix(data, []byte(version)) || bytes.Count(data, []byte("\n")) != 7 {
+			t.Fatalf("%s record: %q", status, data)
+		}
+		if got, err := ReadState(path); err != nil || got != state {
+			t.Fatalf("round trip: %+v %v", got, err)
+		}
+	}
+	state.Status = "restoring"
+	for _, backup := range []string{"", "-", state.Target} {
+		state.Backup = backup
+		if err := WriteState(path, state); !errors.Is(err, ErrMalformedState) {
+			t.Fatalf("invalid restoring backup %q: %v", backup, err)
+		}
+	}
+	state.Backup, state.Kind = "/backup", "block"
+	if err := WriteState(path, state); !errors.Is(err, ErrMalformedState) {
+		t.Fatalf("block restore accepted: %v", err)
 	}
 }
 
