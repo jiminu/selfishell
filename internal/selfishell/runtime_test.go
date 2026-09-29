@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -133,6 +134,16 @@ func TestProcessChild(t *testing.T) {
 	case "wait":
 		fmt.Fprintln(os.Stdout, "ready")
 		time.Sleep(time.Hour)
+	case "graceful":
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, syscall.SIGTERM)
+		fmt.Fprintln(os.Stdout, "ready")
+		<-stop
+		fmt.Fprintln(os.Stdout, "cleaned up")
+	case "ignore":
+		signal.Ignore(syscall.SIGTERM)
+		fmt.Fprintln(os.Stdout, "ready")
+		time.Sleep(time.Hour)
 	}
 	os.Exit(0)
 }
@@ -175,40 +186,73 @@ func TestProcess(t *testing.T) {
 }
 
 func TestProcessCancellation(t *testing.T) {
-	t.Setenv("SELFISHELL_GO_PROCESS_CHILD", "1")
-	executable, _ := os.Executable()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	read, write, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+	for _, mode := range []string{"wait", "graceful", "ignore"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("SELFISHELL_GO_PROCESS_CHILD", "1")
+			executable, _ := os.Executable()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			read, write, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer read.Close()
+			defer write.Close()
+			done := make(chan error, 1)
+			go func() {
+				code, err := (Process{Out: write, Err: io.Discard}).Run(ctx, executable, "-test.run=^TestProcessChild$", "--", mode)
+				if code != 130 || !errors.Is(err, context.Canceled) {
+					done <- fmt.Errorf("code=%d err=%v", code, err)
+				} else {
+					done <- nil
+				}
+			}()
+			if err := read.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			data := make([]byte, 6)
+			if _, err := io.ReadFull(read, data); err != nil {
+				t.Fatal(err)
+			}
+			started := time.Now()
+			cancel()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("cancelled command still running")
+			}
+			write.Close()
+			tail, err := io.ReadAll(read)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "graceful" && string(tail) != "cleaned up\n" {
+				t.Fatalf("child was not allowed to clean up: %q", tail)
+			}
+			if mode == "ignore" && time.Since(started) < 900*time.Millisecond {
+				t.Fatal("child was killed before the shutdown grace period")
+			}
+		})
 	}
-	defer read.Close()
-	defer write.Close()
-	done := make(chan error, 1)
-	go func() {
-		code, err := (Process{Out: write, Err: io.Discard}).Run(ctx, executable, "-test.run=^TestProcessChild$", "--", "wait")
-		if code != 130 || !errors.Is(err, context.Canceled) {
-			done <- fmt.Errorf("code=%d err=%v", code, err)
-		} else {
-			done <- nil
+}
+
+func TestProcessDisablesGitTerminalPrompt(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+	for _, explicit := range []bool{false, true} {
+		var out bytes.Buffer
+		p := Process{Out: &out}
+		if explicit {
+			p.Env = []string{"HOME=" + os.Getenv("HOME"), "GIT_TERMINAL_PROMPT=1"}
 		}
-	}()
-	if err := read.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	data := make([]byte, 6)
-	if _, err := io.ReadFull(read, data); err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
+		code, err := p.Run(context.Background(), "/bin/sh", "-c", `printf '%s' "$GIT_TERMINAL_PROMPT"`)
+		if err != nil || code != 0 || out.String() != "0" {
+			t.Fatalf("explicit=%t: code=%d err=%v prompt=%q", explicit, code, err, out.String())
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("cancelled command still running")
 	}
 }
 
