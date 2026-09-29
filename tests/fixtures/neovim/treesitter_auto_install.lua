@@ -356,6 +356,10 @@ do
     notify_calls[1].msg:find("widgetlang", 1, true) ~= nil,
     "the failure notification should name the affected language: " .. vim.inspect(notify_calls[1])
   )
+  assert(
+    notify_calls[1].msg:find("highlighting won't be available", 1, true) ~= nil,
+    "a language without a bundled parser should report missing highlighting: " .. vim.inspect(notify_calls[1])
+  )
 
   vim.cmd("enew")
   vim.bo.filetype = "widgetlang"
@@ -371,6 +375,50 @@ do
 
   vim.notify = original_notify
   vim.treesitter.start = original_start
+  package.preload["nvim-treesitter"] = nil
+  package.loaded["nvim-treesitter"] = nil
+end
+
+-- Neovim bundles the Lua parser, so a failed install must not claim that
+-- highlighting is unavailable.
+do
+  package.loaded["config.autocmds"] = nil
+  package.loaded["nvim-treesitter"] = nil
+  package.preload["nvim-treesitter"] = nil
+
+  local notify_calls = {}
+  local original_notify = vim.notify
+  vim.notify = function(msg, level)
+    table.insert(notify_calls, { msg = msg, level = level })
+  end
+  package.preload["nvim-treesitter"] = function()
+    return {
+      get_installed = function()
+        return {}
+      end,
+      get_available = function()
+        return { "lua" }
+      end,
+      install = function()
+        return {
+          await = function(_, callback)
+            callback(nil, false)
+          end,
+        }
+      end,
+    }
+  end
+
+  require("config.autocmds")
+  vim.cmd("enew")
+  vim.bo.filetype = "lua"
+  assert(#notify_calls == 1, "a failed bundled-language install should notify once: " .. vim.inspect(notify_calls))
+  assert(
+    notify_calls[1].msg:find("bundled parser stays in use", 1, true) ~= nil,
+    "a bundled parser failure should say highlighting continues: " .. vim.inspect(notify_calls[1])
+  )
+
+  vim.notify = original_notify
   package.preload["nvim-treesitter"] = nil
   package.loaded["nvim-treesitter"] = nil
 end
