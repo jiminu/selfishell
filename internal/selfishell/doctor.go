@@ -45,7 +45,7 @@ func (c CLI) doctor(args []string) int {
 	if err != nil {
 		return c.diagnosticError(err)
 	}
-	fmt.Fprint(c.Out, "Selfishell doctor\n\n")
+	c.diagnosticHeader()
 	result := 0
 	system := diagnosticGroup{c: c, verbose: verbose}
 	_, configuredErr := os.Stat(paths.State + "/configured")

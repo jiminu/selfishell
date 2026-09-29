@@ -219,6 +219,9 @@ func TestConfiguredDiagnostics(t *testing.T) {
 			}
 			requireStatus(t, "CLI", got, tc.status)
 			requireContains(t, got.Stdout, "Selfishell configuration is installed.")
+			if !bytes.HasPrefix(got.Stdout, []byte("[CLI] Current: 2.0.0 | Rollback: none\n[INFO] Selfishell configuration is installed.\n")) {
+				t.Fatalf("inconsistent diagnostic header: %s", got.Stdout)
+			}
 			if strings.HasPrefix(tc.name, "doctor") {
 				requireContains(t, got.Stdout, "Optional tool: optional is not installed")
 				requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
