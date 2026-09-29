@@ -54,6 +54,7 @@ func TestNativeGitCompletionInitializesWithoutZinit(t *testing.T) {
 // mise skips the first prompt's full hook-env only when PATH is unchanged
 // since activation, so Zinit's $ZPFX/bin must be added before it.
 func TestNativeZinitLoadsBeforeMiseActivation(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	nativeWrite(t, filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh"), `path=("$HOME/zpfx/bin" $path)
 zinit() { return 0; }
