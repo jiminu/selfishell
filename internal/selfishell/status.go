@@ -12,7 +12,7 @@ import (
 )
 
 func (c CLI) marker(color, label string) string {
-	if os.Getenv("NO_COLOR") == "" && IsTerminal(c.Out) {
+	if progressColor(c.Out) {
 		return "\x1b[" + color + "m" + label + "\x1b[0m"
 	}
 	return label
@@ -21,7 +21,7 @@ func (c CLI) sayDiagnostic(color, label, message string) {
 	fmt.Fprintf(c.Out, "%s %s\n", c.marker(color, "["+label+"]"), displayHome(message, os.Getenv("HOME")))
 }
 func (c CLI) bold(value string) string {
-	if os.Getenv("NO_COLOR") == "" && IsTerminal(c.Out) {
+	if progressColor(c.Out) {
 		return "\x1b[1m" + value + "\x1b[0m"
 	}
 	return value
@@ -156,8 +156,15 @@ func (c CLI) status(args []string) int {
 	}
 	expected := map[string]bool{}
 	if configured && platformSupported(platform.Name) {
-		choice, _ := os.ReadFile(paths.State + "/ghostty")
-		selected, e := ResourcesForPlatform(c.Root, platform.Name, string(choice) == "1\n")
+		ghostty := false
+		if platform.Name == "macos" {
+			choice, e := readStateFile(paths.State + "/ghostty")
+			if e != nil && !errors.Is(e, fs.ErrNotExist) {
+				return c.diagnosticError(e)
+			}
+			ghostty = string(choice) == "1\n"
+		}
+		selected, e := ResourcesForPlatform(c.Root, platform.Name, ghostty)
 		if e != nil {
 			return c.diagnosticError(e)
 		}
