@@ -155,15 +155,20 @@ if (($+functions[zinit])); then
     unset _selfishell_fzf_tab_path_preview
 
     # _git completes this under `git-switch`. A local branch wins, as in git switch;
-    # a bare remote branch name, which `git log` can't resolve, maps to its hash
-    # only when one remote has it, since git switch refuses an ambiguous name.
+    # a bare remote name counts only when one remote has it. Only a resolved hash
+    # reaches `git log`, so same-named paths and options never become the preview.
     zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
       if ! ref="$(git show-ref --verify --hash "refs/heads/$word" 2>/dev/null)" &&
-        ! git rev-parse --verify --quiet "$word^{commit}" >/dev/null 2>&1; then
-        ref="$(git for-each-ref --format="%(objectname)" "refs/remotes/*/$word" 2>/dev/null)"
-        [[ "$ref" != *[[:space:]]* ]] || ref=""
+        ! ref="$(git rev-parse --verify --quiet --end-of-options "$word^{commit}" 2>/dev/null)"; then
+        ref=""
+        # for-each-ref treats the word as a glob; branch names cannot contain one.
+        if git check-ref-format "refs/heads/$word" >/dev/null 2>&1; then
+          ref="$(git for-each-ref --format="%(objectname)" "refs/remotes/*/$word" 2>/dev/null)"
+        fi
       fi
-      git log --oneline --decorate --color=always -10 "${ref:-$word}" 2>/dev/null
+      if [[ -n "$ref" && "$ref" != *[![:xdigit:]]* ]]; then
+        git log --oneline --decorate --color=always -10 "$ref" -- 2>/dev/null
+      fi
     '
 
     # Preview unstaged changes. Command-line options such as --staged are not parsed.
