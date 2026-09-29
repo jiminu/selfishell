@@ -129,7 +129,19 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 		p.foreground = true
 		name := "apt-get"
 		if privileged {
-			name, args = "sudo", append([]string{"apt-get"}, args...)
+			// Pass only proxy names to sudo; values (which may contain credentials)
+			// stay in the environment rather than the command line or diagnostics.
+			var proxies []string
+			for _, key := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "ftp_proxy", "FTP_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"} {
+				if envValue(p.environment(), key) != "" {
+					proxies = append(proxies, key)
+				}
+			}
+			var sudoArgs []string
+			if len(proxies) != 0 {
+				sudoArgs = append(sudoArgs, "--preserve-env="+strings.Join(proxies, ","))
+			}
+			name, args = "sudo", append(append(sudoArgs, "apt-get"), args...)
 		}
 		code, err := p.Run(ctx, name, args...)
 		if err != nil {

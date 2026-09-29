@@ -55,6 +55,9 @@ func (p Process) runCLI(ctx context.Context, name string, args ...string) (int, 
 
 func (p Process) run(ctx context.Context, forwardCancel bool, name string, args ...string) (int, error) {
 	inheritedEnv := p.Env == nil
+	// Approved dependencies are public. Apply this to indirect Git children too,
+	// so authentication failures cannot wait behind captured progress output.
+	p = withEnvironment(p, map[string]string{"GIT_TERMINAL_PROMPT": "0"})
 	// Propagate transfer limits to tools that start Git themselves,
 	// including Neovim plugin sync.
 	env := p.environment()
@@ -117,6 +120,9 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 		cmd.Env = p.Env
 	}
 	cmd.WaitDelay = time.Second
+	// Give tools a bounded opportunity to release locks and clean temporary
+	// files. CommandContext escalates to Kill if they outlive WaitDelay.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	var captured *outputTail
 	if p.progress != nil && p.progress.compact {
 		if p.foreground || forwardCancel {
@@ -130,8 +136,7 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 		}
 	}
 	if forwardCancel {
-		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-		// Outlast the continuation's own one-second wait for child pipes.
+		// Outlast the continuation's own one-second child shutdown deadline.
 		cmd.WaitDelay = 5 * time.Second
 	}
 	err := cmd.Run()

@@ -74,12 +74,45 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 	executable := toolExecutable(name)
 	path, err := exec.LookPath(executable)
 	if err == nil {
-		shims := envDefault("MISE_DATA_DIR", envDefault("XDG_DATA_HOME", os.Getenv("HOME")+"/.local/share")+"/mise") + "/shims/"
-		if manager != "mise" || !strings.HasPrefix(path, shims) {
+		if manager != "mise" || !miseManagedExecutable(path) {
 			result.Installed, result.Source = "detected", "external"
 		}
 	}
 	return result, nil
+}
+
+func miseManagedExecutable(path string) bool {
+	data := envDefault("MISE_DATA_DIR", envDefault("XDG_DATA_HOME", os.Getenv("HOME")+"/.local/share")+"/mise")
+	var roots []string
+	for _, dir := range []string{data + "/shims", data + "/installs"} {
+		if physical, err := filepath.EvalSymlinks(dir); err == nil {
+			roots = append(roots, physical)
+		}
+	}
+	// Check every link hop: a mise shim itself may point outside mise's data
+	// directory. Resolve parent aliases without losing the final shim name.
+	for hops := 0; hops < 40; hops++ {
+		dir, base := filepath.Split(path)
+		parent, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return false
+		}
+		physical := filepath.Join(parent, base)
+		for _, dir := range roots {
+			if strings.HasPrefix(physical, dir+"/") {
+				return true
+			}
+		}
+		target, err := os.Readlink(physical)
+		if err != nil {
+			return false
+		}
+		path = target
+		if !filepath.IsAbs(target) {
+			path = filepath.Dir(physical) + "/" + target
+		}
+	}
+	return false
 }
 
 func toolExecutable(name string) string {

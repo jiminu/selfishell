@@ -355,6 +355,90 @@ func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
 		t.Fatalf("calls %q", calls)
 	}
 }
+
+func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
+	for _, location := range []string{"installs", "symlink", "shims", "shim-alias", "shim-directory-alias", "shim-parent-alias", "configured-parent-alias", "external-sibling"} {
+		t.Run(location, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			data := filepath.Join(root, "mise-data")
+			t.Setenv("MISE_DATA_DIR", data)
+			if location == "configured-parent-alias" {
+				nested := filepath.Join(root, "nested")
+				if err := os.MkdirAll(nested, 0700); err != nil {
+					t.Fatal(err)
+				}
+				alias := filepath.Join(bin, "data-alias")
+				if err := os.Symlink(nested, alias); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("MISE_DATA_DIR", alias+"/../mise-data")
+			}
+			fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
+			fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nexit 0\n", 0700)
+			tool := filepath.Join(data, "installs/node/20.0.0/bin/node")
+			fixtureFile(t, tool, "#!/bin/sh\nexit 0\n", 0700)
+			selected := tool
+			if location == "shim-alias" || location == "shim-directory-alias" || location == "shim-parent-alias" {
+				shim := filepath.Join(data, "shims/node")
+				if err := os.MkdirAll(filepath.Dir(shim), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(bin, "mise"), shim); err != nil {
+					t.Fatal(err)
+				}
+				if location == "shim-parent-alias" {
+					nested := filepath.Join(data, "nested")
+					if err := os.MkdirAll(nested, 0700); err != nil {
+						t.Fatal(err)
+					}
+					alias := filepath.Join(bin, "alias")
+					if err := os.Symlink(nested, alias); err != nil {
+						t.Fatal(err)
+					}
+					selected = filepath.Join(bin, "node")
+					if err := os.Symlink("alias/../shims/node", selected); err != nil {
+						t.Fatal(err)
+					}
+				} else if location == "shim-alias" {
+					selected = filepath.Join(bin, "node")
+					if err := os.Symlink(shim, selected); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					alias := filepath.Join(root, "shim-alias")
+					if err := os.Symlink(filepath.Dir(shim), alias); err != nil {
+						t.Fatal(err)
+					}
+					selected = filepath.Join(alias, "node")
+				}
+			} else if location == "symlink" || location == "shims" {
+				selected = filepath.Join(bin, "node")
+				if location == "shims" {
+					selected = filepath.Join(data, "shims/node")
+				}
+				if err := os.MkdirAll(filepath.Dir(selected), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(tool, selected); err != nil {
+					t.Fatal(err)
+				}
+			} else if location == "external-sibling" {
+				selected = filepath.Join(data, "installs-personal/node")
+				fixtureFile(t, selected, "#!/bin/sh\nexit 0\n", 0700)
+			}
+			t.Setenv("PATH", filepath.Dir(selected)+":"+bin)
+			got, err := inventory(t, root, paths, warnings).Detect("mise", "node", "linux", "amd64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			installed, source := "missing", "none"
+			if location == "external-sibling" {
+				installed, source = "detected", "external"
+			}
+			wantTool(t, got, installed, source, "24.18.0")
+		})
+	}
+}
 func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)

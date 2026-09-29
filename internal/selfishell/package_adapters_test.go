@@ -117,6 +117,36 @@ func TestAptNonRootRequiresSudo(t *testing.T) {
 	}
 }
 
+func TestAptPreservesOnlyProxyEnvironmentThroughSudo(t *testing.T) {
+	f := newPackageFixture(t)
+	f.apt()
+	f.op.Process.Env = append(f.op.Process.Env, "http_proxy=http://user:private@proxy.example:8080", "HTTPS_PROXY=http://secure.example:8443", "no_proxy=localhost,127.0.0.1", "UNRELATED_SECRET=not-for-apt")
+	f.executable("sudo", `printf '%s\n' "$*" >>"$HOME/sudo-args"
+case "$1" in
+  --preserve-env=http_proxy,HTTPS_PROXY,no_proxy) shift ;;
+  *) unset http_proxy HTTPS_PROXY no_proxy ;;
+esac
+unset UNRELATED_SECRET
+exec "$@"`)
+	f.executable("apt-get", `test "$http_proxy" = 'http://user:private@proxy.example:8080' || exit 31
+test "$HTTPS_PROXY" = 'http://secure.example:8443' || exit 32
+test "$no_proxy" = 'localhost,127.0.0.1' || exit 33
+test -z "$UNRELATED_SECRET" || exit 34
+printf '%s\n' "$1" >>"$HOME/apt-proxy-calls"`)
+	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTestFile(t, f.home+"/apt-proxy-calls"); got != "update\ninstall\n" {
+		t.Fatalf("proxy commands: %q", got)
+	}
+	args := readTestFile(t, f.home+"/sudo-args")
+	for _, secret := range []string{"private", "proxy.example", "UNRELATED_SECRET", "-E "} {
+		if strings.Contains(args, secret) {
+			t.Fatalf("sudo exposes or broadly preserves environment: %q", args)
+		}
+	}
+}
+
 func TestAptNonRootWithoutSudoFails(t *testing.T) {
 	f := newPackageFixture(t)
 	f.apt()

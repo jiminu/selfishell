@@ -47,6 +47,11 @@ vulnerabilities and is not a substitute for reviewing lifecycle changes.
 
 Child-command discovery skips relative `PATH` entries. Installer Git commands
 discard inherited repository-selection variables such as `GIT_DIR` and
-`GIT_WORK_TREE`, while retaining authentication and proxy settings. Dependency
+`GIT_WORK_TREE`, while retaining authentication and proxy settings. They set
+`GIT_TERMINAL_PROMPT=0` for direct and indirect Git children so failed access to
+public dependencies cannot wait for terminal credentials behind progress output.
+Apt requests that sudo preserve only the configured proxy variables; proxy values
+remain in the environment rather than command-line arguments. Sudo policy still
+controls whether preservation is permitted. Dependency
 discovery sends its GitHub token through curl's standard input rather than its
 command-line arguments.
