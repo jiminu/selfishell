@@ -1,41 +1,26 @@
-//go:build darwin
+//go:build darwin || linux
 
 package selfishell
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
-	"unsafe"
+
+	"github.com/jiminu/selfishell/internal/pty"
 )
 
 func packageTestPTY(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
-	master, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+	master, slave, err := pty.Open()
 	if err != nil {
-		t.Fatal(err)
-	}
-	for _, req := range []uint{syscall.TIOCPTYGRANT, syscall.TIOCPTYUNLK} {
-		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, master.Fd(), uintptr(req), 0)
-		if errno != 0 {
-			master.Close()
-			t.Fatal(errno)
-		}
-	}
-	var name [128]byte
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, master.Fd(), uintptr(syscall.TIOCPTYGNAME), uintptr(unsafe.Pointer(&name[0])))
-	if errno != 0 {
-		master.Close()
-		t.Fatal(errno)
-	}
-	slave, err := os.OpenFile(string(bytes.TrimRight(name[:], "\x00")), os.O_RDWR, 0)
-	if err != nil {
-		master.Close()
 		t.Fatal(err)
 	}
 	return master, slave
@@ -46,7 +31,11 @@ func TestInstallAndUpdateTerminalSummary(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			for _, noColor := range []string{"", "1"} {
 				t.Run("NO_COLOR="+noColor, func(t *testing.T) {
-					root, _, paths := blockHome(t, "macos")
+					platform := "macos"
+					if runtime.GOOS == "linux" {
+						platform = "ubuntu"
+					}
+					root, _, paths := blockHome(t, platform)
 					t.Setenv("NO_COLOR", noColor)
 					t.Setenv("TERM", "xterm-256color")
 					t.Setenv("CI", "")
@@ -135,6 +124,7 @@ func TestProgressPlainTerminalModes(t *testing.T) {
 			ui.stage("Applying configuration")
 			c := CLI{Out: slave, Err: slave, progress: ui}
 			c.report("Configuration", "Updated managed file: example.zsh")
+			c.error("example failure")
 			c.complete("Complete")
 			ui.finish()
 			fmt.Fprintln(slave, "END")
@@ -146,6 +136,9 @@ func TestProgressPlainTerminalModes(t *testing.T) {
 }
 
 func TestPackageAdapterColorsTerminalStreams(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CI", "")
+	t.Setenv("NO_COLOR", "")
 	f := newPackageFixture(t)
 	master, slave := packageTestPTY(t)
 	defer master.Close()
@@ -162,16 +155,124 @@ func TestPackageAdapterColorsTerminalStreams(t *testing.T) {
 	if !strings.Contains(got, "\x1b[36mWould install required apt packages:\x1b[0m") || !strings.Contains(got, "\x1b[33mselfishell: warning:\x1b[0m") {
 		t.Fatal(got)
 	}
+	(CLI{Err: slave}).error("example failure")
+	readPackagePTY(t, master, "\x1b[31mselfishell:\x1b[0m example failure\n")
 	master2, slave2 := packageTestPTY(t)
 	defer master2.Close()
 	defer slave2.Close()
 	f.op.Process.Env = append(f.op.Process.Env, "NO_COLOR=1")
+	t.Setenv("NO_COLOR", "1")
 	f.op.Process.Out = slave2
 	if err := f.op.InstallApt(context.Background(), "required", true, "needed"); err != nil {
 		t.Fatal(err)
 	}
-	got = readPackagePTY(t, master2, "Would install required apt packages: needed\n")
+	(CLI{Err: slave2}).error("example failure")
+	got = readPackagePTY(t, master2, "selfishell: example failure\n")
 	if strings.Contains(got, "\x1b[") {
 		t.Fatal(got)
 	}
+}
+
+func TestProgressTerminalFailure(t *testing.T) {
+	isolateHome(t, t.TempDir())
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CI", "")
+	t.Setenv("NO_COLOR", "1")
+	master, slave := packageTestPTY(t)
+	defer master.Close()
+	defer slave.Close()
+	ui := newProgress(slave, slave, Paths{})
+	defer ui.pause()
+	c := CLI{Out: slave, Err: slave, progress: ui}
+	p := Process{Out: slave, Err: slave, progress: ui}
+	ui.stage("Synchronizing tools")
+	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'")
+	if code != 0 || err != nil {
+		t.Fatalf("successful tool: %d %v", code, err)
+	}
+	c.report("Tools", "Installed example tool")
+	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
+	if code != 7 || err != nil {
+		t.Fatalf("failed tool: %d %v", code, err)
+	}
+	// Failure details must be visible before the final summary.
+	got := readPackagePTY(t, master, "failure detail\n")
+	if !strings.Contains(got, "Synchronizing tools") || strings.Contains(got, "successful tool chatter") {
+		t.Fatalf("unexpected progress output: %q", got)
+	}
+	c.error("installation failed")
+	ui.finish()
+	fmt.Fprintln(slave, "END")
+	got = readPackagePTY(t, master, "END\n")
+	if !strings.Contains(got, "selfishell: installation failed") || !strings.Contains(got, "Installed example tool") || strings.Contains(got, "✓") || strings.Contains(got, "\x1b[") {
+		t.Fatalf("failure summary or animation after failure: %q", got)
+	}
+}
+
+func TestConfigurationPromptInterrupt(t *testing.T) {
+	if root := os.Getenv("SELFISHELL_TEST_PROMPT_ROOT"); root != "" {
+		c := CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+		prepared, err := c.prepareConfig(DetectPlatform().Name, false, false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A file changed after preflight must prompt while configuration progress runs.
+		r := failureResource(t, root, "zsh-common")
+		blockWrite(t, r.Target, []byte("# user edit after preflight\n"))
+		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		prepared.m.c.progress = c.progress
+		defer c.progress.finish()
+		if err := c.applyManagedResources(&prepared); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatal("configuration continued after interrupt")
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform := "macos"
+	if runtime.GOOS == "linux" {
+		platform = "ubuntu"
+	}
+	root, _, _ := blockHome(t, platform)
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	t.Setenv("SELFISHELL_TEST_PROMPT_ROOT", root)
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CI", "")
+	master, slave := packageTestPTY(t)
+	defer master.Close()
+	defer slave.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestConfigurationPromptInterrupt$")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	}()
+	// Only the child retains the slave; macOS can otherwise stall while exiting.
+	if err := slave.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got := readPackagePTY(t, master, "Overwrite with default config? [y/N] ")
+	if !strings.Contains(got, "Applying configuration") {
+		t.Fatalf("configuration progress did not run: %q", got)
+	}
+	if _, err := master.Write([]byte{3}); err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.Wait()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGINT {
+		t.Fatalf("prompt did not stop on Ctrl-C: %v (timeout: %v)", err, ctx.Err())
+	}
+	blockEqual(t, failureResource(t, root, "zsh-common").Target, []byte("# user edit after preflight\n"))
 }

@@ -37,7 +37,7 @@ func (c CLI) latestReleaseVersion() (string, error) {
 func (c CLI) error(message string) {
 	c.progress.pause()
 	prefix := "selfishell:"
-	if os.Getenv("NO_COLOR") == "" && IsTerminal(c.Err) {
+	if progressColor(c.Err) {
 		prefix = "\x1b[31mselfishell:\x1b[0m"
 	}
 	fmt.Fprintln(c.Err, prefix+" "+message)
