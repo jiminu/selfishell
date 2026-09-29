@@ -137,8 +137,26 @@ func TestNativeFzfTabGitPreviews(t *testing.T) {
 			t.Fatalf("%s resolved wrong ref", word)
 		}
 	}
-	if got := branch("release-3"); got != "" {
-		t.Fatalf("ambiguous remote: %q", got)
+	first := strings.TrimSpace(gitPreview(t, home, repo, "rev-parse", "main~1"))
+	gitPreview(t, home, repo, "tag", "v1.0", first)
+	gitPreview(t, home, repo, "update-ref", "refs/remotes/origin/release-4", "HEAD")
+	gitPreview(t, home, repo, "update-ref", "refs/remotes/upstream/release-4", "HEAD")
+	// Paths named like refs must not replace or hide the resolved commit.
+	nativeWrite(t, filepath.Join(repo, "v1.0"), "tag-named file\n", 0600)
+	nativeWrite(t, filepath.Join(repo, "release-3"), "branch-named file\n", 0600)
+	gitPreview(t, home, repo, "add", "v1.0", "release-3")
+	gitPreview(t, home, repo, "commit", "-q", "-m", "add ref-named files")
+	for _, word := range []string{"origin/release-2", "v1.0", first} {
+		if got := branch(word); !strings.Contains(got, "record the first revision") || strings.Contains(got, "drop the unused flag") {
+			t.Fatalf("%s resolved wrong ref: %q", word, got)
+		}
+	}
+	// Ambiguous or missing refs preview nothing, even when a path matches or
+	// every remote candidate has the same commit.
+	for _, word := range []string{"release-3", "release-4", "staged only.txt", "--quiet"} {
+		if got := branch(word); got != "" {
+			t.Fatalf("unresolved %s: %q", word, got)
+		}
 	}
 	nativeWrite(t, filepath.Join(repo, "staged only.txt"), "base\nstaged-change\n", 0600)
 	gitPreview(t, home, repo, "add", "staged only.txt")
