@@ -42,6 +42,7 @@ func nativeCommon() string     { return filepath.Join(repoRoot(), "config/shared
 func nativeCompletion() string { return filepath.Join(repoRoot(), "config/shared/zsh/completion.zsh") }
 
 func TestNativeGitCompletionInitializesWithoutZinit(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; (( $+functions[_git] )) || exit 10; [[ -s "$HOME/.zcompdump" ]] || exit 11`, "SELFISHELL_SOURCE="+nativeCommon())
 	nativeQuiet(t, r)
@@ -69,6 +70,7 @@ printf '%s\n' 'typeset -g SELFISHELL_TEST_ACTIVATION_PATH="$PATH"'
 	nativeQuiet(t, r)
 }
 func TestNativeZinitStartup(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		zinit    bool
@@ -222,6 +224,7 @@ func nativeMarker(t *testing.T, home, kind string) func() {
 	}
 }
 func TestNativeCompletionAudit(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	functions := nativeCopyCompletionFunctions(t, home)
 	bin := filepath.Join(home, "bin")
@@ -304,8 +307,10 @@ func nativeAssertCompletionProbe(t *testing.T, r capture, warn bool) {
 	}
 }
 func TestNativeInsecureCompletionDirectory(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"missing", "noninteractive", "removed", "compile-failure", "expired", "foreign-file", "foreign-symlink", "foreign-empty-symlink", "foreign-dangling", "foreign-directory"} {
 		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
 			home := nativeHome(t)
 			root := filepath.Dir(home)
 			insecure := filepath.Join(root, "insecure-completions")
@@ -344,6 +349,7 @@ func TestNativeInsecureCompletionDirectory(t *testing.T) {
 	}
 }
 func TestNativeSecureCompletionDirectory(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	root := filepath.Dir(home)
 	secure := filepath.Join(root, "secure-completions")
@@ -373,6 +379,7 @@ func TestNativeSecureCompletionDirectory(t *testing.T) {
 	}
 }
 func TestNativeMacOSPathPrefix(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	root := filepath.Dir(home)
 	bin := filepath.Join(root, "bin")
@@ -385,6 +392,7 @@ func TestNativeMacOSPathPrefix(t *testing.T) {
 }
 
 func TestNativeMacOSInitializesHomebrewAlreadyOnPath(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	prefix := filepath.Join(filepath.Dir(home), "brew prefix")
 	bin := filepath.Join(prefix, "bin")
@@ -404,6 +412,7 @@ printf 'path=("%s/bin" "%s/sbin" $path)\n' "$SELFISHELL_TEST_BREW_PREFIX" "$SELF
 	}
 }
 func TestNativeWSLDeferredPath(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), `[[ ${path[(I)/mnt/[a-zA-Z]/*]} -eq 0 ]] || return 1
 SELFISHELL_TEST_INITIALIZED=1
@@ -415,6 +424,7 @@ SELFISHELL_TEST_INITIALIZED=1
 	}
 }
 func TestNativeCommandLookupPathSemantics(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	root := filepath.Dir(home)
 	work := filepath.Join(root, "work")

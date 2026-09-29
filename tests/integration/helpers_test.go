@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
 
 func TestGoBuildCacheLifetime(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("SELFISHELL_TEST_CACHE_CHILD") == "1" {
 		mustFS(t, os.WriteFile(filepath.Join(testGoCache, "child-marker"), []byte("compiled fixture"), 0600))
 		return
@@ -56,6 +59,7 @@ func TestGoBuildCacheLifetime(t *testing.T) {
 }
 
 func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	file := filepath.Join(root, "file")
 	if err := os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600); err != nil {
@@ -129,6 +133,7 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 }
 
 func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	stateDir := filepath.Join(root, ".local/state/selfishell")
 	if err := os.MkdirAll(filepath.Join(stateDir, "backups"), 0700); err != nil {
@@ -153,6 +158,7 @@ func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 }
 
 func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	script := filepath.Join(root, "script")
 	mustFS(t, os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
@@ -199,45 +205,48 @@ func TestCLIOverrideExecutableSymlinkPreservesIO(t *testing.T) {
 }
 
 func TestRunCleansDescendantAfterLeaderExits(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	marker := filepath.Join(home, "escaped")
+	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
 	start := time.Now()
-	got, err := runCommand(home, []string{"/bin/sh", "-c", "(/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker}, nil, nil, 3*time.Second)
+	got, err := runCommand(home, []string{"/bin/sh", "-c", "echo $$ >\"$2\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker, group}, nil, nil, 3*time.Second)
 	if got.Status != 0 || err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		t.Fatalf("leader execution: %+v %v", got, err)
 	}
 	if time.Since(start) > 2*time.Second {
 		t.Fatal("inherited pipe blocked cleanup")
 	}
-	time.Sleep(2200 * time.Millisecond)
+	waitProcessGroupGone(t, group)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("descendant survived cleanup: %v", err)
 	}
 }
 
 func TestRunTimeoutKillsChildAndReturns(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	marker := filepath.Join(home, "escaped")
+	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
 	start := time.Now()
-	_, err := runCommand(home, []string{"/bin/sh", "-c", "(/bin/sleep 2; /usr/bin/touch \"$1\") & wait", "sh", marker}, nil, nil, 200*time.Millisecond)
+	_, err := runCommand(home, []string{"/bin/sh", "-c", "echo $$ >\"$2\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & wait", "sh", marker, group}, nil, nil, 200*time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("timeout: %v", err)
 	}
 	if time.Since(start) > 2*time.Second {
 		t.Fatal("timeout blocked")
 	}
-	time.Sleep(2200 * time.Millisecond)
+	waitProcessGroupGone(t, group)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("child survived timeout: %v", err)
 	}
 }
 
 func TestPTYUsesPrivateTempAndCleansDescendant(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	tmpRecord := filepath.Join(home, "private-tmpdir")
-	marker := filepath.Join(home, "escaped")
+	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
 	start := time.Now()
-	_, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\" > \"$1\"; (/bin/sleep 2; /usr/bin/touch \"$2\") & exit 0", "sh", tmpRecord, marker}, nil)
+	_, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\" > \"$1\"; echo $$ >\"$3\"; (/bin/sleep 2; /usr/bin/touch \"$2\") & exit 0", "sh", tmpRecord, marker, group}, nil)
 	if !errors.Is(err, exec.ErrWaitDelay) {
 		t.Fatalf("expected incomplete inherited pipe capture: %v", err)
 	}
@@ -255,9 +264,24 @@ func TestPTYUsesPrivateTempAndCleansDescendant(t *testing.T) {
 	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
 		t.Fatalf("PTY temporary directory retained: %v", err)
 	}
-	time.Sleep(2200 * time.Millisecond)
+	waitProcessGroupGone(t, group)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("PTY descendant survived: %v", err)
+	}
+}
+
+// waitProcessGroupGone polls instead of outwaiting the descendant: a survivor
+// keeps its group alive until it writes the marker, so the marker check still fails.
+func waitProcessGroupGone(t *testing.T, pidFile string) {
+	t.Helper()
+	b, err := os.ReadFile(pidFile)
+	mustFS(t, err)
+	pgid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	mustFS(t, err)
+	for deadline := time.Now().Add(10 * time.Second); !errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("process group %d outlived cleanup", pgid)
+		}
 	}
 }
 

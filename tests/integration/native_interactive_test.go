@@ -59,6 +59,7 @@ func interactiveBin(t *testing.T, home string) string {
 }
 
 func TestNativeShellToolCacheGeneration(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
 		home := nativeHome(t)
 		dir := interactiveCache(t, home)
@@ -96,6 +97,7 @@ func TestNativeShellToolCacheGeneration(t *testing.T) {
 	})
 }
 func TestNativeStarshipInitOnce(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin := fakeExecutable(t, home, "starship", "printf 'prompt_starship_precmd() { :; }\\n(( ++starship_inits ))\\n'\n")
 	r := nativeRun(t, home, `_selfishell_command_path() { command -v "$1"; }; typeset -gi starship_inits=0; source "$SELFISHELL_SOURCE"; source "$SELFISHELL_SOURCE"; print -r -- "$starship_inits"`, "SELFISHELL_SOURCE="+interactiveSource(), "SELFISHELL_COMMON_DIR="+filepath.Join(repoRoot(), "config/shared/zsh"), "PATH="+bin)
@@ -104,6 +106,7 @@ func TestNativeStarshipInitOnce(t *testing.T) {
 	}
 }
 func TestNativeAutosuggestionsOrderAndPin(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	r := nativeRun(t, home, `_selfishell_command_path() { command -v "$1"; }; _selfishell_zinit_plugin_ready() { return 0; }; zinit() { [[ "$1" == ice ]] && print -r -- "ice: ${(j: :)@[2,-1]}"; [[ "$1" == light ]] && print -r -- "light: $2"; }; source "$SELFISHELL_SOURCE"; print -r -- "manual=$ZSH_AUTOSUGGEST_MANUAL_REBIND"`, "SELFISHELL_SOURCE="+interactiveSource(), "SELFISHELL_COMMON_DIR="+filepath.Join(repoRoot(), "config/shared/zsh"))
 	out := string(r.Stdout)
@@ -121,6 +124,7 @@ func TestNativeAutosuggestionsOrderAndPin(t *testing.T) {
 	}
 }
 func TestNativeShellToolCacheReplacement(t *testing.T) {
+	t.Parallel()
 	for _, tool := range []string{"fzf", "zoxide", "starship"} {
 		for _, replacement := range []string{"preserved-mtime", "older-mtime", "symlink"} {
 			t.Run(tool+"/"+replacement, func(t *testing.T) {
@@ -169,6 +173,7 @@ printf 'print old\n'
 	}
 }
 func TestNativeShellToolCacheFailureCleanup(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"write", "mv"} {
 		t.Run(kind, func(t *testing.T) {
 			home := nativeHome(t)
@@ -204,6 +209,7 @@ exit 1
 	}
 }
 func TestNativeFzfCacheGeneration(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"success", "invalid-syntax", "mv-failure"} {
 		t.Run(kind, func(t *testing.T) {
 			home := nativeHome(t)
@@ -239,6 +245,7 @@ exit 1`)
 	}
 }
 func TestNativeFzfFallbackCopy(t *testing.T) {
+	t.Parallel()
 	if _, err := os.Stat("/usr/share/doc/fzf/examples/key-bindings.zsh"); err != nil {
 		t.Skip("system fzf key bindings absent")
 	}
@@ -271,6 +278,7 @@ exit 1`)
 	nativeAssertNoTemp(t, dir)
 }
 func TestNativeInteractiveAliases(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin := fakeExecutable(t, home, "eza", "exit 0")
 	fakeExecutable(t, home, "nvim", "exit 0")
@@ -280,6 +288,7 @@ func TestNativeInteractiveAliases(t *testing.T) {
 	}
 }
 func TestNativeKubectlCanonicalCompletion(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin := fakeExecutable(t, home, "kubectl", `[ "$*" = "completion zsh" ] || exit 1
 printf '_kubectl() { return 0; }\n'`)
@@ -289,6 +298,7 @@ printf '_kubectl() { return 0; }\n'`)
 	}
 }
 func TestNativeEditorAliasesAndExports(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	bin := fakeExecutable(t, home, "nvim", "exit 0")
 	source := filepath.Join(repoRoot(), "config/shared/zsh/aliases.zsh")
@@ -299,6 +309,7 @@ func TestNativeEditorAliasesAndExports(t *testing.T) {
 	}
 }
 func TestNativeMissingNeovimAndGDS(t *testing.T) {
+	t.Parallel()
 	home := nativeHome(t)
 	empty := filepath.Join(home, "empty-bin")
 	mustFS(t, os.MkdirAll(empty, 0700))
@@ -310,6 +321,7 @@ func TestNativeMissingNeovimAndGDS(t *testing.T) {
 	}
 }
 func TestNativeZshPluginPins(t *testing.T) {
+	t.Parallel()
 	data := nativeRead(t, filepath.Join(repoRoot(), "dependencies.conf"))
 	for _, tc := range []struct{ repo, file string }{{"zsh-users/zsh-completions", "completion.zsh"}, {"Aloxaf/fzf-tab", "interactive.zsh"}, {"zsh-users/zsh-autosuggestions", "interactive.zsh"}, {"zdharma-continuum/fast-syntax-highlighting", "interactive.zsh"}} {
 		t.Run(tc.repo, func(t *testing.T) {
@@ -331,6 +343,7 @@ func TestNativeZshPluginPins(t *testing.T) {
 	}
 }
 func TestNativeFzfPaletteAndUserOptions(t *testing.T) {
+	t.Parallel()
 	for _, userOpts := range []string{"", "--with-nth=2.. --bind=ctrl-a:select-all"} {
 		t.Run(fmt.Sprintf("opts=%q", userOpts), func(t *testing.T) {
 			home := nativeHome(t)

@@ -34,7 +34,6 @@ var nativeErr error
 // nativeAssetDir builds once per test process, so lifecycle tests consume these exact bytes.
 func nativeAssetDir(t *testing.T) string {
 	t.Helper()
-	privateNativeHome(t)
 	nativeOnce.Do(func() {
 		nativeDir, nativeErr = os.MkdirTemp("", "selfishell-native-assets-")
 		if nativeErr != nil {
@@ -48,13 +47,18 @@ func nativeAssetDir(t *testing.T) string {
 	return nativeDir
 }
 
+func privateHomeEnv(home string) map[string]string {
+	return map[string]string{
+		"HOME": home, "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data"), "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CACHE_HOME": filepath.Join(home, "cache"), "MISE_DATA_DIR": filepath.Join(home, "mise-data"), "MISE_CACHE_DIR": filepath.Join(home, "mise-cache"), "MISE_CONFIG_DIR": filepath.Join(home, "mise-config"), "MISE_STATE_DIR": filepath.Join(home, "mise-state"), "GOCACHE": testGoCache,
+	}
+}
+
+// privateNativeHome gives a serial test its own home; parallel tests share the
+// private process home that TestMain sets.
 func privateNativeHome(t *testing.T) {
 	t.Helper()
-	home := t.TempDir()
-	for key, path := range map[string]string{
-		"HOME": home, "XDG_CONFIG_HOME": filepath.Join(home, "config"), "XDG_DATA_HOME": filepath.Join(home, "data"), "XDG_STATE_HOME": filepath.Join(home, "state"), "XDG_CACHE_HOME": filepath.Join(home, "cache"), "MISE_DATA_DIR": filepath.Join(home, "mise-data"), "MISE_CACHE_DIR": filepath.Join(home, "mise-cache"), "MISE_CONFIG_DIR": filepath.Join(home, "mise-config"), "MISE_STATE_DIR": filepath.Join(home, "mise-state"), "GOCACHE": testGoCache,
-	} {
-		t.Setenv(key, path)
+	for key, value := range privateHomeEnv(t.TempDir()) {
+		t.Setenv(key, value)
 	}
 }
 
@@ -300,6 +304,7 @@ func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte,
 	}
 }
 func TestNativeReleaseArtifacts(t *testing.T) {
+	t.Parallel()
 	dir := nativeAssetDir(t)
 	assertAssetSet(t, dir, nativeArchiveVersion)
 	for _, platform := range []string{"linux", "macos"} {
@@ -311,6 +316,7 @@ func TestNativeReleaseArtifacts(t *testing.T) {
 	}
 }
 func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
+	privateNativeHome(t)
 	first := nativeAssetDir(t)
 	copied := filepath.Join(t.TempDir(), "source with spaces")
 	mustFS(t, os.MkdirAll(copied, 0755))
@@ -350,7 +356,7 @@ func TestNativeReleaseReproducibleWithHostileEnvironment(t *testing.T) {
 	}
 }
 func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
-	privateNativeHome(t)
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	out := filepath.Join(t.TempDir(), "absent")
@@ -375,6 +381,7 @@ func TestUnavailableNativeToolchain(t *testing.T) {
 }
 
 func TestNativeBuilderCLIOptions(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	toolBin := t.TempDir()
 	mustFS(t, os.Symlink(filepath.Join(runtime.GOROOT(), "bin", "go"), filepath.Join(toolBin, "go")))
@@ -446,7 +453,7 @@ func TestWrongNativeToolchain(t *testing.T) {
 }
 
 func TestFailedPublishHasNoVerifiedManifest(t *testing.T) {
-	privateNativeHome(t)
+	t.Parallel()
 	out := t.TempDir()
 	blocker := filepath.Join(out, releaseAssetNames(nativeArchiveVersion)[0])
 	mustFS(t, os.Mkdir(blocker, 0700))
@@ -463,7 +470,7 @@ func TestFailedPublishHasNoVerifiedManifest(t *testing.T) {
 }
 
 func TestNativeStageUsesOutputFilesystem(t *testing.T) {
-	privateNativeHome(t)
+	t.Parallel()
 	parent := t.TempDir()
 	out := filepath.Join(parent, "chosen output")
 	finished := make(chan error, 1)
@@ -505,6 +512,7 @@ func TestNativeStageUsesOutputFilesystem(t *testing.T) {
 }
 
 func TestNativeAssetFixtureCleanedAtSuiteExit(t *testing.T) {
+	t.Parallel()
 	temp := t.TempDir()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestNativeReleaseArtifacts$", "-test.count=1")
 	cmd.Env = append(os.Environ(), "TMPDIR="+temp)

@@ -18,4 +18,8 @@ if [[ -n "$formatting" ]]; then
   exit 1
 fi
 go vet ./...
-SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" go test ./... -count=1
+# Fixture builds otherwise start from an empty cache on every run. Keep a warm
+# one in the checkout, never in the developer's HOME; CI passes its own.
+test_go_cache="${SELFISHELL_TEST_GO_CACHE:-$ROOT_DIR/.build/test-go-cache}"
+mkdir -p "$test_go_cache"
+SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" SELFISHELL_TEST_GO_CACHE="$test_go_cache" go test ./... -count=1

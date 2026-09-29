@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfig(t *testing.T) {
+	t.Parallel()
 	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -257,6 +258,7 @@ func assertEmptyConfigRestored(t *testing.T, home, config, state string) {
 }
 
 func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
+	t.Parallel()
 	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -309,6 +311,7 @@ func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 }
 
 func TestConfigInvalidDependencies(t *testing.T) {
+	t.Parallel()
 	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -346,6 +349,7 @@ func TestConfigInvalidDependencies(t *testing.T) {
 }
 
 func TestConfigIdenticalExistingFile(t *testing.T) {
+	t.Parallel()
 	builtCLI, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -408,6 +412,7 @@ func TestConfigIdenticalExistingFile(t *testing.T) {
 }
 
 func TestConfigPurge(t *testing.T) {
+	t.Parallel()
 	builtCLI, err := testCLI(t)
 	mustFS(t, err)
 	root := t.TempDir()

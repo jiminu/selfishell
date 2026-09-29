@@ -11,6 +11,7 @@ import (
 )
 
 func TestDeveloperScriptsGoPolicy(t *testing.T) {
+	t.Parallel()
 	const pinnedVersion = "1.23.4"
 	for _, mode := range []string{"missing", "wrong", "controlled"} {
 		for _, tc := range []struct {
@@ -107,6 +108,7 @@ func sourceLauncherFixture(t *testing.T) (string, string, string) {
 }
 
 func TestSourceLauncherRequiresExplicitBuild(t *testing.T) {
+	t.Parallel()
 	root, home, entry := sourceLauncherFixture(t)
 	got, err := runCommandIn(home, home, []string{entry, "version"}, nil, maintenanceMiseEnv(home), 5*time.Second)
 	mustFS(t, err)
@@ -119,6 +121,7 @@ func TestSourceLauncherRequiresExplicitBuild(t *testing.T) {
 }
 
 func TestSourceLauncherForwardsThroughSymlinkFromHostileCWD(t *testing.T) {
+	t.Parallel()
 	root, home, entry := sourceLauncherFixture(t)
 	mustFS(t, os.MkdirAll(filepath.Join(root, ".build"), 0700))
 	binary := filepath.Join(root, ".build", "selfishell")

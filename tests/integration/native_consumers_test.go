@@ -66,6 +66,7 @@ func backupPaths(t *testing.T, roots ...string) []string {
 }
 
 func TestNativeMacInstalledArchiveConsumer(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("SELFISHELL_NATIVE_MACOS_E2E") != "1" {
 		t.Skip("requires SELFISHELL_NATIVE_MACOS_E2E=1")
 	}
@@ -202,6 +203,7 @@ func fullUbuntuCommand(t *testing.T, f *bootstrapFixture, dir string, timeout ti
 }
 
 func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("SELFISHELL_UBUNTU_FULL_E2E") != "1" {
 		t.Skip("requires SELFISHELL_UBUNTU_FULL_E2E=1")
 	}

@@ -55,10 +55,16 @@ install/restore with empty, existing and XDG homes. Release reproducibility chec
 combine a relocated source tree, changed mtimes, hostile build variables and a
 fresh cache; the shell builder is compared with those verified Go-built assets.
 
-Test fixture builds use temporary Go caches by default. CI sets
-`SELFISHELL_TEST_GO_CACHE` to an absolute compiler-cache path to reuse restored
-builds; the test process leaves that caller-owned cache in place. Test homes and
-mise state remain private, and the reproducibility check still uses a fresh cache.
+Test fixture builds use temporary Go caches by default. `SELFISHELL_TEST_GO_CACHE`
+selects an absolute compiler-cache path instead: the repository gate uses
+`.build/test-go-cache` in the checkout so repeated runs reuse fixture builds, and
+CI passes its restored cache. The test process leaves that caller-owned cache in
+place. Test homes and mise state remain private, and the reproducibility check
+still uses a fresh cache.
+
+Integration tests call `t.Parallel()` unless they must change the test process
+environment with `t.Setenv`. Give each test its own temporary HOME and pass
+child environments explicitly.
 
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
 repository gate. Four archive formats are checked; host-native execution occurs

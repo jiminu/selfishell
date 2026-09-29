@@ -147,6 +147,7 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 }
 
 func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -167,6 +168,7 @@ func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
 }
 
 func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -260,6 +262,7 @@ func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 }
 
 func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -297,6 +300,7 @@ func TestContinuationUsesResolvedExecutableWhenCurrentChanges(t *testing.T) {
 }
 
 func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -321,6 +325,7 @@ func TestDefaultUpdateWithoutSetupOnlyChangesCLI(t *testing.T) {
 }
 
 func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -342,6 +347,7 @@ func TestDefaultUpdateRejectsUnreadableSetupMarkerWithoutTransition(t *testing.T
 }
 
 func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -375,6 +381,7 @@ func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing
 }
 
 func TestContinuationPreservesTerminalOutput(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()
@@ -391,6 +398,7 @@ func TestContinuationPreservesTerminalOutput(t *testing.T) {
 }
 
 func TestToolsOnlyOverwritesChangedSourceWithConflictBackupAndChecksum(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	home := t.TempDir()

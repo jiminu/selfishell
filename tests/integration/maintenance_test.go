@@ -77,6 +77,7 @@ fi
 }
 
 func TestPublishedReleaseVerification(t *testing.T) {
+	t.Parallel()
 	version := nativeArchiveVersion
 	home, env := publishedFixture(t, version)
 	script := filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")
@@ -110,6 +111,7 @@ func TestPublishedReleaseVerification(t *testing.T) {
 }
 
 func TestPublishedReleaseInvalidInputBeforeEffects(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	for _, args := range [][]string{{"invalid"}, {"1.2.3", "invalid-repository"}} {
 		got, err := runCommand(home, append([]string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")}, args...), nil, append(maintenanceMiseEnv(home), "PATH=/usr/bin:/bin", "TMPDIR="+home), 5*time.Second)
@@ -126,6 +128,7 @@ func TestPublishedReleaseInvalidInputBeforeEffects(t *testing.T) {
 }
 
 func TestNextPatchVersionContract(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	script := filepath.Join(repoRoot(), "scripts", "next-patch-version.sh")
 	for _, tc := range []struct {
@@ -141,6 +144,7 @@ func TestNextPatchVersionContract(t *testing.T) {
 }
 
 func TestReleaseVersionValidatorParity(t *testing.T) {
+	t.Parallel()
 	script := filepath.Join(repoRoot(), "scripts", "release-version.sh")
 	for _, version := range []string{"0.0.0", "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.2.3-0.3.7", "1.2.3-x.7.z-92", "1.2.3-01alpha", "v1.2.3", "01.2.3", "1.02.3", "1.2.03", "1.2", "1.2.3-", "1.2.3-alpha..1", "1.2.3-alpha_1", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+build"} {
 		home := t.TempDir()
@@ -153,6 +157,7 @@ func TestReleaseVersionValidatorParity(t *testing.T) {
 }
 
 func TestNextPatchUsesLocalStableTags(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	env := maintenanceMiseEnv(home)
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "test"}, {"tag", "v1.2.3"}, {"tag", "v1.2.4-beta.1"}, {"tag", "v1.2.4"}} {
@@ -170,6 +175,7 @@ func TestNextPatchUsesLocalStableTags(t *testing.T) {
 }
 
 func TestCurrentProductionBuilderRejectsInvalidVersions(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	script := filepath.Join(repoRoot(), "scripts", "build-release.sh")
 	for _, tc := range []struct {
@@ -195,6 +201,7 @@ func TestCurrentProductionBuilderRejectsInvalidVersions(t *testing.T) {
 }
 
 func TestPublishedPrereleaseLatestPolicy(t *testing.T) {
+	t.Parallel()
 	version := prereleaseNativeVersion
 	home, env := publishedFixture(t, version)
 	script := filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")
@@ -213,6 +220,7 @@ func TestPublishedPrereleaseLatestPolicy(t *testing.T) {
 }
 
 func TestPublishedStableLatestMustMatch(t *testing.T) {
+	t.Parallel()
 	home, env := publishedFixture(t, nativeArchiveVersion)
 	latest := filepath.Join(home, "releases", "latest", "download", "VERSION")
 	mustFS(t, os.WriteFile(latest, []byte("1.3.1\n"), 0600))

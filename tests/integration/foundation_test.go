@@ -9,6 +9,7 @@ import (
 )
 
 func TestFoundation(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	mustFS(t, err)
 	root := t.TempDir()

@@ -11,6 +11,7 @@ import (
 )
 
 func TestDiagnostics(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -166,6 +167,7 @@ func TestDiagnostics(t *testing.T) {
 }
 
 func TestConfiguredDiagnostics(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -253,6 +255,7 @@ func TestConfiguredDiagnostics(t *testing.T) {
 }
 
 func TestDoctorPlugins(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -397,6 +400,7 @@ func TestDoctorPlugins(t *testing.T) {
 }
 
 func TestStatusGhosttyChoice(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -513,6 +517,7 @@ func TestStatusGhosttyChoice(t *testing.T) {
 }
 
 func TestDiagnosticsTTYColors(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -572,6 +577,7 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 }
 
 func TestStatusRollbackMetadata(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -618,6 +624,7 @@ func TestStatusRollbackMetadata(t *testing.T) {
 }
 
 func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -652,6 +659,7 @@ func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
 }
 
 func TestDoctorXcodeStub(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -684,6 +692,7 @@ func TestDoctorXcodeStub(t *testing.T) {
 }
 
 func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -733,6 +742,7 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 }
 
 func TestStatusInstalledResource(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)
@@ -821,6 +831,7 @@ func TestStatusInstalledResource(t *testing.T) {
 }
 
 func TestStatusListsUnknownTrackedResources(t *testing.T) {
+	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
 		t.Fatal(err)

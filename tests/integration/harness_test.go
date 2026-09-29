@@ -223,7 +223,18 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	// In-process release builds inherit this environment. Parallel tests cannot
+	// use t.Setenv, so they share one private home instead of the developer's.
+	processHome, err := os.MkdirTemp("", "selfishell-test-home-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for key, value := range privateHomeEnv(processHome) {
+		os.Setenv(key, value)
+	}
 	code := m.Run()
+	os.RemoveAll(processHome)
 	if testCLIDir != "" {
 		os.RemoveAll(testCLIDir)
 	}
