@@ -597,9 +597,23 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tools := t.TempDir()
+	calls := tools + "/calls"
+	for _, name := range []string{"git", "mise", "brew", "nvim", "zsh", "dpkg-query", "apt-get", "apt-cache", "sudo", "curl"} {
+		writeTestFile(t, tools+"/"+name, "#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \""+calls+"\"\nexit 91\n", 0700)
+	}
+	t.Setenv("PATH", tools+":/usr/bin:/bin")
 	code, out, stderr := commandResult(root, "update", "--tools-only", "--dry-run")
 	if code != 0 || !strings.Contains(out, "Would install required apt packages") || !strings.Contains(out, "git") || !strings.Contains(out, "Would sync declared Neovim plugins") || !strings.Contains(out, "Would prune unused mise versions") {
 		t.Fatalf("dry: %d %q %q", code, out, stderr)
+	}
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	code, out, stderr = commandResult(root, "update", "--tools-only", "--dry-run")
+	if code != 0 || !strings.Contains(out, "Would install required Homebrew formula") || !strings.Contains(out, "Would install optional Homebrew cask") {
+		t.Fatalf("macOS dry: %d %q %q", code, out, stderr)
+	}
+	if _, err := os.Stat(calls); !os.IsNotExist(err) {
+		t.Fatalf("dry run started tools: %q", readTestFile(t, calls))
 	}
 	after, err := os.ReadDir(home)
 	if err != nil || len(after) != len(before) {
@@ -1058,6 +1072,29 @@ func TestUpdateEditorFailureStopsBeforeCleanup(t *testing.T) {
 	calls, err := os.ReadFile(log)
 	if err != nil || strings.Contains(string(calls), "prune --tools") {
 		t.Fatalf("editor failure pruned: %q %v", calls, err)
+	}
+}
+
+func TestUpdateStopsOnDirtyNeovimPluginBeforeEditorAndCleanup(t *testing.T) {
+	root, home, log := updateCleanupFixture(t, false, false)
+	plugin := home + "/data/nvim/lazy/lazy-source"
+	if err := os.MkdirAll(filepath.Dir(plugin), 0700); err != nil {
+		t.Fatal(err)
+	}
+	gitCommand(t, home, "clone", "-q", home+"/lazy-source", plugin)
+	writeTestFile(t, plugin+"/init.lua", "local edit\n", 0600)
+	code, out, stderr := commandResult(root, "update", "--tools-only", "--yes")
+	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "Neovim plugin checkout was modified; preserving it: "+plugin+".") {
+		t.Fatalf("dirty plugin: %d %q %q", code, out, stderr)
+	}
+	if got := readTestFile(t, plugin+"/init.lua"); got != "local edit\n" {
+		t.Fatalf("dirty plugin changed: %q", got)
+	}
+	if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
+		t.Fatalf("ran Neovim after a dirty plugin: %v", err)
+	}
+	if calls, err := os.ReadFile(log); err != nil || strings.Contains(string(calls), "prune --tools") {
+		t.Fatalf("dirty plugin pruned tools: %q %v", calls, err)
 	}
 }
 

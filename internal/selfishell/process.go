@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -161,6 +162,25 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 		return 127, err
 	}
 	return 126, err
+}
+
+// probeLimit bounds concurrent read-only probes such as Git dirty checks.
+const probeLimit = 8
+
+// probeParallel runs probe(0..n-1), at most probeLimit at once. Probes store
+// results by index so callers still report in declaration order, and their
+// children must not share the caller's stdin.
+func probeParallel(n int, probe func(int)) {
+	slots := make(chan struct{}, probeLimit)
+	var wg sync.WaitGroup
+	for i := range n {
+		slots <- struct{}{}
+		wg.Go(func() {
+			defer func() { <-slots }()
+			probe(i)
+		})
+	}
+	wg.Wait()
 }
 
 // lookPath uses the child's PATH, never the caller's PATH when Env is explicit.

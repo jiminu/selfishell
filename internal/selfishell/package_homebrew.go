@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 func (o *PackageOperation) brewPath() string {
@@ -69,20 +70,49 @@ func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 	return nil
 }
 
-func (o *PackageOperation) brewInventory(ctx context.Context, manager string) (map[string]bool, error) {
-	ready := &o.brewFormulaeReady
-	inventory := &o.brewFormulae
+func (o *PackageOperation) brewCache(manager string) (*map[string]bool, *bool) {
 	if manager == "cask" {
-		ready = &o.brewCasksReady
-		inventory = &o.brewCasks
+		return &o.brewCasks, &o.brewCasksReady
 	}
+	return &o.brewFormulae, &o.brewFormulaeReady
+}
+
+// brewInventory lists each kind once per operation. With brewBothKinds, the
+// first request lists the other kind concurrently; a failed concurrent
+// listing is not cached, so that kind's own request runs it again.
+func (o *PackageOperation) brewInventory(ctx context.Context, manager string) (map[string]bool, error) {
+	inventory, ready := o.brewCache(manager)
 	if *ready {
 		return *inventory, nil
 	}
+	other := "cask"
+	if manager == "cask" {
+		other = "formula"
+	}
+	otherInventory, otherReady := o.brewCache(other)
+	var otherNames map[string]bool
+	var otherErr error
+	var wg sync.WaitGroup
+	listOther := o.brewBothKinds && !*otherReady
+	if listOther {
+		wg.Go(func() { otherNames, otherErr = o.brewList(ctx, other) })
+	}
+	names, err := o.brewList(ctx, manager)
+	wg.Wait()
+	if listOther && otherErr == nil {
+		*otherInventory, *otherReady = otherNames, true
+	}
+	if err != nil {
+		return nil, err
+	}
+	*inventory, *ready = names, true
+	return names, nil
+}
+
+func (o *PackageOperation) brewList(ctx context.Context, manager string) (map[string]bool, error) {
 	var out bytes.Buffer
 	p := o.Process
-	p.Out = &out
-	p.Err = io.Discard
+	p.In, p.Out, p.Err = nil, &out, io.Discard // may run concurrently with the other kind
 	code, err := p.Run(ctx, "brew", "list", "--"+manager)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -93,14 +123,13 @@ func (o *PackageOperation) brewInventory(ctx context.Context, manager string) (m
 	if code != 0 {
 		out.Reset()
 	}
-	*inventory = make(map[string]bool)
+	names := make(map[string]bool)
 	for _, name := range strings.Split(out.String(), "\n") {
 		if name != "" {
-			(*inventory)[name] = true
+			names[name] = true
 		}
 	}
-	*ready = true
-	return *inventory, nil
+	return names, nil
 }
 
 // InstallHomebrew inventories each package kind once per operation. Missing

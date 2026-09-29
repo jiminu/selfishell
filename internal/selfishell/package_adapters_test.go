@@ -332,6 +332,39 @@ func TestHomebrewInventoriesOncePerKindPerOperation(t *testing.T) {
 	}
 }
 
+func TestHomebrewListsBothKindsConcurrentlyOnce(t *testing.T) {
+	f := newPackageFixture(t)
+	// Each listing waits for the other to start, so sequential listings time out.
+	f.executable("brew", `printf 'brew %s\n' "$*" >>"$HOME/calls"
+[ "$1" = list ] || exit 0
+: >"$HOME/started$2"
+i=0
+while [ ! -f "$HOME/started--formula" ] || [ ! -f "$HOME/started--cask" ]; do
+  i=$((i + 1)); [ "$i" -lt 500 ] || exit 3; sleep 0.01
+done
+printf 'first\n'`)
+	f.op.brewBothKinds = true
+	stdin := strings.NewReader("terminal input")
+	f.op.Process.In = stdin
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := f.op.brewInventory(ctx, "formula"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled inventory: %v", err)
+	}
+	for _, manager := range []string{"formula", "cask", "formula"} {
+		if err := f.op.InstallHomebrew(context.Background(), "required", manager, false, "first"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := f.calls()
+	if strings.Count(calls, "brew list --formula\n") != 1 || strings.Count(calls, "brew list --cask\n") != 1 || strings.Contains(calls, "install") {
+		t.Fatalf("expected one concurrent listing per kind: %q", calls)
+	}
+	if stdin.Len() != len("terminal input") {
+		t.Fatal("a concurrent listing read the caller's stdin")
+	}
+}
+
 func TestHomebrewOptionalMissingDoesNotBootstrap(t *testing.T) {
 	f := newPackageFixture(t)
 	if err := f.op.InstallHomebrew(context.Background(), "optional", "formula", false, "missing"); err != nil {

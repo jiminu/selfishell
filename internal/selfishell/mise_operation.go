@@ -3,6 +3,8 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -94,10 +96,13 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 		return o.optionalFailure(requirement, "mise is required to install mise-managed tools.", names)
 	}
 	link := strings.TrimSuffix(paths.Config, "/selfishell") + "/mise/conf.d/selfishell.toml"
-	if info, err := os.Lstat(link); err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+	if info, err := os.Lstat(link); err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) && !o.miseConfigTrusted(link) {
 		p := o.miseProcess(root, false)
 		p.Out, p.Err = io.Discard, io.Discard
-		_, _ = p.Run(ctx, mise, "trust", link)
+		key := miseTrustKey(link)
+		if code, err := p.Run(ctx, mise, "trust", link); err == nil && code == 0 {
+			o.miseTrusted = key
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -125,6 +130,24 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 			strings.ReplaceAll(wrapWords(names, terminalWidth(o.Process.Out)-4), "\n", "\n  "))
 	}
 	return nil
+}
+
+// miseTrustKey identifies the managed conf.d entry by path, link target, and
+// contents; "" means it is unreadable and a trust of it is never reused.
+func miseTrustKey(link string) string {
+	data, err := os.ReadFile(link)
+	if err != nil {
+		return ""
+	}
+	target, _ := os.Readlink(link)
+	sum := sha256.Sum256(data)
+	return link + "\x00" + target + "\x00" + hex.EncodeToString(sum[:])
+}
+
+// miseConfigTrusted reports whether this operation already trusted link, as
+// it is now, successfully; a failed trust is retried by the next caller.
+func (o *PackageOperation) miseConfigTrusted(link string) bool {
+	return o != nil && o.miseTrusted != "" && o.miseTrusted == miseTrustKey(link)
 }
 
 func (o *PackageOperation) miseOutput(ctx context.Context, p Process, mise string, args ...string) (string, error) {

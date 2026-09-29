@@ -152,7 +152,7 @@ func TestConfigurationProgressCancelsBlockedTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	err = c.applyManagedResources(&p)
+	err = c.applyManagedResources(&p, nil)
 	if err == nil || time.Since(start) > time.Second || ui.stop != nil {
 		t.Fatalf("uncancellable config phase: %v after %s spinner=%v", err, time.Since(start), ui.stop)
 	}
