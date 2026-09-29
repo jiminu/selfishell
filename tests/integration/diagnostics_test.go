@@ -396,6 +396,122 @@ func TestDoctorPlugins(t *testing.T) {
 	}
 }
 
+func TestStatusGhosttyChoice(t *testing.T) {
+	cli, err := testCLI(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	release := filepath.Join(root, "release")
+	copyCLIFixture(t, release, cli)
+	entry := filepath.Join(release, "bin/selfishell")
+	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	osRelease, proc := filepath.Join(root, "os-release"), filepath.Join(root, "proc-version")
+	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	for _, tc := range []struct {
+		platform, choice string
+		tracked, wantErr bool
+		wantCode         int
+	}{
+		{platform: "macos", choice: "enabled", wantCode: 1},
+		{platform: "macos", choice: "disabled"},
+		{platform: "macos", choice: "missing"},
+		{platform: "macos", choice: "directory", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "fifo", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "symlink", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "dangling-symlink", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "permission", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "disabled", tracked: true, wantCode: 1},
+		{platform: "macos", choice: "missing", tracked: true, wantCode: 1},
+		{platform: "ubuntu", choice: "fifo"},
+		{platform: "ubuntu-wsl", choice: "fifo"},
+		{platform: "ubuntu", choice: "fifo", tracked: true, wantCode: 1},
+		{platform: "ubuntu-wsl", choice: "fifo", tracked: true, wantCode: 1},
+	} {
+		t.Run(fmt.Sprintf("%s/%s/tracked=%t", tc.platform, tc.choice, tc.tracked), func(t *testing.T) {
+			if tc.choice == "permission" && os.Geteuid() == 0 {
+				t.Skip("root can read files without permission bits")
+			}
+			home := t.TempDir()
+			state := filepath.Join(home, ".local/state/selfishell")
+			mustFS(t, os.MkdirAll(state, 0700))
+			choice := filepath.Join(state, "ghostty")
+			mustFS(t, os.WriteFile(choice, []byte("0\n"), 0600))
+			system, procVersion := "Linux", "Linux\n"
+			if tc.platform == "macos" {
+				system = "Darwin"
+			} else if tc.platform == "ubuntu-wsl" {
+				procVersion = "Linux microsoft WSL2\n"
+			}
+			mustFS(t, os.WriteFile(proc, []byte(procVersion), 0600))
+			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_MACHINE_ARCH=arm64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
+			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
+			if e != nil {
+				t.Fatal(e)
+			}
+			requireStatus(t, "configuration fixture", setup, 0)
+			mustFS(t, os.Remove(choice))
+			switch tc.choice {
+			case "enabled":
+				mustFS(t, os.WriteFile(choice, []byte("1\n"), 0600))
+			case "disabled", "permission":
+				mustFS(t, os.WriteFile(choice, []byte("0\n"), 0600))
+			case "directory":
+				mustFS(t, os.Mkdir(choice, 0700))
+			case "fifo":
+				mustFS(t, makeFIFO(choice))
+			case "symlink", "dangling-symlink":
+				target := filepath.Join(home, "personal-choice")
+				if tc.choice == "symlink" {
+					mustFS(t, os.WriteFile(target, []byte("0\n"), 0600))
+				}
+				mustFS(t, os.Symlink(target, choice))
+			}
+			if tc.tracked {
+				mustFS(t, os.WriteFile(filepath.Join(state, "resources/user-ghostty.state"), []byte("malformed\n"), 0600))
+			}
+			before := mustSnapshot(t, home)
+			if tc.choice == "permission" {
+				mustFS(t, os.Chmod(choice, 0000))
+			}
+			// runCommand kills the child on timeout and returns an error, never a passing exit status.
+			got, e := runCommand(home, []string{entry, "status"}, nil, env, 3*time.Second)
+			if tc.choice == "permission" {
+				info, statErr := os.Lstat(choice)
+				mustFS(t, statErr)
+				if info.Mode().Perm() != 0 {
+					t.Fatal("status changed choice permissions")
+				}
+				mustFS(t, os.Chmod(choice, 0600))
+			}
+			if e != nil {
+				t.Fatalf("status did not finish: %v", e)
+			}
+			requireStatus(t, "status", got, tc.wantCode)
+			if tc.wantErr {
+				requireContains(t, got.Stderr, "selfishell:")
+				requireContains(t, got.Stderr, "~/.local/state/selfishell/ghostty")
+			} else {
+				if len(got.Stderr) != 0 {
+					t.Fatalf("unexpected diagnostic error: %s", got.Stderr)
+				}
+				for _, name := range []string{"ghostty-config", "user-ghostty"} {
+					missing := "[MISSING] Installation record: ~/.local/state/selfishell/resources/" + name + ".state"
+					if bytes.Contains(got.Stdout, []byte(missing)) != (tc.choice == "enabled") {
+						t.Fatalf("incorrect Ghostty selection: %s", got.Stdout)
+					}
+				}
+				if tc.tracked {
+					requireContains(t, got.Stdout, "[MALFORMED] ~/.local/state/selfishell/resources/user-ghostty.state")
+				}
+			}
+			if !bytes.Equal(before, mustSnapshot(t, home)) {
+				t.Fatal("status mutated HOME")
+			}
+		})
+	}
+}
+
 func TestDiagnosticsTTYColors(t *testing.T) {
 	cli, err := testCLI(t)
 	if err != nil {
@@ -412,21 +528,46 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 	target := filepath.Join(home, "link")
 	mustFS(t, os.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "missing"))), 0600))
 	before := mustSnapshot(t, home)
-	for _, noColor := range []string{"", "1"} {
-		t.Run("NO_COLOR="+noColor, func(t *testing.T) {
-			env := []string{"NO_COLOR=" + noColor, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			got, e := capturePTYOutput(home, entry, []string{"status"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "CLI", got, 1)
-			if bytes.Contains(got.Stdout, []byte("\x1b[33m")) != (noColor == "") {
-				t.Fatalf("CLI color: %q", got.Stdout)
-			}
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("CLI mutated HOME")
-			}
-		})
+	for _, tc := range []struct {
+		name, noColor, ci, term string
+		redirect, color         bool
+	}{
+		{name: "TTY", term: "xterm", color: true},
+		{name: "NO_COLOR", noColor: "1", term: "xterm"},
+		{name: "CI", ci: "true", term: "xterm"},
+		{name: "TERM=dumb", term: "dumb"},
+		{name: "redirect", term: "xterm", redirect: true},
+	} {
+		for _, command := range []string{"status", "doctor"} {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				env := []string{"NO_COLOR=" + tc.noColor, "CI=" + tc.ci, "TERM=" + tc.term, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+				captureOutput := capturePTYOutput
+				if tc.redirect {
+					captureOutput = captureCommand
+				}
+				got, e := captureOutput(home, entry, []string{command}, env)
+				if e != nil {
+					t.Fatal(e)
+				}
+				requireStatus(t, "CLI", got, 1)
+				marker, hint := "[CHANGED]", "selfishell update --tools-only --skip-packages"
+				color := "33"
+				if command == "doctor" {
+					marker, hint, color = "[ERROR]", "selfishell install", "31"
+				}
+				requireContains(t, got.Stdout, marker)
+				requireContains(t, got.Stdout, hint)
+				if tc.color {
+					requireContains(t, got.Stdout, "\x1b["+color+"m"+marker+"\x1b[0m")
+					requireContains(t, got.Stdout, "\x1b[1m"+hint+"\x1b[0m")
+				} else if bytes.Contains(got.Stdout, []byte("\x1b")) || bytes.Contains(got.Stderr, []byte("\x1b")) {
+					t.Fatalf("unexpected ANSI: stdout=%q stderr=%q", got.Stdout, got.Stderr)
+				}
+				if !bytes.Equal(before, got.Home) {
+					t.Fatal("CLI mutated HOME")
+				}
+			})
+		}
 	}
 }
 
