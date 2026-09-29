@@ -67,7 +67,15 @@ func TestNativeZinitStartup(t *testing.T) {
 				zinit := filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh")
 				nativeWrite(t, zinit, `typeset -gA ZINIT
 ZINIT[PLUGINS_DIR]="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
-zinit() { print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"; }
+zinit() {
+  print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
+  if [[ "$1" == ice ]]; then
+    SELFISHELL_TEST_BLOCK_FPATH=${@[(I)blockf]}
+  elif [[ "$1" == light && "$2" == zsh-users/zsh-completions && "$SELFISHELL_TEST_BLOCK_FPATH" == 0 ]]; then
+    source "$ZINIT[PLUGINS_DIR]/zsh-users---zsh-completions/zsh-completions.plugin.zsh"
+  fi
+  return 0
+}
 `, 0600)
 				for _, p := range []string{"zsh-users---zsh-completions", "Aloxaf---fzf-tab", "zsh-users---zsh-autosuggestions", "zdharma-continuum---fast-syntax-highlighting"} {
 					path := filepath.Join(home, ".local/share/zinit/plugins", p)
@@ -78,6 +86,11 @@ zinit() { print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"; }
 						mustFS(t, os.MkdirAll(path, 0700))
 					}
 				}
+				if tc.complete {
+					plugin := filepath.Join(home, ".local/share/zinit/plugins/zsh-users---zsh-completions")
+					nativeWrite(t, filepath.Join(plugin, "zsh-completions.plugin.zsh"), `fpath+="${0:A:h}/src"`+"\n", 0600)
+					nativeWrite(t, filepath.Join(plugin, "src/_selfishell_completion_probe"), "#compdef selfishell-completion-probe\n", 0600)
+				}
 			}
 			fakeBin := filepath.Join(root, "bin")
 			if tc.complete {
@@ -87,7 +100,11 @@ zinit() { print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"; }
 			if tc.complete {
 				path = fakeBin + ":" + path
 			}
-			r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"`, "PATH="+path, "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_ZINIT_LOG="+log)
+			probe := `source "$SELFISHELL_SOURCE"`
+			if tc.complete {
+				probe += `; [[ "${_comps[selfishell-completion-probe]}" == _selfishell_completion_probe ]] || exit 20`
+			}
+			r := nativeRun(t, home, probe, "PATH="+path, "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_ZINIT_LOG="+log)
 			nativeQuiet(t, r)
 			data, err := os.ReadFile(log)
 			if os.IsNotExist(err) {
@@ -346,6 +363,26 @@ func TestNativeMacOSPathPrefix(t *testing.T) {
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; print -l -r -- "$path[1]" "$path[2]"`, "PATH="+bin+":"+nativePath, "HOMEBREW_PREFIX=", "SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/macos/zshrc"))
 	if string(r.Stdout) != home+"/.local/bin\n"+home+"/.rd/bin\n" || len(r.Stderr) != 0 {
 		t.Fatalf("path order: %+v", r)
+	}
+}
+
+func TestNativeMacOSInitializesHomebrewAlreadyOnPath(t *testing.T) {
+	home := nativeHome(t)
+	prefix := filepath.Join(filepath.Dir(home), "brew prefix")
+	bin := filepath.Join(prefix, "bin")
+	nativeWrite(t, filepath.Join(bin, "brew"), `#!/bin/sh
+[ "$*" = 'shellenv zsh' ] || exit 1
+printf 'export HOMEBREW_PREFIX="%s"\n' "$SELFISHELL_TEST_BREW_PREFIX"
+printf 'path=("%s/bin" "%s/sbin" $path)\n' "$SELFISHELL_TEST_BREW_PREFIX" "$SELFISHELL_TEST_BREW_PREFIX"
+`, 0700)
+	nativeWrite(t, filepath.Join(bin, "git"), "#!/bin/sh\nexit 0\n", 0700)
+	nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), ":\n", 0600)
+	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; source "$SELFISHELL_SOURCE"; print -rl -- "$HOMEBREW_PREFIX" "$(command -v git)" "$path[1]" "$path[2]"; unique_path=("${(@u)path}"); (( ${#path} == ${#unique_path} )) || exit 21`,
+		"PATH="+nativePath+":"+bin, "HOMEBREW_PREFIX=", "SELFISHELL_TEST_BREW_PREFIX="+prefix,
+		"SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/macos/zshrc"))
+	want := prefix + "\n" + filepath.Join(bin, "git") + "\n" + home + "/.local/bin\n" + home + "/.rd/bin\n"
+	if string(r.Stdout) != want || len(r.Stderr) != 0 {
+		t.Fatalf("Homebrew initialization: want %q got %+v", want, r)
 	}
 }
 func TestNativeWSLDeferredPath(t *testing.T) {

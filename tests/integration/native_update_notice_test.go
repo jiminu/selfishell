@@ -41,6 +41,33 @@ func nativeAbsent(t *testing.T, path string) {
 		t.Fatalf("expected absent %s: %v", path, e)
 	}
 }
+
+func TestNativeNoticeHonorsSettingsAfterLoaderOnce(t *testing.T) {
+	for _, enabled := range []string{"0", "1"} {
+		t.Run(enabled, func(t *testing.T) {
+			home := nativeHome(t)
+			bin, cache := nativeNoticeCLI(t, home)
+			nativeWrite(t, filepath.Join(cache, "available-version"), "1.1.0\n", 0600)
+			nativeWrite(t, filepath.Join(cache, "update-checked-at"), strconv.FormatInt(time.Now().Unix(), 10)+"\n", 0600)
+			code := `_selfishell_command_path() { command -v "$1"; }
+source "$SELFISHELL_SOURCE"
+source "$SELFISHELL_SOURCE"
+SELFISHELL_UPDATE_NOTICE="$SELFISHELL_TEST_ENABLED"
+SELFISHELL_UPDATE_CHECK_INTERVAL=9999999999
+for hook in $precmd_functions; do "$hook"; done
+for hook in $precmd_functions; do "$hook"; done`
+			r, err := runCommand(home, []string{nativeZsh, "-f", "-i", "-c", code}, nil,
+				[]string{"PATH=" + bin + ":" + nativePath, "ZDOTDIR=" + home, "SELFISHELL_UPDATE_NOTICE=1", "SELFISHELL_SOURCE=" + nativeNotice(), "SELFISHELL_TEST_ENABLED=" + enabled}, 10*time.Second)
+			want := ""
+			if enabled == "1" {
+				want = "[Selfishell] 1.1.0 is available. Run: selfishell update\n"
+			}
+			if err != nil || r.Status != 0 || len(r.Stdout) != 0 || string(r.Stderr) != want {
+				t.Fatalf("deferred notice: %+v %v", r, err)
+			}
+		})
+	}
+}
 func TestNativeNoticeReadsInstalledVersionFile(t *testing.T) {
 	home := nativeHome(t)
 	release := filepath.Join(filepath.Dir(home), "releases/1.2.3")
