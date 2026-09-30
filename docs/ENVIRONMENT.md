@@ -62,9 +62,14 @@ declines. The answer is saved in
 Colors do not depend on Ghostty. The prompt, FZF, completion previews, and
 command-line highlighting use the terminal's own palette, and Neovim switches
 between the light and dark VS Code theme to match the background the terminal
-reports, so light terminal themes work as well. The bundled Ghostty
-configuration uses the dark `Dark+` theme; see
+reports. The bundled Ghostty configuration uses the dark `Dark+` theme; see
 [Ghostty customization](INSTALLATION.md#ghostty-customization) to change it.
+
+Many light palettes draw yellow, green, and cyan too faintly on a white
+background. Set the terminal's minimum contrast once rather than searching for
+a palette: in iTerm2, raise Settings → Profiles → Colors → Minimum contrast
+and clear Brighten bold text, which otherwise draws bold text in the lighter
+bright colors; in Ghostty, add `minimum-contrast = 3` to `user.ghostty`.
 
 ## Neovim workflow
 
