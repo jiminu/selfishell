@@ -505,65 +505,157 @@ func policyNeeds(t *testing.T, lines []string) []string {
 	return []string{value}
 }
 
-func TestDependencyWorkflowChanges(t *testing.T) {
+// dependencyRepo commits a fixture for every file the dependency workflow may change.
+func dependencyRepo(t *testing.T) (home, repo string) {
+	t.Helper()
+	home, repo, _ = policyRepo(t)
+	for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua", "go.mod", "mise.toml"} {
+		policyWrite(t, filepath.Join(repo, path), "# fixture\n")
+	}
+	policyGit(t, home, repo, "add", ".")
+	policyGit(t, home, repo, "commit", "-qm", "tracked dependency files")
+	return home, repo
+}
+
+func TestDependencyWorkflowPermissions(t *testing.T) {
 	t.Parallel()
 	raw, jobs := workflowSections(t, "dependency-updates.yml")
+	if !strings.Contains(raw, "\npermissions:\n  contents: read\n\n") {
+		t.Error("dependency workflow must default to a read-only token")
+	}
+	for _, needle := range []string{"pr merge", "--auto", "release create", "git tag"} {
+		if strings.Contains(raw, needle) {
+			t.Errorf("dependency workflow must never merge or release: %s", needle)
+		}
+	}
+	update, pr := policyJob(t, jobs, "update"), policyJob(t, jobs, "pull-request")
+	updateText := strings.Join(update.lines, "\n")
+	if strings.Contains(updateText, ": write") || !strings.Contains(updateText, "\n      contents: read\n") {
+		t.Error("discovery and verification must run with read-only contents")
+	}
+	if !strings.Contains(strings.Join(policyStep(t, update, "Check out repository"), "\n"), "persist-credentials: false") {
+		t.Error("discovery checkout must not persist the token")
+	}
+	for _, needle := range []string{"changed: ${{ steps.export.outputs.changed }}", "artifact_id: ${{ steps.upload.outputs.artifact-id }}"} {
+		if !strings.Contains(updateText, needle) {
+			t.Errorf("discovery job output missing %s", needle)
+		}
+	}
+	upload := strings.Join(policyStep(t, update, "Upload verified dependency changes"), "\n")
+	for _, needle := range []string{"actions/upload-artifact@", "path: ${{ runner.temp }}/dependency-updates/", "if-no-files-found: error"} {
+		if !strings.Contains(upload, needle) {
+			t.Errorf("upload missing %s", needle)
+		}
+	}
+	prText := strings.Join(pr.lines, "\n")
+	for _, perm := range []string{"contents: write", "pull-requests: write"} {
+		if !strings.Contains(prText, "\n      "+perm+"\n") {
+			t.Errorf("PR job missing %s", perm)
+		}
+	}
+	if needs := policyNeeds(t, pr.lines); len(needs) != 1 || needs[0] != "update" {
+		t.Errorf("PR job must wait for verification: %v", needs)
+	}
+	if condition := policyField(t, pr.lines, "    ", "if"); condition != "needs.update.outputs.changed == 'true'" {
+		t.Errorf("PR job does not require verified changes: %q", condition)
+	}
+	// The write job only applies the handed-off patch; it must not run repository code.
+	if len(pr.steps) != 3 || strings.Contains(prText, "scripts/") || strings.Contains(prText, "setup-go") {
+		t.Errorf("PR job runs more than checkout, download, and publish: %v", pr.steps)
+	}
+	download := strings.Join(policyStep(t, pr, "Download verified dependency changes"), "\n")
+	for _, needle := range []string{"actions/download-artifact@", "artifact-ids: ${{ needs.update.outputs.artifact_id }}", "path: ${{ runner.temp }}/dependency-updates", "digest-mismatch: error"} {
+		if !strings.Contains(download, needle) {
+			t.Errorf("download missing %s", needle)
+		}
+	}
+	if !strings.Contains(strings.Join(policyStep(t, pr, "Create or refresh dependency update PR"), "\n"), "PATCH: ${{ runner.temp }}/dependency-updates/dependency-updates.patch") {
+		t.Error("PR step does not read the downloaded patch")
+	}
+}
+
+func TestDependencyWorkflowChanges(t *testing.T) {
+	t.Parallel()
+	_, jobs := workflowSections(t, "dependency-updates.yml")
 	job := policyJob(t, jobs, "update")
 	detect := policyStep(t, job, "Check dependency changes")
-	if id := policyField(t, detect, "        ", "id"); id != "changes" {
-		t.Fatalf("change output is not connected to downstream steps: %q", id)
+	export := policyStep(t, job, "Export verified dependency changes")
+	for _, tc := range []struct{ step, id string }{{"Check dependency changes", "changes"}, {"Export verified dependency changes", "export"}, {"Upload verified dependency changes", "upload"}} {
+		if id := policyField(t, policyStep(t, job, tc.step), "        ", "id"); id != tc.id {
+			t.Fatalf("%s output is not connected to downstream steps: %q", tc.step, id)
+		}
 	}
+	order := strings.Join(job.lines, "\n") + "\n"
 	previous := -1
-	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
-		index := strings.Index(raw, "      - name: "+name+"\n")
+	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Export verified dependency changes", "Upload verified dependency changes"} {
+		index := strings.Index(order, "      - name: "+name+"\n")
 		if index <= previous {
 			t.Fatalf("dependency step %q missing or out of order", name)
 		}
 		previous = index
 	}
-	for _, name := range []string{"Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Create or refresh dependency update PR"} {
+	for _, name := range []string{"Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Export verified dependency changes"} {
 		if condition := policyField(t, policyStep(t, job, name), "        ", "if"); condition != "steps.changes.outputs.changed == 'true'" {
 			t.Errorf("%s does not require dependency changes: %q", name, condition)
 		}
 	}
-	block := policyRun(t, detect)
-	for _, tc := range []struct {
-		name, path string
-		status     int
-		output     string
-	}{
-		{"unchanged", "", 0, "changed=false\n"},
-		{"manifest", "dependencies.conf", 0, "changed=true\n"},
-		{"completion", "config/shared/zsh/completion.zsh", 0, "changed=true\n"},
-		{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
-		{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
-		{"lsp", "config/shared/nvim/lua/config/languages.lua", 0, "changed=true\n"},
-		{"go_toolchain", "go.mod", 0, "changed=true\n"},
-		{"development_mise", "mise.toml", 0, "changed=true\n"},
-		{"unexpected_tracked_only", "README.md", 1, ""},
-		{"unexpected_untracked_only", "unexpected.txt", 1, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua", "go.mod", "mise.toml"} {
-				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
-			}
-			policyGit(t, home, repo, "add", ".")
-			policyGit(t, home, repo, "commit", "-qm", "tracked dependency files")
-			if tc.path != "" {
-				policyWrite(t, filepath.Join(repo, tc.path), "changed\n")
-			}
-			output := filepath.Join(home, "output")
-			policyWrite(t, output, "")
-			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, append(policyEnv(home), "GITHUB_OUTPUT="+output), 5*time.Second)
-			if err != nil || got.Status != tc.status {
-				t.Fatalf("change detection: status=%d want=%d err=%v stderr=%s", got.Status, tc.status, err, got.Stderr)
-			}
-			data, err := os.ReadFile(output)
-			if err != nil || string(data) != tc.output {
-				t.Fatalf("change output=%q want=%q err=%v", data, tc.output, err)
-			}
-		})
+	if condition := policyField(t, policyStep(t, job, "Upload verified dependency changes"), "        ", "if"); condition != "steps.export.outputs.changed == 'true'" {
+		t.Errorf("upload does not require an exported patch: %q", condition)
+	}
+	// Detection and the post-verification export share the same outcomes; the
+	// export also writes a patch holding only the approved files.
+	for _, block := range []struct {
+		name  string
+		lines []string
+	}{{"detect", detect}, {"export", export}} {
+		script := policyRun(t, block.lines)
+		for _, tc := range []struct {
+			name, path string
+			status     int
+			output     string
+		}{
+			{"unchanged", "", 0, "changed=false\n"},
+			{"manifest", "dependencies.conf", 0, "changed=true\n"},
+			{"completion", "config/shared/zsh/completion.zsh", 0, "changed=true\n"},
+			{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
+			{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
+			{"lsp", "config/shared/nvim/lua/config/languages.lua", 0, "changed=true\n"},
+			{"go_toolchain", "go.mod", 0, "changed=true\n"},
+			{"development_mise", "mise.toml", 0, "changed=true\n"},
+			{"unexpected_tracked_only", "README.md", 1, ""},
+			{"unexpected_untracked_only", "unexpected.txt", 1, ""},
+		} {
+			t.Run(block.name+"/"+tc.name, func(t *testing.T) {
+				home, repo := dependencyRepo(t)
+				if tc.path != "" {
+					policyWrite(t, filepath.Join(repo, tc.path), "changed\n")
+				}
+				output := filepath.Join(home, "output")
+				policyWrite(t, output, "")
+				runner := filepath.Join(home, "runner")
+				got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", script}, nil, append(policyEnv(home), "GITHUB_OUTPUT="+output, "RUNNER_TEMP="+runner), 5*time.Second)
+				if err != nil || got.Status != tc.status {
+					t.Fatalf("change detection: status=%d want=%d err=%v stderr=%s", got.Status, tc.status, err, got.Stderr)
+				}
+				data, err := os.ReadFile(output)
+				if err != nil || string(data) != tc.output {
+					t.Fatalf("change output=%q want=%q err=%v", data, tc.output, err)
+				}
+				patch := filepath.Join(runner, "dependency-updates/dependency-updates.patch")
+				_, statErr := os.Stat(patch)
+				if block.name == "detect" || tc.output != "changed=true\n" {
+					if !os.IsNotExist(statErr) {
+						t.Fatalf("unexpected patch: %v", statErr)
+					}
+					return
+				}
+				policyGit(t, home, repo, "checkout", "--", ".")
+				policyGit(t, home, repo, "apply", patch)
+				if changed := strings.TrimSpace(policyGit(t, home, repo, "diff", "--name-only")); changed != tc.path {
+					t.Errorf("patch changed %q want %q", changed, tc.path)
+				}
+			})
+		}
 	}
 }
 
@@ -601,104 +693,129 @@ func TestGoSecurityTargetsAndFailure(t *testing.T) {
 func TestDependencyWorkflowPRBlock(t *testing.T) {
 	t.Parallel()
 	_, jobs := workflowSections(t, "dependency-updates.yml")
-	block := policyRun(t, policyStep(t, policyJob(t, jobs, "update"), "Create or refresh dependency update PR"))
+	block := policyRun(t, policyStep(t, policyJob(t, jobs, "pull-request"), "Create or refresh dependency update PR"))
+	const branch = "automation/dependency-updates"
+	const bot = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 	for _, tc := range []struct {
 		name             string
+		remote           []string // authors of existing branch commits, oldest first
 		open, unexpected bool
-	}{{"skip_when_open", true, false}, {"create_when_absent", false, false}, {"reject_unexpected_path", false, true}} {
+		status           int
+	}{
+		{"create_when_absent", nil, false, false, 0},
+		{"refresh_bot_branch_when_open", []string{bot, bot}, true, false, 0},
+		{"keep_maintainer_commit", []string{bot, "Maintainer <maintainer@selfishell.invalid>"}, true, false, 1},
+		{"reject_unexpected_path", nil, false, true, 1},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			home, repo, _ := policyRepo(t)
-			for _, path := range []string{"config/shared/zsh/completion.zsh", "config/shared/zsh/interactive.zsh", "config/shared/mise.toml", "config/shared/nvim/lua/config/languages.lua", "go.mod", "mise.toml"} {
-				policyWrite(t, filepath.Join(repo, path), "# fixture\n")
+			home, repo := dependencyRepo(t)
+			base := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
+			remote := filepath.Join(home, "remote.git")
+			policyGit(t, home, home, "init", "-q", "--bare", "-b", "main", remote)
+			policyGit(t, home, repo, "remote", "add", "origin", remote)
+			policyGit(t, home, repo, "push", "-q", "origin", "main")
+			policyGit(t, home, repo, "fetch", "-q", "origin")
+			if len(tc.remote) > 0 {
+				policyGit(t, home, repo, "switch", "-q", "-c", "previous")
+				for i, author := range tc.remote {
+					name, email, _ := strings.Cut(strings.TrimSuffix(author, ">"), " <")
+					policyWrite(t, filepath.Join(repo, "go.mod"), fmt.Sprintf("# previous %d\n", i))
+					policyGit(t, home, repo, "add", "go.mod")
+					policyGit(t, home, repo, "-c", "user.name="+name, "-c", "user.email="+email, "commit", "-qm", "previous update")
+				}
+				policyGit(t, home, repo, "push", "-q", "origin", "previous:refs/heads/"+branch)
+				policyGit(t, home, repo, "switch", "-q", "main")
+				policyGit(t, home, repo, "branch", "-q", "-D", "previous")
 			}
-			policyGit(t, home, repo, "add", ".")
-			policyGit(t, home, repo, "commit", "-qm", "tracked workflow files")
+			remoteBefore := policyGit(t, home, repo, "ls-remote", "origin", "refs/heads/"+branch)
+			// The patch stands in for the artifact from the read-only job.
 			policyWrite(t, filepath.Join(repo, "dependencies.conf"), classificationDeps("2222222222222222222222222222222222222222", "1.0"))
 			policyWrite(t, filepath.Join(repo, "config/shared/nvim/lua/config/languages.lua"), "return { lsp = { \"lua_ls@3.19.1\" } }\n")
 			if tc.unexpected {
 				policyWrite(t, filepath.Join(repo, "README.md"), "unrelated change\n")
 			}
-			before := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
+			patch := filepath.Join(home, "dependency-updates.patch")
+			policyWrite(t, patch, policyGit(t, home, repo, "diff", "--binary"))
+			policyGit(t, home, repo, "checkout", "--", ".")
 			fake := filepath.Join(home, "fakebin")
-			if err := os.MkdirAll(fake, 0700); err != nil {
-				t.Fatal(err)
-			}
 			log := filepath.Join(home, "gh.log")
-			mode := "0"
-			if tc.open {
-				mode = "1"
-			}
-			gh := `#!/bin/bash
+			policyWrite(t, filepath.Join(fake, "gh"), `#!/bin/bash
 printf '%s\n' "$*" >>"$POLICY_GH_LOG"
 if [[ "$1 $2" == 'pr list' ]]; then printf '%s\n' "$POLICY_OPEN_COUNT"; exit 0; fi
 if [[ "$1 $2" == 'pr create' ]]; then exit 0; fi
 exit 90
-`
-			git := `#!/bin/bash
-if [[ "$1" == fetch || "$1" == push ]]; then printf 'git %s\n' "$*" >>"$POLICY_GH_LOG"; exit 0; fi
-exec /usr/bin/git "$@"
-`
-			policyWrite(t, filepath.Join(fake, "gh"), gh)
-			policyWrite(t, filepath.Join(fake, "git"), git)
-			for _, tool := range []string{"gh", "git"} {
-				if err := os.Chmod(filepath.Join(fake, tool), 0700); err != nil {
-					t.Fatal(err)
-				}
-			}
-			env := append(policyEnv(home), "PATH="+fake+":/usr/bin:/bin:/usr/sbin:/sbin", "BRANCH=automation/dependency-updates", "POLICY_GH_LOG="+log, "POLICY_OPEN_COUNT="+mode)
-			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 10*time.Second)
-			if tc.unexpected {
-				if err != nil || got.Status != 1 || !strings.Contains(string(got.Stderr), "Dependency update touched unexpected files:") {
-					t.Fatalf("unexpected path not rejected: status=%d err=%v stdout=%s stderr=%s", got.Status, err, got.Stdout, got.Stderr)
-				}
-				if after := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD")); after != before {
-					t.Errorf("workflow committed unexpected path: before=%s after=%s", before, after)
-				}
-				if branch := strings.TrimSpace(policyGit(t, home, repo, "branch", "--show-current")); branch != "main" {
-					t.Errorf("workflow switched branch before rejecting: %s", branch)
-				}
-				if staged := strings.TrimSpace(policyGit(t, home, repo, "diff", "--cached", "--name-only")); staged != "" {
-					t.Errorf("workflow staged paths before rejecting: %s", staged)
-				}
-				if calls, readErr := os.ReadFile(log); readErr == nil {
-					t.Errorf("workflow called fake git/gh before rejecting: %s", calls)
-				} else if !os.IsNotExist(readErr) {
-					t.Fatal(readErr)
-				}
-				t.Log("current PR block rejected unrelated tracked change with status 1 before commit, push, or gh")
-				return
-			}
-			if err != nil || got.Status != 0 {
-				t.Fatalf("PR block: status=%d err=%v stdout=%s stderr=%s", got.Status, err, got.Stdout, got.Stderr)
-			}
-			data, err := os.ReadFile(log)
-			if err != nil {
+`)
+			if err := os.Chmod(filepath.Join(fake, "gh"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			calls := string(data)
-			if !strings.Contains(calls, "pr list --head automation/dependency-updates --state open --json number --jq length") {
+			mode := "0"
+			if tc.open {
+				mode = "1"
+			}
+			env := append(policyEnv(home), "PATH="+fake+":/usr/bin:/bin:/usr/sbin:/sbin", "BRANCH="+branch, "PATCH="+patch, "POLICY_GH_LOG="+log, "POLICY_OPEN_COUNT="+mode)
+			got, err := runCommandIn(home, repo, []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 10*time.Second)
+			if err != nil || got.Status != tc.status {
+				t.Fatalf("PR block: status=%d want=%d err=%v stdout=%s stderr=%s", got.Status, tc.status, err, got.Stdout, got.Stderr)
+			}
+			remoteAfter := policyGit(t, home, repo, "ls-remote", "origin", "refs/heads/"+branch)
+			calls, readErr := os.ReadFile(log)
+			if readErr != nil && !os.IsNotExist(readErr) {
+				t.Fatal(readErr)
+			}
+			if strings.Contains(string(calls), "pr merge") || strings.Contains(string(calls), "release create") {
+				t.Errorf("unexpected publish operation: %s", calls)
+			}
+			if tc.status != 0 {
+				want := "Dependency update touched unexpected files:"
+				if !tc.unexpected {
+					want = branch + " has commits not authored by github-actions[bot]:"
+					if !strings.Contains(string(got.Stderr), "Maintainer <maintainer@selfishell.invalid>") || !strings.Contains(string(got.Stderr), "Merge the dependency update PR, or close it and delete the branch") {
+						t.Errorf("maintainer guidance missing: %s", got.Stderr)
+					}
+				}
+				if !strings.Contains(string(got.Stderr), want) {
+					t.Errorf("stderr missing %q: %s", want, got.Stderr)
+				}
+				if remoteAfter != remoteBefore {
+					t.Errorf("remote branch overwritten: before=%q after=%q", remoteBefore, remoteAfter)
+				}
+				if head := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD")); head != base {
+					t.Errorf("workflow committed before rejecting: %s", head)
+				}
+				if current := strings.TrimSpace(policyGit(t, home, repo, "branch", "--show-current")); current != "main" {
+					t.Errorf("workflow switched branch before rejecting: %s", current)
+				}
+				if len(calls) != 0 {
+					t.Errorf("workflow called gh before rejecting: %s", calls)
+				}
+				return
+			}
+			head := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD"))
+			if remoteAfter != head+"\trefs/heads/"+branch+"\n" {
+				t.Errorf("remote branch=%q want %s", remoteAfter, head)
+			}
+			if parent := strings.TrimSpace(policyGit(t, home, repo, "rev-parse", "HEAD^")); parent != base {
+				t.Errorf("refresh is not based on main: parent=%s base=%s", parent, base)
+			}
+			if author := strings.TrimSpace(policyGit(t, home, repo, "log", "-1", "--format=%an <%ae>")); author != bot {
+				t.Errorf("commit author=%q", author)
+			}
+			if staged := strings.TrimSpace(policyGit(t, home, repo, "show", "--format=", "--name-only", "HEAD")); staged != "config/shared/nvim/lua/config/languages.lua\ndependencies.conf" {
+				t.Errorf("unexpected committed files: %q", staged)
+			}
+			if !strings.Contains(string(calls), "pr list --head "+branch+" --state open --json number --jq length") {
 				t.Errorf("wrong PR lookup: %s", calls)
 			}
-			created := strings.Contains(calls, "pr create ")
+			created := strings.Contains(string(calls), "pr create ")
 			if created == tc.open {
 				t.Errorf("create=%t for open=%t: %s", created, tc.open, calls)
 			}
-			if !strings.Contains(calls, "git push --force-with-lease origin HEAD:automation/dependency-updates") {
-				t.Errorf("missing guarded branch push: %s", calls)
-			}
 			if created {
-				for _, s := range []string{"--base main", "--head automation/dependency-updates", "Review release notes and CI results before merging", "never merges or releases automatically"} {
-					if !strings.Contains(calls, s) {
+				for _, s := range []string{"--base main", "--head " + branch, "Review release notes and CI results before merging", "never merges or releases automatically"} {
+					if !strings.Contains(string(calls), s) {
 						t.Errorf("PR call missing %q: %s", s, calls)
 					}
 				}
-			}
-			if strings.Contains(calls, "pr merge") || strings.Contains(calls, "release create") {
-				t.Errorf("unexpected publish operation: %s", calls)
-			}
-			staged := strings.TrimSpace(policyGit(t, home, repo, "show", "--format=", "--name-only", "HEAD"))
-			if staged != "config/shared/nvim/lua/config/languages.lua\ndependencies.conf" {
-				t.Errorf("unexpected staged files: %q", staged)
 			}
 		})
 	}
