@@ -310,12 +310,9 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool)
 	}
 	switch dep.Kind {
 	case "download":
-		return info.Mode().IsRegular() && info.Mode()&0111 != 0
+		return directDownloadIntact(dep, target, info, managed)
 	case "git":
-		if !info.IsDir() {
-			return false
-		}
-		if _, err := os.Stat(filepath.Join(target, dep.Marker)); err != nil {
+		if !directGitMarkerPresent(dep, target, info) {
 			return false
 		}
 		if !managed {

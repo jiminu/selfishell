@@ -3,6 +3,8 @@ package selfishell
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,7 +121,9 @@ func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 }
 func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
-	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source checksum .local/bin/mise raw\n", 0600)
+	// sha256 of the fixture binary below, as install records it for raw downloads.
+	sum := sha256.Sum256([]byte("#!/bin/sh\nexit 0\n"))
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source "+hex.EncodeToString(sum[:])+" .local/bin/mise raw\n", 0600)
 	target := filepath.Join(os.Getenv("HOME"), ".local/bin/mise")
 	inv := inventory(t, root, paths, warnings)
 	got, err := inv.Detect("direct", "mise", "macos", "arm64")
@@ -139,6 +143,14 @@ func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "1.0", "selfishell", "1.0")
+	// A recorded binary that no longer matches the approved checksum is not the
+	// approved installation, as install already decides.
+	fixtureFile(t, target, "#!/bin/sh\nexit 1\n", 0700)
+	got, err = inv.Detect("direct", "mise", "macos", "arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTool(t, got, "missing", "selfishell", "1.0")
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
