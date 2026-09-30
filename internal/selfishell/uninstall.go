@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 )
 
@@ -60,7 +62,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	os.Remove(paths.State + "/configured")
 	os.Remove(paths.State + "/ghostty")
-	for _, dir := range []string{paths.Config + "/ghostty", paths.Config + "/nvim/after/lsp", paths.Config + "/nvim/after", paths.Config + "/nvim/lua/config", paths.Config + "/nvim/lua/plugins", paths.Config + "/nvim/lua", paths.Config + "/nvim", paths.Config + "/vim", paths.Config + "/mise", paths.Config + "/zsh", paths.Config, paths.Resources, paths.State} {
+	for _, dir := range managedDirectories(resources, paths) {
 		syscall.Rmdir(dir)
 	}
 	if purge {
@@ -71,6 +73,26 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	fmt.Fprintln(c.Out, "Run 'selfishell uninstall --purge' to also remove the CLI, releases, cache, and state.")
 	return nil
 }
+
+// managedDirectories lists the directories above declared resources inside
+// paths.Config, children first, then the config, resources and state roots.
+func managedDirectories(resources []Resource, paths Paths) []string {
+	seen := map[string]bool{}
+	var dirs []string
+	for _, r := range resources {
+		if !strings.HasPrefix(r.Target, paths.Config+"/") {
+			continue
+		}
+		for dir := rawParent(r.Target); dir != paths.Config && !seen[dir]; dir = rawParent(dir) {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
+	}
+	// Reverse lexical order places every directory before its parent.
+	sort.Sort(sort.Reverse(sort.StringSlice(dirs)))
+	return append(dirs, paths.Config, paths.Resources, paths.State)
+}
+
 func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 	s := record.State
 	r := record.Resource

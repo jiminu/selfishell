@@ -65,7 +65,11 @@ func createRawTemp(target string) (*os.File, error) {
 	}
 	return nil, fmt.Errorf("could not create temporary file for %s", target)
 }
-func replaceRaw(path string, data []byte, mode os.FileMode) error {
+
+// writeRaw stages data in a temporary sibling that publish renames or links
+// into place; the temporary name is always removed. A nil mode keeps
+// createRawTemp's 0600.
+func writeRaw(path string, data []byte, mode *os.FileMode, publish func(temp string) error) error {
 	if err := makeRawDir(rawParent(path)); err != nil {
 		return err
 	}
@@ -74,9 +78,11 @@ func replaceRaw(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if err = f.Chmod(mode); err != nil {
-		f.Close()
-		return err
+	if mode != nil {
+		if err = f.Chmod(*mode); err != nil {
+			f.Close()
+			return err
+		}
 	}
 	if _, err = f.Write(data); err != nil {
 		f.Close()
@@ -85,49 +91,22 @@ func replaceRaw(path string, data []byte, mode os.FileMode) error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), path)
+	return publish(f.Name())
 }
+func replaceRaw(path string, data []byte, mode os.FileMode) error {
+	return writeRaw(path, data, &mode, func(temp string) error { return os.Rename(temp, path) })
+}
+
+// createRawOnce leaves an existing path, even one created concurrently, in place.
 func createRawOnce(path string, data []byte) error {
-	if err := makeRawDir(rawParent(path)); err != nil {
-		return err
-	}
-	f, err := createRawTemp(path)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Link(f.Name(), path); os.IsExist(err) {
+	return writeRaw(path, data, nil, func(temp string) error {
+		if err := os.Link(temp, path); !os.IsExist(err) {
+			return err
+		}
 		return nil
-	}
-	return err
+	})
 }
 
 func createRawExclusive(path string, data []byte, mode os.FileMode) error {
-	if err := makeRawDir(rawParent(path)); err != nil {
-		return err
-	}
-	f, err := createRawTemp(path)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if err = f.Chmod(mode); err != nil {
-		f.Close()
-		return err
-	}
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Link(f.Name(), path)
+	return writeRaw(path, data, &mode, func(temp string) error { return os.Link(temp, path) })
 }

@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"slices"
+	"sort"
 	"strings"
 	"syscall"
 	"testing"
@@ -183,6 +185,38 @@ func TestResources(t *testing.T) {
 	entries, _ := os.ReadDir(home)
 	if len(entries) != 0 {
 		t.Fatal("resource discovery wrote files")
+	}
+}
+
+func TestManagedDirectoriesMatchUninstallList(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home+"/alias/../config space")
+	t.Setenv("XDG_STATE_HOME", home+"/state")
+	paths, err := UserPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources, err := ManagedResources("/release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := managedDirectories(resources, paths)
+	c := paths.Config
+	// The list uninstall hard-coded before deriving it from the declarations.
+	want := []string{c + "/ghostty", c + "/nvim/after/lsp", c + "/nvim/after", c + "/nvim/lua/config", c + "/nvim/lua/plugins", c + "/nvim/lua", c + "/nvim", c + "/vim", c + "/mise", c + "/zsh", c, paths.Resources, paths.State}
+	sortedGot, sortedWant := append([]string(nil), got...), append([]string(nil), want...)
+	sort.Strings(sortedGot)
+	sort.Strings(sortedWant)
+	if !slices.Equal(sortedGot, sortedWant) {
+		t.Fatalf("directories:\n got %q\nwant %q", got, want)
+	}
+	for i, dir := range got {
+		for _, earlier := range got[:i] {
+			if strings.HasPrefix(dir, earlier+"/") {
+				t.Fatalf("%s is removed before its child %s", earlier, dir)
+			}
+		}
 	}
 }
 
