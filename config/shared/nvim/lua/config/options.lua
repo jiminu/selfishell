@@ -21,7 +21,6 @@ opt.splitright = true
 
 -- Editing
 opt.autoindent = true
-opt.smartindent = true
 opt.tabstop = 2
 opt.softtabstop = 2
 opt.shiftwidth = 2
