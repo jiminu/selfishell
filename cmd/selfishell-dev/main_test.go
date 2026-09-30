@@ -56,7 +56,7 @@ func TestCurlOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "-fsSL\n--connect-timeout\n7\n--speed-limit\n512\n--speed-time\n4\n--max-time\n9\n-H\nAuthorization: Bearer secret-123\nhttps://example.invalid/metadata\n"
+	want := "-fsSL\n--connect-timeout\n7\n--speed-limit\n512\n--speed-time\n4\n--retry\n3\n--retry-max-time\n60\n--max-time\n9\n-H\nAuthorization: Bearer secret-123\nhttps://example.invalid/metadata\n"
 	if string(got) != want {
 		t.Fatalf("metadata argv=%q", got)
 	}

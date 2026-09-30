@@ -109,7 +109,7 @@ func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 		t.Fatal(got)
 	}
 	args := strings.Split(strings.TrimSpace(readTestFile(t, home+"/curl-arguments")), "\n")
-	for _, flag := range []string{"--connect-timeout", "--speed-limit", "--speed-time"} {
+	for _, flag := range []string{"--connect-timeout", "--speed-limit", "--speed-time", "--retry", "--retry-max-time"} {
 		if !slices.Contains(args, flag) {
 			t.Fatalf("missing %s: %q", flag, args)
 		}
