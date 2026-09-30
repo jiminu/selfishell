@@ -88,6 +88,23 @@ func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T)
 	}
 }
 
+func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
+	root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+	marker := paths.State + "/configured"
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(marker, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"status", "doctor"} {
+		_, out, stderr := blockRun(t, root, "", command)
+		if stderr != "" || strings.Contains(out, "configuration is installed") || strings.Contains(out, "Tools:") {
+			t.Fatalf("%s treated a directory marker as completed setup: out=%q errors=%q", command, out, stderr)
+		}
+	}
+}
+
 func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 	for _, required := range []bool{false, true} {
 		for _, command := range []string{"status", "doctor"} {

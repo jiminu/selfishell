@@ -48,8 +48,7 @@ func (c CLI) doctor(args []string) int {
 	c.diagnosticHeader()
 	result := 0
 	system := diagnosticGroup{c: c, verbose: verbose}
-	_, configuredErr := os.Stat(paths.State + "/configured")
-	configured := configuredErr == nil
+	configured := hasConfiguredMarker(paths)
 	if platformSupported(platform.Name) {
 		if configured {
 			c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")

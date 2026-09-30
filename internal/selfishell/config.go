@@ -100,13 +100,8 @@ func (c CLI) install(args []string) (result int) {
 		err = func() error {
 			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			if err := c.installPackages(ctx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, dry); err != nil {
+			if err := c.installPackages(ctx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, prepared.ghostty, dry); err != nil {
 				return err
-			}
-			if platform == "macos" && prepared.ghostty {
-				if err := operation.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty"); err != nil {
-					return err
-				}
 			}
 			operation.reportSkippedOptional()
 			return nil
