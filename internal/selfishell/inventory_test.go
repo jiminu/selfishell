@@ -151,6 +151,14 @@ func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "1.0")
+	// After a CLI-only update or rollback, the approved checksum describes a
+	// different version, so it cannot judge the recorded binary.
+	fixtureFile(t, filepath.Join(paths.State, "dependencies/mise"), "0.9\n", 0600)
+	got, err = inv.Detect("direct", "mise", "macos", "arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTool(t, got, "0.9", "selfishell", "1.0")
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
 	}
@@ -563,6 +571,21 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
+	// A newer pin's commit cannot judge the recorded checkout, but tracked
+	// changes still can.
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.16.0 all all source deadbeef .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+	inv = inventory(t, root, paths, warnings)
+	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTool(t, got, "v3.15.0", "selfishell", "v3.16.0")
+	fixtureFile(t, marker, "changed\n", 0600)
+	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTool(t, got, "missing", "selfishell", "v3.16.0")
 }
 func TestInventoryDoesNotCreateUserState(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)

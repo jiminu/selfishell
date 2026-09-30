@@ -288,17 +288,19 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 	recorded := strings.TrimRight(strings.ReplaceAll(string(state), "\x00", ""), "\n")
 	if err == nil && recorded != "" {
 		result.Source = "selfishell"
-		if i.validDirect(*dep, target, true) {
+		// After a CLI-only update or rollback the pin describes another version,
+		// which the tools phase replaces; it cannot judge the recorded one.
+		if i.validDirect(*dep, target, true, recorded == dep.Version) {
 			result.Installed = recorded
 		}
 		return result, nil
 	}
-	if i.validDirect(*dep, target, false) {
+	if i.validDirect(*dep, target, false, false) {
 		result.Installed, result.Source = "detected", "external"
 	}
 	return result, nil
 }
-func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool) bool {
+func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinned bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
 		return false
@@ -310,7 +312,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool)
 	}
 	switch dep.Kind {
 	case "download":
-		return directDownloadIntact(dep, target, info, managed)
+		return directDownloadIntact(dep, target, info, managed && pinned)
 	case "git":
 		if !directGitMarkerPresent(dep, target, info) {
 			return false
@@ -321,7 +323,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed bool)
 		if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
 			return false
 		}
-		if dep.Checksum != "-" {
+		if pinned && dep.Checksum != "-" {
 			head, err := inventoryGitHead(target)
 			if err != nil || head != dep.Checksum {
 				return false
