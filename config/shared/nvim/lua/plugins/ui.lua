@@ -27,9 +27,9 @@ local function lualine_mode_color()
     background = "#F5F5F5",
     normal = "#AF00DB",
     insert = "#008000",
-    visual = "#C08000",
+    visual = "#9C6500",
     replace = "#FF0000",
-    command = "#FFA3A3",
+    command = "#C2185B",
   }
   local modes = {
     i = "insert",
