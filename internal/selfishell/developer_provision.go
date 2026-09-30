@@ -24,7 +24,7 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 		return err
 	}
 	platform := DetectPlatform()
-	if platform.Name != "macos" && platform.Name != "ubuntu" && platform.Name != "ubuntu-wsl" {
+	if !platformSupported(platform.Name) {
 		return fmt.Errorf("unsupported developer platform: %s", platform.Name)
 	}
 	o := &PackageOperation{Process: process}
