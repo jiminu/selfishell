@@ -49,6 +49,11 @@ func (c CLI) rollback(args []string) int {
 			return 1
 		}
 		if err != nil {
+			// A non-link at previous is user data; name it instead of echoing EINVAL.
+			if info, e := os.Lstat(l.previous); e == nil && info.Mode()&os.ModeSymlink == 0 {
+				c.error("Retained previous release is invalid: " + l.previous + " is not a link")
+				return 1
+			}
 			c.error(err.Error())
 			return 1
 		}
