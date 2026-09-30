@@ -381,6 +381,35 @@ func (o *PackageOperation) stageGit(ctx context.Context, dep Dependency, stage s
 	}
 	return nil
 }
+
+// directDownloadIntact is shared by install and diagnostics: a recorded raw
+// download must still match its approved SHA-256, not merely be executable.
+func directDownloadIntact(dep Dependency, target string, info os.FileInfo, managed bool) bool {
+	if !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+		return false
+	}
+	if !managed || dep.Marker != "raw" {
+		return true
+	}
+	file, err := os.Open(target)
+	if err != nil {
+		return false
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, file)
+	closeErr := file.Close()
+	return err == nil && closeErr == nil && hex.EncodeToString(h.Sum(nil)) == dep.Checksum
+}
+
+// directGitMarkerPresent requires the approved marker inside the checkout.
+func directGitMarkerPresent(dep Dependency, target string, info os.FileInfo) bool {
+	if !info.IsDir() || !filepath.IsLocal(dep.Marker) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(target, dep.Marker))
+	return err == nil
+}
+
 func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, target string, managed bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
@@ -394,25 +423,9 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, targ
 	}
 	switch dep.Kind {
 	case "download":
-		if !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
-			return false
-		}
-		if !managed || dep.Marker != "raw" {
-			return true
-		}
-		file, err := os.Open(target)
-		if err != nil {
-			return false
-		}
-		h := sha256.New()
-		_, err = io.Copy(h, file)
-		closeErr := file.Close()
-		return err == nil && closeErr == nil && hex.EncodeToString(h.Sum(nil)) == dep.Checksum
+		return directDownloadIntact(dep, target, info, managed)
 	case "git":
-		if !info.IsDir() || !filepath.IsLocal(dep.Marker) {
-			return false
-		}
-		if _, err := os.Stat(target + "/" + dep.Marker); err != nil {
+		if !directGitMarkerPresent(dep, target, info) {
 			return false
 		}
 		if !managed {
