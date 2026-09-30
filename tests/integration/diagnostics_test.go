@@ -166,6 +166,11 @@ func TestDiagnostics(t *testing.T) {
 				t.Fatalf("missing diagnostic %q: %s", expected, got.Stdout)
 			}
 
+			if tc.name == "status-empty" || tc.name == "status-missing-package-manager" {
+				if n := strings.Count(string(got.Stdout), "selfishell install"); n != 1 {
+					t.Fatalf("install hint shown %d times: %s", n, got.Stdout)
+				}
+			}
 			if tc.name == "status-malformed-and-good" && (!strings.Contains(string(got.Stdout), "[MALFORMED]") || !strings.Contains(string(got.Stdout), "Configuration: 1 intact, 1 issues")) {
 				t.Fatalf("status did not account for both resources: %s", got.Stdout)
 			}

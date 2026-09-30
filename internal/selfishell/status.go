@@ -136,7 +136,7 @@ func (c CLI) status(args []string) int {
 			return c.diagnosticError(err)
 		}
 	}
-	result := c.statusSystem(platform, configured, verbose)
+	result, installHinted := c.statusSystem(platform, configured, verbose)
 	resources, err := ManagedResources(c.Root)
 	if err != nil {
 		return c.diagnosticError(err)
@@ -259,7 +259,9 @@ func (c CLI) status(args []string) int {
 	}
 	if count == 0 {
 		fmt.Fprintln(c.Out, "Selfishell configuration is not installed.")
-		c.diagnosticHint("Set up the Selfishell environment with:", "selfishell install")
+		if !installHinted {
+			c.diagnosticHint("Set up the Selfishell environment with:", "selfishell install")
+		}
 		return 1
 	}
 	if intact == count {
