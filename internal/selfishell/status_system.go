@@ -28,8 +28,9 @@ func platformSupported(name string) bool {
 func commandExists(name string) bool { _, err := exec.LookPath(name); return err == nil }
 
 // statusSystem checks setup prerequisites; the compiler is checked only after setup.
-func (c CLI) statusSystem(platform Platform, configured, verbose bool) int {
-	result := 0
+// It also reports whether it already suggested 'selfishell install'.
+func (c CLI) statusSystem(platform Platform, configured, verbose bool) (int, bool) {
+	result, installHinted := 0, false
 	system := diagnosticGroup{c: c, verbose: verbose}
 	if platformSupported(platform.Name) {
 		system.say("32", "OK", "Platform: "+platformLabel(platform.Name))
@@ -64,11 +65,11 @@ func (c CLI) statusSystem(platform Platform, configured, verbose bool) int {
 	} else {
 		system.say("31", "ERROR", "Package manager: "+manager+" was not found")
 		fmt.Fprintf(c.Out, "        Run '%s' to set up the supported toolchain.\n", c.bold("selfishell install"))
-		result = 1
+		result, installHinted = 1, true
 	}
 	if !configured || !platformSupported(platform.Name) {
 		system.summary(platform)
-		return result
+		return result, installHinted
 	}
 	if platform.Name == "macos" {
 		_, _, ok := runInventory("", nil, "xcode-select", "-p")
@@ -83,7 +84,7 @@ func (c CLI) statusSystem(platform Platform, configured, verbose bool) int {
 		result = c.statusCompiler(platform.Name, result, &system)
 	}
 	system.summary(platform)
-	return result
+	return result, installHinted
 }
 func (c CLI) statusCompiler(platform string, result int, system *diagnosticGroup) int {
 	// A compiler counts only if it runs; a failed candidate falls through to the next.
