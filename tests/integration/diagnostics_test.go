@@ -567,11 +567,11 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 				{"[CHANGED]", "selfishell update --tools-only --skip-packages", "33"},
 				{"[ERROR]", "selfishell install", "31"},
 			} {
-				requireContains(t, got.Stdout, want.marker)
-				requireContains(t, got.Stdout, want.hint)
+				requireStdout(t, got, want.marker)
+				requireStdout(t, got, want.hint)
 				if tc.color {
-					requireContains(t, got.Stdout, "\x1b["+want.color+"m"+want.marker+"\x1b[0m")
-					requireContains(t, got.Stdout, "\x1b[1m"+want.hint+"\x1b[0m")
+					requireStdout(t, got, "\x1b["+want.color+"m"+want.marker+"\x1b[0m")
+					requireStdout(t, got, "\x1b[1m"+want.hint+"\x1b[0m")
 				}
 			}
 			if !tc.color && (bytes.Contains(got.Stdout, []byte("\x1b")) || bytes.Contains(got.Stderr, []byte("\x1b"))) {
