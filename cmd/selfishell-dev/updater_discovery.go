@@ -175,14 +175,7 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 			record("download", "mise", version, platform, arch, source, fmt.Sprintf("%x", digest.Sum(nil)))
 		}
 	}
-	// Node and Python release lines remain an explicit maintainer choice.
-	for _, tool := range [][2]string{
-		{"starship", "starship/starship"}, {"fzf", "junegunn/fzf"},
-		{"zoxide", "ajeetdsouza/zoxide"}, {"ripgrep", "BurntSushi/ripgrep"},
-		{"eza", "eza-community/eza"}, {"bat", "sharkdp/bat"}, {"jq", "jqlang/jq"},
-		{"neovim", "neovim/neovim"}, {"tree-sitter", "tree-sitter/tree-sitter"},
-		{"uv", "astral-sh/uv"}, {"gh", "cli/cli"}, {"lazygit", "jesseduffield/lazygit"},
-	} {
+	for _, tool := range miseToolSources {
 		tag, err := latestTag(tool[1])
 		if err != nil {
 			return nil, err
@@ -210,6 +203,17 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 		fmt.Fprintln(&metadata, update)
 	}
 	return parseDependencyMetadata(metadata.String())
+}
+
+// miseToolSources is each mise tool's upstream repository for release discovery.
+// Node and Python release lines remain an explicit maintainer choice; a test
+// keeps this list aligned with the mise tools declared in packages.conf.
+var miseToolSources = [][2]string{
+	{"starship", "starship/starship"}, {"fzf", "junegunn/fzf"},
+	{"zoxide", "ajeetdsouza/zoxide"}, {"ripgrep", "BurntSushi/ripgrep"},
+	{"eza", "eza-community/eza"}, {"bat", "sharkdp/bat"}, {"jq", "jqlang/jq"},
+	{"neovim", "neovim/neovim"}, {"tree-sitter", "tree-sitter/tree-sitter"},
+	{"uv", "astral-sh/uv"}, {"gh", "cli/cli"}, {"lazygit", "jesseduffield/lazygit"},
 }
 
 func lspRegistryUpdates(archive string, pins map[string]string) ([]string, error) {

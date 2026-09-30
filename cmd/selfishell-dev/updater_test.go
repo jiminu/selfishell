@@ -387,3 +387,36 @@ func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
 		})
 	}
 }
+
+// A mise tool added to packages.conf without a discovery source would silently
+// never receive update proposals.
+func TestMiseToolSourcesCoverDeclaredTools(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "packages.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if f := strings.Fields(line); len(f) == 5 && f[0] == "package" && f[3] == "mise" && f[4] != "node" && f[4] != "python" {
+			declared[f[4]] = true
+		}
+	}
+	sources := map[string]bool{}
+	for _, tool := range miseToolSources {
+		if sources[tool[0]] {
+			t.Errorf("duplicate discovery source: %s", tool[0])
+		}
+		sources[tool[0]] = true
+		if !declared[tool[0]] {
+			t.Errorf("discovery source for undeclared mise tool: %s", tool[0])
+		}
+	}
+	for tool := range declared {
+		if !sources[tool] {
+			t.Errorf("declared mise tool has no discovery source: %s", tool)
+		}
+	}
+	if len(declared) == 0 {
+		t.Fatal("no mise tools parsed from packages.conf")
+	}
+}
