@@ -222,7 +222,9 @@ func (p Process) Curl(ctx context.Context, mode string, args ...string) (int, er
 			return 2, fmt.Errorf("Selfishell curl timeout and speed settings must be positive integers.")
 		}
 	}
-	policy := []string{"-fsSL", "--connect-timeout", connect, "--speed-limit", limit, "--speed-time", duration}
+	// Same bounded retry as install.sh: timeouts and HTTP 408/429/5xx only, and
+	// --retry-max-time also caps a server's Retry-After delay.
+	policy := []string{"-fsSL", "--connect-timeout", connect, "--speed-limit", limit, "--speed-time", duration, "--retry", "3", "--retry-max-time", "60"}
 	switch mode {
 	case "metadata":
 		policy = append(policy, "--max-time", maximum)
