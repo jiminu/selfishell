@@ -460,15 +460,42 @@ func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 	}
 }
 func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
-	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
-	fixtureFile(t, filepath.Join(os.Getenv("HOME"), ".local/bin/mise"), "#!/bin/sh\nprintf 'node 24.18.0 /config 24.18.0\\n'\n", 0700)
-	inv := inventory(t, root, paths, warnings)
-	got, err := inv.Detect("mise", "node", "linux", "amd64")
-	if err != nil {
-		t.Fatal(err)
+	for _, location := range []string{"home", "home_alias", "lexical_home_alias"} {
+		t.Run(location, func(t *testing.T) {
+			root, paths, warnings, _ := inventoryFixture(t)
+			fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
+			home := os.Getenv("HOME")
+			if location != "home" {
+				// alias/.. resolves to actual/home; a lexical clean would select work/home.
+				for _, dir := range []string{root + "/actual/child", root + "/work"} {
+					if err := os.MkdirAll(dir, 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.Symlink(root+"/actual/child", root+"/work/alias"); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("HOME", root+"/work/alias/../home")
+				home = root + "/actual/home"
+				if location == "lexical_home_alias" {
+					home = root + "/work/home"
+				}
+			}
+			fixtureFile(t, home+"/.local/bin/mise", "#!/bin/sh\nprintf 'node 24.18.0 /config 24.18.0\\n'\n", 0700)
+			inv := inventory(t, root, paths, warnings)
+			got, err := inv.Detect("mise", "node", "linux", "amd64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if location == "lexical_home_alias" {
+				if got.Source == "mise" {
+					t.Fatalf("mise outside the real HOME used: %+v", got)
+				}
+				return
+			}
+			wantTool(t, got, "24.18.0", "mise", "24.18.0")
+		})
 	}
-	wantTool(t, got, "24.18.0", "mise", "24.18.0")
 }
 func TestToolExecutable(t *testing.T) {
 	for _, tc := range []struct{ name, want string }{{"ripgrep", "rg"}, {"neovim", "nvim"}, {"kubectl@1.36.2", "kubectl"}, {"git", "git"}} {

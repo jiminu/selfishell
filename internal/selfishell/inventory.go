@@ -356,7 +356,7 @@ func (i *ToolInventory) loadMise() {
 	}
 	command, err := exec.LookPath("mise")
 	if err != nil {
-		command = filepath.Join(os.Getenv("HOME"), ".local", "bin", "mise")
+		command = os.Getenv("HOME") + "/.local/bin/mise"
 		info, e := os.Stat(command)
 		if e != nil || info.Mode()&0111 == 0 {
 			return
