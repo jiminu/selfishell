@@ -16,11 +16,9 @@ release provenance and preservation of existing files are security boundaries.
 - Shell startup never installs updates; release metadata can refresh in the
   background. See [update notices](UPDATES.md#status-and-update-notices).
 - Default LSP server versions are approved in
-  `config/shared/nvim/lua/config/languages.lua`. Mason installs these pins on
-  first use, and Selfishell's update tools phase reconciles installed versions
-  with them. These pins select server versions, not immutable registry metadata
-  or transitive dependencies. Additional servers and other Mason packages remain
-  user-managed through `:Mason`.
+  `config/shared/nvim/lua/config/languages.lua` and applied through Mason (see
+  [LSP updates](UPDATES.md#neovim-lsp-servers)). These pins select server
+  versions, not immutable registry metadata or transitive dependencies.
 - Selfishell files are installed without root privileges. Apt may request `sudo`
   for system packages, and Homebrew follows its own privilege model.
 
@@ -41,8 +39,9 @@ gh attestation verify selfishell-<version>-<platform>-<architecture>.tar.gz \
 Without the signer and ref options, any workflow in the repository could have
 produced a valid attestation.
 
-Review `install.sh`, use an exact release, and mirror verified artifacts for
-high-control environments.
+Review `install.sh`, use an exact release, and
+[mirror verified artifacts](COMPANY.md#release-mirror) for high-control
+environments.
 
 The Go security workflow runs weekly and on manual dispatch. It uses the pinned
 compiler and `govulncheck` to scan reachable package and standard-library

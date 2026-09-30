@@ -1,8 +1,8 @@
 # Selfishell Agent Guide
 
-This file contains repository-wide rules for coding agents. Keep it focused on
-constraints that affect implementation. Use the linked documents for user and
-maintainer procedures instead of duplicating them here.
+This file contains repository-wide rules for coding agents: constraints that
+affect implementation. User and maintainer procedures live in the linked
+documents; link to them instead of repeating them here.
 
 ## Project and Sources of Truth
 
@@ -12,13 +12,17 @@ user experience consistent across supported platforms.
 
 - The immutable `v<version>` Git tag is the release version source of truth.
 - `packages.conf` defines the environment's package membership.
-- `dependencies.conf` pins direct downloads and Git dependencies.
-- `config/shared/mise.toml` pins mise-managed developer tools.
-- `config/shared/nvim/lua/config/languages.lua` declares default LSP servers and
-  their exact `server@version` pins. Dependency automation updates these pins;
-  the update tools phase applies them through Mason, including replacing a
-  manually installed different version. User-added Mason packages are not managed.
-- `docs/RELEASING.md` is the release procedure.
+- `dependencies.conf` pins direct downloads and Git dependencies, including
+  Zinit, Zsh plugin, and Neovim plugin commits. Zsh plugin commits are repeated
+  in the `zinit ice ver'…'` lines of `config/shared/zsh/completion.zsh` and
+  `interactive.zsh`; change both together, as dependency automation does.
+- `config/shared/mise.toml` pins mise-managed tool versions.
+- `config/shared/nvim/lua/config/languages.lua` pins the default LSP servers as
+  `server@version`; the update tools phase applies them through Mason, replacing
+  a different installed version. User-added Mason packages are not managed.
+- `go.mod` and the root `mise.toml` pin the development Go toolchain together.
+- `docs/UPDATES.md` defines user-facing update behavior; `docs/RELEASING.md`
+  defines the release and dependency-update procedures.
 
 ## Product Contract
 
@@ -55,21 +59,26 @@ The installed product must work after the source checkout is removed.
 Treat every existing path as user data. Back it up safely, never overwrite a
 backup, and never restore over an occupied target.
 
-Selfishell-declared dependency installation paths (e.g. a Zinit-managed Zsh
-plugin checkout declared in `dependencies.conf`) are managed product state,
-not user data, and may be replaced to restore their approved pinned version.
+Selfishell-owned dependency paths are managed product state and may be replaced
+to restore their approved pins: Zsh plugin checkouts, and Zinit or direct
+downloads recorded as Selfishell-installed. A usable unrecorded installation is
+preserved as external. Neovim plugin checkouts move to approved commits only
+while clean: a modified or non-Git checkout stops install and update until the
+user removes it.
 
 Managed defaults are copied under `~/.config/selfishell`. User-facing
-integration uses either managed links or bounded blocks in user-owned
-configuration files.
+integration uses only:
 
-`~/.zshrc`, `~/.zprofile`, and `~/.vimrc` remain user-owned, each holding
-one bounded Selfishell block. `~/.zshrc`'s block sources the managed platform
-entrypoint; `~/.vimrc`'s block sources the managed Vim entrypoint; personal
-aliases, exports, PATH entries, and functions belong outside it. On
-Ubuntu/WSL, `~/.zshenv` is also user-owned and contains only Selfishell's
-bounded zshenv block (`skip_global_compinit=1`); macOS `~/.zshenv` is not
-managed.
+- bounded blocks at the top of user-owned files: `~/.zshrc` (sources the
+  platform entrypoint), `~/.zprofile` (mise shims), `~/.vimrc` (sources the Vim
+  entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
+  `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
+  `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
+- managed links `~/.config/nvim`, `~/.config/starship.toml`, and
+  `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
+
+Personal aliases, exports, PATH entries, and functions belong outside blocks.
+Keep the user-facing list in `docs/INSTALLATION.md` in sync.
 
 Preserve these lifecycle invariants:
 
@@ -118,78 +127,52 @@ Preserve these lifecycle invariants:
 Selfishell provides one development environment, without selectable profiles.
 Ghostty is a separate saved macOS installation choice. The `configured` marker
 in the state directory records completed setup, not a package selection.
+Behavior below is described for users in `docs/UPDATES.md`.
 
-Mise-managed tool membership is declared in
-`packages.conf`; exact versions for those tools are pinned in
-`config/shared/mise.toml`, the source of truth for mise-managed tool versions.
-Installer-owned mise operations run from the release's `config/shared`
-directory so a caller's project cannot override approved tool versions.
-Status and doctor query installed versions, not merely configured requests;
-an orphaned mise shim does not count as an external tool installation.
-After completed setup, status diagnoses missing installation records for the
-current platform's required resources, respecting the saved Ghostty choice.
-Continue inspecting every existing tracked record, including records from other
-platforms. Missing optional tools remain informational in both detail and summary.
+- Installer-owned mise operations run from the release's `config/shared`
+  directory so a caller's project cannot override approved tool versions.
+- Status and doctor query installed versions, not configured requests; an
+  orphaned mise shim is not an external installation. After completed setup,
+  status reports missing records for the current platform's required resources
+  (respecting the Ghostty choice) and still inspects every tracked record,
+  including other platforms'. Missing optional tools stay informational in
+  detail and summary.
+- `optional` packages are attempted automatically but remain non-fatal.
+- `--skip-packages` skips package and tool installation and applies managed
+  configuration only. An already-current default update exits before the tools
+  phase; only `update --tools-only --skip-packages` reapplies it network-free.
+- After a successful tools sync, prune unused versions of the platform's
+  declared mise tools, never with an empty tool list. Protect current pins via
+  mise's tracked configuration, exclude the previous release's configuration
+  even if tracked, and keep the CLI rollback release and project tracking.
+  Skip on incomplete setup (including optional failures), `--skip-packages`,
+  and CLI-only or no-op updates; cleanup failures only warn.
+- Dry-run must not invoke mise; even its read-only commands write metadata.
 
-Successful tool/configuration updates prune unused mise versions by default,
-scoped to the current platform's declared mise tools. Preserve current pins
-through mise's tracked configuration. Exclude the previous release's mise
-configuration during cleanup, even if already tracked; rollback-only tool
-versions are not retained. Keep the CLI rollback release and project tracking
-intact. Never call prune with an empty tool list. Skip cleanup on incomplete
-setup (including optional package failures), `--skip-packages`, and CLI-only/no-op updates. Dry-run must
-not invoke mise, since even its read-only commands can write metadata. Cleanup
-failures warn without invalidating a completed synchronization. See
-`docs/UPDATES.md` for project-version retention limits.
-
-When the tools/configuration phase runs, `--skip-packages` must skip package
-and tool installation and apply managed configuration only. A default update
-whose target release is already active exits before that phase; use
-`update --tools-only --skip-packages` to reapply the current release's managed
-configuration. Only that form is also network-free, since `update`'s
-CLI-release phase can otherwise still reach the network. `optional` packages
-are attempted automatically but remain non-fatal.
-
-Automated dependency discovery may open a review PR but must never auto-merge
-or auto-publish a release. A maintainer reviews and merges
-`automation/dependency-updates`, then runs the normal manual release process
-described below.
-Go toolchain patch discovery updates `go.mod` and root `mise.toml` together
-within the current release line; selecting a new line remains a maintainer
-choice. Run vulnerability scans in the dedicated scheduled
-workflow, keeping network-dependent scanning outside the ordinary local gate.
+Dependency automation may open a review PR but must never auto-merge or
+auto-publish a release; a maintainer merges `automation/dependency-updates` and
+then runs the normal manual release. Go patch discovery stays within the
+current release line; selecting a new line is a maintainer choice.
+Vulnerability scans run in the dedicated scheduled workflow, outside the
+ordinary local gate.
 
 ## Release Rules
 
-`install.sh` selects an exact platform archive, verifies it against
-`SHA256SUMS`, installs it into a versioned release directory, and atomically
-switches links. An explicit version must use only its own
-`releases/download/v<version>` path and never fall back to latest.
-
-Semantic version tags are immutable release sources. The source checkout does
-not track a release `VERSION` file: `scripts/build-release.sh` receives an
-explicit version and generates `VERSION` only inside the release payload and
-published asset set. A source checkout therefore reports `selfishell
-development`, while an installed release reads its generated `VERSION` file.
-
-Treat release readiness, audit, or preparation requests as non-publishing.
-Only an explicit request to release, publish, or tag authorizes creating and
-pushing a release tag. Before publishing, read `docs/RELEASING.md` and
-`.github/workflows/release.yml` for the current procedure and automation
-contract.
-
-Publish from the documented release branch, currently `main`, only after its
-changes are already pushed and verified. Create an annotated `v<version>` tag
-on the intended commit and push that tag; the Release workflow validates the
-tag, reruns the release checks on Linux and macOS, builds the archives, smoke
-tests the exact install, generates attestations, and publishes the immutable
-GitHub Release. Do not create a release-only version commit or maintain a
-second version source.
-
-Never replace assets on an existing GitHub Release; publish a new patch version
-instead. After publication, verify all four archives, `SHA256SUMS`, generated
-`VERSION`, the exact version URL, and `releases/latest/download/VERSION`. See
-`docs/RELEASING.md` for the complete procedure.
+- `install.sh` verifies an exact platform archive against `SHA256SUMS`,
+  installs it into a versioned release directory, and switches links
+  atomically. An explicit version uses only its own
+  `releases/download/v<version>` path and never falls back to latest.
+- No `VERSION` file is tracked: `scripts/build-release.sh` generates it inside
+  the release payload, so a checkout reports `selfishell development`. Never
+  add a release-only version commit or a second version source.
+- Readiness, audit, or preparation requests are non-publishing. Only an
+  explicit request to release, publish, or tag authorizes pushing a tag; first
+  read `docs/RELEASING.md` and `.github/workflows/release.yml`.
+- Tag a pushed, verified `main` commit with an annotated `v<version>` tag; the
+  Release workflow reruns full CI for it before building and publishing.
+- Tags and releases are immutable, enforced by a `v*` tag ruleset and GitHub
+  immutable releases. Never move a tag or replace assets; publish a new patch
+  version, and verify each publication as `docs/RELEASING.md` describes.
 
 ## Verification
 
@@ -201,23 +184,22 @@ bash scripts/check.sh
 ```
 
 The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, Go
-format/vet, four native builds, and the Go-owned test suite. Maintained test
-setup, process control, assertions, and cleanup belong in Go; native Zsh/Lua
-runtime probes and small external-process fixtures may remain. Tests must use a
-temporary `HOME` and must never install against or modify the developer's real
-home directory. Behavioral changes require tests,
-especially for empty/existing paths, repeated operations, interruptions,
-unsupported platforms, --skip-packages behavior, uninstall, restore, update,
-and rollback.
+format/vet, four native builds, and the Go-owned test suite.
 
-Keep verification proportional to the change. For incidental presentation
-changes such as spacing, prose, or glyph choices, do not add a regression test
-unless the exact presentation is a product contract or a repeated source of
-bugs; use the relevant parser, formatter, or focused smoke check instead. For a
-small option change, prefer extending an existing focused test over creating a
-new test or suite. Do not run the full repository gate for an unrelated
-cosmetic or configuration-only change when a smaller relevant validation covers
-it; the gate remains required for the change categories listed above.
+- Maintained test setup, process control, assertions, and cleanup belong in Go;
+  native Zsh/Lua runtime probes and small external-process fixtures may remain.
+- Tests must use a temporary `HOME` and never install against or modify the
+  developer's real home directory.
+- Integration tests call `t.Parallel()` unless they need `t.Setenv`.
+- Behavioral changes require tests, especially for empty/existing paths,
+  repeated operations, interruptions, unsupported platforms, `--skip-packages`
+  behavior, uninstall, restore, update, and rollback.
+- Keep verification proportional. Presentation-only changes (spacing, prose,
+  glyphs) need no regression test unless the exact output is a product contract
+  or a repeated bug source (use the relevant parser, formatter, or a focused
+  smoke check); a small option change extends an existing focused test. A
+  cosmetic or configuration-only change may skip the full gate when a smaller
+  validation covers it; the categories above still require it.
 
 ## Repository Map
 
@@ -242,10 +224,9 @@ it; the gate remains required for the change categories listed above.
    finishing the change.
 6. Record durable architecture decisions in this file or a focused document
    under `docs/`; keep transient status and dated run logs out of agent rules.
-7. Keep planning artifacts out of the repository. Implementation plans, design
-   drafts, task checklists, and roadmaps are working notes for one change: they
-   go stale the moment the change merges, and the merged diff plus its tests are
-   the durable record. Write them outside the checkout.
+7. Keep planning artifacts (implementation plans, design drafts, task
+   checklists, roadmaps) out of the repository; they go stale once the change
+   merges, and the merged diff plus its tests are the durable record.
 8. Report only checks actually run. Separate local results, GitHub Actions
    results, and checks that were unavailable; never imply an unrun check passed.
 9. After merging a branch into `main`, delete the remote branch (e.g.

@@ -10,22 +10,22 @@ for external fault injection.
 
 The exact Go version is pinned in `go.mod` for development and CI. The installed
 product does not need Go. The build uses `GOTOOLCHAIN=local` and fails if that
-version is unavailable. Zsh, ShellCheck, shfmt and Neovim are needed for the
-repository gate.
+version is unavailable. Zsh, ShellCheck and shfmt are needed for the repository
+gate. Neovim at the version pinned in `config/shared/mise.toml` is optional; it
+enables the Neovim configuration tests, which skip without it.
 The root `mise.toml` selects the same Go version for local development; keep it
 in sync with `go.mod`. With mise installed, run `mise trust` and `mise install go`
-from the checkout before building.
-Dependency update PRs keep these two pins together for patch releases within
-the selected Go release line. A new Go release line requires a maintainer change.
+from the checkout before building. Dependency automation updates both pins for
+Go patch releases; see
+[approved dependency updates](docs/RELEASING.md#approved-dependency-updates).
 
 Source build scripts share `scripts/go-env.sh`: they require that exact Go
 version on `PATH`, disable automatic toolchain downloads and ignore caller
 Go settings, workspaces, build flags and cross-compilation targets. They build
 in module mode without CGO, module downloads or VCS stamping and preserve
 explicit compiler/module cache paths. The release builder selects its four
-targets explicitly. `scripts/update-dependencies.sh` also builds its Go
-maintenance tool; `--metadata FILE` applies saved metadata without network
-access. Discovery uses curl and Git; JSON and checksums are handled in Go.
+targets explicitly. `scripts/update-dependencies.sh` builds its Go maintenance
+tool the same way.
 
 ```bash
 bash scripts/build-cli.sh       # Build the host CLI at .build/selfishell
