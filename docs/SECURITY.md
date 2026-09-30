@@ -33,8 +33,13 @@ Verify a downloaded release archive with GitHub CLI:
 
 ```sh
 gh attestation verify selfishell-<version>-<platform>-<architecture>.tar.gz \
-  --repo jiminu/selfishell
+  --repo jiminu/selfishell \
+  --signer-workflow jiminu/selfishell/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version> --deny-self-hosted-runners
 ```
+
+Without the signer and ref options, any workflow in the repository could have
+produced a valid attestation.
 
 Review `install.sh`, use an exact release, and mirror verified artifacts for
 high-control environments.

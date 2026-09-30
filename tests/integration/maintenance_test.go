@@ -57,6 +57,10 @@ elif [[ "$1 $2" == "attestation verify" ]]; then
   [[ "${TEST_NO_ATTESTATION:-0}" != 1 ]] || exit 2
   [[ "${3:-}" != --help ]] || exit 0
   [[ "${TEST_BAD_ATTESTATION:-0}" != 1 ]] || exit 1
+  # Provenance must name the release workflow and the exact tag.
+  [[ "$*" == *" --signer-workflow jiminu/selfishell/.github/workflows/release.yml "* ]] || exit 3
+  [[ "$*" == *" --source-ref refs/tags/v$TEST_VERSION"* ]] || exit 3
+  [[ "$*" == *" --deny-self-hosted-runners"* ]] || exit 3
 else
   exit 2
 fi

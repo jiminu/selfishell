@@ -91,8 +91,8 @@ After the workflow completes:
 bash scripts/verify-published-release.sh 1.2.3
 ```
 
-This verifies the exact asset set, checksums, GitHub Artifact Attestations, the
-tag's `install.sh`, an isolated exact-version bootstrap, and
+This verifies the exact asset set, checksums, GitHub Artifact Attestations
+signed by the Release workflow for that tag, the tag's `install.sh`, an isolated exact-version bootstrap, and
 `releases/latest/download/VERSION` for stable releases. Attestation
 verification requires a gh CLI with the `attestation` subcommand and fails the
 script by default if it is unavailable; set
