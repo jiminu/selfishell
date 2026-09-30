@@ -67,8 +67,19 @@ environment with `t.Setenv`. Give each test its own temporary HOME and pass
 child environments explicitly.
 
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
-repository gate. Four archive formats are checked; host-native execution occurs
-on each CI host. Platform selectors in tests are simulations, not evidence of
-runtime execution on another OS or CPU. See [architecture](docs/ARCHITECTURE.md)
-for supported behavior and [release procedure](docs/RELEASING.md) for manual
-publication.
+repository gate. See [architecture](docs/ARCHITECTURE.md) for supported behavior
+and [release procedure](docs/RELEASING.md) for manual publication.
+
+## Verification coverage
+
+CI runs on GitHub-hosted `ubuntu-latest` (AMD64) and `macos-latest` (ARM64)
+runners. For runtime changes and release tags it runs the repository gate and
+an exact prebuilt-archive install on both hosts, a full installation from the
+Linux/AMD64 archive in an `ubuntu:24.04` container, the macOS/ARM64 archive's
+configuration lifecycle, and the pinned Neovim developer lifecycle on Ubuntu.
+The release builder produces four archive formats; only the host's native
+archive executes in each job.
+
+Linux/ARM64, macOS/AMD64, WSL 2, and OS releases other than those runner
+images and the container are not executed in CI. Platform selectors in tests
+simulate them; they are not evidence of runtime execution on another OS or CPU.
