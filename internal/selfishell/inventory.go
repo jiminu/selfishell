@@ -320,7 +320,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinn
 		if !managed {
 			return true
 		}
-		if _, err := os.Stat(filepath.Join(target, ".git")); err != nil {
+		if _, err := os.Stat(target + "/.git"); err != nil {
 			return false
 		}
 		if pinned && dep.Checksum != "-" {

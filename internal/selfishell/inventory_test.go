@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -586,6 +588,90 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "v3.16.0")
+}
+
+// pathSnapshot records every entry under root without following links.
+func pathSnapshot(t *testing.T, root string) string {
+	t.Helper()
+	var b strings.Builder
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(&b, "%s %v %d", path, info.Mode(), info.ModTime().UnixNano())
+		if d.Type()&fs.ModeSymlink != 0 {
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			b.WriteString(" -> " + link)
+		} else if d.Type().IsRegular() {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(&b, " %x", sha256.Sum256(data))
+		}
+		b.WriteByte('\n')
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
+}
+func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
+	for _, shape := range []string{"managed_real_checkout", "external_real_marker", "external_lexical_marker"} {
+		t.Run(shape, func(t *testing.T) {
+			root, paths, warnings, _ := inventoryFixture(t)
+			home := os.Getenv("HOME")
+			// alias/.. resolves to actual/data; a lexical clean would select work/data.
+			for _, dir := range []string{home + "/actual/child", home + "/work"} {
+				if err := os.MkdirAll(dir, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
+			real, lexical := home+"/actual/data/zinit/zinit.git", home+"/work/data/zinit/zinit.git"
+			sha, want := "-", ToolResult{"detected", "external", "v3.15.0"}
+			switch shape {
+			case "managed_real_checkout":
+				if err := os.MkdirAll(real, 0700); err != nil {
+					t.Fatal(err)
+				}
+				gitCommand(t, real, "init", "--quiet")
+				fixtureFile(t, real+"/zinit.zsh", ":\n", 0600)
+				gitCommand(t, real, "add", "zinit.zsh")
+				gitCommand(t, real, "commit", "--quiet", "-m", "initial")
+				sha = gitCommand(t, real, "rev-parse", "HEAD")
+				fixtureFile(t, filepath.Join(paths.State, "dependencies/zinit"), "v3.15.0\n", 0600)
+				want = ToolResult{"v3.15.0", "selfishell", "v3.15.0"}
+			case "external_real_marker":
+				fixtureFile(t, real+"/zinit.zsh", ":\n", 0600)
+			case "external_lexical_marker":
+				fixtureFile(t, real+"/user-file", "user data\n", 0600)
+				fixtureFile(t, lexical+"/zinit.zsh", ":\n", 0600)
+				want = ToolResult{"missing", "none", "v3.15.0"}
+			}
+			fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.15.0 all all source "+sha+" .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+			before := pathSnapshot(t, root)
+			got, err := inventory(t, root, paths, warnings).Detect("direct", "zinit", "linux", "amd64")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantTool(t, got, want.Installed, want.Source, want.Approved)
+			if after := pathSnapshot(t, root); after != before {
+				t.Fatalf("diagnostics changed paths:\n%s\n---\n%s", before, after)
+			}
+		})
+	}
 }
 func TestInventoryDoesNotCreateUserState(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
