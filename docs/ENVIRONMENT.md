@@ -59,6 +59,13 @@ declines. The answer is saved in
 `selfishell uninstall` clears the saved choice, and the next
 `selfishell install` asks again. Uninstall leaves the Ghostty app installed.
 
+Colors do not depend on Ghostty. The prompt, FZF, completion previews, and
+command-line highlighting use the terminal's own palette, and Neovim switches
+between the light and dark VS Code theme to match the background the terminal
+reports, so light terminal themes work as well. The bundled Ghostty
+configuration uses the dark `Dark+` theme; see
+[Ghostty customization](INSTALLATION.md#ghostty-customization) to change it.
+
 ## Neovim workflow
 
 Selfishell includes a pinned Neovim configuration whose leader key

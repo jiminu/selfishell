@@ -48,6 +48,111 @@ local function lualine_mode_color()
   }
 end
 
+-- bufferline calls this again on every ColorScheme, which also fires when
+-- Neovim detects the terminal background.
+local function bufferline_highlights()
+  local c = vim.o.background == "dark" and {
+    inactive = "#858585",
+    selected = "#FFFFFF",
+    close_selected = "#D4D4D4",
+    modified = "#D7BA7D",
+  } or {
+    inactive = "#616161",
+    selected = "#333333",
+    close_selected = "#616161",
+    modified = "#895503",
+  }
+  return {
+    fill = {
+      fg = { attribute = "fg", highlight = "TabLineFill" },
+      bg = { attribute = "bg", highlight = "TabLineFill" },
+    },
+    background = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+      italic = false,
+    },
+    buffer_visible = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+      italic = false,
+    },
+    buffer_selected = {
+      fg = c.selected,
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      bold = false,
+      italic = false,
+      underline = true,
+      sp = "#007ACC",
+    },
+    close_button = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    close_button_visible = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    close_button_selected = {
+      fg = c.close_selected,
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      underline = true,
+      sp = "#007ACC",
+    },
+    duplicate = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+      italic = true,
+    },
+    duplicate_visible = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLine" },
+      italic = true,
+    },
+    duplicate_selected = {
+      fg = c.inactive,
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      italic = true,
+      underline = true,
+      sp = "#007ACC",
+    },
+    modified = {
+      fg = c.modified,
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    modified_visible = {
+      fg = c.modified,
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    modified_selected = {
+      fg = c.modified,
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      underline = true,
+      sp = "#007ACC",
+    },
+    separator = {
+      fg = { attribute = "bg", highlight = "TabLineFill" },
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    separator_visible = {
+      fg = { attribute = "bg", highlight = "TabLineFill" },
+      bg = { attribute = "bg", highlight = "TabLine" },
+    },
+    separator_selected = {
+      fg = { attribute = "bg", highlight = "TabLineFill" },
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      underline = true,
+      sp = "#007ACC",
+    },
+    indicator_selected = {
+      fg = "#007ACC",
+      bg = { attribute = "bg", highlight = "TabLineSel" },
+      underline = true,
+      sp = "#007ACC",
+    },
+  }
+end
+
 return {
   plugin("mofiqul/vscode.nvim", {
     lazy = false,
@@ -175,95 +280,7 @@ return {
           },
         },
       },
-      highlights = {
-        fill = {
-          fg = { attribute = "fg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLineFill" },
-        },
-        background = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = false,
-        },
-        buffer_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = false,
-        },
-        buffer_selected = {
-          fg = "#FFFFFF",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          bold = false,
-          italic = false,
-          underline = true,
-          sp = "#007ACC",
-        },
-        close_button = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        close_button_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        close_button_selected = {
-          fg = "#D4D4D4",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        duplicate = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = true,
-        },
-        duplicate_visible = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLine" },
-          italic = true,
-        },
-        duplicate_selected = {
-          fg = "#858585",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          italic = true,
-          underline = true,
-          sp = "#007ACC",
-        },
-        modified = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        modified_visible = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        modified_selected = {
-          fg = "#D7BA7D",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        separator = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        separator_visible = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLine" },
-        },
-        separator_selected = {
-          fg = { attribute = "bg", highlight = "TabLineFill" },
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-        indicator_selected = {
-          fg = "#007ACC",
-          bg = { attribute = "bg", highlight = "TabLineSel" },
-          underline = true,
-          sp = "#007ACC",
-        },
-      },
+      highlights = bufferline_highlights,
     },
   }),
 
@@ -287,7 +304,9 @@ return {
         lualine_c = {
           {
             "branch",
-            color = { fg = "#5fd700" },
+            color = function()
+              return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
+            end,
             icon = "",
             padding = { left = 0, right = 1 },
           },
