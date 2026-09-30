@@ -74,6 +74,15 @@ func (o *PackageOperation) miseProcess(root string, offline bool) Process {
 	return p
 }
 
+// trustManagedMiseConfig trusts the managed conf.d entry when it is a file or
+// link. Callers choose the mise binary and the child's environment.
+func trustManagedMiseConfig(ctx context.Context, p Process, mise string, paths Paths) {
+	link := strings.TrimSuffix(paths.Config, "/selfishell") + "/mise/conf.d/selfishell.toml"
+	if info, err := os.Lstat(link); err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
+		_, _ = p.Run(ctx, mise, "trust", link)
+	}
+}
+
 // InstallMise synchronizes one required or optional group against release pins.
 func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths Paths, requirement string, dryRun bool, names ...string) error {
 	if err := ctx.Err(); err != nil {
@@ -93,14 +102,11 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 	if err != nil {
 		return o.optionalFailure(requirement, "mise is required to install mise-managed tools.", names)
 	}
-	link := strings.TrimSuffix(paths.Config, "/selfishell") + "/mise/conf.d/selfishell.toml"
-	if info, err := os.Lstat(link); err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
-		p := o.miseProcess(root, false)
-		p.Out, p.Err = io.Discard, io.Discard
-		_, _ = p.Run(ctx, mise, "trust", link)
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	trust := o.miseProcess(root, false)
+	trust.Out, trust.Err = io.Discard, io.Discard
+	trustManagedMiseConfig(ctx, trust, mise, paths)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	shared := root + "/config/shared"
 	check := o.miseProcess(root, true)

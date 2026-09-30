@@ -349,28 +349,11 @@ func (i *ToolInventory) loadMise() {
 	i.miseApproved = map[string]string{}
 	i.miseVersions = map[string]string{}
 	config := filepath.Join(i.root, "config", "shared", "mise.toml")
-	data, err := os.ReadFile(config)
-	if err == nil {
-		inTools := false
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "[") {
-				inTools = line == "[tools]"
-				continue
-			}
-			if !inTools {
-				continue
-			}
-			name, value, ok := strings.Cut(line, "=")
-			if !ok {
-				continue
-			}
-			name = strings.TrimSpace(name)
-			value = strings.TrimSpace(value)
-			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") && len(value) >= 2 {
-				i.miseApproved[name] = strings.Trim(value, "\"")
-			}
-		}
+	// A missing config approves nothing. Diagnostics strip every edge quote,
+	// while install pins drop exactly one pair.
+	versions, _ := approvedMiseVersions(config)
+	for name, version := range versions {
+		i.miseApproved[name] = strings.Trim(version, "\"")
 	}
 	command, err := exec.LookPath("mise")
 	if err != nil {

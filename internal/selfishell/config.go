@@ -57,26 +57,14 @@ func (c CLI) install(args []string) (result int) {
 		return 1
 	}
 	platform := DetectPlatform().Name
-	if platform != "macos" && platform != "ubuntu" && platform != "ubuntu-wsl" {
+	if !platformSupported(platform) {
 		c.error("Managed installation is unavailable on " + platform + ".")
 		return 1
 	}
 	if !skip {
-		selected := platform
-		if selected == "ubuntu-wsl" {
-			selected = "ubuntu"
-		}
-		var miseNames []string
-		for _, p := range packages {
-			if p.Manager == "mise" && (p.Platform == "all" || p.Platform == selected) {
-				miseNames = append(miseNames, p.Name)
-			}
-		}
-		if len(miseNames) > 0 {
-			if _, err := approvedMisePins(c.Root+"/config/shared/mise.toml", miseNames); err != nil {
-				c.error(err.Error())
-				return 1
-			}
+		if err := checkMisePins(c.Root, packages, platform); err != nil {
+			c.error(err.Error())
+			return 1
 		}
 	}
 	if !yes && !dry {
@@ -291,7 +279,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 		}
 	}
 	if !m.dry {
-		c.trustMise()
+		c.trustMise(paths)
 	}
 	return ctx.Err()
 }

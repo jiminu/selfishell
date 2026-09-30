@@ -10,21 +10,17 @@ import (
 	"strings"
 )
 
-func (c CLI) trustMise() {
-	link := envDefault("XDG_CONFIG_HOME", os.Getenv("HOME")+"/.config") + "/mise/conf.d/selfishell.toml"
-	info, present, _ := exists(link)
-	if !present || !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
-		return
-	}
+// trustMise keeps the caller's environment, unlike InstallMise's release-scoped process.
+func (c CLI) trustMise(paths Paths) {
 	binary, e := exec.LookPath("mise")
 	if e != nil {
 		binary = os.Getenv("HOME") + "/.local/bin/mise"
-		info, e = os.Stat(binary)
+		info, e := os.Stat(binary)
 		if e != nil || info.Mode()&0111 == 0 {
 			return
 		}
 	}
-	(Process{Dir: c.Root + "/config/shared"}).Run(c.invocationContext(), binary, "trust", link)
+	trustManagedMiseConfig(c.invocationContext(), Process{Dir: c.Root + "/config/shared"}, binary, paths)
 }
 func (c CLI) defaultShell(dry, yes bool) {
 	c.progress.pause()

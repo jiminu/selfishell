@@ -42,9 +42,7 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	}
 	selected := make([]Package, 0, len(all))
 	seen := map[string]bool{}
-	if platform == "ubuntu-wsl" {
-		platform = "ubuntu"
-	}
+	platform = packagePlatform(platform)
 	for _, p := range all {
 		if (p.Platform == "all" || p.Platform == platform) && !seen[p.Name] {
 			selected = append(selected, p)
@@ -53,6 +51,16 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	}
 	return selected, nil
 }
+
+// packagePlatform maps a detected platform to its packages.conf platform.
+func packagePlatform(platform string) string {
+	if platform == "ubuntu-wsl" {
+		return "ubuntu"
+	}
+	return platform
+}
+
+// dependencyPlatform maps a detected platform to its dependencies.conf platform.
 func dependencyPlatform(platform string) string {
 	if platform == "ubuntu" || platform == "ubuntu-wsl" {
 		return "linux"

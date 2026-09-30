@@ -62,9 +62,7 @@ func ManagedResources(root string) ([]Resource, error) {
 // ResourcesForPlatform selects installation resources only. It must not be
 // used to filter uninstall: another platform's recorded resources still count.
 func ResourcesForPlatform(root, platform string, ghostty bool) ([]Resource, error) {
-	switch platform {
-	case "macos", "ubuntu", "ubuntu-wsl":
-	default:
+	if !platformSupported(platform) {
 		return nil, fmt.Errorf("managed installation is unavailable on %s", platform)
 	}
 	all, err := ManagedResources(root)

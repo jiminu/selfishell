@@ -64,15 +64,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if platform == "ubuntu-wsl" {
-		platform = "ubuntu"
-	}
-	var tools []string
-	for _, item := range packages {
-		if item.Manager == "mise" && (item.Platform == "all" || item.Platform == platform) {
-			tools = append(tools, item.Name)
-		}
-	}
+	tools := platformMiseTools(packages, platform)
 	if len(tools) == 0 {
 		return nil
 	}

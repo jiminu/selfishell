@@ -32,10 +32,7 @@ func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manif
 	if err := o.loadDependencies(manifest); err != nil {
 		return err
 	}
-	depPlatform := platform
-	if platform == "ubuntu" || platform == "ubuntu-wsl" {
-		depPlatform = "linux"
-	}
+	depPlatform := dependencyPlatform(platform)
 	var dep *Dependency
 	for i := range o.dependencies {
 		d := &o.dependencies[i]

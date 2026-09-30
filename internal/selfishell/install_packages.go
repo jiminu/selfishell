@@ -9,10 +9,7 @@ import (
 
 // installPackages follows the requirement/manager order with one operation.
 func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, dry bool) error {
-	selected := platform
-	if selected == "ubuntu-wsl" {
-		selected = "ubuntu"
-	}
+	selected := packagePlatform(platform)
 	groups := map[string][]string{}
 	for _, p := range packages {
 		if p.Platform == "all" || p.Platform == selected {
@@ -63,7 +60,46 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 	return nil
 }
 
+// platformMiseTools lists the mise tools packages.conf declares for platform.
+func platformMiseTools(packages []Package, platform string) []string {
+	platform = packagePlatform(platform)
+	var tools []string
+	for _, p := range packages {
+		if p.Manager == "mise" && (p.Platform == "all" || p.Platform == platform) {
+			tools = append(tools, p.Name)
+		}
+	}
+	return tools
+}
+
+// checkMisePins fails before any change when a declared mise tool has no release pin.
+func checkMisePins(root string, packages []Package, platform string) error {
+	names := platformMiseTools(packages, platform)
+	if len(names) == 0 {
+		return nil
+	}
+	_, err := approvedMisePins(root+"/config/shared/mise.toml", names)
+	return err
+}
+
 func approvedMisePins(file string, names []string) ([]string, error) {
+	versions, err := approvedMiseVersions(file)
+	if err != nil {
+		return nil, err
+	}
+	pins := make([]string, 0, len(names))
+	for _, name := range names {
+		version := versions[name]
+		if version == "" {
+			return nil, fmt.Errorf("missing approved mise version: %s", name)
+		}
+		pins = append(pins, name+"@"+version)
+	}
+	return pins, nil
+}
+
+// approvedMiseVersions reads the quoted [tools] values of a release mise.toml.
+func approvedMiseVersions(file string) (map[string]string, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
@@ -85,13 +121,5 @@ func approvedMisePins(file string, names []string) ([]string, error) {
 			versions[strings.TrimSpace(name)] = version[1 : len(version)-1]
 		}
 	}
-	pins := make([]string, 0, len(names))
-	for _, name := range names {
-		version := versions[name]
-		if version == "" {
-			return nil, fmt.Errorf("missing approved mise version: %s", name)
-		}
-		pins = append(pins, name+"@"+version)
-	}
-	return pins, nil
+	return versions, nil
 }
