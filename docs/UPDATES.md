@@ -17,11 +17,10 @@ is needed on the user's machine.
 | `selfishell update --skip-packages` | Update the CLI, then apply configuration if the release changed. |
 | `selfishell update --tools-only --skip-packages` | Reapply current configuration without network access. |
 
-Tools and configuration synchronize without a separate confirmation. If a
-managed file or Selfishell block was modified locally, update asks whether to
-overwrite it or skip it. An accepted overwrite backs up the local content first.
-Changes outside Selfishell blocks are preserved without prompting. `--yes` and
-non-interactive execution preserve modified managed content and report an error.
+Tools and configuration synchronize without a separate confirmation. Changes
+outside Selfishell blocks are preserved without prompting; for a locally
+modified managed file or block, see
+[Modified Managed File](TROUBLESHOOTING.md#modified-managed-file).
 
 Add `--yes` for non-interactive confirmation or `--dry-run` to preview the
 selected phases without changing tools, configuration, or the active release.

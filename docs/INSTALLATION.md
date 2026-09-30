@@ -57,18 +57,10 @@ Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
 
 ## Verification coverage
 
-CI runs on GitHub-hosted `ubuntu-latest` (AMD64) and `macos-latest` (ARM64)
-runners. For runtime changes and release tags it runs the repository gate and
-an exact prebuilt-archive install on both hosts, a full installation from the
-Linux/AMD64 archive in an `ubuntu:24.04` container, the macOS/ARM64 archive's
-configuration lifecycle, and the pinned Neovim developer lifecycle on Ubuntu.
-The release builder produces four archive formats; only the host's native
-archive executes in each job.
-
-Linux/ARM64, macOS/AMD64, WSL 2, and OS releases other than those runner
-images and the container have not been executed in CI. Platform selection and
-configuration behavior have isolated tests, which are not substitutes for
-execution on those hosts.
+CI executes Selfishell on macOS ARM64 and Ubuntu 24.04 AMD64. The Linux ARM64
+and macOS AMD64 archives are built but not executed, and WSL 2 is covered only
+by isolated tests; see [verification coverage](../CONTRIBUTING.md#verification-coverage)
+for the exact CI jobs.
 
 ## Bootstrap options
 

@@ -176,15 +176,9 @@ ordinary local gate.
 
 ## Verification
 
-Run the smallest relevant tests while iterating, then run the repository gate
-for any shell, lifecycle, package, dependency, or release change:
-
-```sh
-bash scripts/check.sh
-```
-
-The gate performs Bash/Zsh syntax checks, ShellCheck, formatting checks, Go
-format/vet, four native builds, and the Go-owned test suite.
+Run the smallest relevant tests while iterating, then the repository gate
+(`bash scripts/check.sh`; contents in `CONTRIBUTING.md`) for any shell,
+lifecycle, package, dependency, or release change.
 
 - Maintained test setup, process control, assertions, and cleanup belong in Go;
   native Zsh/Lua runtime probes and small external-process fixtures may remain.
@@ -192,14 +186,14 @@ format/vet, four native builds, and the Go-owned test suite.
   developer's real home directory.
 - Integration tests call `t.Parallel()` unless they need `t.Setenv`.
 - Behavioral changes require tests, especially for empty/existing paths,
-  repeated operations, interruptions, unsupported platforms, `--skip-packages`
-  behavior, uninstall, restore, update, and rollback.
-- Keep verification proportional. Presentation-only changes (spacing, prose,
+  repeated operations, interruptions, unsupported platforms, `--skip-packages`,
+  uninstall, restore, update, and rollback.
+- Keep verification proportional: presentation-only changes (spacing, prose,
   glyphs) need no regression test unless the exact output is a product contract
-  or a repeated bug source (use the relevant parser, formatter, or a focused
-  smoke check); a small option change extends an existing focused test. A
-  cosmetic or configuration-only change may skip the full gate when a smaller
-  validation covers it; the categories above still require it.
+  or a repeated bug source; use a parser, formatter, or focused smoke check
+  instead. A small option change extends an existing focused test. Outside the
+  gate categories above, a cosmetic or configuration-only change may skip the
+  gate when a smaller check covers it.
 
 ## Repository Map
 
@@ -215,19 +209,13 @@ format/vet, four native builds, and the Go-owned test suite.
 
 ## Working Process
 
-1. Follow the user's requested scope.
-2. Check the worktree before editing and preserve unrelated user changes.
-3. Keep changes to one reviewable feature, fix, or documentation slice.
-4. Add or update tests for behavioral changes.
-5. When changing a shared shell function's signature, search the entire
-   repository for every call site, including scripts and tests, before
-   finishing the change.
-6. Record durable architecture decisions in this file or a focused document
-   under `docs/`; keep transient status and dated run logs out of agent rules.
-7. Keep planning artifacts (implementation plans, design drafts, task
-   checklists, roadmaps) out of the repository; they go stale once the change
-   merges, and the merged diff plus its tests are the durable record.
-8. Report only checks actually run. Separate local results, GitHub Actions
-   results, and checks that were unavailable; never imply an unrun check passed.
-9. After merging a branch into `main`, delete the remote branch (e.g.
-   `gh pr merge --delete-branch`); don't leave merged branches behind.
+1. Follow the requested scope; keep each change to one reviewable feature, fix,
+   or documentation slice, and preserve unrelated worktree changes.
+2. When changing a shared function's signature, update every call site,
+   including shell scripts and tests.
+3. Record durable decisions here or in a focused `docs/` file. Keep planning
+   artifacts, transient status, and dated run logs out of the repository.
+4. Report only checks actually run, separating local results, GitHub Actions
+   results, and unavailable checks; never imply an unrun check passed.
+5. After merging into `main`, delete the merged branch (e.g.
+   `gh pr merge --delete-branch`).

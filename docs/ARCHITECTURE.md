@@ -25,7 +25,7 @@ Dependency discovery and pin rewriting live in the `selfishell-dev` Go command;
 [approved dependency updates](RELEASING.md#approved-dependency-updates).
 
 The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
-and ARM64 archive formats. See [verification coverage](INSTALLATION.md#verification-coverage)
+and ARM64 archive formats. See [verification coverage](../CONTRIBUTING.md#verification-coverage)
 for environments exercised in CI and the limits of simulated platform tests.
 
 ## Tests
