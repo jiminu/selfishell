@@ -74,7 +74,8 @@ Pass options to the bootstrap after `bash -s --`:
 | `--yes` | With `--setup`, pass `--yes` to `selfishell install`. |
 | `--skip-packages` | With `--setup`, pass `--skip-packages` to `selfishell install`. |
 
-The bootstrap installs only the CLI unless `--setup` is supplied.
+The bootstrap installs only the CLI unless `--setup` is supplied; without it,
+`--yes` and `--skip-packages` are ignored with a warning.
 Version discovery prefers the latest stable release and otherwise uses the
 newest version tag only after its exact `VERSION` release asset is published.
 

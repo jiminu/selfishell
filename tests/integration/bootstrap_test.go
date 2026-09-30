@@ -289,6 +289,16 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 		}
 		requireAbsent(t, filepath.Join(f.share, "current"))
 	})
+	t.Run("setup-only options without setup", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		f.latest(t, nativeArchiveVersion)
+		got := f.run(t, "--yes", "--skip-packages")
+		requireOK(t, got)
+		requireContains(t, got.Stderr, "--yes and --skip-packages apply only with --setup")
+		requireInstallerErrorsOnly(t, got.Stderr)
+		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
+		requireAbsent(t, filepath.Join(f.home, ".local/state/selfishell/configured"))
+	})
 	t.Run("curl policy", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		f.latest(t, nativeArchiveVersion)
