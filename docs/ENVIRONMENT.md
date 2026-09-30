@@ -52,7 +52,8 @@ Package requirements have two failure policies:
 
 Eza and Bat are optional. Only Ghostty has a separate installation choice:
 on macOS, the first `selfishell install` asks whether to install it and manage
-its configuration. `--yes` accepts; a non-interactive run without `--yes`
+its configuration. Ghostty is the recommended terminal, so pressing Enter
+accepts; `--yes` also accepts, and a non-interactive run without `--yes`
 declines. The answer is saved in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/ghostty` and reused by later
 `install` and `update` runs without asking again. No option changes it:

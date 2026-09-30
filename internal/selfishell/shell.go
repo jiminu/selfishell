@@ -61,7 +61,7 @@ func (c CLI) defaultShell(dry, yes bool) {
 		}
 		fmt.Fprint(c.Out, "Set login shell to Zsh? [Y/n] ")
 		answer, _ := c.readAnswer()
-		if answer == "n" || answer == "N" || answer == "no" || answer == "NO" {
+		if negative(answer) {
 			return
 		}
 	}
