@@ -22,7 +22,7 @@ func TestCurlOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	fake := filepath.Join(root, "curl")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$CURL_ARGS\"\nprintf '%s\\n' \"$HTTPS_PROXY\" >\"$CURL_PROXY\"\nprintf 'metadata-payload'\nexit \"${CURL_STATUS:-0}\"\n"
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$CURL_ARGS\"\nprintf '%s\\n' \"$HTTPS_PROXY\" >\"$CURL_PROXY\"\nout=/dev/stdout\nwhile [ \"$#\" -gt 0 ]; do [ \"$1\" = -o ] && out=\"$2\"; shift; done\nprintf 'metadata-payload' >\"$out\"\nexit \"${CURL_STATUS:-0}\"\n"
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -56,17 +56,21 @@ func TestCurlOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "-fsSL\n--connect-timeout\n7\n--speed-limit\n512\n--speed-time\n4\n--retry\n3\n--retry-max-time\n60\n--max-time\n9\n-H\nAuthorization: Bearer secret-123\nhttps://example.invalid/metadata\n"
-	if string(got) != want {
+	// Stdout responses are staged in TMPDIR so a retry cannot append to a partial one.
+	want := "-fsSL\n--connect-timeout\n7\n--speed-limit\n512\n--speed-time\n4\n--retry\n3\n--retry-max-time\n60\n--max-time\n9\n-H\nAuthorization: Bearer secret-123\nhttps://example.invalid/metadata\n-o\n" + filepath.Join(root, "tmp", "selfishell-curl.")
+	if !strings.HasPrefix(string(got), want) {
 		t.Fatalf("metadata argv=%q", got)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(root, "tmp")); len(staged) != 0 {
+		t.Fatalf("staged response left behind: %v", staged)
 	}
 	proxy, err := os.ReadFile(filepath.Join(root, "proxy"))
 	if err != nil || string(proxy) != "http://proxy.invalid:8080\n" {
 		t.Fatalf("proxy=%q err=%v", proxy, err)
 	}
 	out, status = run("0", "transfer", "transfer", "https://example.invalid/archive", "-o", filepath.Join(root, "archive"))
-	if status != 0 || out != "metadata-payload" {
-		t.Fatalf("transfer status=%d output=%q", status, out)
+	if archive, _ := os.ReadFile(filepath.Join(root, "archive")); status != 0 || out != "" || string(archive) != "metadata-payload" {
+		t.Fatalf("transfer status=%d output=%q archive=%q", status, out, archive)
 	}
 	got, _ = os.ReadFile(filepath.Join(root, "args"))
 	if strings.Contains(string(got), "--max-time") || !strings.HasSuffix(string(got), "https://example.invalid/archive\n-o\n"+filepath.Join(root, "archive")+"\n") {

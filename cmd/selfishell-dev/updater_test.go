@@ -168,7 +168,6 @@ func TestUpdaterDiscoveryUsesPrivateTransportAndPeeledGitTag(t *testing.T) {
 	curl := `#!/bin/bash
 printf '%s\n' "$*" >>"$DISCOVERY_LOG"
 if [[ "${DISCOVERY_FAILURE:-}" == curl ]]; then printf 'private-secret' >&2; exit 22; fi
-if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 out=""; url=""
 while (($#)); do
   if [[ "$1" == -o ]]; then shift; out="$1"
@@ -176,14 +175,17 @@ while (($#)); do
   else url="$1"; fi
   shift
 done
-if [[ -n "$out" ]]; then
-  [[ "${DISCOVERY_FAILURE:-}" != download ]] || exit 22
-  if [[ "$url" == */registry.json.zip ]]; then
-    [[ "${DISCOVERY_FAILURE:-}" != registry ]] || { printf broken >"$out"; exit 0; }
-    cp "$REGISTRY_ZIP" "$out"; exit 0
-  fi
-  printf archive-bytes >"$out"; exit 0
-fi
+case "$url" in
+  'https://go.dev/dl/?mode=json' | */releases/latest) [[ -z "$out" ]] || exec >"$out" ;;
+  *)
+    [[ "${DISCOVERY_FAILURE:-}" != download ]] || exit 22
+    if [[ "$url" == */registry.json.zip ]]; then
+      [[ "${DISCOVERY_FAILURE:-}" != registry ]] || { printf broken >"$out"; exit 0; }
+      cp "$REGISTRY_ZIP" "$out"; exit 0
+    fi
+    printf archive-bytes >"$out"; exit 0 ;;
+esac
+if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 case "$url" in
   'https://go.dev/dl/?mode=json')
     [[ "${DISCOVERY_FAILURE:-}" != go-line ]] || { printf '[{"version":"go1.28.0","stable":true}]'; exit 0; }
