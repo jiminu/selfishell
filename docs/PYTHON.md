@@ -1,31 +1,38 @@
 # Python Development with Selfishell
 
 Selfishell uses `mise` for Python versions and `uv` for packages and virtual
-environments. Project settings can enable automatic virtualenv activation.
+environments. Project settings can enable automatic virtualenv activation for
+uv projects.
 
 ## Getting Started
 
-### 1. Creating a Virtual Environment
+### 1. Creating a uv Project
 
-Create a `.venv` in your project directory:
+Create a uv project, or use an existing one with a `pyproject.toml`:
 
 ```bash
 cd /path/to/project
-uv venv
+uv init --python 3.12   # Skip when pyproject.toml already exists.
+uv add requests
 ```
 
-If you need a specific Python version, you can define it during creation:
+`uv add` records the dependency in `pyproject.toml`, writes `uv.lock`, and
+installs it into the project's `.venv`. In an existing project, `uv sync`
+creates `.venv` and `uv.lock` from `pyproject.toml`. To import a
+`requirements.txt` file:
 
 ```bash
-uv venv --python 3.12
+uv add -r requirements.txt
 ```
 
 ### 2. Auto-Activation
 
-`python.uv_venv_auto` requires a uv project with a `uv.lock` file, created by
-`uv lock` or `uv sync`; a `.venv` directory alone is insufficient.
+Automatic activation is mise's `python.uv_venv_auto` setting. It applies only
+to a uv project with a `uv.lock` file; a `.venv` directory alone is
+insufficient.
 
-Add this setting to your project's `mise.toml`:
+Add this setting to your project's `mise.toml`, then run `mise trust` in the
+project directory:
 
 ```toml
 [settings]
@@ -35,7 +42,7 @@ python.uv_venv_auto = "create|source"
 `"source"` activates an existing virtual environment; `"create|source"` also
 creates one when necessary.
 
-Once configured, entering the uv project directory will activate it:
+Once configured, entering the uv project directory activates it:
 
 ```bash
 cd /path/to/project
@@ -43,24 +50,15 @@ which python
 # Expected: /path/to/project/.venv/bin/python
 ```
 
-### 3. Installing Packages
+### 3. Environments without uv.lock
 
-Install packages in the virtual environment:
-
-```bash
-uv pip install requests
-```
-
-To install from a `requirements.txt` file:
+`uv venv` and `uv pip install` create and fill a `.venv` without `uv.lock`, so
+auto-activation does not apply. Activate such an environment manually:
 
 ```bash
+uv venv
 uv pip install -r requirements.txt
-```
-
-To generate a pinned lock file from dependency specifications:
-
-```bash
-uv pip compile pyproject.toml -o requirements.txt
+source .venv/bin/activate
 ```
 
 ## Editor Integration (Neovim)

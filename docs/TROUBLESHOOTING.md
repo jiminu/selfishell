@@ -26,13 +26,18 @@ architecture, package manager, compiler availability, installed tools, and Zsh
 plugin checkouts. Use `status` to inspect configuration changes and `doctor` to
 diagnose environment prerequisites and plugin problems.
 
-Tool sources include Selfishell-managed, Homebrew, apt, external, or missing.
-Package-manager versions are reported without an exact approved version because
-those repositories control resolution. `status` returns nonzero when required
-tools are missing or managed configuration is missing or changed. Optional
-missing tools remain informational, including in the summary. Problem groups
-include a next step, and paths beneath the current home directory use `~`.
-Diagnostics do not modify files or check the network.
+A tool's source is `selfishell`, `mise`, `homebrew`, `homebrew-cask`, `apt`,
+`external` (found, but installed some other way), or `none` when the tool is
+missing. Package-manager versions are reported without an exact approved
+version because those repositories control resolution. `status` returns
+nonzero when required tools are missing or managed configuration is missing or
+changed. Optional missing tools remain informational, including in the summary.
+Problem groups include a next step, and paths beneath the current home
+directory use `~`.
+
+Diagnostics do not check the network or change Selfishell configuration,
+state, or tools. They list installed mise tools with `mise ls`, which can
+update mise's own cache and tracking metadata.
 
 After completed setup, `status` also reports missing installation records for
 configuration required on the current platform, including Ghostty when enabled.
@@ -41,7 +46,9 @@ Keep existing backups and review the reported records before reinstalling.
 ## Restricted Network
 
 Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` variables are inherited.
-Use `--skip-packages` for configuration-only setup.
+Use `--skip-packages` for configuration-only setup; see
+[update modes](UPDATES.md#update-modes). To download Selfishell releases from a
+mirror, see [Company deployment](COMPANY.md#release-mirror).
 
 Release and direct-tool downloads stop when they cannot connect or remain below
 the minimum transfer rate. Git clones and Neovim plugin syncs use the same
@@ -86,9 +93,9 @@ automatically. Bytes outside the block markers remain unchanged. Uninstall
 still refuses to remove a block that was modified after installation.
 
 If the whole block was deleted or a regular rc file was replaced, run
-`selfishell update --tools-only --skip-packages` to append the current block
-while preserving the file's other content. `selfishell install --skip-packages`
-also repairs it. Uninstall leaves an already absent block and its user file
+`selfishell update --tools-only --skip-packages` to add the current block at the
+top of the file while preserving the file's other content.
+`selfishell install --skip-packages` also repairs it. Uninstall leaves an already absent block and its user file
 alone. Incomplete or duplicated markers must still be resolved before retrying.
 
 Install and update reprovision a Zinit checkout whose tracked files were

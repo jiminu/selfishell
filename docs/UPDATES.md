@@ -64,8 +64,9 @@ normal terminal output so password prompts and installer questions stay visible.
 Synchronization installs missing Apt or Homebrew packages from `packages.conf`,
 applies approved direct-tool and Git dependency versions from `dependencies.conf`,
 synchronizes mise tools and Neovim plugins, and reapplies managed configuration.
-Optional Apt packages are attempted automatically; a failed optional package
-is reported but does not fail the whole setup. Required package failures do.
+`optional` packages in `packages.conf`, and Ghostty when chosen, are attempted
+automatically; a failed optional package is reported but does not fail the
+whole setup. Required package failures do.
 Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
@@ -163,34 +164,19 @@ repairs the CLI.
 
 ## Approved versions
 
-Direct-tool and Git dependency versions, including exact Neovim plugin commits,
-are approved in `dependencies.conf`. A repository `lazy-lock.json` is unnecessary:
-lazy.nvim's runtime lock lives under Selfishell's state directory, and updates
-cannot move plugins beyond approved commits.
+Direct-tool and Git dependency versions, including exact Zsh and Neovim plugin
+commits, are approved in `dependencies.conf`. A repository `lazy-lock.json` is
+unnecessary: lazy.nvim's runtime lock lives under Selfishell's state directory,
+and updates cannot move plugins beyond approved commits.
 
 `packages.conf` declares mise tool membership; `config/shared/mise.toml` pins
 exact defaults. Both manifests change through review and a Selfishell release.
 Project-local `mise.toml` files remain outside this lifecycle.
 
-Maintainers use `scripts/update-dependencies.sh` to discover upstream releases,
-calculate downloaded mise artifact checksums, and update mise tool and default
-LSP pins. LSP candidates come from the published Mason registry; only the servers
-declared in `config/shared/nvim/lua/config/languages.lua` are considered. This
-launcher builds the Go maintenance tool with the version pinned in `go.mod`;
-discovery requires curl and Git. `--metadata FILE` applies saved metadata without
-network access. Node and Python release lines remain a manual maintainer choice.
-Go's official release metadata supplies stable patch updates within the
-development toolchain's existing release line. These update `go.mod` and the
-root `mise.toml` together; the workflow selects the updated compiler before
-validation. A new Go release line remains a maintainer choice. This development
-toolchain update does not add Go to the installed environment.
-All manifest and configuration edits are validated and staged before any file
-is replaced, and each replacement uses an atomic rename. The
-weekly workflow runs the same script, skips shell tooling setup and the full
-verification suite when no pins change, and otherwise opens or refreshes
-`automation/dependency-updates` only when tracked files change. It never merges
-or publishes. Review upstream release notes, checksums, and CI before merging,
-then follow the [release procedure](RELEASING.md) to deliver the changes.
+New pins reach users only through a reviewed dependency update and a new
+Selfishell release; see
+[approved dependency updates](RELEASING.md#approved-dependency-updates) for the
+maintainer workflow.
 
 ## Status and update notices
 

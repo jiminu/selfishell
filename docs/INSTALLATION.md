@@ -10,11 +10,39 @@ curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
 selfishell install
 ```
 
-`selfishell install` sets up the complete development environment.
+`selfishell install` sets up the complete development environment. It asks for
+confirmation; non-interactive runs need `--yes`.
 
 Installation shows the current phase and finishes with a grouped change summary.
 See [progress output](UPDATES.md#tools-and-configuration) for details,
 including plain output in CI and how tool failures appear.
+
+## Files Selfishell manages
+
+Managed defaults live under `~/.config/selfishell`. `selfishell install`
+connects them to these locations; paths under `~/.config` follow
+`XDG_CONFIG_HOME`:
+
+| Path | Change | Existing content |
+| --- | --- | --- |
+| `~/.zshrc`, `~/.zprofile`, `~/.vimrc` | Marked block added at the top | Kept below the block |
+| `~/.zshenv` (Ubuntu/WSL only) | Marked block added at the top | Kept below the block |
+| `~/.config/ghostty/config.ghostty` (macOS, if Ghostty is chosen) | Marked block added at the top | Kept below the block |
+| `~/.config/nvim` | Link to `~/.config/selfishell/nvim` | Moved to a backup |
+| `~/.config/starship.toml` | Link to `~/.config/selfishell/starship.toml` | Moved to a backup |
+| `~/.config/mise/conf.d/selfishell.toml` | Link to `~/.config/selfishell/mise/selfishell.toml` | Moved to a backup |
+| `~/.config/mise/config.toml` | Created empty if absent | Never changed |
+| Files under `~/.config/selfishell` | Managed copies, checksummed | Moved to a backup |
+
+A backup sits beside its original path as `<path>.backup.<timestamp>`, with a
+numeric suffix when that name is taken, and reinstalling keeps the original
+backup. Adding a block makes no backup because the rest of the file stays in
+place. A block target that is a symbolic link, such as a `~/.zshrc` managed by
+a dotfiles tool, stops installation before any change. See
+[Uninstallation](#uninstallation) to remove these changes and restore backups.
+
+Tools install separately: the pinned mise binary at `~/.local/bin/mise`, and
+mise tools, Zinit, and Neovim plugins under `~/.local/share`.
 
 ## Reinstallation
 
@@ -29,34 +57,45 @@ Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
 
 ## Verification coverage
 
-Automated verification has exercised a native Linux/AMD64 archive and full
-installation in an Ubuntu 24.04 container, a native macOS/ARM64 archive and
-configuration lifecycle on macOS 26.6.2, and the pinned Neovim developer
-lifecycle on Ubuntu. The release builder produces four archive formats; only
-the host's native archive executes in each job. CI smoke tests install an exact
-prebuilt archive on Linux and macOS after the repository gate.
+CI runs on GitHub-hosted `ubuntu-latest` (AMD64) and `macos-latest` (ARM64)
+runners. For runtime changes and release tags it runs the repository gate and
+an exact prebuilt-archive install on both hosts, a full installation from the
+Linux/AMD64 archive in an `ubuntu:24.04` container, the macOS/ARM64 archive's
+configuration lifecycle, and the pinned Neovim developer lifecycle on Ubuntu.
+The release builder produces four archive formats; only the host's native
+archive executes in each job.
 
-WSL 2, Ubuntu 26.04 and every advertised CPU/OS combination have not been
-executed as separate CI runners. Platform selection and configuration behavior
-have isolated tests, which are not substitutes for execution on those hosts.
+Linux/ARM64, macOS/AMD64, WSL 2, and OS releases other than those runner
+images and the container have not been executed in CI. Platform selection and
+configuration behavior have isolated tests, which are not substitutes for
+execution on those hosts.
 
 ## Bootstrap options
 
+Pass options to the bootstrap after `bash -s --`:
+
+| Option | Effect |
+| --- | --- |
+| `--version VERSION` | Install an exact release; never falls back to the latest one. |
+| `--prefix PATH` | Absolute installation prefix; default `~/.local`. |
+| `--setup` | Run `selfishell install` after installing the CLI. |
+| `--yes` | With `--setup`, pass `--yes` to `selfishell install`. |
+| `--skip-packages` | With `--setup`, pass `--skip-packages` to `selfishell install`. |
+
+The bootstrap installs only the CLI unless `--setup` is supplied.
+Version discovery prefers the latest stable release and otherwise uses the
+newest version tag only after its exact `VERSION` release asset is published.
+
 ### Configure the CLI directory in PATH
 
-The default prefix is `~/.local`. If `~/.local/bin` is missing from `PATH`, the
-installer prints commands for the current shell and an absolute command that
-works immediately. The installer never modifies shell startup files. To make
-the CLI available in future sessions, add the following line to your shell
-startup file:
+If `~/.local/bin` is missing from `PATH`, the installer prints commands for the
+current shell and an absolute command that works immediately. The installer
+never modifies shell startup files. To make the CLI available in future
+sessions, add the following line to your shell startup file:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
-
-The bootstrap installs only the CLI unless `--setup` is explicitly supplied.
-Version discovery prefers the latest stable release and otherwise uses the
-newest version tag only after its exact `VERSION` release asset is published.
 
 ### Install CLI and environment together
 
@@ -88,6 +127,20 @@ release's `SHA256SUMS`, and then installed under
 are never replaced. A later bootstrap installation retains the former active
 release for offline rollback and removes older inactive releases.
 
+### Install under a custom prefix
+
+`--prefix PATH` puts the CLI links in `PATH/bin` and releases in
+`PATH/share/selfishell`; `update`, `rollback`, and `uninstall --purge` follow
+the running CLI's location. The prefix moves only the CLI: configuration,
+state, and tools keep their XDG and `~/.local` locations, and the managed Zsh
+configuration prepends `~/.local/bin`, not the custom bin directory. Add that
+directory to `PATH` in `~/.zshrc`, outside the Selfishell block, so new shells
+and update notices find `selfishell`:
+
+```sh
+export PATH="/opt/selfishell/bin:$PATH"
+```
+
 ### Install configuration without network access
 
 For configuration-only installation after the CLI is provisioned:
@@ -96,27 +149,27 @@ For configuration-only installation after the CLI is provisioned:
 selfishell install --skip-packages --yes
 ```
 
-`--skip-packages` performs configuration-only installation without package or
-network commands.
+`--skip-packages` applies managed configuration without installing packages or
+tools. See [update modes](UPDATES.md#update-modes) for its effect on updates.
 
 ## Zsh integration
 
-`~/.zshrc` is user-owned. Selfishell manages one bounded loader block that
-sources the managed platform entrypoint; personal aliases, exports, PATH
-entries, and functions belong outside that block.
+`~/.zshrc` is user-owned. Its Selfishell block sources the managed platform
+entrypoint; personal aliases, exports, PATH entries, and functions belong
+outside that block.
 
-Selfishell also adds a marked block to the user-owned `~/.zprofile`. The block
-runs `mise activate zsh --shims` when mise is available, allowing login
-environments and IDEs such as VS Code to resolve mise-managed tools. Interactive
-Zsh keeps using normal mise activation from the managed `.zshrc` configuration.
-Untouched blocks are upgraded automatically with new releases; see
+The `~/.zprofile` block runs `mise activate zsh --shims` when mise is
+available, allowing login environments and IDEs such as VS Code to resolve
+mise-managed tools. Interactive Zsh keeps using normal mise activation from the
+managed `.zshrc` configuration. Untouched blocks are upgraded automatically
+with new releases; see
 [Modified Managed File](TROUBLESHOOTING.md#modified-managed-file) for what
 happens if you edit inside one.
 
-On Ubuntu and Ubuntu on WSL, `~/.zshenv` also remains user-owned. Selfishell
-manages only a bounded block containing `skip_global_compinit=1` so Ubuntu's
-system-wide Zsh configuration does not initialize `compinit` before
-Selfishell's own. Selfishell does not manage `~/.zshenv` on macOS.
+On Ubuntu and Ubuntu on WSL, the `~/.zshenv` block contains only
+`skip_global_compinit=1` so Ubuntu's system-wide Zsh configuration does not
+initialize `compinit` before Selfishell's own. Selfishell does not manage
+`~/.zshenv` on macOS.
 
 ## Ghostty customization
 
@@ -147,6 +200,8 @@ wins over the corresponding default. `user.ghostty` is entirely yours:
 Selfishell never creates, modifies, checksums, or deletes it, and its absence
 is normal — Ghostty simply has no overrides applied.
 
+See [Environment](ENVIRONMENT.md) for how the Ghostty choice is saved.
+
 ## Uninstallation
 
 ### Restore configuration
@@ -174,9 +229,8 @@ same or a newer CLI. A path already restored is left untouched, including any
 subsequent personal edits. Finish this recovery before installing again. A
 backup whose destination is occupied is preserved rather than overwritten.
 
-Without `--restore`, uninstall keeps original backups and prints their paths.
-These installation backups sit beside the original paths with a
-`.backup.<timestamp>` suffix (and a collision suffix when needed).
+Without `--restore`, uninstall keeps the
+[original backups](#files-selfishell-manages) and prints their paths.
 
 ### Restore configuration and purge Selfishell
 
@@ -188,16 +242,16 @@ state. Backups of managed files you had modified stay in
 selfishell uninstall --restore --purge
 ```
 
-Personal content in `~/.zshrc` and `~/.zprofile`, and in `~/.zshenv` on
-Ubuntu/WSL, is preserved; uninstall removes only the intact marked Selfishell
-blocks. Packages installed through Apt, Homebrew, or direct tool installers are
-also preserved. Purge does not automatically remove Zinit or Neovim plugin
-checkouts.
+Personal content in `~/.zshrc`, `~/.zprofile`, and `~/.vimrc`, and in
+`~/.zshenv` on Ubuntu/WSL, is preserved; uninstall removes only the intact
+marked Selfishell blocks. Packages installed through Apt, Homebrew, or direct
+tool installers are also preserved. Purge does not automatically remove Zinit
+or Neovim plugin checkouts.
 
 ## Platform notes
 
 - On WSL, install and select a Nerd Font in Windows Terminal or VS Code so
   Starship icons render correctly.
 - On macOS, restart Ghostty after installation to apply its configuration.
-- Optional packages unavailable on a distribution are reported without
-  stopping required setup; missing required packages stop installation.
+- Optional packages that are unavailable or fail to install are reported
+  without stopping required setup; missing required packages stop installation.

@@ -20,10 +20,9 @@ Developer build entrypoints use `scripts/go-env.sh` to check the pin before
 compilation and isolate Go settings from the caller. Full benchmark provisioning
 applies the same policy inside its private child process.
 
-Dependency discovery and pin rewriting live in the `selfishell-dev` Go command.
-`scripts/update-dependencies.sh` only builds and invokes that source-maintenance
-tool. It uses the existing curl/Git transport and Go's JSON and SHA256 support;
-saved metadata can be applied without network access.
+Dependency discovery and pin rewriting live in the `selfishell-dev` Go command;
+`scripts/update-dependencies.sh` only builds and invokes it. See
+[approved dependency updates](RELEASING.md#approved-dependency-updates).
 
 The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
 and ARM64 archive formats. See [verification coverage](INSTALLATION.md#verification-coverage)
@@ -48,9 +47,9 @@ Release publication is a separate manual tag decision.
 Managed paths remain user-safe: pending state is written before mutation,
 regular files are checksummed, original backups persist across reinstalls,
 preflights cover all uninstall resources, and restore never overwrites an
-occupied target. Dry-run writes nothing. `update --tools-only --skip-packages`
-reapplies current configuration without network access; ordinary default
-update is a no-op when already current. Rollback uses retained files offline.
+occupied target. Dry-run writes nothing. Rollback uses retained files offline.
+See [update modes](UPDATES.md#update-modes) for `--skip-packages` and no-op
+updates.
 
 A full update runs the newly activated CLI for its tools/configuration phase.
 Cancellation sends that CLI SIGTERM and gives it up to five seconds to cancel
@@ -60,7 +59,7 @@ process group for terminal input.
 
 An existing user file with the same bytes as a managed default is backed up
 before adoption and preserved on restore.
-Three operational limits remain intentional. Optional Apt failures warn
+Three operational limits remain intentional. Optional package failures warn
 without invalidating a setup that otherwise completes; a fresh download may
 activate before a later state commit failure is reported; and concurrent
 installers have no lock guarantee. Run one bootstrap/update/rollback at a time.

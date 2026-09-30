@@ -51,9 +51,13 @@ Package requirements have two failure policies:
   unavailable package or installation failure does not stop the rest of setup.
 
 Eza and Bat are optional. Only Ghostty has a separate installation choice:
-on macOS, interactive setup asks whether to install it and manage its
-configuration. `--yes` accepts that choice automatically. The choice is saved
-and reused by `selfishell update`.
+on macOS, the first `selfishell install` asks whether to install it and manage
+its configuration. `--yes` accepts; a non-interactive run without `--yes`
+declines. The answer is saved in
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/ghostty` and reused by later
+`install` and `update` runs without asking again. No option changes it:
+`selfishell uninstall` clears the saved choice, and the next
+`selfishell install` asks again. Uninstall leaves the Ghostty app installed.
 
 ## Neovim workflow
 
@@ -71,9 +75,8 @@ Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
 available as well.
 
-`selfishell update --tools-only` synchronizes the seven default LSP servers with
-the current release's approved versions through Mason. See
-[LSP updates](UPDATES.md#neovim-lsp-servers) for scope and failure handling.
+Selfishell pins seven default LSP servers and synchronizes them through Mason;
+see [LSP updates](UPDATES.md#neovim-lsp-servers).
 
 Additional LSP servers are installed with `:LspInstall <server>`, the standard
 mason-lspconfig command; installed servers auto-enable on the next matching

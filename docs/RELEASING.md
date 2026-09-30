@@ -48,6 +48,9 @@ release a new patch version, because release tags are never moved.
 Before tagging, require a clean worktree, confirm `HEAD` is the intended pushed
 `origin/main` commit, and verify that `v<version>` does not already exist locally
 or remotely. Existing release tags are immutable; never move or recreate them.
+The repository enforces this: a tag ruleset on `v*` blocks tag updates and
+deletion, and GitHub immutable releases prevent changing a published release's
+assets.
 
 Choose the version explicitly. For a normal patch release, the helper can derive
 the next stable patch from existing tags:
@@ -104,7 +107,29 @@ immutable is part of the release contract.
 
 ## Approved dependency updates
 
-The weekly dependency workflow opens or refreshes a PR from
+`scripts/update-dependencies.sh` builds the `selfishell-dev` maintenance tool
+with the Go version pinned in `go.mod`, discovers upstream releases, and
+rewrites the approved pins:
+
+- direct downloads and Git dependencies in `dependencies.conf`, including
+  checksums of downloaded mise artifacts; a Zsh plugin commit is also rewritten
+  in its `zinit ice ver'…'` line in `config/shared/zsh/completion.zsh` or
+  `interactive.zsh`;
+- mise tool versions in `config/shared/mise.toml`;
+- default LSP pins in `config/shared/nvim/lua/config/languages.lua`, from the
+  published Mason registry and only for the declared servers;
+- Go patch releases within the current release line, in `go.mod` and the root
+  `mise.toml` together. This does not add Go to the installed environment.
+
+Node and Python release lines and a new Go release line remain maintainer
+choices. Discovery requires curl and Git; `--metadata FILE` applies saved
+metadata without network access. All edits are validated and staged before any
+file is replaced, and each replacement uses an atomic rename.
+
+The weekly Dependency updates workflow runs the same script without write
+permission. When no pins change, it skips shell tooling setup and the
+repository gate; otherwise it runs the gate with the updated compiler, and a
+separate job applies only the approved files and opens or refreshes a PR from
 `automation/dependency-updates`. It never merges the PR or publishes a release.
 Because the workflow pushes with its `GITHUB_TOKEN`, each CI run for the PR
 stops at `action_required` without running any job. After every open or
@@ -114,8 +139,9 @@ access required) and wait for CI to pass before merging.
 Commits you push to the branch are never overwritten. A later run that finds
 updates fails instead until you merge the PR, or close it and delete the branch.
 
-Review the diff and CI results, merge when ready, then publish a normal patch
-release by creating the next release tag. Use `scripts/next-patch-version.sh`
-when you want the helper to calculate that patch version.
+Review upstream release notes, checksums, the diff, and CI results, merge when
+ready, then publish a normal patch release by creating the next release tag.
+Use `scripts/next-patch-version.sh` when you want the helper to calculate that
+patch version.
 
 For manual archive verification, see the [security model](SECURITY.md).

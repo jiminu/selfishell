@@ -17,3 +17,23 @@ Recommended deployment controls:
 4. Never place credentials, tokens, kubeconfigs, internal URLs, or certificate
    private keys in package configuration or this repository.
 5. Validate the environment on a clean managed image before broad rollout.
+
+## Release mirror
+
+`SELFISHELL_RELEASE_ROOT` replaces `https://github.com/jiminu/selfishell/releases`
+for the bootstrap and the installed CLI (`update`, `version --available`, and
+update notices). Set it when running `install.sh` and export it in `~/.zshrc`,
+outside the Selfishell block. Mirror each release's asset set unchanged; the
+mirror must serve:
+
+```text
+<root>/latest/download/VERSION
+<root>/download/v<version>/selfishell-<version>-<platform>-<architecture>.tar.gz
+<root>/download/v<version>/SHA256SUMS
+```
+
+Without `latest/download/VERSION`, latest-release discovery fails; pass
+`--version VERSION` to both `install.sh` and `selfishell update`. Archives are
+verified only against the mirrored `SHA256SUMS`, so verify
+[attestations](SECURITY.md) before publishing to the mirror. The variable does
+not redirect mise, Zinit, plugin, or tool downloads.
