@@ -8,7 +8,8 @@ import (
 )
 
 // installPackages follows the requirement/manager order with one operation.
-func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, dry bool) error {
+// The saved Ghostty choice is not a packages.conf record; its cask comes last.
+func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
 	selected := packagePlatform(platform)
 	groups := map[string][]string{}
 	for _, p := range packages {
@@ -56,6 +57,9 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 		if err != nil {
 			return err
 		}
+	}
+	if platform == "macos" && ghostty {
+		return o.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
 	}
 	return nil
 }

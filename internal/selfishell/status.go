@@ -95,6 +95,13 @@ func (c CLI) diagnosticHeader() {
 	fmt.Fprintf(c.Out, "[CLI] Current: %s | Rollback: %s\n", version, rollbackStatusVersion(c.Root))
 }
 
+// hasConfiguredMarker reports completed setup for diagnostics; only a regular
+// file counts, so a replaced marker path is not mistaken for setup.
+func hasConfiguredMarker(paths Paths) bool {
+	info, err := os.Stat(paths.State + "/configured")
+	return err == nil && info.Mode().IsRegular()
+}
+
 func (c CLI) status(args []string) int {
 	verbose := false
 	for _, arg := range args {
@@ -116,10 +123,9 @@ func (c CLI) status(args []string) int {
 	c.diagnosticHeader()
 	result, present, requiredMissing, optionalMissing, count, intact := 0, 0, 0, 0, 0, 0
 	changedPaths, recordIssues := false, false
-	configured := false
+	configured := hasConfiguredMarker(paths)
 	platform := DetectPlatform()
-	if info, e := os.Stat(paths.State + "/configured"); e == nil && info.Mode().IsRegular() {
-		configured = true
+	if configured {
 		c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
 		packages, e := diagnosticPackages(c.Root, platform.Name)
 		if e != nil {

@@ -301,10 +301,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	operation := &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
 	if !o.skip {
 		phaseCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
-		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, o.dry)
-		if err == nil && platform == "macos" && prepared.ghostty {
-			err = operation.InstallHomebrew(phaseCtx, "optional", "cask", o.dry, "ghostty")
-		}
+		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, prepared.ghostty, o.dry)
 		canceled := phaseCtx.Err()
 		stop()
 		if err != nil {
