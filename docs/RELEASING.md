@@ -106,6 +106,14 @@ immutable is part of the release contract.
 
 The weekly dependency workflow opens or refreshes a PR from
 `automation/dependency-updates`. It never merges the PR or publishes a release.
+Because the workflow pushes with its `GITHUB_TOKEN`, each CI run for the PR
+stops at `action_required` without running any job. After every open or
+refresh, select **Approve workflows to run** in the PR's merge box (write
+access required) and wait for CI to pass before merging.
+
+Commits you push to the branch are never overwritten. A later run that finds
+updates fails instead until you merge the PR, or close it and delete the branch.
+
 Review the diff and CI results, merge when ready, then publish a normal patch
 release by creating the next release tag. Use `scripts/next-patch-version.sh`
 when you want the helper to calculate that patch version.

@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: dependency-updates
@@ -18,12 +17,19 @@ jobs:
     name: Check approved dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Discovery, third-party tools, and the test suite never hold a write token.
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.export.outputs.changed }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up pinned Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -68,30 +74,94 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
 
-      - name: Create or refresh dependency update PR
+      - name: Export verified dependency changes
+        id: export
         if: steps.changes.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: automation/dependency-updates
         run: |
-          # Recheck after verification before committing any files.
+          # Recheck after verification; only the approved files leave this job.
           tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua go.mod mise.toml)
-          git diff --quiet -- "${tracked_files[@]}" && {
-            printf 'All approved dependencies are current.\n'
-            exit 0
-          }
           unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua' ':!go.mod' ':!mise.toml')"
           [[ -z "$unexpected" ]] || {
             printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
             exit 1
           }
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git fetch origin "$BRANCH" || true
+          if git diff --quiet -- "${tracked_files[@]}"; then
+            printf 'All approved dependencies are current.\n'
+            printf 'changed=false\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/dependency-updates"
+          git diff --binary -- "${tracked_files[@]}" >"$RUNNER_TEMP/dependency-updates/dependency-updates.patch"
+          printf 'changed=true\n' >>"$GITHUB_OUTPUT"
+
+      - name: Upload verified dependency changes
+        id: upload
+        if: steps.export.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-updates-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dependency-updates/
+          if-no-files-found: error
+
+  pull-request:
+    name: Create or refresh dependency update PR
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only this job can push; it applies the verified patch without running repository code.
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download verified dependency changes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.update.outputs.artifact_id }}
+          path: ${{ runner.temp }}/dependency-updates
+          digest-mismatch: error
+
+      - name: Create or refresh dependency update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/dependency-updates
+          PATCH: ${{ runner.temp }}/dependency-updates/dependency-updates.patch
+        run: |
+          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua go.mod mise.toml)
+          bot_name='github-actions[bot]'
+          bot_email='41898282+github-actions[bot]@users.noreply.github.com'
+          # The patch comes from a job that ran third-party code; accept only approved files.
+          git apply "$PATCH"
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua' ':!go.mod' ':!mise.toml')"
+          [[ -z "$unexpected" ]] || {
+            printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
+            exit 1
+          }
+          git config user.name "$bot_name"
+          git config user.email "$bot_email"
+          # An empty lease requires the branch to be absent, so a failed fetch cannot overwrite it.
+          remote_sha=''
+          if git fetch origin "refs/heads/$BRANCH"; then
+            remote_sha="$(git rev-parse FETCH_HEAD)"
+            authors="$(git log --format='%h %an <%ae>' "origin/main..$remote_sha")"
+            foreign="$(grep -vF " $bot_name <$bot_email>" <<<"$authors" || true)"
+            [[ -z "$foreign" ]] || {
+              printf '%s has commits not authored by %s:\n%s\n' "$BRANCH" "$bot_name" "$foreign" >&2
+              printf 'Refusing to overwrite them. Merge the dependency update PR, or close it and delete the branch, then rerun this workflow.\n' >&2
+              exit 1
+            }
+          fi
           git checkout -B "$BRANCH"
           git add "${tracked_files[@]}"
           git commit -m 'Update approved dependencies'
-          git push --force-with-lease origin "HEAD:$BRANCH"
+          git push --force-with-lease="refs/heads/$BRANCH:$remote_sha" origin "HEAD:refs/heads/$BRANCH"
           open_pr_count="$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')"
           if [[ "$open_pr_count" == "0" ]]; then
             gh pr create \
