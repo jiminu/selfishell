@@ -1,9 +1,9 @@
 # Architecture
 
-The installed `selfishell` command is a native Go executable with all eight
-public commands: `help`, `version`, `doctor`, `install`, `status`, `update`,
-`rollback`, and `uninstall`. `sfs` is an optional link. The standalone Bash 3.2
-bootstrap transports a verified archive; native Zsh and editor configuration
+The installed `selfishell` command is a native Go executable with all seven
+public commands: `help`, `version`, `install`, `status`, `update`, `rollback`,
+and `uninstall`; `doctor` is a hidden alias of `status`. `sfs` is an optional
+link. The standalone Bash 3.2 bootstrap transports a verified archive; native Zsh and editor configuration
 continue to run in their own languages. Users do not need Go. Package
 membership and pins live in
 `packages.conf`, `dependencies.conf`, and `config/shared/mise.toml`.

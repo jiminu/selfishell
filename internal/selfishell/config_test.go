@@ -103,7 +103,7 @@ func TestInvalidPackageNameHasUsageStatusAtPublicConsumers(t *testing.T) {
 			t.Fatal(err)
 		}
 		isolateHome(t, home)
-		for _, args := range [][]string{{"install", "--yes"}, {"update", "--tools-only", "--skip-packages", "--dry-run"}, {"status"}, {"doctor"}} {
+		for _, args := range [][]string{{"install", "--yes"}, {"update", "--tools-only", "--skip-packages", "--dry-run"}, {"status"}} {
 			var out, stderr bytes.Buffer
 			code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run(args)
 			diagnostic := stderr.String()

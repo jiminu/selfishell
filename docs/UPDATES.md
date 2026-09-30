@@ -179,8 +179,9 @@ maintainer workflow.
 
 ## Status and update notices
 
-`selfishell status` reports local CLI, rollback, tool, and managed-resource state
-without checking the network or available Apt/Homebrew updates. Use
+`selfishell status` reports local CLI, rollback, system, tool, Zsh plugin, and
+managed-resource state without checking the network or available Apt/Homebrew
+updates. Use
 `selfishell version --available` to check the latest release.
 
 Interactive Zsh checks once before the first prompt, reads the installed

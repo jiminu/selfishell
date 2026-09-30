@@ -103,21 +103,21 @@ func TestPrebuiltSmokeRejectsWrongCPUAndPayload(t *testing.T) {
 	}
 }
 
-func TestMinimalSmokeDoctorRequiresMissingMiseDiagnosis(t *testing.T) {
+func TestMinimalSmokeStatusRequiresMissingMiseDiagnosis(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		got    capture
 		reject bool
 	}{
-		{"unexpected success", capture{Status: 0, Stdout: []byte("Selfishell doctor\n[OK] Tool: mise detected\n")}, true},
-		{"missing diagnosis", capture{Status: 1, Stdout: []byte("Selfishell doctor\n")}, true},
-		{"expected missing mise", capture{Status: 1, Stdout: []byte("Selfishell doctor\n[ERROR] Tool: mise is missing (direct)\n")}, false},
+		{"unexpected success", capture{Status: 0, Stdout: []byte("Selfishell status\n[OK] Tool: mise detected\n")}, true},
+		{"missing diagnosis", capture{Status: 1, Stdout: []byte("Selfishell status\n")}, true},
+		{"expected missing mise", capture{Status: 1, Stdout: []byte("Selfishell status\n[ERROR] Tool: mise is missing (direct)\n")}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := minimalDoctorDiagnosis(tc.got)
+			err := minimalStatusDiagnosis(tc.got)
 			if (err != nil) != tc.reject {
-				t.Fatalf("doctor diagnosis error %v, reject want %t", err, tc.reject)
+				t.Fatalf("status diagnosis error %v, reject want %t", err, tc.reject)
 			}
 		})
 	}

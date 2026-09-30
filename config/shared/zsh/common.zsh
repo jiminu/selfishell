@@ -40,7 +40,7 @@ _selfishell_command_path() {
 }
 
 # Startup never downloads a plugin, so require a complete checkout: a partial
-# clone then stays quiet instead of failing Zinit. `doctor` reports it.
+# clone then stays quiet instead of failing Zinit. `status` reports it.
 _selfishell_zinit_plugin_ready() {
   local repository="$1"
   [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1

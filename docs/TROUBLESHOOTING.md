@@ -11,27 +11,26 @@ export PATH="$HOME/.local/bin:$PATH"
 ## Platform or Dependency Diagnosis
 
 ```sh
-selfishell doctor
 selfishell status
 ```
 
-`status` and `doctor` summarize healthy groups and list missing tools or other
-problems individually. Use `selfishell status --verbose` for every managed path
-and each tool's installed version, source, and approved version. Use
-`selfishell doctor --verbose` for individual system checks and installed tools.
-
-Both commands start with the current CLI and rollback versions. `status` checks
-managed configuration integrity and tool installation. `doctor` checks platform,
-architecture, package manager, compiler availability, installed tools, and Zsh
-plugin checkouts. Use `status` to inspect configuration changes and `doctor` to
-diagnose environment prerequisites and plugin problems.
+`status` starts with the current CLI and rollback versions, then checks the
+platform, architecture, package manager, C compiler, managed configuration
+integrity, installed tools, and Zsh plugin checkouts. Each healthy group is
+summarized in one line; problems are listed individually. Before setup, it
+checks only the platform, architecture, and package manager. Use
+`selfishell status --verbose` for every system check and managed path, and each
+tool's installed version, source, and approved version. `selfishell doctor`
+remains an alias of `status`.
 
 A tool's source is `selfishell`, `mise`, `homebrew`, `homebrew-cask`, `apt`,
 `external` (found, but installed some other way), or `none` when the tool is
 missing. Package-manager versions are reported without an exact approved
 version because those repositories control resolution. `status` returns
-nonzero when required tools are missing or managed configuration is missing or
-changed. Optional missing tools remain informational, including in the summary.
+nonzero when a system check fails, required tools are missing, a Zsh plugin
+checkout is missing, modified, or at an unapproved revision, or managed
+configuration is not installed, missing, or changed. Optional missing tools
+remain informational, including in the summary.
 Problem groups include a next step, and paths beneath the current home
 directory use `~`.
 
