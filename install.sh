@@ -168,6 +168,15 @@ bootstrap_curl() {
   curl -fsSL "${arguments[@]}" "$@"
 }
 
+# A retry truncates an output file but would append to a partial response on stdout.
+bootstrap_metadata() {
+  local output="$SELFISHELL_TEMP_DIR/metadata"
+
+  rm -f "$output"
+  bootstrap_curl metadata "$@" -o "$output" || return
+  [[ ! -f "$output" ]] || cat "$output"
+}
+
 # Earlier lines may belong to attempts a retry already replaced.
 bootstrap_curl_error() {
   awk 'NF { line = $0 } END { if (line != "") print line }' "$1" 2>/dev/null || true
@@ -194,7 +203,7 @@ bootstrap_latest_version() {
   local official_root="https://github.com/jiminu/selfishell/releases"
   local api_url response version published_version
 
-  if version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>>"$error_file")"; then
+  if version="$(bootstrap_metadata "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>>"$error_file")"; then
     version="${version#v}"
     [[ -n "$version" ]] && {
       printf '%s\n' "$version"
@@ -204,14 +213,14 @@ bootstrap_latest_version() {
 
   [[ "$SELFISHELL_RELEASE_ROOT" == "$official_root" || -n "${SELFISHELL_RELEASE_TAGS_API_URL:-}" ]] || return 1
   api_url="${SELFISHELL_RELEASE_TAGS_API_URL:-https://api.github.com/repos/jiminu/selfishell/tags?per_page=1}"
-  response="$(bootstrap_curl metadata \
+  response="$(bootstrap_metadata \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
     "$api_url" 2>>"$error_file")" || return 1
   version="$(printf '%s\n' "$response" | sed -n \
     -e 's/.*"name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
   [[ -n "$version" ]] || return 1
-  published_version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>>"$error_file")" || return 1
+  published_version="$(bootstrap_metadata "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>>"$error_file")" || return 1
   published_version="${published_version#v}"
   [[ "$published_version" == "$version" ]] || return 1
   printf '%s\n' "$version"

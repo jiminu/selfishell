@@ -294,6 +294,33 @@ func TestCurl(t *testing.T) {
 	}
 }
 
+// A retry after a partial response must replace it, not append to it.
+func TestCurlRetryReplacesPartialResponse(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	for _, name := range []string{"http_proxy", "HTTP_PROXY", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("SELFISHELL_CURL_METADATA_MAX_TIME", "1")
+	body := "1.4.1\n"
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		if requests.Add(1) == 1 {
+			io.WriteString(w, body[:3])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		io.WriteString(w, body)
+	}))
+	defer server.Close()
+	var out bytes.Buffer
+	code, err := (Process{Out: &out, Err: io.Discard}).Curl(context.Background(), "metadata", server.URL+"/VERSION")
+	if code != 0 || err != nil || out.String() != body || requests.Load() != 2 {
+		t.Fatalf("code=%d err=%v out=%q requests=%d", code, err, out.String(), requests.Load())
+	}
+}
+
 func TestCurlUsesProxy(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	requested := make(chan string, 1)

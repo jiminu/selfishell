@@ -413,7 +413,7 @@ func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
 	}
 	f.op.brewLocations = []string{standard}
 	f.op.Process.Env = append(f.op.Process.Env, "BREW_TARGET="+standard)
-	f.executable("curl", `printf 'curl %s\n' "$*" >>"$HOME/calls"; printf '/bin/cp "$HOME/seed-brew" "$BREW_TARGET"\n'`)
+	f.executable("curl", `printf 'curl %s\n' "$*" >>"$HOME/calls"; for out; do :; done; printf '/bin/cp "$HOME/seed-brew" "$BREW_TARGET"\n' >"$out"`)
 	if err := f.op.InstallHomebrew(context.Background(), "required", "formula", false, "needed"); err != nil {
 		t.Fatal(err)
 	}

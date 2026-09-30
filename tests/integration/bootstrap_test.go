@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -180,18 +181,18 @@ type releaseServer struct {
 }
 
 // serveHTTP serves the fixture's release root through real curl, answering the
-// first request for unavailableOnce with 503.
-func (f *bootstrapFixture) serveHTTP(t *testing.T, unavailableOnce string) *releaseServer {
+// first request for once with interrupt.
+func (f *bootstrapFixture) serveHTTP(t *testing.T, once string, interrupt http.HandlerFunc) *releaseServer {
 	t.Helper()
 	s := &releaseServer{}
 	files := http.FileServer(http.Dir(f.remote))
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
-		first := r.URL.Path == unavailableOnce && !slices.Contains(s.requests, r.URL.Path)
+		first := r.URL.Path == once && !slices.Contains(s.requests, r.URL.Path)
 		s.requests = append(s.requests, r.URL.Path)
 		s.mu.Unlock()
 		if first {
-			http.Error(w, "busy", http.StatusServiceUnavailable)
+			interrupt(w, r)
 			return
 		}
 		files.ServeHTTP(w, r)
@@ -200,6 +201,23 @@ func (f *bootstrapFixture) serveHTTP(t *testing.T, unavailableOnce string) *rele
 	s.url = server.URL
 	f.env = append(f.env, "SELFISHELL_RELEASE_ROOT="+s.url)
 	return s
+}
+
+func unavailable(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "busy", http.StatusServiceUnavailable)
+}
+
+// stall sends half of the file, then waits for curl to time out.
+func (f *bootstrapFixture) stall(w http.ResponseWriter, r *http.Request) {
+	body, err := os.ReadFile(filepath.Join(f.remote, filepath.FromSlash(r.URL.Path)))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.Write(body[:len(body)/2])
+	w.(http.Flusher).Flush()
+	<-r.Context().Done()
 }
 
 func (s *releaseServer) paths() []string {
@@ -369,7 +387,7 @@ func TestNativeBootstrapDownloadErrors(t *testing.T) {
 	t.Run("transient failure retried", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		archive := "/download/v" + nativeArchiveVersion + "/" + hostArchive(nativeArchiveVersion)
-		server := f.serveHTTP(t, archive)
+		server := f.serveHTTP(t, archive, unavailable)
 		got := f.run(t, "--version", nativeArchiveVersion)
 		requireOK(t, got)
 		if n := len(slices.DeleteFunc(server.paths(), func(p string) bool { return p != archive })); n != 2 {
@@ -380,10 +398,22 @@ func TestNativeBootstrapDownloadErrors(t *testing.T) {
 		}
 		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
 	})
+	t.Run("partial metadata retried", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		f.latest(t, nativeArchiveVersion)
+		const version = "/latest/download/VERSION"
+		server := f.serveHTTP(t, version, f.stall)
+		f.env = append(f.env, "SELFISHELL_CURL_METADATA_MAX_TIME=1")
+		requireOK(t, f.run(t))
+		if n := len(slices.DeleteFunc(server.paths(), func(p string) bool { return p != version })); n != 2 {
+			t.Fatalf("VERSION requested %d times: %v", n, server.paths())
+		}
+		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
+	})
 	t.Run("explicit version not found", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		f.latest(t, nativeArchiveVersion)
-		server := f.serveHTTP(t, "")
+		server := f.serveHTTP(t, "", nil)
 		got := f.run(t, "--version", "9.9.9")
 		requireExit(t, got, 1)
 		url := server.url + "/download/v9.9.9/" + hostArchive("9.9.9")

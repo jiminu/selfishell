@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -232,5 +233,26 @@ func (p Process) Curl(ctx context.Context, mode string, args ...string) (int, er
 	default:
 		return 2, fmt.Errorf("Unknown Selfishell curl mode: %s", mode)
 	}
-	return p.Run(ctx, "curl", append(policy, args...)...)
+	policy = append(policy, args...)
+	if slices.Contains(args, "-o") || slices.Contains(args, "--output") {
+		return p.Run(ctx, "curl", policy...)
+	}
+	// A retry truncates an output file but would append to a partial response
+	// already written to Out, so stage the response and copy it on success.
+	file, err := os.CreateTemp("", "selfishell-curl.")
+	if err != nil {
+		return 1, err
+	}
+	defer os.Remove(file.Name())
+	defer file.Close()
+	staged := p
+	staged.Out = io.Discard
+	code, err := staged.Run(ctx, "curl", append(policy, "-o", file.Name())...)
+	if err != nil || code != 0 || p.Out == nil {
+		return code, err
+	}
+	if _, err := io.Copy(p.Out, file); err != nil {
+		return 1, err
+	}
+	return 0, nil
 }
