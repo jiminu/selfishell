@@ -30,10 +30,12 @@ The canonical command is `selfishell`; `sfs` is an optional convenience
 symlink. Do not introduce `sf`, and use `selfishell` in documentation,
 automation, and errors.
 
-Supported commands are `help`, `version`, `doctor`, `install`, `status`,
-`update`, `rollback`, and `uninstall`. Keep their responsibilities narrow:
+Supported commands are `help`, `version`, `install`, `status`, `update`,
+`rollback`, and `uninstall`. Keep their responsibilities narrow:
 
 - the bootstrap installs only the CLI unless `--setup` is explicit;
+- `status` is the single read-only diagnosis (system, configuration, tools,
+  Zsh plugins); `doctor` stays a hidden alias, not a separate check;
 - `selfishell install` explicitly installs the development environment and configuration;
 - `update --cli-only` and `update --tools-only` keep release and environment
   updates separable;
@@ -131,7 +133,7 @@ Behavior below is described for users in `docs/UPDATES.md`.
 
 - Installer-owned mise operations run from the release's `config/shared`
   directory so a caller's project cannot override approved tool versions.
-- Status and doctor query installed versions, not configured requests; an
+- Status queries installed versions, not configured requests; an
   orphaned mise shim is not an external installation. After completed setup,
   status reports missing records for the current platform's required resources
   (respecting the Ghostty choice) and still inspects every tracked record,

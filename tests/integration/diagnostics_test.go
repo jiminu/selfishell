@@ -22,6 +22,9 @@ func TestDiagnostics(t *testing.T) {
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.2.3\n"), 0600))
 	tools := fixtureTools(t, root)
+	manager := filepath.Join(root, "manager")
+	mustFS(t, os.MkdirAll(manager, 0700))
+	mustFS(t, os.WriteFile(filepath.Join(manager, "apt-get"), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
@@ -33,10 +36,10 @@ func TestDiagnostics(t *testing.T) {
 	}{
 		{"status-empty", "status", 1, nil},
 		{"status-help", "status", 0, nil},
-		{"doctor-unconfigured", "doctor", 1, nil},
-		{"doctor-unsupported", "doctor", 1, nil},
-		{"doctor-unsupported-architecture", "doctor", 1, nil},
-		{"doctor-ubuntu-wsl", "doctor", 1, nil},
+		{"status-missing-package-manager", "status", 1, nil},
+		{"status-unsupported", "status", 1, nil},
+		{"status-unsupported-architecture", "status", 1, nil},
+		{"status-ubuntu-wsl", "status", 1, nil},
 		{"status-ghostty-user-override", "status", 0, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
@@ -113,20 +116,24 @@ func TestDiagnostics(t *testing.T) {
 				tc.setup(home)
 			}
 			arch := "x86_64"
-			if tc.name == "doctor-unsupported-architecture" {
+			if tc.name == "status-unsupported-architecture" {
 				arch = "mips64"
 			}
-			if tc.name == "doctor-ubuntu-wsl" {
+			if tc.name == "status-ubuntu-wsl" {
 				mustFS(t, os.WriteFile(proc, []byte("Linux microsoft WSL2\n"), 0600))
 			} else {
 				mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
 			}
-			env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=" + arch, "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
+			path := tools + ":" + manager
+			if tc.name == "status-missing-package-manager" {
+				path = tools
+			}
+			env := []string{"PATH=" + path, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=" + arch, "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 			args := []string{tc.command}
 			if tc.name == "status-help" {
 				args = append(args, "--help")
 			}
-			if tc.name == "doctor-unsupported" {
+			if tc.name == "status-unsupported" {
 				mustFS(t, os.WriteFile(osRelease, []byte("ID=fedora\n"), 0600))
 			} else {
 				mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
@@ -143,10 +150,10 @@ func TestDiagnostics(t *testing.T) {
 			expected := map[string]string{
 				"status-empty":                                 "Selfishell configuration is not installed.",
 				"status-help":                                  "Usage: selfishell status [--verbose]",
-				"doctor-unconfigured":                          "[ERROR] System: Ubuntu",
-				"doctor-unsupported":                           "[ERROR] Platform: Unsupported Linux distribution",
-				"doctor-unsupported-architecture":              "[ERROR] Architecture: mips64",
-				"doctor-ubuntu-wsl":                            "[ERROR] System: Ubuntu on WSL",
+				"status-missing-package-manager":               "[ERROR] System: Ubuntu",
+				"status-unsupported":                           "[ERROR] Platform: Unsupported Linux distribution",
+				"status-unsupported-architecture":              "[ERROR] Architecture: mips64",
+				"status-ubuntu-wsl":                            "[OK] System: Ubuntu on WSL",
 				"status-ghostty-user-override":                 "[OK] Configuration: 1 paths intact",
 				"status-pending":                               "[PENDING] ~/vimrc",
 				"status-changed-file":                          "[CHANGED] ~/vimrc",
@@ -196,7 +203,7 @@ func TestConfiguredDiagnostics(t *testing.T) {
 		args   []string
 		status int
 	}{
-		{"status", []string{"status"}, 0}, {"status-verbose", []string{"status", "--verbose"}, 0}, {"doctor", []string{"doctor"}, 0}, {"doctor-verbose", []string{"doctor", "--verbose"}, 0},
+		{"status", []string{"status"}, 0}, {"status-verbose", []string{"status", "--verbose"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := filepath.Join(root, "home")
@@ -224,28 +231,17 @@ func TestConfiguredDiagnostics(t *testing.T) {
 			if !bytes.HasPrefix(got.Stdout, []byte("[CLI] Current: 2.0.0 | Rollback: none\n[INFO] Selfishell configuration is installed.\n")) {
 				t.Fatalf("inconsistent diagnostic header: %s", got.Stdout)
 			}
-			if strings.HasPrefix(tc.name, "doctor") {
-				requireContains(t, got.Stdout, "Optional tool: optional is not installed")
-				requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
-				if tc.name == "doctor-verbose" {
-					requireContains(t, got.Stdout, "[OK] Tool: git 2.0")
-					requireContains(t, got.Stdout, "[OK] C compiler:")
-				} else if bytes.Contains(got.Stdout, []byte("[OK] Tool: git")) || bytes.Contains(got.Stdout, []byte("[OK] C compiler:")) {
-					t.Fatalf("healthy details were not collapsed: %s", got.Stdout)
-				}
-			} else {
-				requireContains(t, got.Stdout, "Configuration: 31 paths intact")
-				requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
-				if tc.name == "status-verbose" {
-					requireContains(t, got.Stdout, "[OK] ~/link")
-					requireContains(t, got.Stdout, "[TOOL] git | Installed: 2.0")
-					requireContains(t, got.Stdout, "[TOOL] optional | Installed: missing")
-				} else {
-					requireContains(t, got.Stdout, "Optional tool: optional is not installed")
-					if bytes.Contains(got.Stdout, []byte("[OK] ~/link")) {
-						t.Fatalf("healthy path was not collapsed: %s", got.Stdout)
-					}
-				}
+			requireContains(t, got.Stdout, "[OK] System: Ubuntu (amd64), 4 checks passed")
+			requireContains(t, got.Stdout, "Configuration: 31 paths intact")
+			requireContains(t, got.Stdout, "Optional tool: optional is not installed")
+			requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
+			if tc.name == "status-verbose" {
+				requireContains(t, got.Stdout, "[OK] C compiler:")
+				requireContains(t, got.Stdout, "[OK] ~/link")
+				requireContains(t, got.Stdout, "[TOOL] git | Installed: 2.0")
+				requireContains(t, got.Stdout, "[TOOL] optional | Installed: missing")
+			} else if bytes.Contains(got.Stdout, []byte("[OK] C compiler:")) || bytes.Contains(got.Stdout, []byte("[OK] ~/link")) || bytes.Contains(got.Stdout, []byte("[TOOL]")) {
+				t.Fatalf("healthy details were not collapsed: %s", got.Stdout)
 			}
 			if !bytes.Equal(before, got.Home) {
 				t.Fatal("CLI mutated HOME")
@@ -254,7 +250,7 @@ func TestConfiguredDiagnostics(t *testing.T) {
 	}
 }
 
-func TestDoctorPlugins(t *testing.T) {
+func TestStatusPlugins(t *testing.T) {
 	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
@@ -292,8 +288,10 @@ func TestDoctorPlugins(t *testing.T) {
 			home := filepath.Join(root, "home")
 			mustFS(t, os.RemoveAll(home))
 			mustFS(t, os.MkdirAll(home, 0700))
+			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
+			mustFS(t, e)
+			requireStatus(t, "configuration fixture", setup, 0)
 			state := filepath.Join(home, ".local/state/selfishell")
-			mustFS(t, os.MkdirAll(state, 0700))
 			mustFS(t, os.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
 			zinit := filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh")
 			mustFS(t, os.MkdirAll(filepath.Dir(zinit), 0700))
@@ -353,7 +351,7 @@ func TestDoctorPlugins(t *testing.T) {
 			mustFS(t, os.WriteFile(trace, nil, 0600))
 			diagnosticEnv := append(append([]string{}, env...), "GIT_TRACE="+trace, "GIT_DIR="+root+"/foreign", "GIT_WORK_TREE="+root+"/foreign")
 			before := mustSnapshot(t, home)
-			got, e := captureCommand(home, entry, []string{"doctor"}, diagnosticEnv)
+			got, e := captureCommand(home, entry, []string{"status"}, diagnosticEnv)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -412,6 +410,11 @@ func TestStatusGhosttyChoice(t *testing.T) {
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	osRelease, proc := filepath.Join(root, "os-release"), filepath.Join(root, "proc-version")
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	tools := filepath.Join(root, "system-tools")
+	mustFS(t, os.MkdirAll(tools, 0700))
+	for _, name := range []string{"apt-get", "brew", "xcode-select", "gcc"} {
+		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
+	}
 	for _, tc := range []struct {
 		platform, choice string
 		tracked, wantErr bool
@@ -448,7 +451,7 @@ func TestStatusGhosttyChoice(t *testing.T) {
 				procVersion = "Linux microsoft WSL2\n"
 			}
 			mustFS(t, os.WriteFile(proc, []byte(procVersion), 0600))
-			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_MACHINE_ARCH=arm64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
+			env := []string{"PATH=" + tools + ":/usr/bin:/bin:/usr/sbin:/sbin", "SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_MACHINE_ARCH=arm64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
 			if e != nil {
 				t.Fatal(e)
@@ -543,36 +546,36 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 		{name: "TERM=dumb", term: "dumb"},
 		{name: "redirect", term: "xterm", redirect: true},
 	} {
-		for _, command := range []string{"status", "doctor"} {
-			t.Run(command+"/"+tc.name, func(t *testing.T) {
-				env := []string{"NO_COLOR=" + tc.noColor, "CI=" + tc.ci, "TERM=" + tc.term, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-				captureOutput := capturePTYOutput
-				if tc.redirect {
-					captureOutput = captureCommand
-				}
-				got, e := captureOutput(home, entry, []string{command}, env)
-				if e != nil {
-					t.Fatal(e)
-				}
-				requireStatus(t, "CLI", got, 1)
-				marker, hint := "[CHANGED]", "selfishell update --tools-only --skip-packages"
-				color := "33"
-				if command == "doctor" {
-					marker, hint, color = "[ERROR]", "selfishell install", "31"
-				}
-				requireContains(t, got.Stdout, marker)
-				requireContains(t, got.Stdout, hint)
+		t.Run(tc.name, func(t *testing.T) {
+			env := []string{"NO_COLOR=" + tc.noColor, "CI=" + tc.ci, "TERM=" + tc.term, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+			captureOutput := capturePTYOutput
+			if tc.redirect {
+				captureOutput = captureCommand
+			}
+			got, e := captureOutput(home, entry, []string{"status"}, env)
+			if e != nil {
+				t.Fatal(e)
+			}
+			requireStatus(t, "CLI", got, 1)
+			// brew is outside PATH, so the system check fails alongside the changed link.
+			for _, want := range []struct{ marker, hint, color string }{
+				{"[CHANGED]", "selfishell update --tools-only --skip-packages", "33"},
+				{"[ERROR]", "selfishell install", "31"},
+			} {
+				requireContains(t, got.Stdout, want.marker)
+				requireContains(t, got.Stdout, want.hint)
 				if tc.color {
-					requireContains(t, got.Stdout, "\x1b["+color+"m"+marker+"\x1b[0m")
-					requireContains(t, got.Stdout, "\x1b[1m"+hint+"\x1b[0m")
-				} else if bytes.Contains(got.Stdout, []byte("\x1b")) || bytes.Contains(got.Stderr, []byte("\x1b")) {
-					t.Fatalf("unexpected ANSI: stdout=%q stderr=%q", got.Stdout, got.Stderr)
+					requireContains(t, got.Stdout, "\x1b["+want.color+"m"+want.marker+"\x1b[0m")
+					requireContains(t, got.Stdout, "\x1b[1m"+want.hint+"\x1b[0m")
 				}
-				if !bytes.Equal(before, got.Home) {
-					t.Fatal("CLI mutated HOME")
-				}
-			})
-		}
+			}
+			if !tc.color && (bytes.Contains(got.Stdout, []byte("\x1b")) || bytes.Contains(got.Stderr, []byte("\x1b"))) {
+				t.Fatalf("unexpected ANSI: stdout=%q stderr=%q", got.Stdout, got.Stderr)
+			}
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("CLI mutated HOME")
+			}
+		})
 	}
 }
 
@@ -617,21 +620,19 @@ func TestStatusRollbackMetadata(t *testing.T) {
 			}
 			retained := mustSnapshot(t, share)
 			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			for _, command := range []string{"status", "doctor"} {
-				got, e := captureCommand(home, entry, []string{command}, env)
-				if e != nil {
-					t.Fatal(e)
-				}
-				requireStatus(t, command, got, 1)
-				if !bytes.Contains(got.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
-					t.Fatalf("%s rollback: %q", command, got.Stdout)
-				}
-				if !bytes.Equal(before, got.Home) {
-					t.Fatalf("%s mutated HOME", command)
-				}
-				if !bytes.Equal(retained, mustSnapshot(t, share)) {
-					t.Fatalf("%s changed retained releases", command)
-				}
+			got, e := captureCommand(home, entry, []string{"status"}, env)
+			if e != nil {
+				t.Fatal(e)
+			}
+			requireStatus(t, "status", got, 1)
+			if !bytes.Contains(got.Stdout, []byte("Rollback: "+tc.expected+"\n")) {
+				t.Fatalf("status rollback: %q", got.Stdout)
+			}
+			if !bytes.Equal(before, got.Home) {
+				t.Fatal("status mutated HOME")
+			}
+			if !bytes.Equal(retained, mustSnapshot(t, share)) {
+				t.Fatal("status changed retained releases")
 			}
 		})
 	}
@@ -654,25 +655,23 @@ func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
 	mustFS(t, os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700))
 	mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
 	before := mustSnapshot(t, home)
-	for _, command := range []string{"status", "doctor"} {
-		got, e := captureCommand(home, filepath.Join(release, "bin/selfishell"), []string{command}, []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"})
-		if e != nil {
-			t.Fatal(e)
-		}
-		requireStatus(t, command, got, 1)
-		if !bytes.Contains(got.Stderr, []byte("invalid manifest record")) {
-			t.Fatalf("%s accepted malformed dependency: %s", command, got.Stderr)
-		}
-		if !bytes.Equal(before, got.Home) {
-			t.Fatalf("%s mutated HOME", command)
-		}
-		if _, e := os.Lstat(injected); e == nil {
-			t.Fatalf("%s executed dependency text", command)
-		}
+	got, e := captureCommand(home, filepath.Join(release, "bin/selfishell"), []string{"status"}, []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	requireStatus(t, "status", got, 1)
+	if !bytes.Contains(got.Stderr, []byte("invalid manifest record")) {
+		t.Fatalf("status accepted malformed dependency: %s", got.Stderr)
+	}
+	if !bytes.Equal(before, got.Home) {
+		t.Fatal("status mutated HOME")
+	}
+	if _, e := os.Lstat(injected); e == nil {
+		t.Fatal("status executed dependency text")
 	}
 }
 
-func TestDoctorXcodeStub(t *testing.T) {
+func TestStatusXcodeStub(t *testing.T) {
 	t.Parallel()
 	cli, err := testCLI(t)
 	if err != nil {
@@ -713,11 +712,14 @@ func TestDoctorXcodeStub(t *testing.T) {
 				}
 			}
 			home := filepath.Join(root, "home")
-			mustFS(t, os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700))
+			mustFS(t, os.MkdirAll(home, 0700))
+			env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64"}
+			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
+			mustFS(t, e)
+			requireStatus(t, "configuration fixture", setup, 0)
 			mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
 			before := mustSnapshot(t, home)
-			env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64"}
-			got, e := captureCommand(home, entry, []string{"doctor", "--verbose"}, env)
+			got, e := captureCommand(home, entry, []string{"status", "--verbose"}, env)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -770,7 +772,7 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 	for _, tc := range []struct {
 		command string
 		status  int
-	}{{"status", 1}, {"doctor", 1}} {
+	}{{"status", 1}} {
 		t.Run(tc.command, func(t *testing.T) {
 			got, e := captureCommand(home, entry, []string{tc.command}, env)
 			if e != nil {
@@ -799,6 +801,9 @@ func TestStatusInstalledResource(t *testing.T) {
 	entry := filepath.Join(release, "bin/selfishell")
 	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
+	for _, name := range []string{"apt-get", "gcc"} {
+		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
+	}
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
 	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))

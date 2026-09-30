@@ -22,7 +22,6 @@ Then install the development environment and verify it:
 ```bash
 selfishell install
 exec zsh
-selfishell doctor
 selfishell status
 ```
 
@@ -54,14 +53,14 @@ and the Neovim workflow.
 
 | Command | Use it to |
 | --- | --- |
-| `selfishell status` | Summarize tools and managed resources, list problems, and show CLI/rollback version. |
-| `selfishell doctor` | Summarize system and tool checks, listing problems individually. |
+| `selfishell status` | Check the system, tools, Zsh plugins, and managed configuration; list problems with next steps. |
 | `selfishell version --available` | Check the latest published release. |
 | `selfishell update` | Update the CLI, tools, and configuration. |
 | `selfishell rollback` | Return to the previous retained release offline. |
 | `selfishell uninstall --restore --dry-run` | Preview restoring backed-up configuration. |
 
-Add `--verbose` to `status` or `doctor` to include every healthy item.
+Add `--verbose` to `status` to include every healthy item. `selfishell doctor`
+remains an alias of `status`.
 
 `sfs` is the optional short alias for `selfishell`; an existing `sfs` from
 another program is left in place. See

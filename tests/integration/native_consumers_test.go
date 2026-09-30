@@ -253,7 +253,6 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 	requireOK(t, fullUbuntuCommand(t, f, f.home, 45*time.Second, "/bin/bash", repoRoot()+"/install.sh", "--prefix", f.prefix, "--version", initial))
 	requireOK(t, fullUbuntuCommand(t, f, project, 35*time.Minute, f.cli, "install", "--yes"))
 	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "status"))
-	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "doctor"))
 	deps := strings.Split(string(readBytes(t, filepath.Join(f.share, "current/dependencies.conf"))), "\n")
 	heads := map[string]bool{}
 	directories := map[string]os.FileInfo{}
@@ -318,12 +317,12 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 		}
 	})
 	f.env = append(f.env, "PATH="+f.home+"/.local/share/mise/shims:"+f.prefix+"/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
-	doctor := fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "doctor")
-	if doctor.Status == 0 || !bytes.Contains(append(doctor.Stdout, doctor.Stderr...), []byte("Tool: starship is missing (mise)")) {
-		t.Fatalf("orphan starship accepted: %d %s %s", doctor.Status, doctor.Stdout, doctor.Stderr)
+	orphan := fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "status")
+	if orphan.Status == 0 || !bytes.Contains(append(orphan.Stdout, orphan.Stderr...), []byte("Tool: starship is missing (mise)")) {
+		t.Fatalf("orphan starship accepted: %d %s %s", orphan.Status, orphan.Stdout, orphan.Stderr)
 	}
 	mustFS(t, os.Rename(moved, starship))
-	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "doctor"))
+	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "status"))
 	requireOK(t, fullUbuntuCommand(t, f, project, 45*time.Second, f.cli, "update", "--cli-only", "--version", next, "--yes"))
 	requireLink(t, filepath.Join(f.share, "current"), "releases/"+next)
 	requireLink(t, filepath.Join(f.share, "previous"), "releases/"+initial)

@@ -121,41 +121,22 @@ func (c CLI) status(args []string) int {
 		return c.diagnosticError(err)
 	}
 	c.diagnosticHeader()
-	result, present, requiredMissing, optionalMissing, count, intact := 0, 0, 0, 0, 0, 0
+	count, intact := 0, 0
 	changedPaths, recordIssues := false, false
 	configured := hasConfiguredMarker(paths)
 	platform := DetectPlatform()
+	var packages []Package
+	var inventory *ToolInventory
 	if configured {
 		c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
-		packages, e := diagnosticPackages(c.Root, platform.Name)
-		if e != nil {
-			return c.diagnosticError(e)
+		if packages, err = diagnosticPackages(c.Root, platform.Name); err != nil {
+			return c.diagnosticError(err)
 		}
-		inventory, e := NewToolInventory(c.Root, paths, c.Err)
-		if e != nil {
-			return c.diagnosticError(e)
-		}
-		for _, p := range packages {
-			tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
-			if e != nil {
-				return c.diagnosticError(e)
-			}
-			if tool.Installed == "missing" {
-				c.missingTool(p)
-				if p.Requirement == "required" {
-					requiredMissing++
-					result = 1
-				} else {
-					optionalMissing++
-				}
-			} else {
-				present++
-			}
-			if verbose {
-				fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, tool.Installed, tool.Source, tool.Approved)
-			}
+		if inventory, err = NewToolInventory(c.Root, paths, c.Err); err != nil {
+			return c.diagnosticError(err)
 		}
 	}
+	result := c.statusSystem(platform, configured, verbose)
 	resources, err := ManagedResources(c.Root)
 	if err != nil {
 		return c.diagnosticError(err)
@@ -293,9 +274,44 @@ func (c CLI) status(args []string) int {
 		c.diagnosticHint("Review changed configuration before synchronizing with:", "selfishell update --tools-only --skip-packages")
 	}
 	if configured {
-		c.toolsSummary(present, requiredMissing, optionalMissing)
+		missing, e := c.statusTools(packages, inventory, platform, verbose)
+		if e != nil {
+			return c.diagnosticError(e)
+		}
+		if missing {
+			result = 1
+		}
+		if c.statusPlugins(inventory.dependencies) {
+			result = 1
+		}
 	}
 	return result
+}
+
+// statusTools reports whether a required tool is missing.
+func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform Platform, verbose bool) (bool, error) {
+	present, requiredMissing, optionalMissing := 0, 0, 0
+	for _, p := range packages {
+		tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
+		if e != nil {
+			return false, e
+		}
+		if tool.Installed == "missing" {
+			c.missingTool(p)
+			if p.Requirement == "required" {
+				requiredMissing++
+			} else {
+				optionalMissing++
+			}
+		} else {
+			present++
+		}
+		if verbose {
+			fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, tool.Installed, tool.Source, tool.Approved)
+		}
+	}
+	c.toolsSummary(present, requiredMissing, optionalMissing)
+	return requiredMissing > 0, nil
 }
 func blockLabel(name string) string {
 	switch name {

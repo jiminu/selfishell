@@ -66,12 +66,12 @@ func assertRestoredOriginal(t *testing.T, f *bootstrapFixture, original []byte, 
 	}
 	requireAbsent(t, filepath.Join(f.home, ".config/selfishell/zsh/zshrc"))
 }
-func minimalDoctorDiagnosis(got capture) error {
+func minimalStatusDiagnosis(got capture) error {
 	if got.Status != 1 {
-		return fmt.Errorf("doctor status %d want 1: stdout %q stderr %q", got.Status, got.Stdout, got.Stderr)
+		return fmt.Errorf("status exit %d want 1: stdout %q stderr %q", got.Status, got.Stdout, got.Stderr)
 	}
 	if !bytes.Contains(got.Stdout, []byte("[ERROR] Tool: mise is missing (direct)")) {
-		return fmt.Errorf("doctor omitted missing mise diagnosis: %q", got.Stdout)
+		return fmt.Errorf("status omitted missing mise diagnosis: %q", got.Stdout)
 	}
 	return nil
 }
@@ -96,12 +96,8 @@ func setupAndCheck(t *testing.T, f *bootstrapFixture, version string, original [
 		t.Fatalf("configured %q", got)
 	}
 	status := f.cliRun(t, "status")
-	if status.Status != 0 && status.Status != 1 {
-		t.Fatalf("status command: %d %q", status.Status, status.Stderr)
-	}
 	requireContains(t, status.Stdout, "Current: "+version)
-	doctor := f.cliRun(t, "doctor")
-	if err := minimalDoctorDiagnosis(doctor); err != nil {
+	if err := minimalStatusDiagnosis(status); err != nil {
 		t.Fatal(err)
 	}
 	assertNoSourceLinks(t, f.home, "")
@@ -243,7 +239,7 @@ func TestNativeCompleteReleaseLifecycle(t *testing.T) {
 	original := []byte("original zshrc\n")
 	mustFS(t, os.WriteFile(filepath.Join(f.home, ".zshrc"), original, 0600))
 	requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--yes", "--skip-packages"))
-	requireOK(t, f.cliRun(t, "doctor"))
+	requireOK(t, f.cliRun(t, "status"))
 	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion)
 	zshrc := filepath.Join(f.home, ".zshrc")
 	info, e := os.Lstat(zshrc)

@@ -26,33 +26,12 @@ func platformSupported(name string) bool {
 	return name == "macos" || name == "ubuntu" || name == "ubuntu-wsl"
 }
 func commandExists(name string) bool { _, err := exec.LookPath(name); return err == nil }
-func (c CLI) doctor(args []string) int {
-	verbose := false
-	for _, arg := range args {
-		switch arg {
-		case "--verbose":
-			verbose = true
-		case "help", "--help", "-h":
-			fmt.Fprintln(c.Out, "Usage: selfishell doctor [--verbose]")
-			return 0
-		default:
-			c.error("Unknown doctor option: " + arg)
-			return 2
-		}
-	}
-	platform := DetectPlatform()
-	paths, err := UserPaths()
-	if err != nil {
-		return c.diagnosticError(err)
-	}
-	c.diagnosticHeader()
+
+// statusSystem checks setup prerequisites; the compiler is checked only after setup.
+func (c CLI) statusSystem(platform Platform, configured, verbose bool) int {
 	result := 0
 	system := diagnosticGroup{c: c, verbose: verbose}
-	configured := hasConfiguredMarker(paths)
 	if platformSupported(platform.Name) {
-		if configured {
-			c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
-		}
 		system.say("32", "OK", "Platform: "+platformLabel(platform.Name))
 	} else {
 		system.say("31", "ERROR", "Platform: "+platformLabel(platform.Name))
@@ -98,48 +77,15 @@ func (c CLI) doctor(args []string) int {
 			fmt.Fprintf(c.Out, "        Install them by running: %s\n", c.bold("xcode-select --install"))
 			result = 1
 		} else {
-			result = c.doctorCompiler(platform.Name, result, &system)
+			result = c.statusCompiler(platform.Name, result, &system)
 		}
 	} else {
-		result = c.doctorCompiler(platform.Name, result, &system)
+		result = c.statusCompiler(platform.Name, result, &system)
 	}
 	system.summary(platform)
-	packages, err := diagnosticPackages(c.Root, platform.Name)
-	if err != nil {
-		return c.diagnosticError(err)
-	}
-	inventory, err := NewToolInventory(c.Root, paths, c.Err)
-	if err != nil {
-		return c.diagnosticError(err)
-	}
-	present, requiredMissing, optionalMissing := 0, 0, 0
-	for _, p := range packages {
-		tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
-		if e != nil {
-			return c.diagnosticError(e)
-		}
-		if tool.Installed == "missing" {
-			c.missingTool(p)
-			if p.Requirement == "required" {
-				requiredMissing++
-				result = 1
-			} else {
-				optionalMissing++
-			}
-		} else {
-			present++
-			if verbose {
-				c.sayDiagnostic("32", "OK", fmt.Sprintf("Tool: %s %s (%s)", p.Name, tool.Installed, tool.Source))
-			}
-		}
-	}
-	c.toolsSummary(present, requiredMissing, optionalMissing)
-	if err := c.doctorPlugins(paths, inventory.dependencies); err {
-		result = 1
-	}
 	return result
 }
-func (c CLI) doctorCompiler(platform string, result int, system *diagnosticGroup) int {
+func (c CLI) statusCompiler(platform string, result int, system *diagnosticGroup) int {
 	// A compiler counts only if it runs; a failed candidate falls through to the next.
 	var broken []string
 	for _, name := range []string{"gcc", "clang"} {
@@ -168,7 +114,7 @@ func (c CLI) doctorCompiler(platform string, result int, system *diagnosticGroup
 	}
 	return 1
 }
-func (c CLI) doctorPlugins(paths Paths, dependencies []Dependency) bool {
+func (c CLI) statusPlugins(dependencies []Dependency) bool {
 	dataHome := envDefault("XDG_DATA_HOME", os.Getenv("HOME")+"/.local/share")
 	zinit, err := os.Stat(dataHome + "/zinit/zinit.git/zinit.zsh")
 	if err != nil || zinit.Size() == 0 {

@@ -101,10 +101,8 @@ func (c CLI) Run(args []string) int {
 		return c.install(args)
 	case "uninstall":
 		return c.uninstall(args)
-	case "status":
+	case "status", "doctor": // doctor is a hidden alias from before the two merged.
 		return c.status(args)
-	case "doctor":
-		return c.doctor(args)
 	case "update":
 		return c.update(args)
 	case "rollback":
@@ -137,11 +135,10 @@ Usage:
 
 Commands:
   install    Install managed shell configuration
-  status     Show managed configuration status
+  status     Check the system, tools, and managed configuration
   uninstall  Remove managed configuration
   update     Update the CLI, approved tools, and managed configuration
   rollback   Switch back to a retained CLI release
-  doctor     Diagnose platform and required dependencies
   version    Print the Selfishell version
   help       Show this help
 

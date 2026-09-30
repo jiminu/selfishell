@@ -45,7 +45,7 @@ func compactDiagnosticFixture(t *testing.T, platform string, ghostty bool) (stri
 		blockWrite(t, paths.State+"/ghostty", []byte(choice))
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	for _, name := range []string{"apt-get", "gcc"} {
+	for _, name := range []string{"apt-get", "brew", "xcode-select", "gcc"} {
 		path := home + "/tools/" + name
 		blockWrite(t, path, []byte("#!/bin/sh\nprintf 'fixture 1.0\\n'\n"))
 		if err := os.Chmod(path, 0755); err != nil {
@@ -97,34 +97,48 @@ func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
 	if err := os.Mkdir(marker, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"status", "doctor"} {
-		_, out, stderr := blockRun(t, root, "", command)
-		if stderr != "" || strings.Contains(out, "configuration is installed") || strings.Contains(out, "Tools:") {
-			t.Fatalf("%s treated a directory marker as completed setup: out=%q errors=%q", command, out, stderr)
-		}
+	_, out, stderr := blockRun(t, root, "", "status")
+	if stderr != "" || strings.Contains(out, "configuration is installed") || strings.Contains(out, "Tools:") || strings.Contains(out, "C compiler") {
+		t.Fatalf("status treated a directory marker as completed setup: out=%q errors=%q", out, stderr)
 	}
 }
 
 func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 	for _, required := range []bool{false, true} {
-		for _, command := range []string{"status", "doctor"} {
-			t.Run(command+map[bool]string{true: "required", false: "optional"}[required], func(t *testing.T) {
-				root, _ := compactDiagnosticFixture(t, "ubuntu", false)
-				packages := "package all optional direct zinit\n"
-				wantCode := 0
-				want := "[INFO] Tools: 0 present, 1 optional not installed"
-				if required {
-					packages += "package all required direct mise\n"
-					wantCode = 1
-					want = "[ERROR] Tools: 0 present, 1 required missing, 1 optional not installed"
-				}
-				blockWrite(t, root+"/packages.conf", []byte(packages))
-				code, out, stderr := blockRun(t, root, "", command)
-				if code != wantCode || stderr != "" || !strings.Contains(out, want) || strings.Contains(out, "[WARN] Tools") || strings.Count(out, "selfishell update --tools-only") != 1 {
-					t.Fatalf("tool severity/count/hint: code=%d out=%q errors=%q", code, out, stderr)
-				}
-			})
+		t.Run(map[bool]string{true: "required", false: "optional"}[required], func(t *testing.T) {
+			root, _ := compactDiagnosticFixture(t, "ubuntu", false)
+			packages := "package all optional direct zinit\n"
+			wantCode := 0
+			want := "[INFO] Tools: 0 present, 1 optional not installed"
+			if required {
+				packages += "package all required direct mise\n"
+				wantCode = 1
+				want = "[ERROR] Tools: 0 present, 1 required missing, 1 optional not installed"
+			}
+			blockWrite(t, root+"/packages.conf", []byte(packages))
+			code, out, stderr := blockRun(t, root, "", "status")
+			if code != wantCode || stderr != "" || !strings.Contains(out, want) || strings.Contains(out, "[WARN] Tools") || strings.Count(out, "selfishell update --tools-only") != 1 {
+				t.Fatalf("tool severity/count/hint: code=%d out=%q errors=%q", code, out, stderr)
+			}
+		})
+	}
+}
+
+func TestDoctorIsHiddenStatusAlias(t *testing.T) {
+	root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+	blockWrite(t, blockState(t, paths, "zsh-common").Target, []byte("personal edit\n"))
+	wantCode, wantOut, wantErr := blockRun(t, root, "", "status", "--verbose")
+	code, out, stderr := blockRun(t, root, "", "doctor", "--verbose")
+	if code != 1 || code != wantCode || out != wantOut || stderr != wantErr {
+		t.Fatalf("doctor diverged from status: code=%d/%d out=%q want %q errors=%q/%q", code, wantCode, out, wantOut, stderr, wantErr)
+	}
+	for _, want := range []string{"[OK] C compiler: gcc", "System: Ubuntu (", "[CHANGED] ~/.config/selfishell/zsh/common.zsh", "Tools: 0 present"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("merged status omitted %q: %s", want, out)
 		}
+	}
+	if help := blockOK(t, root, "help"); strings.Contains(help, "doctor") {
+		t.Fatalf("help lists the hidden alias: %s", help)
 	}
 }
 

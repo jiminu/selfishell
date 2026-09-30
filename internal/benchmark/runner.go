@@ -25,7 +25,7 @@ const usage = `Usage: scripts/benchmark.sh [--mode base|full] [--prompt] [--diag
         into an isolated HOME. Does not install Apt/Homebrew packages.
 
   --prompt       Measure first and command-to-prompt latency in a PTY.
-  --diagnostics  Measure status and doctor after isolated configuration setup.
+  --diagnostics  Measure status after isolated configuration setup.
 
 SELFISHELL_BENCHMARK_PROFILE=base|full is equivalent to --mode.
 The benchmark uses this checkout and its built .build/selfishell executable.
@@ -632,30 +632,28 @@ func (f *fixture) diagnosticsRun(ctx context.Context) error {
 	if e != nil {
 		return fmt.Errorf("diagnostic setup: %w: %s", e, output)
 	}
-	f.recordComment("Diagnostics: configured HOME; no system packages installed; missing tools may yield exit 1.")
-	for _, name := range []string{"status", "doctor"} {
-		spec.args = []string{name}
-		output, e = execute(ctx, spec)
-		expected := exitStatus(e)
-		if expected != 0 && expected != 1 {
-			return fmt.Errorf("diagnostic %s: %w: %s", name, e, output)
-		}
-		f.recordComment(fmt.Sprintf("cli-%s exit=%d", name, expected))
-		fmt.Fprint(f.out, output)
-		samples := make([]float64, 0, f.iterations)
-		for i := 0; i < f.iterations; i++ {
-			elapsed, sampleErr := timedExecute(ctx, spec)
-			if exitStatus(sampleErr) != expected {
-				return fmt.Errorf("Diagnostic %s exit changed from %d to %d", name, expected, exitStatus(sampleErr))
-			}
-			samples = append(samples, elapsed)
-		}
-		stats, e := Summarize(samples)
-		if e != nil {
-			return e
-		}
-		f.metric("cli-"+name, stats)
+	f.recordComment("Diagnostics: configured HOME; no system packages installed; missing tools or prerequisites may yield exit 1.")
+	spec.args = []string{"status"}
+	output, e = execute(ctx, spec)
+	expected := exitStatus(e)
+	if expected != 0 && expected != 1 {
+		return fmt.Errorf("diagnostic status: %w: %s", e, output)
 	}
+	f.recordComment(fmt.Sprintf("cli-status exit=%d", expected))
+	fmt.Fprint(f.out, output)
+	samples := make([]float64, 0, f.iterations)
+	for i := 0; i < f.iterations; i++ {
+		elapsed, sampleErr := timedExecute(ctx, spec)
+		if exitStatus(sampleErr) != expected {
+			return fmt.Errorf("Diagnostic status exit changed from %d to %d", expected, exitStatus(sampleErr))
+		}
+		samples = append(samples, elapsed)
+	}
+	stats, e := Summarize(samples)
+	if e != nil {
+		return e
+	}
+	f.metric("cli-status", stats)
 	return f.resultErr
 }
 func exitStatus(err error) int {

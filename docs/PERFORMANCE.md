@@ -69,10 +69,11 @@ deferred plugins are ready. Repository timings depend on this checkout's size
 and working-tree state; language projects may have different costs.
 
 `--diagnostics` applies configuration with `install --skip-packages --yes` in
-a separate temporary HOME, then measures `cli-status` and `cli-doctor` after
-one warm-up invocation each. It prints that invocation's output and exit code
-to identify the measured state; a changed exit code during sampling fails the
-benchmark. Exit 1 is expected when required tools are missing. Both modes query
+a separate temporary HOME, then measures `cli-status` after one warm-up
+invocation. It prints that invocation's output and exit code to identify the
+measured state; a changed exit code during sampling fails the benchmark. Exit 1
+is expected when required tools or system prerequisites, such as a package
+manager outside the measured PATH, are missing. Both modes query
 available system package inventories. Base mode uses `/usr/bin:/bin`; full mode
 also shares the temporary pinned shell tools and Zinit plugins and includes
 the caller's PATH tools and package managers.
