@@ -288,12 +288,13 @@ func TestDirectDryRunReadOnly(t *testing.T) {
 
 func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	op, _, manifest, home := dependencyFixture(t)
-	writeTestFile(t, home+"/actual/.keep", "keep", 0600)
-	if err := os.Symlink(home+"/actual", home+"/link"); err != nil {
+	// alias/.. resolves to actual/data; a lexical clean would select work/data.
+	writeTestFile(t, home+"/actual/child/.keep", "keep", 0600)
+	os.MkdirAll(home+"/work", 0700)
+	if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 		t.Fatal(err)
 	}
-	raw := home + "/link/../link"
-	t.Setenv("XDG_DATA_HOME", raw)
+	t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
 	paths, err := UserPaths()
 	if err != nil {
 		t.Fatal(err)
@@ -302,10 +303,10 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	if err := installTool(op, paths, manifest); err != nil {
 		t.Fatal(err)
 	}
-	if readTestFile(t, raw+"/tool/tool") != "#!/bin/sh\necho 1.0\n" {
+	if readTestFile(t, home+"/actual/data/tool/tool") != "#!/bin/sh\necho 1.0\n" {
 		t.Fatal("raw XDG data target not used")
 	}
-	assertNoPath(t, home+"/tool")
+	assertNoPath(t, home+"/work/data")
 }
 
 func TestDirectArchiveMemberAndUnsafeEntries(t *testing.T) {
