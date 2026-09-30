@@ -119,9 +119,12 @@ jobs:
     steps:
       - name: Install container prerequisites
         run: |
-          # Use the hosted runners' Azure mirror: some security.ubuntu.com backends
-          # have served an index before its packages, failing installs with 404.
-          sed -i -E 's#http://(archive|security)\.ubuntu\.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#' /etc/apt/sources.list.d/ubuntu.sources
+          # Each mirror has failed alone (a security.ubuntu.com 404, Azure refusals), so
+          # every file, including those fetched by the apt calls under test, falls back
+          # from Azure to archive.ubuntu.com. Retries stay 0: apt 2.8 hung retrying a refused mirror.
+          printf 'http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://archive.ubuntu.com/ubuntu/\tpriority:2\n' > /etc/apt/mirrors.txt
+          echo 'Acquire::Retries "0";' > /etc/apt/apt.conf.d/80-retries
+          sed -i -E 's#http://(archive|security)\.ubuntu\.com/ubuntu/#mirror+file:/etc/apt/mirrors.txt#' /etc/apt/sources.list.d/ubuntu.sources
           apt-get update
           apt-get install -y ca-certificates curl git tar gzip
 
