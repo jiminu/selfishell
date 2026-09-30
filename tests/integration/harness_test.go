@@ -364,6 +364,15 @@ func requireStatus(t *testing.T, name string, got capture, want int) {
 		t.Fatalf("%s: status %d want %d; stderr=%s", name, got.Status, want, got.Stderr)
 	}
 }
+
+// requireStdout also reports status and stderr, which tell a lost PTY capture
+// from a command that failed before writing its report.
+func requireStdout(t *testing.T, got capture, s string) {
+	t.Helper()
+	if !bytes.Contains(got.Stdout, []byte(s)) {
+		t.Fatalf("missing %q in stdout; status=%d stdout=%q stderr=%q", s, got.Status, got.Stdout, got.Stderr)
+	}
+}
 func fixtureTools(t *testing.T, root string) string {
 	t.Helper()
 	tools := filepath.Join(root, "tools")
