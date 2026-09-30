@@ -140,39 +140,9 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 				}
 				return nil
 			}
-			action := m.actions[r.Name]
-			if action == "" {
-				if m.yes || !m.c.interactive() {
-					return fmt.Errorf("Managed file was modified; preserving it: %s", r.Target)
-				}
-				m.c.progress.pause()
-				fmt.Fprintf(m.c.Out, "Managed file was modified: %s. Overwrite with default config? [y/N] ", r.Target)
-				answer, _ := m.c.readAnswer()
-				if affirmative(answer) {
-					action = "overwrite"
-				} else {
-					action = "skip"
-				}
-				m.actions[r.Name] = action
-			}
-			if preflight {
-				return nil
-			}
-			if action == "skip" {
-				m.say(reportWarning, "Skipped modified managed file: %s", r.Target)
-				return nil
-			}
-			conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
-			if err != nil {
+			if overwrite, err := m.resolveModified(r, "file", "Overwrite with default config?", preflight); err != nil || !overwrite {
 				return err
 			}
-			if err = makeRawDir(rawParent(conflict)); err != nil {
-				return err
-			}
-			if err = copyPreserve(r.Target, conflict); err != nil {
-				return err
-			}
-			m.say(reportSuccess, "Backed up modified managed file: %s -> %s", r.Target, conflict)
 		}
 	}
 	if preflight {
@@ -226,6 +196,43 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	}
 	m.say(reportSuccess, "%s managed file: %s", verb, r.Target)
 	return nil
+}
+
+// resolveModified asks once per resource whether to overwrite a locally
+// modified managed file or block, backing it up first. False leaves it as is.
+func (m *managed) resolveModified(r Resource, kind, question string, preflight bool) (bool, error) {
+	action := m.actions[r.Name]
+	if action == "" {
+		if m.yes || !m.c.interactive() {
+			return false, fmt.Errorf("Managed %s was modified; preserving it: %s", kind, r.Target)
+		}
+		m.c.progress.pause()
+		fmt.Fprintf(m.c.Out, "Managed %s was modified: %s. %s [y/N] ", kind, r.Target, question)
+		answer, _ := m.c.readAnswer()
+		if affirmative(answer) {
+			action = "overwrite"
+		} else {
+			action = "skip"
+		}
+		m.actions[r.Name] = action
+	}
+	if preflight {
+		return false, nil
+	}
+	if action == "skip" {
+		m.say(reportWarning, "Skipped modified managed %s: %s", kind, r.Target)
+		return false, nil
+	}
+	conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
+	if err != nil {
+		return false, err
+	}
+	// copyPreserve creates the backups directory.
+	if err = copyPreserve(r.Target, conflict); err != nil {
+		return false, err
+	}
+	m.say(reportSuccess, "Backed up modified managed %s: %s -> %s", kind, r.Target, conflict)
+	return true, nil
 }
 func copyPreserve(source, target string) error {
 	data, e := os.ReadFile(source)
@@ -412,36 +419,9 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 			}
 			return nil
 		}
-		action := m.actions[r.Name]
-		if action == "" {
-			if m.yes || !m.c.interactive() {
-				return fmt.Errorf("Managed block was modified; preserving it: %s", r.Target)
-			}
-			m.c.progress.pause()
-			fmt.Fprintf(m.c.Out, "Managed block was modified: %s. Overwrite the Selfishell block? [y/N] ", r.Target)
-			answer, _ := m.c.readAnswer()
-			if affirmative(answer) {
-				action = "overwrite"
-			} else {
-				action = "skip"
-			}
-			m.actions[r.Name] = action
-		}
-		if preflight {
-			return nil
-		}
-		if action == "skip" {
-			m.say(reportWarning, "Skipped modified managed block: %s", r.Target)
-			return nil
-		}
-		conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
-		if err != nil {
+		if overwrite, err := m.resolveModified(r, "block", "Overwrite the Selfishell block?", preflight); err != nil || !overwrite {
 			return err
 		}
-		if err = copyPreserve(r.Target, conflict); err != nil {
-			return err
-		}
-		m.say(reportSuccess, "Backed up modified managed block: %s -> %s", r.Target, conflict)
 	}
 	if has && view.status != "intact" && view.status != "absent" {
 		return blockConflictError(r)
