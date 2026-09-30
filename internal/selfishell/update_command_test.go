@@ -532,6 +532,23 @@ func TestRollbackRejectsCorruptPreviousWithoutMutation(t *testing.T) {
 			t.Fatalf("%s rewrote current: %s", bad, current)
 		}
 	}
+	// A regular file at previous is user data, not a readlink failure to echo.
+	if err := os.Remove(share + "/previous"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(share+"/previous", []byte("user data\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, stderr := commandResult(op.Root, "rollback", "--yes")
+	if code != 1 || out != "" || !strings.Contains(stderr, "Retained previous release is invalid: ") || !strings.HasSuffix(stderr, "/previous is not a link\n") {
+		t.Fatalf("file previous: %d %q %q", code, out, stderr)
+	}
+	if data, err := os.ReadFile(share + "/previous"); err != nil || string(data) != "user data\n" {
+		t.Fatalf("file previous changed: %q, %v", data, err)
+	}
+	if current, _ := os.Readlink(share + "/current"); current != "releases/1.0.0" {
+		t.Fatalf("file previous rewrote current: %s", current)
+	}
 }
 
 func TestToolsOnlySkipPackagesAppliesConfigurationWithoutInstallFinalization(t *testing.T) {
