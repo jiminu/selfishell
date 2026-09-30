@@ -85,9 +85,12 @@ gh release download "$tag" --repo "$repository" --dir "$download_dir"
 )
 
 # Require attestations unless explicitly skipped; matching checksums alone do not prove provenance.
+# Pin the signer to the release workflow on this tag, not any workflow in the repository.
 if gh attestation verify --help >/dev/null 2>&1; then
   for archive in "$download_dir"/selfishell-"$version"-*.tar.gz; do
-    gh attestation verify "$archive" --repo "$repository" >/dev/null
+    gh attestation verify "$archive" --repo "$repository" \
+      --signer-workflow "$repository/.github/workflows/release.yml" \
+      --source-ref "refs/tags/$tag" --deny-self-hosted-runners >/dev/null
   done
   printf 'Artifact attestations verified.\n'
 elif [[ "${SELFISHELL_VERIFY_SKIP_ATTESTATION:-0}" == "1" ]]; then
