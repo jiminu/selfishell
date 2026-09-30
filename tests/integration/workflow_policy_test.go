@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestCIChangeClassification(t *testing.T) {
@@ -68,7 +70,7 @@ func policyWrite(t *testing.T, path, content string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+	if err := testutil.WriteFile(path, []byte(content), 0600); err != nil {
 		t.Fatal(err)
 	}
 }

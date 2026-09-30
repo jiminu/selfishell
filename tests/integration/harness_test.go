@@ -326,7 +326,7 @@ func copyFile(from, to string) error {
 	if e != nil {
 		return e
 	}
-	return os.WriteFile(to, b, info.Mode().Perm())
+	return testutil.WriteFile(to, b, info.Mode().Perm())
 }
 func copyTree(from, to string) error {
 	return filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
@@ -481,5 +481,5 @@ func copyCLIFixture(t *testing.T, root, executable string) {
 	for _, name := range []string{"packages.conf", "dependencies.conf"} {
 		mustFS(t, copyFile(filepath.Join(repoRoot(), name), filepath.Join(root, name)))
 	}
-	mustFS(t, os.WriteFile(filepath.Join(root, "VERSION"), []byte("0.0.0-test\n"), 0644))
+	mustFS(t, testutil.WriteFile(filepath.Join(root, "VERSION"), []byte("0.0.0-test\n"), 0644))
 }

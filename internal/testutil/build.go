@@ -75,7 +75,7 @@ func CopyCLI(t testing.TB, target string) bool {
 	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(target, data, 0755); err != nil {
+	if err := WriteFile(target, data, 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(target, 0755); err != nil {

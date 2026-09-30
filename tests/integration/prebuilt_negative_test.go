@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func rewriteSuppliedArchive(t *testing.T, path string, change func(map[string]archiveMember)) {
@@ -24,9 +26,8 @@ func rewriteSuppliedArchive(t *testing.T, path string, change func(map[string]ar
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	f, e := os.Create(path)
-	mustFS(t, e)
-	gz := gzip.NewWriter(f)
+	var data bytes.Buffer
+	gz := gzip.NewWriter(&data)
 	gz.ModTime = time.Unix(946684800, 0).UTC()
 	gz.OS = 255
 	tw := tar.NewWriter(gz)
@@ -41,13 +42,13 @@ func rewriteSuppliedArchive(t *testing.T, path string, change func(map[string]ar
 		}
 		mustFS(t, tw.WriteHeader(h))
 		if m.kind == tar.TypeReg {
-			_, e = tw.Write(m.data)
+			_, e := tw.Write(m.data)
 			mustFS(t, e)
 		}
 	}
 	mustFS(t, tw.Close())
 	mustFS(t, gz.Close())
-	mustFS(t, f.Close())
+	mustFS(t, testutil.WriteFile(path, data.Bytes(), 0644))
 }
 func copiedSuppliedAssets(t *testing.T) string {
 	t.Helper()
@@ -64,7 +65,7 @@ func refreshSuppliedChecksums(t *testing.T, dir string) {
 	for _, name := range releaseAssetNames(nativeArchiveVersion) {
 		fmt.Fprintf(&sums, "%x  %s\n", sha256.Sum256(readBytes(t, filepath.Join(dir, name))), name)
 	}
-	mustFS(t, os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(sums.String()), 0644))
+	mustFS(t, testutil.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(sums.String()), 0644))
 }
 func TestPrebuiltSmokeRejectsWrongCPUAndPayload(t *testing.T) {
 	t.Parallel()

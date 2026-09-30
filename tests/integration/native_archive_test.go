@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/releasebuild"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 const nativeArchiveVersion = "1.3.2"
@@ -234,9 +235,9 @@ func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte,
 	t.Helper()
 	releaseRoot := t.TempDir()
 	mustFS(t, os.MkdirAll(filepath.Join(releaseRoot, "bin"), 0755))
-	mustFS(t, os.WriteFile(filepath.Join(releaseRoot, "VERSION"), []byte(version+"\n"), 0644))
+	mustFS(t, testutil.WriteFile(filepath.Join(releaseRoot, "VERSION"), []byte(version+"\n"), 0644))
 	path := filepath.Join(releaseRoot, "bin", "selfishell")
-	mustFS(t, os.WriteFile(path, b, 0755))
+	mustFS(t, testutil.WriteFile(path, b, 0755))
 	switch platform {
 	case "linux":
 		f, e := elf.Open(path)
@@ -440,7 +441,7 @@ func TestWrongNativeToolchain(t *testing.T) {
 	privateNativeHome(t)
 	bin := t.TempDir()
 	goStub := filepath.Join(bin, "go")
-	mustFS(t, os.WriteFile(goStub, []byte("#!/bin/sh\nprintf 'go1.26.9\\n'\n"), 0755))
+	mustFS(t, testutil.WriteFile(goStub, []byte("#!/bin/sh\nprintf 'go1.26.9\\n'\n"), 0755))
 	t.Setenv("PATH", bin)
 	out := filepath.Join(t.TempDir(), "absent")
 	e := releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, out)
@@ -457,7 +458,7 @@ func TestFailedPublishHasNoVerifiedManifest(t *testing.T) {
 	out := t.TempDir()
 	blocker := filepath.Join(out, releaseAssetNames(nativeArchiveVersion)[0])
 	mustFS(t, os.Mkdir(blocker, 0700))
-	mustFS(t, os.WriteFile(filepath.Join(out, "SHA256SUMS"), []byte("stale\n"), 0644))
+	mustFS(t, testutil.WriteFile(filepath.Join(out, "SHA256SUMS"), []byte("stale\n"), 0644))
 	if e := releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, out); e == nil {
 		t.Fatal("blocked publish succeeded")
 	}

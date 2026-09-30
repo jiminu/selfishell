@@ -15,12 +15,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func releaseEnv(t *testing.T, home, remote string) []string {
 	t.Helper()
 	osRelease := filepath.Join(home, "os-release")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 	return []string{
 		"SELFISHELL_RELEASE_ROOT=file://" + remote,
 		"SELFISHELL_TEST_SYSTEM_NAME=Linux",
@@ -39,7 +41,7 @@ func installedFixture(t *testing.T, home, version, executable string) (string, s
 	root := filepath.Join(share, "releases", version)
 	mustFS(t, os.MkdirAll(root+"/bin", 0700))
 	mustFS(t, copyFile(executable, root+"/bin/selfishell"))
-	mustFS(t, os.WriteFile(root+"/VERSION", []byte(version+"\n"), 0644))
+	mustFS(t, testutil.WriteFile(root+"/VERSION", []byte(version+"\n"), 0644))
 	for _, name := range []string{"config", "packages.conf", "dependencies.conf"} {
 		from, to := filepath.Join(repoRoot(), name), filepath.Join(root, name)
 		if name == "config" {
@@ -57,7 +59,7 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 	payload := t.TempDir()
 	mustFS(t, os.MkdirAll(payload+"/bin", 0700))
 	mustFS(t, copyFile(executable, payload+"/bin/selfishell"))
-	mustFS(t, os.WriteFile(payload+"/VERSION", []byte(version+"\n"), 0644))
+	mustFS(t, testutil.WriteFile(payload+"/VERSION", []byte(version+"\n"), 0644))
 	for _, name := range []string{"config", "packages.conf", "dependencies.conf"} {
 		from, to := filepath.Join(repoRoot(), name), filepath.Join(payload, name)
 		if name == "config" {
@@ -67,15 +69,10 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 		}
 	}
 	if len(packagesOverride) != 0 {
-		mustFS(t, os.WriteFile(payload+"/packages.conf", []byte(packagesOverride[0]), 0644))
+		mustFS(t, testutil.WriteFile(payload+"/packages.conf", []byte(packagesOverride[0]), 0644))
 	}
 	if marker != "" {
-		file := payload + "/config/shared/vimrc"
-		f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
-		mustFS(t, err)
-		_, err = f.WriteString("\n\" " + marker + "\n")
-		mustFS(t, err)
-		mustFS(t, f.Close())
+		mustFS(t, testutil.AppendFile(payload+"/config/shared/vimrc", []byte("\n\" "+marker+"\n")))
 	}
 	platform := runtime.GOOS
 	if platform == "darwin" {
@@ -85,11 +82,10 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 	dir := filepath.Join(remote, "download", "v"+version)
 	mustFS(t, os.MkdirAll(dir, 0700))
 	archive := filepath.Join(dir, name)
-	f, err := os.Create(archive)
-	mustFS(t, err)
-	gz := gzip.NewWriter(f)
+	var data bytes.Buffer
+	gz := gzip.NewWriter(&data)
 	w := tar.NewWriter(gz)
-	err = filepath.WalkDir(payload, func(path string, d fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(payload, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -139,11 +135,9 @@ func archiveFixture(t *testing.T, remote, version, executable, marker string, pa
 	mustFS(t, err)
 	mustFS(t, w.Close())
 	mustFS(t, gz.Close())
-	mustFS(t, f.Close())
-	data, err := os.ReadFile(archive)
-	mustFS(t, err)
-	digest := sha256.Sum256(data)
-	mustFS(t, os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0644))
+	mustFS(t, testutil.WriteFile(archive, data.Bytes(), 0644))
+	digest := sha256.Sum256(data.Bytes())
+	mustFS(t, testutil.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0644))
 }
 
 func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
@@ -154,7 +148,7 @@ func TestGoUpdateContinuationForwardsArgumentsStreamsAndStatus(t *testing.T) {
 	root, share := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
 	stub := filepath.Join(t.TempDir(), "selfishell")
-	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nprintf 'argv:%s\\n' \"$*\"\ncat\nprintf 'child-stderr\\n' >&2\nexit 7\n"), 0755))
+	mustFS(t, testutil.WriteFile(stub, []byte("#!/bin/sh\nprintf 'argv:%s\\n' \"$*\"\ncat\nprintf 'child-stderr\\n' >&2\nexit 7\n"), 0755))
 	archiveFixture(t, remote, "2.0.0", stub, "")
 	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes", "--skip-packages"}, []byte("child-input\n"), releaseEnv(t, home, remote), 20*time.Second)
 	mustFS(t, err)
@@ -179,7 +173,7 @@ func TestGoToGoUpdateUsesNewRootAndOfflineRollback(t *testing.T) {
 	original := []byte("\" personal Vim configuration\r\n")
 	vimrc := filepath.Join(home, ".config/selfishell/vim/vimrc")
 	mustFS(t, os.MkdirAll(filepath.Dir(vimrc), 0700))
-	mustFS(t, os.WriteFile(vimrc, original, 0640))
+	mustFS(t, testutil.WriteFile(vimrc, original, 0640))
 	statePath := filepath.Join(home, ".local/state/selfishell/resources/vimrc.state")
 	backupPath := func() string {
 		t.Helper()
@@ -367,7 +361,7 @@ func TestContinuationRequiredPhaseFailureKeepsChildStatusAndNoSuccess(t *testing
 		"apt-get":    "#!/bin/sh\nexit 1\n",
 		"sudo":       "#!/bin/sh\nexec \"$@\"\n",
 	} {
-		mustFS(t, os.WriteFile(bin+"/"+name, []byte(body), 0755))
+		mustFS(t, testutil.WriteFile(bin+"/"+name, []byte(body), 0755))
 	}
 	got, err := runCommand(home, []string{root + "/bin/selfishell", "update", "--version", "2.0.0", "--yes"}, nil, append(env, "PATH="+bin+":/usr/bin:/bin"), 20*time.Second)
 	mustFS(t, err)
@@ -388,7 +382,7 @@ func TestContinuationPreservesTerminalOutput(t *testing.T) {
 	root, _ := installedFixture(t, home, "1.0.0", cli)
 	remote := t.TempDir()
 	stub := filepath.Join(t.TempDir(), "selfishell")
-	mustFS(t, os.WriteFile(stub, []byte("#!/bin/sh\nif [ -t 1 ]; then printf 'child-stdout-is-tty\\n'; else printf 'child-lost-tty\\n'; fi\n"), 0755))
+	mustFS(t, testutil.WriteFile(stub, []byte("#!/bin/sh\nif [ -t 1 ]; then printf 'child-stdout-is-tty\\n'; else printf 'child-lost-tty\\n'; fi\n"), 0755))
 	archiveFixture(t, remote, "2.0.0", stub, "")
 	got, err := capturePTYOutput(home, root+"/bin/selfishell", []string{"update", "--version", "2.0.0", "--yes"}, releaseEnv(t, home, remote))
 	mustFS(t, err)
@@ -420,7 +414,7 @@ func TestToolsOnlyOverwritesChangedSourceWithConflictBackupAndChecksum(t *testin
 	state := home + "/.local/state/selfishell/resources/vimrc.state"
 	before, err := os.ReadFile(state)
 	mustFS(t, err)
-	mustFS(t, os.WriteFile(target, []byte("user_modified_vimrc\n"), 0600))
+	mustFS(t, testutil.WriteFile(target, []byte("user_modified_vimrc\n"), 0600))
 	updated, err := runCommand(home, []string{share + "/current/bin/selfishell", "update", "--tools-only", "--skip-packages"}, []byte("y\n"), append(env, "SELFISHELL_TEST_TTY=1"), 20*time.Second)
 	mustFS(t, err)
 	if updated.Status != 0 || !bytes.Contains(updated.Stdout, []byte("Selfishell tools and configuration synchronized")) {

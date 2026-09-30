@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestDiagnostics(t *testing.T) {
@@ -20,15 +22,15 @@ func TestDiagnostics(t *testing.T) {
 	release := filepath.Join(root, "releases", "1.2.3")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.2.3\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte("1.2.3\n"), 0600))
 	tools := fixtureTools(t, root)
 	manager := filepath.Join(root, "manager")
 	mustFS(t, os.MkdirAll(manager, 0700))
-	mustFS(t, os.WriteFile(filepath.Join(manager, "apt-get"), []byte("#!/bin/sh\nexit 0\n"), 0700))
+	mustFS(t, testutil.WriteFile(filepath.Join(manager, "apt-get"), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
 	cases := []struct {
 		name, command string
 		status        int
@@ -44,10 +46,10 @@ func TestDiagnostics(t *testing.T) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
 			target := filepath.Join(home, "target")
-			mustFS(t, os.WriteFile(target, []byte("intact"), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("intact"), 0600))
 			link := filepath.Join(home, "link")
 			mustFS(t, os.Symlink(target, link))
-			mustFS(t, os.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", link, target)), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", link, target)), 0600))
 			ghostty := filepath.Join(home, ".config/ghostty/user.ghostty")
 			mustFS(t, os.MkdirAll(filepath.Dir(ghostty), 0700))
 			mustFS(t, os.Symlink(filepath.Join(home, "missing"), ghostty))
@@ -55,21 +57,21 @@ func TestDiagnostics(t *testing.T) {
 		{"status-pending", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
-			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\npending\n%s\n-\n-\n-\n", filepath.Join(home, "vimrc"))), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\npending\n%s\n-\n-\n-\n", filepath.Join(home, "vimrc"))), 0600))
 		}},
 		{"status-changed-file", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
 			target := filepath.Join(home, "vimrc")
-			mustFS(t, os.WriteFile(target, []byte("changed"), 0600))
-			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n0:0\n", target)), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("changed"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n0:0\n", target)), 0600))
 		}},
 		{"status-file-replaced-by-same-content-symlink", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
 			personal := filepath.Join(home, "personal-vimrc")
 			content := []byte("same managed bytes\n")
-			mustFS(t, os.WriteFile(personal, content, 0600))
+			mustFS(t, testutil.WriteFile(personal, content, 0600))
 			checksum, err := runCommand(home, []string{"cksum"}, content, nil, 10*time.Second)
 			if err != nil || checksum.Status != 0 {
 				t.Fatalf("cksum: %v %s", err, checksum.Stderr)
@@ -80,30 +82,30 @@ func TestDiagnostics(t *testing.T) {
 			}
 			target := filepath.Join(home, "vimrc")
 			mustFS(t, os.Symlink(personal, target))
-			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n%s:%s\n", target, fields[0], fields[1])), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "vimrc.state"), []byte(fmt.Sprintf("2\nfile\nactive\n%s\n-\n-\n%s:%s\n", target, fields[0], fields[1])), 0600))
 		}},
 		{"status-changed-link", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
 			target := filepath.Join(home, "link")
-			mustFS(t, os.WriteFile(target, []byte("replaced link"), 0600))
-			mustFS(t, os.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "original"))), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("replaced link"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "original"))), 0600))
 		}},
 		{"status-changed-block", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
 			target := filepath.Join(home, ".vimrc")
-			mustFS(t, os.WriteFile(target, []byte("personal vimrc\n"), 0600))
-			mustFS(t, os.WriteFile(filepath.Join(state, "user-vimrc.state"), []byte(fmt.Sprintf("2\nblock\nactive\n%s\n-\n-\n0:0\n", target)), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("personal vimrc\n"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "user-vimrc.state"), []byte(fmt.Sprintf("2\nblock\nactive\n%s\n-\n-\n0:0\n", target)), 0600))
 		}},
 		{"status-malformed-and-good", "status", 1, func(home string) {
 			state := filepath.Join(home, ".local/state/selfishell/resources")
 			mustFS(t, os.MkdirAll(state, 0700))
-			mustFS(t, os.WriteFile(filepath.Join(state, "vimrc.state"), []byte("2\n"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "vimrc.state"), []byte("2\n"), 0600))
 			target := filepath.Join(home, "good")
-			mustFS(t, os.WriteFile(target, []byte("good"), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("good"), 0600))
 			// The second record checks that a malformed record does not stop listing.
-			mustFS(t, os.WriteFile(filepath.Join(state, "aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
 			mustFS(t, os.Symlink(target, filepath.Join(home, "link")))
 		}},
 	}
@@ -120,9 +122,9 @@ func TestDiagnostics(t *testing.T) {
 				arch = "mips64"
 			}
 			if tc.name == "status-ubuntu-wsl" {
-				mustFS(t, os.WriteFile(proc, []byte("Linux microsoft WSL2\n"), 0600))
+				mustFS(t, testutil.WriteFile(proc, []byte("Linux microsoft WSL2\n"), 0600))
 			} else {
-				mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
+				mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
 			}
 			path := tools + ":" + manager
 			if tc.name == "status-missing-package-manager" {
@@ -134,9 +136,9 @@ func TestDiagnostics(t *testing.T) {
 				args = append(args, "--help")
 			}
 			if tc.name == "status-unsupported" {
-				mustFS(t, os.WriteFile(osRelease, []byte("ID=fedora\n"), 0600))
+				mustFS(t, testutil.WriteFile(osRelease, []byte("ID=fedora\n"), 0600))
 			} else {
-				mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+				mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 			}
 			before := mustSnapshot(t, home)
 			got, err := captureCommand(home, entry, args, env)
@@ -188,20 +190,20 @@ func TestConfiguredDiagnostics(t *testing.T) {
 	release := filepath.Join(root, "releases", "2.0.0")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
 	tools := fixtureTools(t, root)
 	for name, body := range map[string]string{
 		"apt-get":    "#!/bin/sh\nexit 0\n",
 		"dpkg-query": "#!/bin/sh\nprintf 'git\\tii \\t2.0\\n'\n",
 		"gcc":        "#!/bin/sh\nprintf 'gcc fixture 1.0\\n'\n",
 	} {
-		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
+		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
 	}
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
 	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=x86_64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 	for _, tc := range []struct {
 		name   string
@@ -221,10 +223,10 @@ func TestConfiguredDiagnostics(t *testing.T) {
 			requireStatus(t, "configuration fixture", setup, 0)
 			state := filepath.Join(home, ".local/state/selfishell")
 			mustFS(t, os.MkdirAll(filepath.Join(state, "resources"), 0700))
-			mustFS(t, os.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
 			target := filepath.Join(home, "managed")
-			mustFS(t, os.WriteFile(target, []byte("managed"), 0600))
-			mustFS(t, os.WriteFile(filepath.Join(state, "resources/aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
+			mustFS(t, testutil.WriteFile(target, []byte("managed"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "resources/aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
 			mustFS(t, os.Symlink(target, filepath.Join(home, "link")))
 			before := mustSnapshot(t, home)
 			got, err := captureCommand(home, entry, tc.args, env)
@@ -265,7 +267,7 @@ func TestStatusPlugins(t *testing.T) {
 	release := filepath.Join(root, "release")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
 	git, err := resolveCommand("git", baseEnv(root, os.TempDir()))
 	if err != nil {
@@ -273,12 +275,12 @@ func TestStatusPlugins(t *testing.T) {
 	}
 	mustFS(t, os.Symlink(git, filepath.Join(tools, "git")))
 	for name, body := range map[string]string{"apt-get": "#!/bin/sh\nexit 0\n", "gcc": "#!/bin/sh\nprintf 'gcc fixture 1.0\\n'\n"} {
-		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
+		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
 	}
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
 	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=x86_64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 	runGit := func(dir string, args ...string) string {
 		t.Helper()
@@ -297,10 +299,10 @@ func TestStatusPlugins(t *testing.T) {
 			mustFS(t, e)
 			requireStatus(t, "configuration fixture", setup, 0)
 			state := filepath.Join(home, ".local/state/selfishell")
-			mustFS(t, os.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
 			zinit := filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh")
 			mustFS(t, os.MkdirAll(filepath.Dir(zinit), 0700))
-			mustFS(t, os.WriteFile(zinit, []byte("# zinit\n"), 0600))
+			mustFS(t, testutil.WriteFile(zinit, []byte("# zinit\n"), 0600))
 			plugin := filepath.Join(home, ".local/share/zinit/plugins/test---plugin")
 			revision := strings.Repeat("0", 40)
 			if name != "missing" {
@@ -310,7 +312,7 @@ func TestStatusPlugins(t *testing.T) {
 				runGit(plugin, "config", "maintenance.auto", "false")
 				runGit(plugin, "config", "user.email", "test@example.com")
 				runGit(plugin, "config", "user.name", "test")
-				mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("first\n"), 0600))
+				mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("first\n"), 0600))
 				runGit(plugin, "add", "tracked")
 				runGit(plugin, "commit", "--quiet", "-m", "first")
 				revision = runGit(plugin, "rev-parse", "HEAD")
@@ -327,33 +329,29 @@ func TestStatusPlugins(t *testing.T) {
 					runGit(plugin, "rm", "-q", "tracked")
 					runGit(plugin, "symbolic-ref", "HEAD", "refs/heads/unborn")
 				case "broken":
-					mustFS(t, os.WriteFile(filepath.Join(plugin, ".git/HEAD"), []byte("invalid\n"), 0600))
+					mustFS(t, testutil.WriteFile(filepath.Join(plugin, ".git/HEAD"), []byte("invalid\n"), 0600))
 				case "invalid-config":
-					mustFS(t, os.WriteFile(filepath.Join(plugin, ".git/config"), []byte("[invalid\n"), 0600))
+					mustFS(t, testutil.WriteFile(filepath.Join(plugin, ".git/config"), []byte("[invalid\n"), 0600))
 				case "untracked":
-					mustFS(t, os.WriteFile(filepath.Join(plugin, "untracked"), []byte("user data\n"), 0600))
+					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "untracked"), []byte("user data\n"), 0600))
 				}
 				if name == "drift" {
-					mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("second\n"), 0600))
+					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("second\n"), 0600))
 					runGit(plugin, "commit", "--quiet", "-am", "second")
 				}
 				if name == "dirty" || name == "mixed" {
-					mustFS(t, os.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
+					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
 				}
 			}
-			mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
 			if name == "mixed" {
 				other := filepath.Join(home, ".local/share/zinit/plugins/test---other")
 				runGit(root, "clone", "--quiet", plugin, other)
 				runGit(other, "config", "maintenance.auto", "false")
-				f, e := os.OpenFile(filepath.Join(release, "dependencies.conf"), os.O_APPEND|os.O_WRONLY, 0600)
-				mustFS(t, e)
-				_, e = fmt.Fprintf(f, "zsh-plugin test/other %s all all - - - -\n", strings.Repeat("0", 40))
-				mustFS(t, e)
-				mustFS(t, f.Close())
+				mustFS(t, testutil.AppendFile(filepath.Join(release, "dependencies.conf"), []byte("zsh-plugin test/other "+strings.Repeat("0", 40)+" all all - - - -\n")))
 			}
 			trace := filepath.Join(root, "git-trace")
-			mustFS(t, os.WriteFile(trace, nil, 0600))
+			mustFS(t, testutil.WriteFile(trace, nil, 0600))
 			diagnosticEnv := append(append([]string{}, env...), "GIT_TRACE="+trace, "GIT_DIR="+root+"/foreign", "GIT_WORK_TREE="+root+"/foreign")
 			before := mustSnapshot(t, home)
 			got, e := captureCommand(home, entry, []string{"status"}, diagnosticEnv)
@@ -412,13 +410,13 @@ func TestStatusGhosttyChoice(t *testing.T) {
 	release := filepath.Join(root, "release")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	osRelease, proc := filepath.Join(root, "os-release"), filepath.Join(root, "proc-version")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 	tools := filepath.Join(root, "system-tools")
 	mustFS(t, os.MkdirAll(tools, 0700))
 	for _, name := range []string{"apt-get", "brew", "xcode-select", "gcc"} {
-		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
+		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	}
 	for _, tc := range []struct {
 		platform, choice string
@@ -448,14 +446,14 @@ func TestStatusGhosttyChoice(t *testing.T) {
 			state := filepath.Join(home, ".local/state/selfishell")
 			mustFS(t, os.MkdirAll(state, 0700))
 			choice := filepath.Join(state, "ghostty")
-			mustFS(t, os.WriteFile(choice, []byte("0\n"), 0600))
+			mustFS(t, testutil.WriteFile(choice, []byte("0\n"), 0600))
 			system, procVersion := "Linux", "Linux\n"
 			if tc.platform == "macos" {
 				system = "Darwin"
 			} else if tc.platform == "ubuntu-wsl" {
 				procVersion = "Linux microsoft WSL2\n"
 			}
-			mustFS(t, os.WriteFile(proc, []byte(procVersion), 0600))
+			mustFS(t, testutil.WriteFile(proc, []byte(procVersion), 0600))
 			env := []string{"PATH=" + tools + ":/usr/bin:/bin:/usr/sbin:/sbin", "SELFISHELL_TEST_SYSTEM_NAME=" + system, "SELFISHELL_TEST_MACHINE_ARCH=arm64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
 			if e != nil {
@@ -465,9 +463,9 @@ func TestStatusGhosttyChoice(t *testing.T) {
 			mustFS(t, os.Remove(choice))
 			switch tc.choice {
 			case "enabled":
-				mustFS(t, os.WriteFile(choice, []byte("1\n"), 0600))
+				mustFS(t, testutil.WriteFile(choice, []byte("1\n"), 0600))
 			case "disabled", "permission":
-				mustFS(t, os.WriteFile(choice, []byte("0\n"), 0600))
+				mustFS(t, testutil.WriteFile(choice, []byte("0\n"), 0600))
 			case "directory":
 				mustFS(t, os.Mkdir(choice, 0700))
 			case "fifo":
@@ -475,12 +473,12 @@ func TestStatusGhosttyChoice(t *testing.T) {
 			case "symlink", "dangling-symlink":
 				target := filepath.Join(home, "personal-choice")
 				if tc.choice == "symlink" {
-					mustFS(t, os.WriteFile(target, []byte("0\n"), 0600))
+					mustFS(t, testutil.WriteFile(target, []byte("0\n"), 0600))
 				}
 				mustFS(t, os.Symlink(target, choice))
 			}
 			if tc.tracked {
-				mustFS(t, os.WriteFile(filepath.Join(state, "resources/user-ghostty.state"), []byte("malformed\n"), 0600))
+				mustFS(t, testutil.WriteFile(filepath.Join(state, "resources/user-ghostty.state"), []byte("malformed\n"), 0600))
 			}
 			before := mustSnapshot(t, home)
 			if tc.choice == "permission" {
@@ -539,7 +537,7 @@ func TestDiagnosticsTTYColors(t *testing.T) {
 	state := filepath.Join(home, ".local/state/selfishell/resources")
 	mustFS(t, os.MkdirAll(state, 0700))
 	target := filepath.Join(home, "link")
-	mustFS(t, os.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "missing"))), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "missing"))), 0600))
 	before := mustSnapshot(t, home)
 	for _, tc := range []struct {
 		name, noColor, ci, term string
@@ -595,10 +593,10 @@ func TestStatusRollbackMetadata(t *testing.T) {
 	release := filepath.Join(share, "releases", "2.0.0")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
 	old := filepath.Join(share, "releases", "1.0.0")
 	mustFS(t, os.MkdirAll(filepath.Join(old, "bin"), 0700))
-	mustFS(t, os.WriteFile(filepath.Join(old, "bin/selfishell"), []byte("#!/bin/sh\n"), 0700))
+	mustFS(t, testutil.WriteFile(filepath.Join(old, "bin/selfishell"), []byte("#!/bin/sh\n"), 0700))
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
 	before := mustSnapshot(t, home)
@@ -617,11 +615,11 @@ func TestStatusRollbackMetadata(t *testing.T) {
 				mustFS(t, os.Symlink(tc.rollback, previous))
 			}
 			if tc.occupied {
-				mustFS(t, os.WriteFile(previous, []byte("releases/1.0.0\n"), 0600))
+				mustFS(t, testutil.WriteFile(previous, []byte("releases/1.0.0\n"), 0600))
 			}
 			_ = os.Remove(filepath.Join(old, "VERSION"))
 			if tc.version != "" {
-				mustFS(t, os.WriteFile(filepath.Join(old, "VERSION"), []byte(tc.version), 0600))
+				mustFS(t, testutil.WriteFile(filepath.Join(old, "VERSION"), []byte(tc.version), 0600))
 			}
 			retained := mustSnapshot(t, share)
 			env := []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
@@ -653,12 +651,12 @@ func TestDiagnosticsRejectMalformedDependencyWithoutMutation(t *testing.T) {
 	release := filepath.Join(root, "release")
 	mustFS(t, os.MkdirAll(filepath.Join(release, "bin"), 0700))
 	mustFS(t, copyFile(cli, filepath.Join(release, "bin/selfishell")))
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required direct zinit\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required direct zinit\n"), 0600))
 	injected := filepath.Join(root, "injected")
-	mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), []byte("download zinit invalid all all - - - - $(touch "+injected+")\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), []byte("download zinit invalid all all - - - - $(touch "+injected+")\n"), 0600))
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700))
-	mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
 	before := mustSnapshot(t, home)
 	got, e := captureCommand(home, filepath.Join(release, "bin/selfishell"), []string{"status"}, []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"})
 	if e != nil {
@@ -705,7 +703,7 @@ func TestStatusXcodeStub(t *testing.T) {
 			release := filepath.Join(root, "release")
 			copyCLIFixture(t, release, cli)
 			entry := filepath.Join(release, "bin/selfishell")
-			mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 			tools := fixtureTools(t, root)
 			bodies := map[string]string{"xcode-select": "#!/bin/sh\n" + tc.xcode + "\n", "gcc": tc.gcc, "clang": tc.clang}
 			if tc.brew {
@@ -713,7 +711,7 @@ func TestStatusXcodeStub(t *testing.T) {
 			}
 			for name, body := range bodies {
 				if body != "" {
-					mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
+					mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
 				}
 			}
 			home := filepath.Join(root, "home")
@@ -722,7 +720,7 @@ func TestStatusXcodeStub(t *testing.T) {
 			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
 			mustFS(t, e)
 			requireStatus(t, "configuration fixture", setup, 0)
-			mustFS(t, os.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(home, ".local/state/selfishell/configured"), []byte("1\n"), 0600))
 			before := mustSnapshot(t, home)
 			got, e := captureCommand(home, entry, []string{"status", "--verbose"}, env)
 			if e != nil {
@@ -754,7 +752,7 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 	release := filepath.Join(root, "release")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	home := filepath.Join(root, "home")
 	mustFS(t, os.MkdirAll(home, 0700))
 	traverse := filepath.Join(root, "traverse")
@@ -765,12 +763,12 @@ func TestDiagnosticsLiteralXDGStatePath(t *testing.T) {
 	literal := filepath.Join(traverse, "link") + "/.."
 	state := filepath.Join(actual, "selfishell")
 	mustFS(t, os.MkdirAll(filepath.Join(state, "resources"), 0700))
-	mustFS(t, os.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
 	target := filepath.Join(home, "target")
 	link := filepath.Join(home, "link")
-	mustFS(t, os.WriteFile(target, []byte("intact"), 0600))
+	mustFS(t, testutil.WriteFile(target, []byte("intact"), 0600))
 	mustFS(t, os.Symlink(target, link))
-	mustFS(t, os.WriteFile(filepath.Join(state, "resources/user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", link, target)), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(state, "resources/user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", link, target)), 0600))
 	beforeHome := mustSnapshot(t, home)
 	beforeState := mustSnapshot(t, actual)
 	env := []string{"XDG_STATE_HOME=" + literal, "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
@@ -804,15 +802,15 @@ func TestStatusInstalledResource(t *testing.T) {
 	release := filepath.Join(root, "release")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
 	tools := fixtureTools(t, root)
 	for _, name := range []string{"apt-get", "gcc"} {
-		mustFS(t, os.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
+		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	}
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
 	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=x86_64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
 	home := filepath.Join(root, "home")
 	mustFS(t, os.RemoveAll(home))
@@ -820,7 +818,7 @@ func TestStatusInstalledResource(t *testing.T) {
 	config := filepath.Join(home, ".config")
 	mustFS(t, os.MkdirAll(filepath.Join(config, "mise"), 0700))
 	global := filepath.Join(config, "mise/config.toml")
-	mustFS(t, os.WriteFile(global, []byte("user original\n"), 0600))
+	mustFS(t, testutil.WriteFile(global, []byte("user original\n"), 0600))
 	run := func(name string, args []string, status int) capture {
 		t.Helper()
 		got, e := captureCommand(home, entry, args, env)
@@ -831,13 +829,13 @@ func TestStatusInstalledResource(t *testing.T) {
 		return got
 	}
 	run("install", []string{"install", "--skip-packages", "--yes"}, 0)
-	mustFS(t, os.WriteFile(global, []byte("user modified\n"), 0600))
+	mustFS(t, testutil.WriteFile(global, []byte("user modified\n"), 0600))
 	run("reinstall", []string{"install", "--skip-packages", "--yes"}, 0)
 	globalBytes, e := os.ReadFile(global)
 	if e != nil || string(globalBytes) != "user modified\n" {
 		t.Fatalf("reinstall changed user mise config: %v %q", e, globalBytes)
 	}
-	mustFS(t, os.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
+	mustFS(t, testutil.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
 	before := mustSnapshot(t, home)
 	plain := run("plain", []string{"status"}, 0)
 	requireContains(t, plain.Stdout, "[OK] Configuration:")
@@ -864,13 +862,7 @@ func TestStatusInstalledResource(t *testing.T) {
 		t.Fatal("user config changed status output")
 	}
 	nvim := filepath.Join(config, "selfishell/nvim/init.lua")
-	f, e := os.OpenFile(nvim, os.O_APPEND|os.O_WRONLY, 0)
-	if e != nil {
-		t.Fatal(e)
-	}
-	_, e = f.WriteString("\n-- personal edit\n")
-	mustFS(t, e)
-	mustFS(t, f.Close())
+	mustFS(t, testutil.AppendFile(nvim, []byte("\n-- personal edit\n")))
 	changed := run("changed Neovim", []string{"status"}, 1)
 	if !bytes.Contains(changed.Stdout, []byte("[CHANGED] ~/.config/selfishell/nvim/init.lua")) {
 		t.Fatalf("modified Neovim not reported: %s", changed.Stdout)
@@ -900,8 +892,8 @@ func TestStatusListsUnknownTrackedResources(t *testing.T) {
 	state := filepath.Join(home, ".local/state/selfishell/resources")
 	mustFS(t, os.MkdirAll(state, 0700))
 	target := filepath.Join(home, "personal")
-	mustFS(t, os.WriteFile(filepath.Join(state, "old-platform-link.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "approved"))), 0600))
-	mustFS(t, os.WriteFile(filepath.Join(state, "unknown-bad.state"), []byte("2\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(state, "old-platform-link.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "approved"))), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(state, "unknown-bad.state"), []byte("2\n"), 0600))
 	before := mustSnapshot(t, home)
 	got, e := captureCommand(home, filepath.Join(release, "bin/selfishell"), []string{"status"}, []string{"SELFISHELL_TEST_SYSTEM_NAME=Darwin"})
 	if e != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func maintenanceMiseEnv(home string) []string {
@@ -34,7 +35,7 @@ func publishedFixture(t *testing.T, version string) (string, []string) {
 		mustFS(t, copyFile(filepath.Join(assets, name), filepath.Join(releaseRoot, "download", "v"+version, name)))
 	}
 	mustFS(t, copyFile(filepath.Join(repoRoot(), "install.sh"), filepath.Join(rawRoot, "v"+version, "install.sh")))
-	mustFS(t, os.WriteFile(filepath.Join(releaseRoot, "latest", "download", "VERSION"), []byte(version+"\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(releaseRoot, "latest", "download", "VERSION"), []byte(version+"\n"), 0600))
 	gh := `#!/bin/bash
 set -euo pipefail
 if [[ "$1 $2" == "release view" && "$*" == *'--json assets'* ]]; then
@@ -65,7 +66,7 @@ else
   exit 2
 fi
 `
-	mustFS(t, os.WriteFile(filepath.Join(home, "bin", "gh"), []byte(gh), 0700))
+	mustFS(t, testutil.WriteFile(filepath.Join(home, "bin", "gh"), []byte(gh), 0700))
 	classification := "false"
 	if strings.Contains(version, "-") {
 		classification = "true"
@@ -215,7 +216,7 @@ func TestPublishedPrereleaseLatestPolicy(t *testing.T) {
 		t.Fatalf("prerelease latest accepted: %d %q", failed.Status, failed.Stderr)
 	}
 	latest := filepath.Join(home, "releases", "latest", "download", "VERSION")
-	mustFS(t, os.WriteFile(latest, []byte("1.3.2\n"), 0600))
+	mustFS(t, testutil.WriteFile(latest, []byte("1.3.2\n"), 0600))
 	passed, err := runCommand(home, []string{"/bin/bash", script, version}, nil, env, 90*time.Second)
 	mustFS(t, err)
 	if passed.Status != 0 || !strings.Contains(string(passed.Stdout), "Published release "+version+" verified:") {
@@ -227,7 +228,7 @@ func TestPublishedStableLatestMustMatch(t *testing.T) {
 	t.Parallel()
 	home, env := publishedFixture(t, nativeArchiveVersion)
 	latest := filepath.Join(home, "releases", "latest", "download", "VERSION")
-	mustFS(t, os.WriteFile(latest, []byte("1.3.1\n"), 0600))
+	mustFS(t, testutil.WriteFile(latest, []byte("1.3.1\n"), 0600))
 	got, err := runCommand(home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "verify-published-release.sh"), nativeArchiveVersion}, nil, env, 90*time.Second)
 	mustFS(t, err)
 	if got.Status != 1 || !strings.Contains(string(got.Stderr), "Latest stable version mismatch") {

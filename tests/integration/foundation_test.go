@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestFoundation(t *testing.T) {
@@ -16,7 +18,7 @@ func TestFoundation(t *testing.T) {
 	release := filepath.Join(root, "release with spaces")
 	copyCLIFixture(t, release, cli)
 	mustFS(t, os.Remove(filepath.Join(release, "VERSION")))
-	mustFS(t, os.WriteFile(filepath.Join(release, ".git"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, ".git"), nil, 0600))
 	entry := filepath.Join(release, "bin/selfishell")
 	home := t.TempDir()
 	before := mustSnapshot(t, home)
@@ -70,7 +72,7 @@ func TestFoundation(t *testing.T) {
 		{" v1 \r\n", "selfishell  v1 \r\n"},
 		{"", "selfishell \n"},
 	} {
-		mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte(tc.contents), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte(tc.contents), 0600))
 		got, err := captureCommand(home, entry, []string{"version"}, env)
 		mustFS(t, err)
 		if got.Status != 0 || string(got.Stdout) != tc.want || len(got.Stderr) != 0 {
@@ -109,7 +111,7 @@ func TestFoundation(t *testing.T) {
 	mustFS(t, os.MkdirAll(filepath.Join(installed, "bin"), 0700))
 	installedCLI := filepath.Join(installed, "bin/selfishell")
 	mustFS(t, copyFile(cli, installedCLI))
-	mustFS(t, os.WriteFile(filepath.Join(installed, "VERSION"), []byte("0.0.0-test\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(installed, "VERSION"), []byte("0.0.0-test\n"), 0600))
 	mustFS(t, os.RemoveAll(release))
 	noTools := []string{"SELFISHELL_ROOT=/wrong/root", "PATH=" + filepath.Join(root, "no-tools")}
 	got, err := captureCommand(home, installedCLI, []string{"version"}, noTools)

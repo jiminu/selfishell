@@ -186,7 +186,9 @@ lifecycle, package, dependency, or release change.
   native Zsh/Lua runtime probes and small external-process fixtures may remain.
 - Tests must use a temporary `HOME` and never install against or modify the
   developer's real home directory.
-- Integration tests call `t.Parallel()` unless they need `t.Setenv`.
+- Integration tests call `t.Parallel()` unless they need `t.Setenv`. They write
+  files only through `testutil.WriteFile` or `testutil.AppendFile`: a concurrent
+  fork would inherit a plain write descriptor and make exec fail with ETXTBSY.
 - Behavioral changes require tests, especially for empty/existing paths,
   repeated operations, interruptions, unsupported platforms, `--skip-packages`,
   uninstall, restore, update, and rollback.

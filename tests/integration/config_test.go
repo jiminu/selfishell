@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestConfig(t *testing.T) {
@@ -30,9 +32,9 @@ func TestConfig(t *testing.T) {
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
 	procWSL := filepath.Join(root, "proc-version-wsl")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, os.WriteFile(proc, []byte("Linux\n"), 0600))
-	mustFS(t, os.WriteFile(procWSL, []byte("Linux microsoft WSL2\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
+	mustFS(t, testutil.WriteFile(procWSL, []byte("Linux microsoft WSL2\n"), 0600))
 	for _, platform := range []string{"macos", "ubuntu", "ubuntu-wsl"} {
 		scenarios := []string{"empty", "existing", "custom"}
 		// WSL shares Ubuntu's configuration implementation. Keep its complete
@@ -43,8 +45,8 @@ func TestConfig(t *testing.T) {
 		for _, scenario := range scenarios {
 			t.Run(platform+"/"+scenario, func(t *testing.T) {
 				home := t.TempDir()
-				mustFS(t, os.WriteFile(filepath.Join(release, "packages.conf"), packages, 0644))
-				mustFS(t, os.WriteFile(filepath.Join(release, "dependencies.conf"), dependencies, 0644))
+				mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), packages, 0644))
+				mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), dependencies, 0644))
 				env := configEnv(platform, scenario, home, tools, osRelease, proc, procWSL)
 				runConfigScenario(t, home, cli, release, scenario, env)
 			})
@@ -81,10 +83,10 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 	config, state := configPaths(home, scenario)
 	if scenario != "empty" {
 		mustFS(t, os.MkdirAll(filepath.Join(config, "nvim"), 0700))
-		mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600))
-		mustFS(t, os.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600))
-		mustFS(t, os.WriteFile(filepath.Join(config, "nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600))
-		mustFS(t, os.WriteFile(filepath.Join(config, "starship.toml"), nil, 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(config, "nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(config, "starship.toml"), nil, 0600))
 	}
 	initial := mustSnapshot(t, home)
 	run := func(name string, status int, args ...string) capture {
@@ -96,16 +98,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		return got
 	}
 	if scenario == "malformed-package" {
-		file := filepath.Join(release, "packages.conf")
-		f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = f.WriteString("execute unsafe\n")
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-		mustFS(t, err)
+		mustFS(t, testutil.AppendFile(filepath.Join(release, "packages.conf"), []byte("execute unsafe\n")))
 		got := run("malformed-install", 1, "install", "--skip-packages", "--yes")
 		if !bytes.Equal(initial, got.Home) {
 			t.Fatal("malformed package mutated HOME")
@@ -113,15 +106,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		return
 	}
 	if scenario == "late-preflight" {
-		f, err := os.OpenFile(filepath.Join(home, ".vimrc"), os.O_APPEND|os.O_WRONLY, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = f.WriteString("\" >>> Selfishell vimrc >>>\n")
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-		mustFS(t, err)
+		mustFS(t, testutil.AppendFile(filepath.Join(home, ".vimrc"), []byte("\" >>> Selfishell vimrc >>>\n")))
 		before := mustSnapshot(t, home)
 		got := run("blocked-install", 1, "install", "--skip-packages", "--yes")
 		if !bytes.Equal(before, got.Home) {
@@ -154,18 +139,18 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 	changed := false
 	switch scenario {
 	case "changed-file":
-		mustFS(t, os.WriteFile(filepath.Join(config, "selfishell/zsh/history.zsh"), []byte("user changed managed content\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(config, "selfishell/zsh/history.zsh"), []byte("user changed managed content\n"), 0600))
 		changed = true
 	case "changed-link":
 		mustFS(t, os.Remove(filepath.Join(config, "nvim")))
 		mustFS(t, os.Symlink(filepath.Join(config, "starship.toml"), filepath.Join(config, "nvim")))
 		changed = true
 	case "changed-block":
-		mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("# >>> Selfishell initialize >>>\nuser changed shell config\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte("# >>> Selfishell initialize >>>\nuser changed shell config\n"), 0600))
 		changed = true
 	case "absent-block":
 		zshrc := filepath.Join(home, ".zshrc")
-		mustFS(t, os.WriteFile(zshrc, []byte("export PERSONAL=kept\r\n"), 0600))
+		mustFS(t, testutil.WriteFile(zshrc, []byte("export PERSONAL=kept\r\n"), 0600))
 		run("restore missing block", 0, "install", "--skip-packages", "--yes")
 		if data, err := os.ReadFile(zshrc); err != nil || !bytes.Contains(data, []byte("# >>> Selfishell initialize >>>")) || !bytes.Contains(data, []byte("export PERSONAL=kept\r\n")) {
 			t.Fatalf("missing block was not restored around personal content: %v %q", err, data)
@@ -182,7 +167,7 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 		}
 		fields[2] = []byte("pending")
 		next := p + ".next"
-		mustFS(t, os.WriteFile(next, bytes.Join(fields, []byte("\n")), 0600))
+		mustFS(t, testutil.WriteFile(next, bytes.Join(fields, []byte("\n")), 0600))
 		mustFS(t, os.Rename(next, p))
 		mustFS(t, os.Remove(filepath.Join(config, "nvim")))
 		run("recover", 0, "install", "--skip-packages", "--yes")
@@ -291,9 +276,9 @@ func TestConfigPendingBlockUninstallDiagnostic(t *testing.T) {
 		t.Fatalf("unexpected state: %q", raw)
 	}
 	fields[2] = []byte("pending")
-	mustFS(t, os.WriteFile(state, bytes.Join(fields, []byte("\n")), 0600))
+	mustFS(t, testutil.WriteFile(state, bytes.Join(fields, []byte("\n")), 0600))
 	vimrc := filepath.Join(home, ".vimrc")
-	mustFS(t, os.WriteFile(vimrc, []byte("\" >>> Selfishell vimrc >>>\nuser vimrc\n"), 0600))
+	mustFS(t, testutil.WriteFile(vimrc, []byte("\" >>> Selfishell vimrc >>>\nuser vimrc\n"), 0600))
 	before := mustSnapshot(t, home)
 	got, err := captureCommand(home, cli, []string{"uninstall", "--yes"}, env)
 	if err != nil {
@@ -321,16 +306,7 @@ func TestConfigInvalidDependencies(t *testing.T) {
 	copyCLIFixture(t, release, builtCLI)
 	cli := filepath.Join(release, "bin/selfishell")
 	tools := fixtureTools(t, root)
-	file := filepath.Join(release, "dependencies.conf")
-	f, err := os.OpenFile(file, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.WriteString("execute unsafe\n")
-	if closeErr := f.Close(); err == nil {
-		err = closeErr
-	}
-	mustFS(t, err)
+	mustFS(t, testutil.AppendFile(filepath.Join(release, "dependencies.conf"), []byte("execute unsafe\n")))
 	home := filepath.Join(root, "home")
 	mustFS(t, os.Mkdir(home, 0700))
 	env := configEnv("macos", "empty", home, tools, "/unused", "/unused", "/unused")
@@ -421,7 +397,7 @@ func TestConfigPurge(t *testing.T) {
 	home := t.TempDir()
 	release := filepath.Join(prefix, "share/selfishell/releases/1.0.0")
 	copyCLIFixture(t, release, builtCLI)
-	mustFS(t, os.WriteFile(filepath.Join(release, "VERSION"), []byte("1.0.0\n"), 0644))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte("1.0.0\n"), 0644))
 	mustFS(t, os.MkdirAll(filepath.Join(prefix, "bin"), 0700))
 	mustFS(t, os.Symlink("releases/1.0.0", filepath.Join(prefix, "share/selfishell/current")))
 	mustFS(t, os.Symlink("../share/selfishell/current/bin/selfishell", filepath.Join(prefix, "bin/selfishell")))
@@ -435,10 +411,10 @@ func runPurgeScenario(t *testing.T, home, cli, prefix string, env []string) {
 	t.Helper()
 	config, _ := configPaths(home, "existing")
 	mustFS(t, os.MkdirAll(filepath.Join(config, "nvim"), 0700))
-	mustFS(t, os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600))
-	mustFS(t, os.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600))
-	mustFS(t, os.WriteFile(filepath.Join(config, "nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600))
-	mustFS(t, os.WriteFile(filepath.Join(config, "starship.toml"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PERSONAL=kept\r\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(home, ".vimrc"), []byte("set number"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(config, "nvim/init.lua"), []byte("personal editor\x00bytes\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(config, "starship.toml"), nil, 0600))
 	result := map[string]capture{}
 	run := func(name string, args ...string) {
 		got, err := captureCommand(home, cli, args, env)

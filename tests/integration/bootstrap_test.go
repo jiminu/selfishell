@@ -18,6 +18,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/releasebuild"
 	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 const nextNativeVersion = "1.3.3"
@@ -81,7 +82,7 @@ func newBootstrapFixture(t *testing.T, versions ...string) *bootstrapFixture {
 		}
 	}
 	osRelease := filepath.Join(home, "os-release")
-	mustFS(t, os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
+	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
 	f.env = []string{
 		"SELFISHELL_RELEASE_ROOT=file://" + f.remote,
 		"SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=" + runtime.GOARCH,
@@ -263,7 +264,7 @@ func TestNativeBootstrapExactAndDefault(t *testing.T) {
 	requireLink(t, filepath.Join(f.share, "previous"), "releases/"+nativeArchiveVersion)
 	unknownRelease := filepath.Join(f.share, "releases/0.0.1")
 	mustFS(t, os.Mkdir(unknownRelease, 0700))
-	mustFS(t, os.WriteFile(filepath.Join(unknownRelease, "personal"), []byte("keep me\n"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(unknownRelease, "personal"), []byte("keep me\n"), 0600))
 	requireOK(t, f.run(t, "--version", nextNativeVersion))
 	if got := string(readBytes(t, filepath.Join(unknownRelease, "personal"))); got != "keep me\n" {
 		t.Fatalf("unknown release changed: %q", got)
@@ -282,7 +283,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 	t.Run("latest prerelease", func(t *testing.T) {
 		f := newBootstrapFixture(t, prereleaseNativeVersion)
 		tags := filepath.Join(f.home, "tags.json")
-		mustFS(t, os.WriteFile(tags, []byte("[{\"name\":\"v"+prereleaseNativeVersion+"\"}]\n"), 0600))
+		mustFS(t, testutil.WriteFile(tags, []byte("[{\"name\":\"v"+prereleaseNativeVersion+"\"}]\n"), 0600))
 		f.env = append(f.env, "SELFISHELL_RELEASE_TAGS_API_URL=file://"+tags)
 		requireOK(t, f.run(t))
 		requireLink(t, filepath.Join(f.share, "current"), "releases/"+prereleaseNativeVersion)
@@ -300,7 +301,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 	t.Run("unpublished tag", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		tags := filepath.Join(f.home, "tags.json")
-		mustFS(t, os.WriteFile(tags, []byte("[{\"name\":\"v9.9.9-beta.1\"}]\n"), 0600))
+		mustFS(t, testutil.WriteFile(tags, []byte("[{\"name\":\"v9.9.9-beta.1\"}]\n"), 0600))
 		f.env = append(f.env, "SELFISHELL_RELEASE_TAGS_API_URL=file://"+tags)
 		if got := f.run(t); got.Status == 0 {
 			t.Fatal("unpublished tag selected")
@@ -322,7 +323,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 		f.latest(t, nativeArchiveVersion)
 		bin := filepath.Join(f.home, "fakebin")
 		mustFS(t, os.Mkdir(bin, 0700))
-		mustFS(t, os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/curl-calls\"\nexec /usr/bin/curl \"$@\"\n"), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/curl-calls\"\nexec /usr/bin/curl \"$@\"\n"), 0755))
 		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 		requireOK(t, f.run(t))
 		calls := string(readBytes(t, filepath.Join(f.home, "curl-calls")))
@@ -432,7 +433,7 @@ func TestNativeBootstrapDownloadErrors(t *testing.T) {
 		bin := filepath.Join(f.home, "fakebin")
 		mustFS(t, os.Mkdir(bin, 0700))
 		script := "#!/bin/sh\necho 'Warning: Transient problem. Will retry.' >&2\necho 'curl: (5) Could not resolve proxy: proxy.invalid' >&2\nexit 5\n"
-		mustFS(t, os.WriteFile(filepath.Join(bin, "curl"), []byte(script), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(bin, "curl"), []byte(script), 0755))
 		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 		got := f.run(t)
 		requireExit(t, got, 1)
@@ -467,8 +468,8 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		elsewhere := filepath.Join(f.home, "elsewhere")
 		mustFS(t, os.MkdirAll(filepath.Join(elsewhere, "bin"), 0700))
-		mustFS(t, os.WriteFile(filepath.Join(elsewhere, "VERSION"), []byte(nativeArchiveVersion+"\n"), 0644))
-		mustFS(t, os.WriteFile(filepath.Join(elsewhere, "bin/selfishell"), []byte("#!/bin/sh\nexit 0\n"), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(elsewhere, "VERSION"), []byte(nativeArchiveVersion+"\n"), 0644))
+		mustFS(t, testutil.WriteFile(filepath.Join(elsewhere, "bin/selfishell"), []byte("#!/bin/sh\nexit 0\n"), 0755))
 		mustFS(t, os.MkdirAll(filepath.Join(f.share, "releases"), 0700))
 		release := filepath.Join(f.share, "releases", nativeArchiveVersion)
 		mustFS(t, os.Symlink(elsewhere, release))
@@ -487,11 +488,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion))
 		before := string(readBytes(t, filepath.Join(f.share, "current/VERSION")))
 		archive := filepath.Join(f.remote, "download", "v"+nativeArchiveVersion, hostArchive(nativeArchiveVersion))
-		file, e := os.OpenFile(archive, os.O_APPEND|os.O_WRONLY, 0)
-		mustFS(t, e)
-		_, e = file.WriteString("corruption")
-		mustFS(t, e)
-		mustFS(t, file.Close())
+		mustFS(t, testutil.AppendFile(archive, []byte("corruption")))
 		beforeHome := homeSnapshot(t, f.home)
 		requireExit(t, f.run(t, "--version", nativeArchiveVersion), 1)
 		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
@@ -506,7 +503,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 				f := newBootstrapFixture(t, nativeArchiveVersion)
 				mustFS(t, os.MkdirAll(filepath.Dir(f.cli), 0700))
 				if kind == "file" {
-					mustFS(t, os.WriteFile(f.cli, []byte("user file"), 0600))
+					mustFS(t, testutil.WriteFile(f.cli, []byte("user file"), 0600))
 				} else {
 					mustFS(t, os.Symlink("/usr/bin/true", f.cli))
 				}
@@ -528,7 +525,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
 		sfs := filepath.Join(f.prefix, "bin/sfs")
 		mustFS(t, os.MkdirAll(filepath.Dir(sfs), 0700))
-		mustFS(t, os.WriteFile(sfs, []byte("user command\n"), 0600))
+		mustFS(t, testutil.WriteFile(sfs, []byte("user command\n"), 0600))
 		got := f.run(t, "--version", nativeArchiveVersion)
 		requireOK(t, got)
 		requireContains(t, got.Stdout, "Leaving "+sfs+" in place")
@@ -551,7 +548,7 @@ func TestNativeBootstrapStagingAndTermination(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		bin := filepath.Join(f.home, "fakebin")
 		mustFS(t, os.Mkdir(bin, 0700))
-		mustFS(t, os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nkill -TERM \"$PPID\"\n"), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\nkill -TERM \"$PPID\"\n"), 0755))
 		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 		requireExit(t, f.run(t, "--version", nativeArchiveVersion), 143)
 		requireAbsent(t, filepath.Join(f.share, "current"))
@@ -571,7 +568,7 @@ version="${staging##*/.}"
 version="${version%%.tmp.*}"
 cp -R "$staging" "$releases/$version"
 `
-		mustFS(t, os.WriteFile(filepath.Join(bin, "tar"), []byte(script), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(bin, "tar"), []byte(script), 0755))
 		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion))
 		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
@@ -600,10 +597,10 @@ cp -R "$staging" "$releases/$version"
 		mustFS(t, os.Mkdir(newlineStage, 0700))
 		mustFS(t, os.Mkdir(foreignStage, 0700))
 		mustFS(t, os.Mkdir(foreignRelease, 0700))
-		mustFS(t, os.WriteFile(filepath.Join(foreignRelease, "personal"), []byte("keep me\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(foreignRelease, "personal"), []byte("keep me\n"), 0600))
 		mustFS(t, os.MkdirAll(filepath.Join(obsoleteRelease, "bin"), 0700))
-		mustFS(t, os.WriteFile(filepath.Join(obsoleteRelease, "VERSION"), []byte("0.9.0\n"), 0600))
-		mustFS(t, os.WriteFile(filepath.Join(obsoleteRelease, "bin/selfishell"), []byte("#!/bin/sh\n"), 0755))
+		mustFS(t, testutil.WriteFile(filepath.Join(obsoleteRelease, "VERSION"), []byte("0.9.0\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(obsoleteRelease, "bin/selfishell"), []byte("#!/bin/sh\n"), 0755))
 		old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		mustFS(t, os.Chtimes(stale, old, old))
 		mustFS(t, os.Chtimes(emptySuffix, old, old))
@@ -691,7 +688,7 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes"))
 		cache := filepath.Join(f.home, ".cache/selfishell")
 		mustFS(t, os.MkdirAll(cache, 0700))
-		mustFS(t, os.WriteFile(filepath.Join(cache, "test"), []byte("cache\n"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(cache, "test"), []byte("cache\n"), 0600))
 		out := f.cliRun(t, "uninstall", "--restore", "--purge", "--yes")
 		requireOK(t, out)
 		requireAbsent(t, f.cli)
@@ -716,7 +713,7 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		backups := filepath.Join(f.home, ".local/state/selfishell/backups")
 		mustFS(t, os.MkdirAll(backups, 0700))
 		file := filepath.Join(backups, "vimrc.backup.20260101000000")
-		mustFS(t, os.WriteFile(file, []byte("user edit\n"), 0600))
+		mustFS(t, testutil.WriteFile(file, []byte("user edit\n"), 0600))
 		dry := f.cliRun(t, "uninstall", "--restore", "--purge", "--dry-run")
 		requireOK(t, dry)
 		requireContains(t, dry.Stdout, "Would keep backups of modified files: "+backups)
