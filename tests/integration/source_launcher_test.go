@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestDeveloperScriptsGoPolicy(t *testing.T) {
@@ -28,7 +30,7 @@ func TestDeveloperScriptsGoPolicy(t *testing.T) {
 				root, home, _ := sourceLauncherFixture(t)
 				mustFS(t, copyTree(filepath.Join(repoRoot(), "scripts"), filepath.Join(root, "scripts")))
 				mustFS(t, copyFile(filepath.Join(repoRoot(), "dependencies.conf"), filepath.Join(root, "dependencies.conf")))
-				mustFS(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/test\n\ngo "+pinnedVersion+"\n"), 0600))
+				mustFS(t, testutil.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/test\n\ngo "+pinnedVersion+"\n"), 0600))
 				bin, temp := t.TempDir(), t.TempDir()
 				for _, name := range []string{"dirname", "awk", "mkdir", "mktemp", "rm"} {
 					path, err := exec.LookPath(name)
@@ -36,10 +38,10 @@ func TestDeveloperScriptsGoPolicy(t *testing.T) {
 					mustFS(t, os.Symlink(path, filepath.Join(bin, name)))
 				}
 				for _, name := range []string{"gh", "curl"} {
-					mustFS(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 72\n"), 0700))
+					mustFS(t, testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 72\n"), 0700))
 				}
 				if mode != "missing" {
-					mustFS(t, os.WriteFile(filepath.Join(bin, "go"), []byte(`#!/bin/sh
+					mustFS(t, testutil.WriteFile(filepath.Join(bin, "go"), []byte(`#!/bin/sh
 case "$1 $2" in
   'env GOVERSION')
     printf '%s\n' "$GOTOOLCHAIN|$GOENV|$GOWORK" >"$TEST_GO_CHECK"
@@ -125,7 +127,7 @@ func TestSourceLauncherForwardsThroughSymlinkFromHostileCWD(t *testing.T) {
 	root, home, entry := sourceLauncherFixture(t)
 	mustFS(t, os.MkdirAll(filepath.Join(root, ".build"), 0700))
 	binary := filepath.Join(root, ".build", "selfishell")
-	mustFS(t, os.WriteFile(binary, []byte("#!/bin/sh\nprintf 'arg:%s\\n' \"$1\"\ncat\nprintf 'error\\n' >&2\nexit 17\n"), 0700))
+	mustFS(t, testutil.WriteFile(binary, []byte("#!/bin/sh\nprintf 'arg:%s\\n' \"$1\"\ncat\nprintf 'error\\n' >&2\nexit 17\n"), 0700))
 	link := filepath.Join(home, "sfs")
 	mustFS(t, os.Symlink(entry, link))
 	got, err := runCommandIn(home, home, []string{link, "argument with spaces"}, []byte("input\n"), maintenanceMiseEnv(home), 5*time.Second)

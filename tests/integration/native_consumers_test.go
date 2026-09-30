@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func nativeConsumerFixture(t *testing.T, versions ...string) *bootstrapFixture {
@@ -83,9 +85,9 @@ func TestNativeMacInstalledArchiveConsumer(t *testing.T) {
 		originalVim := []byte("set nocompatible\r\nset background=dark")
 		originalStarship := []byte("format = \"user starship config\"\n")
 		zshrc, vimrc, starship := f.home+"/.zshrc", f.home+"/.vimrc", config+"/starship.toml"
-		mustFS(t, os.WriteFile(zshrc, originalZsh, 0640))
-		mustFS(t, os.WriteFile(vimrc, originalVim, 0600))
-		mustFS(t, os.WriteFile(starship, originalStarship, 0600))
+		mustFS(t, testutil.WriteFile(zshrc, originalZsh, 0640))
+		mustFS(t, testutil.WriteFile(vimrc, originalVim, 0600))
+		mustFS(t, testutil.WriteFile(starship, originalStarship, 0600))
 		requireOK(t, f.run(t, "--version", initial, "--setup", "--yes", "--skip-packages"))
 		requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+initial)
 		countBlock(t, zshrc, "# >>> Selfishell initialize >>>")
@@ -248,7 +250,7 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 	}
 	project := f.home + "/project"
 	mustFS(t, os.MkdirAll(project, 0700))
-	mustFS(t, os.WriteFile(project+"/mise.toml", []byte("[tools]\nnode = \"0.0.0\"\nneovim = \"0.0.0\"\nstarship = \"0.0.0\"\n"), 0600))
+	mustFS(t, testutil.WriteFile(project+"/mise.toml", []byte("[tools]\nnode = \"0.0.0\"\nneovim = \"0.0.0\"\nstarship = \"0.0.0\"\n"), 0600))
 	f.env = append(f.env, "MISE_TRUSTED_CONFIG_PATHS="+f.home)
 	requireOK(t, fullUbuntuCommand(t, f, f.home, 45*time.Second, "/bin/bash", repoRoot()+"/install.sh", "--prefix", f.prefix, "--version", initial))
 	requireOK(t, fullUbuntuCommand(t, f, project, 35*time.Minute, f.cli, "install", "--yes"))

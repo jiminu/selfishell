@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 const nativeZsh = "/bin/zsh"
@@ -22,7 +24,7 @@ func nativeHome(t *testing.T) string {
 func nativeWrite(t *testing.T, path, body string, mode os.FileMode) {
 	t.Helper()
 	mustFS(t, os.MkdirAll(filepath.Dir(path), 0700))
-	mustFS(t, os.WriteFile(path, []byte(body), mode))
+	mustFS(t, testutil.WriteFile(path, []byte(body), mode))
 }
 func nativeRun(t *testing.T, home, code string, env ...string) capture {
 	t.Helper()
@@ -361,11 +363,9 @@ func TestNativeSecureCompletionDirectory(t *testing.T) {
 	with := nativeCompletionProbe(t, home, secure, "", "")
 	for _, p := range []string{".zcompdump", ".zcompdump.audit"} {
 		path := filepath.Join(home, p)
-		file, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0600)
-		if err != nil {
-			t.Fatal(err)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			nativeWrite(t, path, "", 0600)
 		}
-		mustFS(t, file.Close())
 		nativeOldTime(t, path)
 	}
 	without := nativeCompletionProbe(t, home, "", "", "")

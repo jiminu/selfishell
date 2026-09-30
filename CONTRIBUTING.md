@@ -64,7 +64,9 @@ still uses a fresh cache.
 
 Integration tests call `t.Parallel()` unless they must change the test process
 environment with `t.Setenv`. Give each test its own temporary HOME and pass
-child environments explicitly.
+child environments explicitly. Write fixture files with `testutil.WriteFile` or
+`testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
+cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
 
 `scripts/check-go.sh` runs Go format, vet, tests and target builds through the
 repository gate. See [architecture](docs/ARCHITECTURE.md) for supported behavior

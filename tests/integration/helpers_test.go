@@ -12,12 +12,14 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestGoBuildCacheLifetime(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("SELFISHELL_TEST_CACHE_CHILD") == "1" {
-		mustFS(t, os.WriteFile(filepath.Join(testGoCache, "child-marker"), []byte("compiled fixture"), 0600))
+		mustFS(t, testutil.WriteFile(filepath.Join(testGoCache, "child-marker"), []byte("compiled fixture"), 0600))
 		return
 	}
 	for _, mode := range []string{"private", "shared", "relative"} {
@@ -29,7 +31,7 @@ func TestGoBuildCacheLifetime(t *testing.T) {
 			} else if mode == "relative" {
 				cache = "relative-cache"
 			}
-			mustFS(t, os.WriteFile(filepath.Join(shared, "owner-marker"), []byte("retained"), 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(shared, "owner-marker"), []byte("retained"), 0600))
 			cmd := exec.Command(os.Args[0], "-test.run=^TestGoBuildCacheLifetime$", "-test.count=1")
 			cmd.Dir = home
 			cmd.Env = withEnv(baseEnv(home, temp), "SELFISHELL_TEST_CACHE_CHILD=1", "SELFISHELL_TEST_GO_CACHE="+cache)
@@ -62,7 +64,7 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	file := filepath.Join(root, "file")
-	if err := os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600); err != nil {
+	if err := testutil.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("file", filepath.Join(root, "link")); err != nil {
@@ -76,8 +78,8 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	}
 	before := mustSnapshot(t, root)
 	changes := []func(){
-		func() { mustFS(t, os.WriteFile(file, []byte{'a', '\n', 0, 'b'}, 0600)) },
-		func() { mustFS(t, os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b', '\n'}, 0600)) },
+		func() { mustFS(t, testutil.WriteFile(file, []byte{'a', '\n', 0, 'b'}, 0600)) },
+		func() { mustFS(t, testutil.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b', '\n'}, 0600)) },
 		func() { mustFS(t, os.Chmod(file, 0640)) },
 		func() {
 			mustFS(t, os.Remove(filepath.Join(root, "link")))
@@ -85,7 +87,7 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 		},
 		func() {
 			mustFS(t, os.Remove(filepath.Join(root, "link")))
-			mustFS(t, os.WriteFile(filepath.Join(root, "link"), nil, 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(root, "link"), nil, 0600))
 		},
 		func() { mustFS(t, os.Remove(filepath.Join(root, "link"))) },
 	}
@@ -95,7 +97,7 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 			t.Fatalf("change %d hidden", i)
 		}
 		mustFS(t, os.Remove(file))
-		mustFS(t, os.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600))
+		mustFS(t, testutil.WriteFile(file, []byte{'a', '\r', '\n', 0, 'b'}, 0600))
 		if _, err := os.Lstat(filepath.Join(root, "link")); err == nil {
 			mustFS(t, os.Remove(filepath.Join(root, "link")))
 		} else if !os.IsNotExist(err) {
@@ -111,10 +113,10 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	}
 	mustFS(t, os.Chmod(file, 0600))
 	outside := t.TempDir()
-	mustFS(t, os.WriteFile(filepath.Join(outside, "value"), []byte("before"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(outside, "value"), []byte("before"), 0600))
 	mustFS(t, os.Symlink(outside, filepath.Join(root, "outside")))
 	unchanged := mustSnapshot(t, root)
-	mustFS(t, os.WriteFile(filepath.Join(outside, "value"), []byte("after"), 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(outside, "value"), []byte("after"), 0600))
 	if !bytes.Equal(unchanged, mustSnapshot(t, root)) {
 		t.Fatal("followed symlink")
 	}
@@ -140,15 +142,15 @@ func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(stateDir, "file.state")
-	mustFS(t, os.WriteFile(state, []byte("2\nfile\nactive\n/target\n/source\n-\n123:4\n"), 0600))
+	mustFS(t, testutil.WriteFile(state, []byte("2\nfile\nactive\n/target\n/source\n-\n123:4\n"), 0600))
 	before := mustSnapshot(t, root)
 	backup := filepath.Join(stateDir, "backups/file.backup.20000101000000")
-	mustFS(t, os.WriteFile(backup, []byte("original\n"), 0600))
+	mustFS(t, testutil.WriteFile(backup, []byte("original\n"), 0600))
 	if bytes.Equal(before, mustSnapshot(t, root)) {
 		t.Fatal("backup hidden")
 	}
 	mustFS(t, os.Remove(backup))
-	mustFS(t, os.WriteFile(state, []byte("2\nfile\npending\n/target\n/source\n-\n123:4\n"), 0600))
+	mustFS(t, testutil.WriteFile(state, []byte("2\nfile\npending\n/target\n/source\n-\n123:4\n"), 0600))
 	if bytes.Equal(before, mustSnapshot(t, root)) {
 		t.Fatal("state change hidden")
 	}
@@ -161,7 +163,7 @@ func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	script := filepath.Join(root, "script")
-	mustFS(t, os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
+	mustFS(t, testutil.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
 	got, err := runCommand(root, []string{"/bin/sh", script, "", "two words"}, []byte("input\x00bytes"), nil, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +176,7 @@ func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
 func TestInvalidCLIOverrideFails(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "not-executable")
-	mustFS(t, os.WriteFile(file, []byte("#!/bin/sh\nexit 0\n"), 0600))
+	mustFS(t, testutil.WriteFile(file, []byte("#!/bin/sh\nexit 0\n"), 0600))
 	for _, tc := range []struct{ path, diagnostic string }{
 		{"relative/path", "must be absolute"},
 		{filepath.Join(root, "missing"), "invalid SELFISHELL_TEST_CLI"},
@@ -191,7 +193,7 @@ func TestInvalidCLIOverrideFails(t *testing.T) {
 func TestCLIOverrideExecutableSymlinkPreservesIO(t *testing.T) {
 	root := t.TempDir()
 	target, link := filepath.Join(root, "target"), filepath.Join(root, "test-cli")
-	mustFS(t, os.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
+	mustFS(t, testutil.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
 	mustFS(t, os.Symlink(target, link))
 	t.Setenv("SELFISHELL_TEST_CLI", link)
 	selected, err := testCLI(t)
