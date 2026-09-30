@@ -429,6 +429,58 @@ func TestDirectGitPinAndRepair(t *testing.T) {
 	assertNoPath(t, target)
 }
 
+func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
+	for _, shape := range []string{"managed_real_checkout", "external_lexical_marker"} {
+		t.Run(shape, func(t *testing.T) {
+			op, _, manifest, home, repo, _ := directGitFixture(t)
+			// alias/.. resolves to actual/data; a lexical clean would select work/data.
+			os.MkdirAll(home+"/actual/child", 0700)
+			os.MkdirAll(home+"/work", 0700)
+			if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
+			paths, err := UserPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			real, lexical := home+"/actual/data/testgit", home+"/work/data/testgit"
+			state := paths.State + "/dependencies/testgit"
+			if shape == "managed_real_checkout" {
+				gitCommand(t, home, "clone", "--quiet", repo, real)
+				writeTestFile(t, state, "v1.0\n", 0600)
+				before, err := os.Lstat(real)
+				if err != nil {
+					t.Fatal(err)
+				}
+				// Without its source, any clone or replacement would fail.
+				if err := os.RemoveAll(repo); err != nil {
+					t.Fatal(err)
+				}
+				if err := installGit(op, paths, manifest); err != nil || output(op) != "" || op.UnchangedCount != 1 {
+					t.Fatalf("approved checkout not reused: %v %q", err, output(op))
+				}
+				after, err := os.Lstat(real)
+				if err != nil || !os.SameFile(before, after) || readTestFile(t, state) != "v1.0\n" {
+					t.Fatalf("approved checkout replaced: %v", err)
+				}
+				assertNoPath(t, lexical)
+				return
+			}
+			writeTestFile(t, real+"/user-file", "user data\n", 0600)
+			writeTestFile(t, lexical+"/marker", "marker\n", 0600)
+			if err := installGit(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "not a usable testgit installation") {
+				t.Fatalf("lexical marker accepted: %v %q", err, output(op))
+			}
+			assertNoPath(t, real+"/marker")
+			assertNoPath(t, state)
+			if readTestFile(t, real+"/user-file") != "user data\n" || readTestFile(t, lexical+"/marker") != "marker\n" {
+				t.Fatal("existing paths changed")
+			}
+		})
+	}
+}
+
 func TestShippedZinitDependencyPinsCommit(t *testing.T) {
 	deps, err := ReadDependencies("../../dependencies.conf")
 	if err != nil {

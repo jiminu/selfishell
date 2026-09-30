@@ -401,12 +401,13 @@ func directDownloadIntact(dep Dependency, target string, info os.FileInfo, manag
 	return err == nil && closeErr == nil && hex.EncodeToString(h.Sum(nil)) == dep.Checksum
 }
 
-// directGitMarkerPresent requires the approved marker inside the checkout.
+// directGitMarkerPresent requires the approved marker inside the checkout. The
+// raw join keeps symlink/.. components that filepath.Join would clean.
 func directGitMarkerPresent(dep Dependency, target string, info os.FileInfo) bool {
 	if !info.IsDir() || !filepath.IsLocal(dep.Marker) {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(target, dep.Marker))
+	_, err := os.Stat(target + "/" + dep.Marker)
 	return err == nil
 }
 
