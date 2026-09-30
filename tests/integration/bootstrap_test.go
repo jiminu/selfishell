@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -159,6 +162,51 @@ func requireContains(t *testing.T, b []byte, s string) {
 		t.Fatalf("missing %q in %q", s, b)
 	}
 }
+
+// Raw curl output must reach users only inside an installer message.
+func requireInstallerErrorsOnly(t *testing.T, stderr []byte) {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimRight(string(stderr), "\n"), "\n") {
+		if !strings.HasPrefix(line, "selfishell installer: ") {
+			t.Fatalf("raw error output: %q", stderr)
+		}
+	}
+}
+
+type releaseServer struct {
+	url      string
+	mu       sync.Mutex
+	requests []string
+}
+
+// serveHTTP serves the fixture's release root through real curl, answering the
+// first request for unavailableOnce with 503.
+func (f *bootstrapFixture) serveHTTP(t *testing.T, unavailableOnce string) *releaseServer {
+	t.Helper()
+	s := &releaseServer{}
+	files := http.FileServer(http.Dir(f.remote))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		first := r.URL.Path == unavailableOnce && !slices.Contains(s.requests, r.URL.Path)
+		s.requests = append(s.requests, r.URL.Path)
+		s.mu.Unlock()
+		if first {
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
+		files.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	s.url = server.URL
+	f.env = append(f.env, "SELFISHELL_RELEASE_ROOT="+s.url)
+	return s
+}
+
+func (s *releaseServer) paths() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.requests)
+}
 func readBytes(t *testing.T, path string) []byte {
 	t.Helper()
 	b, e := os.ReadFile(path)
@@ -228,9 +276,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 			t.Fatal("missing metadata accepted")
 		}
 		requireContains(t, got.Stderr, "Use --version VERSION to select one.")
-		if bytes.Contains(got.Stderr, []byte("curl:")) {
-			t.Fatalf("raw curl: %q", got.Stderr)
-		}
+		requireInstallerErrorsOnly(t, got.Stderr)
 		requireAbsent(t, filepath.Join(f.share, "current"))
 	})
 	t.Run("unpublished tag", func(t *testing.T) {
@@ -252,7 +298,7 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 		requireOK(t, f.run(t))
 		calls := string(readBytes(t, filepath.Join(f.home, "curl-calls")))
-		for _, s := range []string{"--connect-timeout 10", "--speed-limit 1024", "--speed-time 30", "--max-time 15"} {
+		for _, s := range []string{"--connect-timeout 10", "--speed-limit 1024", "--speed-time 30", "--max-time 15", "--retry 3 --retry-max-time 60"} {
 			if !strings.Contains(calls, s) {
 				t.Errorf("missing curl policy %s: %s", s, calls)
 			}
@@ -293,6 +339,68 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 			t.Fatal("missing exact release selected latest")
 		}
 		requireAbsent(t, filepath.Join(f.share, "current"))
+	})
+}
+
+func TestNativeBootstrapDownloadErrors(t *testing.T) {
+	t.Parallel()
+	t.Run("curl missing", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		f.latest(t, nativeArchiveVersion)
+		mustFS(t, os.Remove(filepath.Join(f.systembin, "curl")))
+		for _, args := range [][]string{nil, {"--version", nativeArchiveVersion}} {
+			got := f.run(t, args...)
+			requireExit(t, got, 1)
+			requireContains(t, got.Stderr, "curl is required")
+			requireInstallerErrorsOnly(t, got.Stderr)
+			requireAbsent(t, filepath.Join(f.share, "current"))
+		}
+	})
+	t.Run("transient failure retried", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		archive := "/download/v" + nativeArchiveVersion + "/" + hostArchive(nativeArchiveVersion)
+		server := f.serveHTTP(t, archive)
+		got := f.run(t, "--version", nativeArchiveVersion)
+		requireOK(t, got)
+		if n := len(slices.DeleteFunc(server.paths(), func(p string) bool { return p != archive })); n != 2 {
+			t.Fatalf("archive requested %d times: %v", n, server.paths())
+		}
+		if bytes.Contains(got.Stderr, []byte("503")) {
+			t.Fatalf("recovered attempt reported: %q", got.Stderr)
+		}
+		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
+	})
+	t.Run("explicit version not found", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		f.latest(t, nativeArchiveVersion)
+		server := f.serveHTTP(t, "")
+		got := f.run(t, "--version", "9.9.9")
+		requireExit(t, got, 1)
+		url := server.url + "/download/v9.9.9/" + hostArchive("9.9.9")
+		requireContains(t, got.Stderr, "Unable to download Selfishell 9.9.9 from "+url+": curl: (22)")
+		requireContains(t, got.Stderr, "404")
+		requireInstallerErrorsOnly(t, got.Stderr)
+		for _, p := range server.paths() {
+			if strings.Contains(p, "latest") {
+				t.Fatalf("explicit version consulted latest: %v", server.paths())
+			}
+		}
+		requireAbsent(t, filepath.Join(f.share, "current"))
+	})
+	t.Run("latest discovery reports curl error", func(t *testing.T) {
+		f := newBootstrapFixture(t)
+		bin := filepath.Join(f.home, "fakebin")
+		mustFS(t, os.Mkdir(bin, 0700))
+		script := "#!/bin/sh\necho 'Warning: Transient problem. Will retry.' >&2\necho 'curl: (5) Could not resolve proxy: proxy.invalid' >&2\nexit 5\n"
+		mustFS(t, os.WriteFile(filepath.Join(bin, "curl"), []byte(script), 0755))
+		f.env = append(f.env, "PATH="+bin+":"+f.systembin)
+		got := f.run(t)
+		requireExit(t, got, 1)
+		requireContains(t, got.Stderr, "Unable to determine the latest Selfishell release: curl: (5) Could not resolve proxy: proxy.invalid. Use --version VERSION to select one.")
+		requireInstallerErrorsOnly(t, got.Stderr)
+		if bytes.Contains(got.Stderr, []byte("Warning")) {
+			t.Fatalf("curl transcript reported: %q", got.Stderr)
+		}
 	})
 }
 

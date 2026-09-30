@@ -3,6 +3,10 @@
 set -euo pipefail
 
 SELFISHELL_RELEASE_ROOT="${SELFISHELL_RELEASE_ROOT:-https://github.com/jiminu/selfishell/releases}"
+SELFISHELL_CURL_CONNECT_TIMEOUT="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"
+SELFISHELL_CURL_LOW_SPEED_LIMIT="${SELFISHELL_CURL_LOW_SPEED_LIMIT:-1024}"
+SELFISHELL_CURL_LOW_SPEED_TIME="${SELFISHELL_CURL_LOW_SPEED_TIME:-30}"
+SELFISHELL_CURL_METADATA_MAX_TIME="${SELFISHELL_CURL_METADATA_MAX_TIME:-15}"
 SELFISHELL_TEMP_DIR=""
 SELFISHELL_STAGING_DIR=""
 
@@ -119,17 +123,17 @@ bootstrap_validate_version() {
   }
 }
 
-bootstrap_curl() {
-  local mode="$1"
-  local connect_timeout="${SELFISHELL_CURL_CONNECT_TIMEOUT:-10}"
-  local low_speed_limit="${SELFISHELL_CURL_LOW_SPEED_LIMIT:-1024}"
-  local low_speed_time="${SELFISHELL_CURL_LOW_SPEED_TIME:-30}"
-  local metadata_max_time="${SELFISHELL_CURL_METADATA_MAX_TIME:-15}"
+# Checked before any download, so a missing curl or a bad setting is not
+# reported as a network failure.
+bootstrap_curl_preflight() {
   local value
-  local arguments=()
-  shift
 
-  for value in "$connect_timeout" "$low_speed_limit" "$low_speed_time" "$metadata_max_time"; do
+  if ! command -v curl >/dev/null 2>&1; then
+    bootstrap_error "curl is required to download Selfishell. Install curl, then rerun the installer."
+    return 1
+  fi
+  for value in "$SELFISHELL_CURL_CONNECT_TIMEOUT" "$SELFISHELL_CURL_LOW_SPEED_LIMIT" \
+    "$SELFISHELL_CURL_LOW_SPEED_TIME" "$SELFISHELL_CURL_METADATA_MAX_TIME"; do
     case "$value" in
       "" | *[!0-9]* | 0)
         bootstrap_error "Curl timeout and speed settings must be positive integers."
@@ -137,14 +141,23 @@ bootstrap_curl() {
         ;;
     esac
   done
+}
 
+bootstrap_curl() {
+  local mode="$1"
+  local arguments=()
+  shift
+
+  # --retry covers only timeouts and HTTP 408, 429, 500, 502, 503 and 504;
+  # --retry-max-time also caps a server's Retry-After delay.
   arguments=(
-    --connect-timeout "$connect_timeout"
-    --speed-limit "$low_speed_limit"
-    --speed-time "$low_speed_time"
+    --connect-timeout "$SELFISHELL_CURL_CONNECT_TIMEOUT"
+    --speed-limit "$SELFISHELL_CURL_LOW_SPEED_LIMIT"
+    --speed-time "$SELFISHELL_CURL_LOW_SPEED_TIME"
+    --retry 3 --retry-max-time 60
   )
   case "$mode" in
-    metadata) arguments+=(--max-time "$metadata_max_time") ;;
+    metadata) arguments+=(--max-time "$SELFISHELL_CURL_METADATA_MAX_TIME") ;;
     transfer) ;;
     *)
       bootstrap_error "Unknown curl mode: $mode"
@@ -155,11 +168,33 @@ bootstrap_curl() {
   curl -fsSL "${arguments[@]}" "$@"
 }
 
+# Earlier lines may belong to attempts a retry already replaced.
+bootstrap_curl_error() {
+  awk 'NF { line = $0 } END { if (line != "") print line }' "$1" 2>/dev/null || true
+}
+
+bootstrap_download() {
+  local version="$1"
+  local url="$2"
+  local output="$3"
+  local error_file="$SELFISHELL_TEMP_DIR/curl-error"
+  local reason
+
+  if bootstrap_curl transfer "$url" -o "$output" 2>"$error_file"; then
+    return
+  fi
+  reason="$(bootstrap_curl_error "$error_file")"
+  bootstrap_error "Unable to download Selfishell $version from $url${reason:+: $reason}"
+  return 1
+}
+
+# Appends each curl error to error_file; the caller reports the latest one.
 bootstrap_latest_version() {
+  local error_file="$1"
   local official_root="https://github.com/jiminu/selfishell/releases"
   local api_url response version published_version
 
-  if version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>/dev/null)"; then
+  if version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/latest/download/VERSION" 2>>"$error_file")"; then
     version="${version#v}"
     [[ -n "$version" ]] && {
       printf '%s\n' "$version"
@@ -172,11 +207,11 @@ bootstrap_latest_version() {
   response="$(bootstrap_curl metadata \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
-    "$api_url" 2>/dev/null)" || return 1
+    "$api_url" 2>>"$error_file")" || return 1
   version="$(printf '%s\n' "$response" | sed -n \
     -e 's/.*"name"[[:space:]]*:[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/p' | sed -n '1p')"
   [[ -n "$version" ]] || return 1
-  published_version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>/dev/null)" || return 1
+  published_version="$(bootstrap_curl metadata "$SELFISHELL_RELEASE_ROOT/download/v${version}/VERSION" 2>>"$error_file")" || return 1
   published_version="${published_version#v}"
   [[ "$published_version" == "$version" ]] || return 1
   printf '%s\n' "$version"
@@ -340,6 +375,7 @@ main() {
   local previous_target=""
   local install_sfs=1
   local nested_staging
+  local reason
 
   while (("$#" > 0)); do
     case "$1" in
@@ -385,10 +421,19 @@ main() {
 
   platform="$(bootstrap_platform)"
   architecture="$(bootstrap_architecture)"
+  bootstrap_curl_preflight
+
+  SELFISHELL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-install.XXXXXX")"
+  # A signal must stop the install, not only clean up: continuing could still activate.
+  trap bootstrap_cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
   if [[ -z "$version" ]]; then
-    version="$(bootstrap_latest_version)" || {
-      bootstrap_error "Unable to determine the latest Selfishell release. Use --version VERSION to select one."
+    version="$(bootstrap_latest_version "$SELFISHELL_TEMP_DIR/curl-error")" || {
+      reason="$(bootstrap_curl_error "$SELFISHELL_TEMP_DIR/curl-error")"
+      bootstrap_error "Unable to determine the latest Selfishell release${reason:+: $reason}. Use --version VERSION to select one."
       return 1
     }
   fi
@@ -396,18 +441,12 @@ main() {
 
   release_url="$SELFISHELL_RELEASE_ROOT/download/v${version}"
   archive_name="selfishell-${version}-${platform}-${architecture}.tar.gz"
-  SELFISHELL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/selfishell-install.XXXXXX")"
-  # A signal must stop the install, not only clean up: continuing could still activate.
-  trap bootstrap_cleanup EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
   archive_file="$SELFISHELL_TEMP_DIR/$archive_name"
   checksum_file="$SELFISHELL_TEMP_DIR/SHA256SUMS"
 
   printf '%sDownloading Selfishell %s for %s/%s%s\n' "$SELFISHELL_COLOR_CYAN" "$version" "$platform" "$architecture" "$SELFISHELL_COLOR_RESET"
-  bootstrap_curl transfer "$release_url/$archive_name" -o "$archive_file"
-  bootstrap_curl transfer "$release_url/SHA256SUMS" -o "$checksum_file"
+  bootstrap_download "$version" "$release_url/$archive_name" "$archive_file"
+  bootstrap_download "$version" "$release_url/SHA256SUMS" "$checksum_file"
 
   # Collapse agreeing checksum entries; conflicting duplicates still fail verification.
   expected_checksum="$(awk -v archive="$archive_name" '$2 == archive { print $1 }' "$checksum_file" | sort -u)"

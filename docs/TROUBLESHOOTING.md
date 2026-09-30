@@ -58,7 +58,9 @@ export SELFISHELL_CURL_METADATA_MAX_TIME=30
 ```
 
 Archive downloads deliberately have no fixed total deadline, so a slow but
-progressing download can finish.
+progressing download can finish. The bootstrap installer retries a release
+download up to three times within one minute after a timeout or an HTTP 408,
+429, 500, 502, 503, or 504 response; a failure reports curl's final error.
 
 ## Clipboard over SSH and on WSL
 
