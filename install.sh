@@ -418,6 +418,9 @@ main() {
     bootstrap_error "--prefix must be an absolute path: $prefix"
     return 2
   }
+  if [[ "$setup" != "1" ]] && [[ "$assume_yes" == "1" || "$skip_packages" == "1" ]]; then
+    printf 'selfishell installer: warning: --yes and --skip-packages apply only with --setup; ignoring them.\n' >&2
+  fi
 
   platform="$(bootstrap_platform)"
   architecture="$(bootstrap_architecture)"
