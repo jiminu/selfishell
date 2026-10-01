@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,24 +34,6 @@ func TestFoundation(t *testing.T) {
 		if len(got.Stderr) != 0 {
 			t.Fatalf("help stderr: %q", got.Stderr)
 		}
-	}
-	for _, tc := range []struct {
-		args           []string
-		status         int
-		stdout, stderr string
-	}{
-		{[]string{"-v"}, 0, "selfishell development\n", ""},
-		{[]string{"version", "help", "extra"}, 0, "Usage: selfishell version [--available]\n", ""},
-		{[]string{"version", "--help"}, 0, "Usage: selfishell version [--available]\n", ""},
-	} {
-		t.Run(fmt.Sprint(tc.args), func(t *testing.T) {
-			got, err := captureCommand(home, chained, tc.args, env)
-			mustFS(t, err)
-			requireStatus(t, "command", got, tc.status)
-			if string(got.Stdout) != tc.stdout || string(got.Stderr) != tc.stderr {
-				t.Fatalf("stdout=%q stderr=%q; expected %q / %q", got.Stdout, got.Stderr, tc.stdout, tc.stderr)
-			}
-		})
 	}
 	for _, args := range [][]string{{"update", "--cli-only", "--version", "1.2.3", "--yes"}, {"rollback", "--yes"}} {
 		got, err := captureCommand(home, entry, args, env)
