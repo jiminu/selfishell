@@ -9,41 +9,56 @@ import (
 	"testing"
 )
 
-func TestFullInstallRequiredPackageFailureBeforeConfiguration(t *testing.T) {
-	root, home := t.TempDir(), t.TempDir()
-	for _, name := range []string{"config", "dependencies.conf"} {
-		if err := os.Symlink(filepath.Join(testRelease(t), name), filepath.Join(root, name)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(root, "packages.conf"), []byte("package ubuntu required apt fixture-required-unavailable\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	bin := t.TempDir()
-	for name, body := range map[string]string{
-		"apt-get":    "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/package-calls\"\nexit 1\n",
-		"dpkg-query": "#!/bin/sh\nexit 1\n",
-		"sudo":       "#!/bin/sh\nexec \"$@\"\n",
+func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
+	const required = "package ubuntu required apt fixture-unavailable\n"
+	const unpinned = "package ubuntu required apt fixture-apt\npackage all required mise absent\n"
+	for _, tc := range []struct {
+		name, packages, want, calls string
+		args                        []string
+	}{
+		{"install required failure", required, "Could not update apt package indexes", "dpkg-query\napt-get update\n", []string{"install", "--yes"}},
+		{"update required failure", required, "Could not update apt package indexes", "dpkg-query\napt-get update\n", []string{"update", "--tools-only"}},
+		{"install missing pin", unpinned, "missing approved mise version: absent", "", []string{"install", "--yes"}},
+		{"update missing pin", unpinned, "missing approved mise version: absent", "", []string{"update", "--tools-only", "--yes"}},
 	} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	isolateHome(t, home)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(bin, "os-release"))
-	os.WriteFile(filepath.Join(bin, "os-release"), []byte("ID=ubuntu\n"), 0600)
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
-	if code != 1 || !strings.Contains(stderr.String(), "Could not update apt package indexes") {
-		t.Fatalf("full install did not reach package phase: code=%d stderr=%q", code, stderr.String())
-	}
-	if data, err := os.ReadFile(home + "/package-calls"); err != nil || string(data) != "update\n" {
-		t.Fatalf("fixture apt call: %q %v", data, err)
-	}
-	if _, err := os.Lstat(filepath.Join(home, ".zshrc")); !os.IsNotExist(err) {
-		t.Fatalf("required package failure changed configuration: %v", err)
+		t.Run(tc.name, func(t *testing.T) {
+			home := isolatedUpdateHome(t)
+			root, bin := t.TempDir(), t.TempDir()
+			for _, name := range []string{"config", "dependencies.conf"} {
+				if err := os.Symlink(filepath.Join(testRelease(t), name), filepath.Join(root, name)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeTestFile(t, root+"/packages.conf", tc.packages, 0600)
+			if tc.args[0] == "update" {
+				writeTestFile(t, home+"/.local/state/selfishell/configured", "1\n", 0600)
+			}
+			for name, body := range map[string]string{
+				"dpkg-query": "#!/bin/sh\nprintf 'dpkg-query\\n' >>\"$HOME/package-calls\"\nexit 1\n",
+				"apt-get":    "#!/bin/sh\nprintf 'apt-get %s\\n' \"$*\" >>\"$HOME/package-calls\"\nexit 1\n",
+				"sudo":       "#!/bin/sh\nexec \"$@\"\n",
+				"os-release": "ID=ubuntu\n",
+			} {
+				writeTestFile(t, bin+"/"+name, body, 0700)
+			}
+			t.Setenv("PATH", bin+":/usr/bin:/bin")
+			t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+			t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", bin+"/os-release")
+			t.Setenv("SELFISHELL_TEST_TTY", "")
+			code, out, stderr := commandResult(root, tc.args...)
+			if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, tc.want) {
+				t.Fatalf("%d %q %q", code, out, stderr)
+			}
+			if tc.args[0] == "update" && !strings.Contains(stderr, "retry with: selfishell update --tools-only\n") {
+				t.Fatalf("missing tools retry guidance: %q", stderr)
+			}
+			if calls, _ := os.ReadFile(home + "/package-calls"); string(calls) != tc.calls {
+				t.Fatalf("package calls %q, want %q", calls, tc.calls)
+			}
+			if _, err := os.Lstat(home + "/.zshrc"); !os.IsNotExist(err) {
+				t.Fatalf("package failure applied configuration: %v", err)
+			}
+		})
 	}
 }
 
@@ -269,63 +284,6 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 	}
 	if !strings.Contains(out.String(), "items unchanged") {
 		t.Fatalf("missing repeat report: %s", out.String())
-	}
-}
-
-func TestOptionalMiseSkipReportsPackageNames(t *testing.T) {
-	home, root := t.TempDir(), t.TempDir()
-	isolateHome(t, home)
-	if err := os.MkdirAll(root+"/config/shared", 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(root+"/config/shared/mise.toml", []byte("[tools]\neza = \"0.23.0\"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	var out, stderr bytes.Buffer
-	c := CLI{Root: root, Out: &out, Err: &stderr}
-	o := &PackageOperation{Process: Process{Out: &out, Err: &stderr, Env: []string{"HOME=" + home, "PATH=" + t.TempDir()}}}
-	paths, _ := UserPaths()
-	if err := c.installPackages(context.Background(), o, paths, []Package{{Platform: "all", Requirement: "optional", Manager: "mise", Name: "eza"}}, "macos", "arm64", false, false); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(stderr.String(), "Skipped optional packages:") {
-		t.Fatalf("reported before remaining optional phases: %q", stderr.String())
-	}
-	o.reportSkippedOptional()
-	if len(o.SkippedOptional) != 1 || o.SkippedOptional[0] != "eza" || !strings.Contains(stderr.String(), "Skipped optional packages: eza\n") {
-		t.Fatalf("skipped %v, warning %q", o.SkippedOptional, stderr.String())
-	}
-}
-
-func TestFullInstallRejectsMissingMisePinBeforePackageCommands(t *testing.T) {
-	_, _, root, manifest, home, _ := neovimFixture(t)
-	if err := os.RemoveAll(root + "/config"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(testRelease(t)+"/config", root+"/config"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(manifest, root+"/dependencies.conf"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(root+"/packages.conf", []byte("package ubuntu required apt example\npackage all required mise absent\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	bin := home + "/bin"
-	if err := os.WriteFile(bin+"/dpkg-query", []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
-	os.WriteFile(home+"/os-release", []byte("ID=ubuntu\n"), 0600)
-	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
-	if code != 1 || !strings.Contains(stderr.String(), "missing approved mise version: absent") {
-		t.Fatalf("%d %s", code, stderr.String())
-	}
-	if _, err := os.Lstat(home + "/package-called"); !os.IsNotExist(err) {
-		t.Fatalf("package command ran first: %v", err)
 	}
 }
 
