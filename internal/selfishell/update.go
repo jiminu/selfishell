@@ -284,7 +284,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.error(err.Error())
 		return 1
 	}
-	prepared, err := c.prepareConfig(platform, o.dry, o.yes, true)
+	prepared, err := c.prepareConfig(platform, o.dry, o.yes, true, false)
 	if err != nil {
 		c.error(err.Error())
 		return 1

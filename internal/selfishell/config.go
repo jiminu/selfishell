@@ -11,10 +11,11 @@ import (
 )
 
 const installHelp = `Usage:
-  selfishell install [--skip-packages] [--dry-run] [--yes]
+  selfishell install [--skip-packages] [--ghostty] [--dry-run] [--yes]
 
 Options:
   --skip-packages Skip package and tool installation and apply managed configuration only
+  --ghostty  On macOS, install and manage Ghostty even if it was declined before
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -31,11 +32,13 @@ Options:
 `
 
 func (c CLI) install(args []string) (result int) {
-	skip, dry, yes := false, false, false
+	skip, dry, yes, ghostty := false, false, false, false
 	for _, arg := range args {
 		switch arg {
 		case "--skip-packages":
 			skip = true
+		case "--ghostty":
+			ghostty = true
 		case "--dry-run":
 			dry = true
 		case "--yes":
@@ -61,6 +64,10 @@ func (c CLI) install(args []string) (result int) {
 		c.error("Managed installation is unavailable on " + platform + ".")
 		return 1
 	}
+	if ghostty && platform != "macos" {
+		c.error("--ghostty is available only on macOS.")
+		return 2
+	}
 	if !skip {
 		if err := checkMisePins(c.Root, packages, platform); err != nil {
 			c.error(err.Error())
@@ -84,7 +91,7 @@ func (c CLI) install(args []string) (result int) {
 			c.retryHint("selfishell install", skip)
 		}
 	}()
-	prepared, err := c.prepareConfig(platform, dry, yes, false)
+	prepared, err := c.prepareConfig(platform, dry, yes, false, ghostty)
 	if err != nil {
 		c.error(err.Error())
 		return 1
@@ -180,14 +187,16 @@ type preparedConfig struct {
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
-func (c CLI) prepareConfig(platform string, dry, yes, update bool) (preparedConfig, error) {
+func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty bool) (preparedConfig, error) {
 	paths, err := UserPaths()
 	if err != nil {
 		return preparedConfig{}, err
 	}
 	ghostty := false
 	if platform == "macos" {
-		if data, e := os.ReadFile(paths.State + "/ghostty"); e == nil {
+		if enableGhostty {
+			ghostty = true
+		} else if data, e := os.ReadFile(paths.State + "/ghostty"); e == nil {
 			ghostty = string(data) == "1\n"
 		} else if !update {
 			ghostty = yes || dry

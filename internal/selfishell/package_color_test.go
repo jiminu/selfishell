@@ -138,7 +138,7 @@ func TestProgressTerminalFailure(t *testing.T) {
 func TestConfigurationPromptInterrupt(t *testing.T) {
 	if root := os.Getenv("SELFISHELL_TEST_PROMPT_ROOT"); root != "" {
 		c := CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-		prepared, err := c.prepareConfig(DetectPlatform().Name, false, false, true)
+		prepared, err := c.prepareConfig(DetectPlatform().Name, false, false, true, false)
 		if err != nil {
 			t.Fatal(err)
 		}
