@@ -209,9 +209,10 @@ provides what Ghostty's managed configuration sets up:
 - Font: Neovim's pickers and Markdown preview use Nerd Font icons. Select
   JetBrainsMono Nerd Font Mono, which Selfishell installs on macOS, as the
   terminal font; it matches Ghostty's built-in font. On Ubuntu Desktop, install
-  it yourself. Korean needs no font: terminals fall back to the system's
-  Korean font. In iTerm2, leave "Use a different font for non-ASCII text" off,
-  since that font would also replace the Nerd Font icons.
+  it yourself; the first setup in a local desktop session reminds you. Korean
+  needs no font: terminals fall back to the system's Korean font. In iTerm2,
+  leave "Use a different font for non-ASCII text" off, since that font would
+  also replace the Nerd Font icons.
 - Option as Alt: FZF's Alt-C directory jump and other Alt shortcuts need the
   Option key to send Alt. In iTerm2, set Settings → Profiles → Keys → General
   → Left Option key to Esc+; in Terminal.app, enable Settings → Profiles →
@@ -271,9 +272,9 @@ or Neovim plugin checkouts.
 
 ## Platform notes
 
-- On WSL, install and select a Nerd Font such as JetBrainsMono Nerd Font in
+- On WSL, install JetBrainsMono Nerd Font Mono on Windows and select it in
   Windows Terminal or VS Code so icons in Neovim's pickers and Markdown preview
-  render correctly.
+  render correctly. The first setup prints this reminder.
 - On macOS, restart Ghostty after installation to apply its configuration.
 - Optional packages that are unavailable or fail to install are reported
   without stopping required setup; missing required packages stop installation.
