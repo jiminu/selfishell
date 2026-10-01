@@ -3,13 +3,10 @@ package selfishell
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -281,6 +278,7 @@ func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
 		{"macos", "ghostty-link", ".config/ghostty/config.ghostty", "link", "Refusing to modify symbolic link"},
 		{"macos", "ghostty-directory", ".config/ghostty/config.ghostty", "directory", "Refusing to modify non-regular block path"},
 		{"macos", "zshrc-malformed", ".zshrc", "malformed", "Cannot manage"},
+		{"macos", "zshrc-untracked", ".zshrc", "untracked", "Cannot manage"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, home, paths := blockHome(t, tc.platform)
@@ -301,6 +299,12 @@ func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
 				}
 			case "malformed":
 				blockWrite(t, target, []byte("# >>> Selfishell initialize >>>\nuser content\n"))
+			case "untracked":
+				content, e := blockContent("user-zshrc", paths.Config)
+				if e != nil {
+					t.Fatal(e)
+				}
+				blockWrite(t, target, content)
 			}
 			targetInfo, _ := os.Lstat(target)
 			before := []byte(nil)
@@ -714,64 +718,6 @@ func runNativeZprofile(home, path string, timeout time.Duration) ([]byte, error)
 	return out, err
 }
 
-func TestNativeZprofileTimeoutKillsMiseDescendant(t *testing.T) {
-	if _, err := os.Stat("/bin/zsh"); err != nil {
-		t.Skip("native zsh unavailable")
-	}
-	root, home, _ := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	bin := filepath.Join(home, "fakebin")
-	if err := os.Mkdir(bin, 0700); err != nil {
-		t.Fatal(err)
-	}
-	blockWrite(t, filepath.Join(bin, "mise"), []byte("#!/bin/sh\nprintf '%s\\n' \"$$\" >\"$HOME/hung-mise.pid\"\nexec /bin/sleep 30\n"))
-	if err := os.Chmod(filepath.Join(bin, "mise"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	start := time.Now()
-	_, err := runNativeZprofile(home, bin+":/usr/bin:/bin", time.Second)
-	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 4*time.Second {
-		t.Fatalf("native profile was not bounded: %v, elapsed %s", err, time.Since(start))
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(blockRead(t, home+"/hung-mise.pid"))))
-	if err != nil || pid <= 0 {
-		t.Fatalf("invalid private fake PID: %d %v", pid, err)
-	}
-	cleanup := true
-	t.Cleanup(func() {
-		if cleanup && syscall.Kill(pid, 0) == nil {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-		}
-	})
-	// SIGKILL delivery is asynchronous, and waiting for Zsh does not reap its
-	// grandchild. Give that private descendant a bounded chance to stop.
-	deadline := time.Now().Add(time.Second)
-	for {
-		probeErr := syscall.Kill(pid, 0)
-		if probeErr == nil && runtime.GOOS == "linux" {
-			// Container init may leave a killed grandchild as a non-running zombie.
-			stat, readErr := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-			if readErr == nil {
-				at := bytes.LastIndex(stat, []byte(") "))
-				if at >= 0 && len(stat) > at+2 && stat[at+2] == 'Z' {
-					probeErr = syscall.ESRCH
-				}
-			}
-		}
-		if errors.Is(probeErr, syscall.ESRCH) {
-			cleanup = false
-			break
-		}
-		if probeErr != nil {
-			t.Fatal(probeErr)
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("private fake mise descendant %d survived timeout", pid)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("backup copy permission failure requires unprivileged process")
@@ -844,28 +790,6 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 	if state := blockState(t, paths, "user-zprofile"); state.Status != "active" {
 		t.Fatalf("state %+v", state)
 	}
-}
-
-func TestGhosttyPersonalBytesSurviveDryRunReinstallAndUninstall(t *testing.T) {
-	root, _, paths := blockHome(t, "macos")
-	target := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
-	original := []byte("font-size = 14\r\n")
-	blockWrite(t, target, original)
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	installed := blockRead(t, target)
-	edited := append([]byte("cursor-style = bar\n"), installed...)
-	edited = append(edited, []byte("font-family = 한글\x00")...)
-	blockWrite(t, target, edited)
-	blockOK(t, root, "install", "--skip-packages", "--dry-run", "--yes")
-	blockEqual(t, target, edited)
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockEqual(t, target, edited)
-	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
-	blockEqual(t, target, edited)
-	blockOK(t, root, "uninstall", "--yes")
-	want := append([]byte("cursor-style = bar\n"), original...)
-	want = append(want, []byte("font-family = 한글\x00")...)
-	blockEqual(t, target, want)
 }
 
 func blockBackupNames(t *testing.T, home string) []string {

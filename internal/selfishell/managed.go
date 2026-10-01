@@ -10,17 +10,15 @@ import (
 )
 
 type managed struct {
-	c                 CLI
-	paths             Paths
-	dry, yes          bool
-	unchanged         int
-	actions           map[string]string
-	removeState       func(string) error
-	beforeBackupMove  func(string, string)
-	afterBackupChoice func(string)
-	createLink        func(string, string) error
-	atomicWrite       func(string, []byte, os.FileMode) error
-	removePath        func(string) error
+	c                CLI
+	paths            Paths
+	dry, yes         bool
+	unchanged        int
+	actions          map[string]string
+	removeState      func(string) error
+	beforeBackupMove func(string, string)
+	createLink       func(string, string) error
+	atomicWrite      func(string, []byte, os.FileMode) error
 }
 
 func (m *managed) write(path string, data []byte, mode os.FileMode) error {
@@ -111,9 +109,6 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 		backup, err = m.backup(r.Target)
 		if err != nil {
 			return err
-		}
-		if m.afterBackupChoice != nil {
-			m.afterBackupChoice(backup)
 		}
 	}
 	backupPresent := false
