@@ -315,7 +315,7 @@ return {
             path = 0,
             symbols = {
               modified = " ●",
-              readonly = " 󰌾",
+              readonly = " [ro]",
               unnamed = "[No Name]",
               newfile = "[New]",
             },
@@ -325,8 +325,8 @@ return {
             sources = { "nvim_diagnostic" },
             sections = { "error", "warn" },
             symbols = {
-              error = " ",
-              warn = " ",
+              error = "✘ ",
+              warn = "▲ ",
             },
           },
         },
