@@ -91,6 +91,28 @@ func TestNativeFzfTabPreviewFallbacks(t *testing.T) {
 		})
 	}
 }
+func TestNativeFzfTabFilePreviewTheme(t *testing.T) {
+	t.Parallel()
+	for _, tool := range []string{"bat", "batcat"} {
+		t.Run(tool, func(t *testing.T) {
+			t.Parallel()
+			home := previewFixture(t)
+			command := previewCommands(t, home)["file"]
+			bin := fakeExecutable(t, home, tool, `printf '%s\n' "$@"`)
+			file := filepath.Join(home, "notes.txt")
+			nativeWrite(t, file, "note\n", 0600)
+			for theme, want := range map[string]string{"": "--theme=ansi", "Nord": "--theme=Nord"} {
+				r, err := runCommandIn(home, home, []string{nativeZsh, "-f", "-c", command, "zsh"}, nil, []string{"PATH=" + bin, "realpath=" + file, "BAT_THEME=" + theme}, 10*time.Second)
+				if err != nil || r.Status != 0 || len(r.Stderr) != 0 {
+					t.Fatalf("BAT_THEME=%q: %+v %v", theme, r, err)
+				}
+				if !strings.Contains("\n"+string(r.Stdout), "\n"+want+"\n") {
+					t.Fatalf("BAT_THEME=%q: %q lacks %q", theme, r.Stdout, want)
+				}
+			}
+		})
+	}
+}
 func gitPreview(t *testing.T, home, repo string, args ...string) string {
 	t.Helper()
 	r, err := runCommandIn(home, repo, append([]string{"/usr/bin/git"}, args...), nil, []string{"PATH=" + nativePath, "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_AUTHOR_NAME=selfishell", "GIT_AUTHOR_EMAIL=selfishell@example.invalid", "GIT_COMMITTER_NAME=selfishell", "GIT_COMMITTER_EMAIL=selfishell@example.invalid", "GIT_CONFIG_NOSYSTEM=1"}, 10*time.Second)

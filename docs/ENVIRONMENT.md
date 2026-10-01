@@ -59,6 +59,20 @@ declines. The answer is saved in
 `selfishell uninstall` clears the saved choice, and the next
 `selfishell install` asks again. Uninstall leaves the Ghostty app installed.
 
+Colors do not depend on Ghostty. The prompt, FZF, completion previews, and
+command-line highlighting use the terminal's own palette, and Neovim switches
+between the light and dark VS Code theme to match the background the terminal
+reports. The bundled Ghostty configuration uses the dark `Dark+` theme; see
+[Ghostty customization](INSTALLATION.md#ghostty-customization) to change it.
+
+Many light palettes draw yellow, green, and cyan too faintly on a white
+background. In iTerm2, raise Settings → Profiles → Colors → Minimum contrast,
+which adjusts only the colors that need it and keeps their hue, and clear
+Brighten bold text, which otherwise draws bold text in the lighter bright
+colors. Ghostty's `minimum-contrast` instead turns such colors black or white,
+including the dim autosuggestion text, so in Ghostty choose a light theme whose
+colors read well.
+
 ## Neovim workflow
 
 Selfishell includes a pinned Neovim configuration whose leader key

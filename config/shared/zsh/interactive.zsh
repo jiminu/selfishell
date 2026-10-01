@@ -133,6 +133,8 @@ if (($+functions[zinit])); then
 
     # $realpath is the full path; $word is only the part after the common
     # prefix. Both branches cap output and fall back to coreutils.
+    # Piped bat cannot detect the background and assumes dark, so the ansi
+    # theme follows the palette instead. BAT_THEME still wins.
     _selfishell_fzf_tab_path_preview='
       if [[ -d "$realpath" ]]; then
         if command -v eza >/dev/null 2>&1; then
@@ -142,9 +144,9 @@ if (($+functions[zinit])); then
         fi | head -n 200
       elif [[ -f "$realpath" ]]; then
         if command -v bat >/dev/null 2>&1; then
-          bat --color=always --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+          bat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
         elif command -v batcat >/dev/null 2>&1; then
-          batcat --color=always --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+          batcat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
         else
           head -n 200 "$realpath" 2>/dev/null
         fi
@@ -198,6 +200,13 @@ if (($+functions[zinit])); then
     zinit light zsh-users/zsh-autosuggestions
   fi
   if _selfishell_zinit_plugin_ready zdharma-continuum/fast-syntax-highlighting; then
+    # The built-in theme's 256-color entries assume a dark background; the
+    # plugin only fills unset styles, and a saved fast-theme still wins.
+    typeset -gA FAST_HIGHLIGHT_STYLES
+    : ${FAST_HIGHLIGHT_STYLES[variable]:=fg=cyan}
+    : ${FAST_HIGHLIGHT_STYLES[here-string-text]:=bg=blue}
+    : ${FAST_HIGHLIGHT_STYLES[here-string-var]:=fg=cyan,bg=blue}
+    : ${FAST_HIGHLIGHT_STYLES[subtle-bg]:=bg=blue}
     zinit ice wait'0' lucid ver'4672ad5dd9ad68a7effc1476d65afb7c584ce2b3' \
       atload'(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets'
     zinit light zdharma-continuum/fast-syntax-highlighting
