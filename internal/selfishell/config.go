@@ -287,6 +287,9 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		return err
 	}
 	m, paths, miseGlobal, ghostty := &p.m, p.paths, p.miseGlobal, p.ghostty
+	if ghostty {
+		c.noteGhosttyOverrides(p.resources)
+	}
 	if operation != nil {
 		m.unchanged += operation.UnchangedCount
 	}

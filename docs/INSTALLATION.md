@@ -189,7 +189,11 @@ ${EDITOR:-vim} "${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/user.ghostty"
 ```
 
 `user.ghostty` loads after the Selfishell defaults, so any key you set there
-wins over the corresponding default. `user.ghostty` is entirely yours:
+wins over the corresponding default. Ghostty applies included files after the
+file that includes them, so a setting already in `config.ghostty` loses to the
+Selfishell default for the same key or keybind trigger; `font-family` values add
+fallbacks instead. `selfishell install` lists such settings; move them to
+`user.ghostty` to keep them. `user.ghostty` is entirely yours:
 Selfishell never creates, modifies, checksums, or deletes it, and its absence
 is normal — Ghostty simply has no overrides applied.
 
