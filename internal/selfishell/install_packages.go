@@ -9,7 +9,8 @@ import (
 )
 
 // Ghostty draws Nerd Font icons itself; other macOS terminals need this font
-// selected, so the hint appears once, when the cask is first installed.
+// selected, so the hint appears once, when the cask is first installed. Linux
+// installs no font and hints on first setup where a local terminal draws text.
 const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrainsMono Nerd Font Mono"
 
 // installPackages follows the requirement/manager order with one operation.
@@ -66,10 +67,21 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 	if platform == "macos" && ghostty {
 		return o.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
 	}
-	if platform == "macos" && slices.Contains(o.installedCasks, terminalFontCask) {
+	switch {
+	case platform == "macos" && slices.Contains(o.installedCasks, terminalFontCask):
 		c.report("Notes", reportInfo, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
+	case hasConfiguredMarker(paths): // Linux hints only before the first setup completes.
+	case platform == "ubuntu-wsl":
+		c.report("Notes", reportInfo, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
+	case platform == "ubuntu" && localDesktop():
+		c.report("Notes", reportInfo, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
 	}
 	return nil
+}
+
+// Over SSH the client's terminal draws the icons, so its font is what matters.
+func localDesktop() bool {
+	return os.Getenv("SSH_CONNECTION") == "" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "")
 }
 
 // platformMiseTools lists the mise tools packages.conf declares for platform.
