@@ -199,6 +199,26 @@ is normal — Ghostty simply has no overrides applied.
 
 See [Environment](ENVIRONMENT.md) for how the Ghostty choice is saved.
 
+## Other terminals
+
+Selfishell configures only Ghostty. The shell and Neovim also work in other
+terminals, such as iTerm2, Terminal.app, or Windows Terminal, once the terminal
+provides what Ghostty's managed configuration sets up:
+
+- Font: Neovim's pickers and Markdown preview use Nerd Font icons. Select
+  MesloLGS Nerd Font Mono, which Selfishell installs on macOS, as the terminal
+  font. Ghostty includes these symbols without it.
+- Option as Alt: FZF's Alt-C directory jump and other Alt shortcuts need the
+  Option key to send Alt. In iTerm2, set Settings → Profiles → Keys → General
+  → Left Option key to Esc+; in Terminal.app, enable Settings → Profiles →
+  Keyboard → Use Option as Meta key.
+- 24-bit color: Neovim draws its theme in 24-bit color. Terminal.app supports
+  it from macOS 26; on earlier macOS versions, use iTerm2 or Ghostty.
+
+For light color schemes, see the minimum contrast note in
+[Environment](ENVIRONMENT.md); for copying from Neovim over SSH, see
+[Clipboard over SSH and on WSL](TROUBLESHOOTING.md#clipboard-over-ssh-and-on-wsl).
+
 ## Uninstallation
 
 ### Restore configuration
