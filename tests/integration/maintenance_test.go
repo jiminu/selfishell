@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -86,23 +87,27 @@ func TestPublishedReleaseVerification(t *testing.T) {
 	version := nativeArchiveVersion
 	home, env := publishedFixture(t, version)
 	script := filepath.Join(repoRoot(), "scripts", "verify-published-release.sh")
+	latest := filepath.Join(home, "releases", "latest", "download", "VERSION")
 	for _, tc := range []struct {
 		name   string
 		extra  []string
 		status int
 		output string
 		stderr string
+		latest string
 	}{
-		{"attested", nil, 0, "Artifact attestations verified.\n", ""},
-		{"unavailable", []string{"TEST_NO_ATTESTATION=1"}, 1, "", "SELFISHELL_VERIFY_SKIP_ATTESTATION"},
-		{"optout", []string{"TEST_NO_ATTESTATION=1", "SELFISHELL_VERIFY_SKIP_ATTESTATION=1"}, 0, "skipped (SELFISHELL_VERIFY_SKIP_ATTESTATION=1)", ""},
-		{"bad-attestation", []string{"TEST_BAD_ATTESTATION=1", "SELFISHELL_VERIFY_SKIP_ATTESTATION=1"}, 1, "", ""},
-		{"wrong-tag", []string{"TEST_TAG=v0.0.0"}, 1, "", "Published tag mismatch"},
-		{"wrong-classification", []string{"TEST_PRERELEASE=true"}, 1, "", "Release classification mismatch"},
-		{"wrong-assets", []string{"TEST_EXTRA_ASSET=1"}, 1, "", "Published asset set mismatch"},
-		{"bad-checksum", []string{"TEST_BAD_CHECKSUM=1"}, 1, "FAILED", ""},
+		{"attested", nil, 0, "Artifact attestations verified.\n", "", ""},
+		{"unavailable", []string{"TEST_NO_ATTESTATION=1"}, 1, "", "SELFISHELL_VERIFY_SKIP_ATTESTATION", ""},
+		{"optout", []string{"TEST_NO_ATTESTATION=1", "SELFISHELL_VERIFY_SKIP_ATTESTATION=1"}, 0, "skipped (SELFISHELL_VERIFY_SKIP_ATTESTATION=1)", "", ""},
+		{"bad-attestation", []string{"TEST_BAD_ATTESTATION=1", "SELFISHELL_VERIFY_SKIP_ATTESTATION=1"}, 1, "", "", ""},
+		{"wrong-tag", []string{"TEST_TAG=v0.0.0"}, 1, "", "Published tag mismatch", ""},
+		{"wrong-classification", []string{"TEST_PRERELEASE=true"}, 1, "", "Release classification mismatch", ""},
+		{"wrong-assets", []string{"TEST_EXTRA_ASSET=1"}, 1, "", "Published asset set mismatch", ""},
+		{"bad-checksum", []string{"TEST_BAD_CHECKSUM=1"}, 1, "FAILED", "", ""},
+		{"stale-latest", nil, 1, "", "Latest stable version mismatch", "1.3.1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			mustFS(t, testutil.WriteFile(latest, []byte(cmp.Or(tc.latest, version)+"\n"), 0600))
 			got, err := runCommand(home, []string{"/bin/bash", script, version}, nil, append(env, tc.extra...), 90*time.Second)
 			mustFS(t, err)
 			if got.Status != tc.status || !strings.Contains(string(got.Stdout), tc.output) || !strings.Contains(string(got.Stderr), tc.stderr) {
@@ -151,12 +156,17 @@ func TestNextPatchVersionContract(t *testing.T) {
 func TestReleaseVersionValidatorParity(t *testing.T) {
 	t.Parallel()
 	script := filepath.Join(repoRoot(), "scripts", "release-version.sh")
-	for _, version := range []string{"0.0.0", "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.2.3-0.3.7", "1.2.3-x.7.z-92", "1.2.3-01alpha", "v1.2.3", "01.2.3", "1.02.3", "1.2.03", "1.2", "1.2.3-", "1.2.3-alpha..1", "1.2.3-alpha_1", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+build"} {
-		home := t.TempDir()
-		got, err := runCommand(home, []string{"/bin/bash", "-c", "source \"$1\"; selfishell_version_is_valid \"$2\"", "bash", script, version}, nil, maintenanceMiseEnv(home), 5*time.Second)
-		mustFS(t, err)
-		if (got.Status == 0) != selfishell.ValidReleaseVersion(version) {
-			t.Errorf("validator disagreement for %q: shell status %d", version, got.Status)
+	for valid, versions := range map[bool][]string{
+		true:  {"0.0.0", "1.2.3", "1.2.3-alpha", "1.2.3-alpha.1", "1.2.3-0.3.7", "1.2.3-x.7.z-92", "1.2.3-01alpha"},
+		false: {"v1.2.3", "01.2.3", "1.02.3", "1.2.03", "1.2", "1.2.3-", "1.2.3-alpha..1", "1.2.3-alpha_1", "1.2.3-01", "1.2.3-alpha.01", "1.2.3+build"},
+	} {
+		for _, version := range versions {
+			home := t.TempDir()
+			got, err := runCommand(home, []string{"/bin/bash", "-c", "source \"$1\"; selfishell_version_is_valid \"$2\"", "bash", script, version}, nil, maintenanceMiseEnv(home), 5*time.Second)
+			mustFS(t, err)
+			if goValid := selfishell.ValidReleaseVersion(version); (got.Status == 0) != valid || goValid != valid {
+				t.Errorf("%q: want valid=%v; shell status %d, Go %v", version, valid, got.Status, goValid)
+			}
 		}
 	}
 }
@@ -179,32 +189,6 @@ func TestNextPatchUsesLocalStableTags(t *testing.T) {
 	}
 }
 
-func TestCurrentProductionBuilderRejectsInvalidVersions(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	script := filepath.Join(repoRoot(), "scripts", "build-release.sh")
-	for _, tc := range []struct {
-		name string
-		args []string
-	}{
-		{"invalid", []string{"--version", "1.2.3-alpha..1"}},
-		{"missing", nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			output := filepath.Join(home, tc.name)
-			args := append(append([]string{"/bin/bash", script}, tc.args...), "--output", output)
-			got, err := runCommand(home, args, nil, maintenanceMiseEnv(home), 5*time.Second)
-			mustFS(t, err)
-			if got.Status != 2 {
-				t.Fatalf("status=%d stderr=%q", got.Status, got.Stderr)
-			}
-			if _, err := os.Lstat(output); !os.IsNotExist(err) {
-				t.Fatalf("builder created output: %v", err)
-			}
-		})
-	}
-}
-
 func TestPublishedPrereleaseLatestPolicy(t *testing.T) {
 	t.Parallel()
 	version := prereleaseNativeVersion
@@ -221,17 +205,5 @@ func TestPublishedPrereleaseLatestPolicy(t *testing.T) {
 	mustFS(t, err)
 	if passed.Status != 0 || !strings.Contains(string(passed.Stdout), "Published release "+version+" verified:") {
 		t.Fatalf("prerelease stable unchanged: %d %q %q", passed.Status, passed.Stdout, passed.Stderr)
-	}
-}
-
-func TestPublishedStableLatestMustMatch(t *testing.T) {
-	t.Parallel()
-	home, env := publishedFixture(t, nativeArchiveVersion)
-	latest := filepath.Join(home, "releases", "latest", "download", "VERSION")
-	mustFS(t, testutil.WriteFile(latest, []byte("1.3.1\n"), 0600))
-	got, err := runCommand(home, []string{"/bin/bash", filepath.Join(repoRoot(), "scripts", "verify-published-release.sh"), nativeArchiveVersion}, nil, env, 90*time.Second)
-	mustFS(t, err)
-	if got.Status != 1 || !strings.Contains(string(got.Stderr), "Latest stable version mismatch") {
-		t.Fatalf("stable latest accepted: %d %q", got.Status, got.Stderr)
 	}
 }

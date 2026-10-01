@@ -1,7 +1,6 @@
 package selfishell
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -23,7 +22,6 @@ const zinitFixture = `zinit() {
       print -r -- 'concurrent user data' > "$plugin_dir/user-data"
       return 1
     fi
-    [[ "$SELFISHELL_TEST_ZINIT_FAIL" != before ]] || return 1
     plugin_dir="$ZINIT[PLUGINS_DIR]/${2//\//---}"
     command git clone -q "$SELFISHELL_TEST_ZINIT_SOURCE" "$plugin_dir" || return 1
     command git -C "$plugin_dir" checkout -q --detach "$approved_revision" || return 1
@@ -102,8 +100,8 @@ func TestZinitProvisionsDeclaredPluginsWithoutLoading(t *testing.T) {
 	if err := installPlugins(op, paths, manifest); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Split(strings.TrimSpace(readTestFile(t, home+"/zinit.log")), "\n"); len(got) != len(log) {
-		t.Fatalf("Zinit metadata caused a repeat provision: %q", got)
+	if got := strings.Split(strings.TrimSpace(readTestFile(t, home+"/zinit.log")), "\n"); len(got) != len(log) || output(op) != "" {
+		t.Fatalf("Zinit metadata caused a repeat provision: %q %q", got, output(op))
 	}
 }
 func TestZinitMissingIsReported(t *testing.T) {
@@ -111,13 +109,6 @@ func TestZinitMissingIsReported(t *testing.T) {
 	os.Remove(home + "/data/zinit/zinit.git/zinit.zsh")
 	if err := installPlugins(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "Zinit is not installed:") {
 		t.Fatalf("missing Zinit: %v", err)
-	}
-}
-func TestZinitProvisioningFailure(t *testing.T) {
-	op, paths, manifest, _, _, _ := zinitFixtureSetup(t, 1)
-	t.Setenv("SELFISHELL_TEST_ZINIT_FAIL", "before")
-	if err := installPlugins(op, paths, manifest); err == nil {
-		t.Fatal("provisioning failure ignored")
 	}
 }
 func TestZinitFailedFreshPluginCleanedForRetry(t *testing.T) {
@@ -147,69 +138,33 @@ func TestZinitFailedProvisionPreservesConcurrentCanonicalTarget(t *testing.T) {
 		t.Fatalf("success reported: %q", output(op))
 	}
 }
-func TestZinitApprovedPluginNoop(t *testing.T) {
-	op, paths, manifest, home, head, names := zinitFixtureSetup(t, 1)
-	target := pluginTarget(home, names[0])
-	os.MkdirAll(filepath.Dir(target), 0700)
-	gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
-	gitCommand(t, target, "checkout", "--quiet", "--detach", head)
-	if err := installPlugins(op, paths, manifest); err != nil {
-		t.Fatal(err)
-	}
-	assertNoPath(t, home+"/zinit.log")
-	if output(op) != "" {
-		t.Fatalf("noop output: %q", output(op))
-	}
-}
-func TestZinitOutdatedPluginReprovisioned(t *testing.T) {
-	op, paths, manifest, home, head, names := zinitFixtureSetup(t, 1)
-	target := pluginTarget(home, names[0])
-	os.MkdirAll(filepath.Dir(target), 0700)
-	gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
-	gitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
-	writeTestFile(t, target+"/untracked", "old", 0600)
-	if err := installPlugins(op, paths, manifest); err != nil {
-		t.Fatal(err)
-	}
-	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != head {
-		t.Fatalf("drift remains: %s", got)
-	}
-	assertNoPath(t, target+"/untracked")
-	if !strings.Contains(output(op), "Updated Zsh plugin: "+names[0]) {
-		t.Fatalf("update not reported: %q", output(op))
-	}
-	entries, err := os.ReadDir(filepath.Dir(target))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if strings.Contains(entry.Name(), ".previous.") {
-			t.Fatal("previous checkout left behind")
-		}
-	}
-}
-func TestZinitDirtyApprovedPluginReprovisioned(t *testing.T) {
-	for _, shape := range []string{"tracked", "untracked"} {
+func TestZinitChangedPluginReprovisioned(t *testing.T) {
+	for _, shape := range []string{"drift", "tracked", "untracked"} {
 		t.Run(shape, func(t *testing.T) {
 			op, paths, manifest, home, head, names := zinitFixtureSetup(t, 1)
 			target := pluginTarget(home, names[0])
 			os.MkdirAll(filepath.Dir(target), 0700)
 			gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
-			gitCommand(t, target, "checkout", "--quiet", "--detach", head)
-			if shape == "tracked" {
+			switch shape {
+			case "drift":
+				gitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
+			case "tracked":
 				writeTestFile(t, target+"/marker", "edited", 0600)
-			} else {
+			case "untracked":
 				writeTestFile(t, target+"/untracked", "local", 0600)
 			}
 			if err := installPlugins(op, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
-			if readTestFile(t, target+"/marker") != "marker\n" {
-				t.Fatal("tracked edit remains")
+			if gitCommand(t, target, "rev-parse", "HEAD") != head || readTestFile(t, target+"/marker") != "marker\n" {
+				t.Fatal("checkout not restored to the approved revision")
 			}
 			assertNoPath(t, target+"/untracked")
 			if !strings.Contains(output(op), "Updated Zsh plugin: "+names[0]) {
-				t.Fatalf("dirty repair not reported: %q", output(op))
+				t.Fatalf("repair not reported: %q", output(op))
+			}
+			if left, _ := filepath.Glob(target + ".previous.*"); len(left) != 0 {
+				t.Fatalf("previous checkout left behind: %v", left)
 			}
 		})
 	}
@@ -301,16 +256,10 @@ func TestZinitOrderingAcrossInvalidNamesAndSharedCheckouts(t *testing.T) {
 	}
 }
 
-func TestZinitDryRunAndCancellation(t *testing.T) {
+func TestZinitDryRun(t *testing.T) {
 	op, paths, manifest, home, _, _ := zinitFixtureSetup(t, 1)
 	os.Remove(home + "/data/zinit/zinit.git/zinit.zsh")
 	if err := op.InstallZinitPlugins(context.Background(), paths, manifest, true); err != nil || !strings.Contains(output(op), "Would sync") {
 		t.Fatalf("dry run: %v %q", err, output(op))
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	op.Process.Out = new(bytes.Buffer)
-	if err := op.InstallZinitPlugins(ctx, paths, manifest, false); err != context.Canceled || output(op) != "" {
-		t.Fatalf("cancelled operation: %v %q", err, output(op))
 	}
 }

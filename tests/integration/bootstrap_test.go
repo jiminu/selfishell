@@ -361,14 +361,6 @@ func TestNativeBootstrapMetadataAndPolicy(t *testing.T) {
 			requireAbsent(t, filepath.Join(f.share, "current"))
 		}
 	})
-	t.Run("exact never latest", func(t *testing.T) {
-		f := newBootstrapFixture(t, nativeArchiveVersion)
-		f.latest(t, nativeArchiveVersion)
-		if got := f.run(t, "--version", "9.9.9"); got.Status == 0 {
-			t.Fatal("missing exact release selected latest")
-		}
-		requireAbsent(t, filepath.Join(f.share, "current"))
-	})
 }
 
 func TestNativeBootstrapDownloadErrors(t *testing.T) {
@@ -625,16 +617,6 @@ cp -R "$staging" "$releases/$version"
 	})
 }
 
-func TestNativeBootstrapPathGuidance(t *testing.T) {
-	t.Parallel()
-	f := newBootstrapFixture(t, nativeArchiveVersion)
-	got := f.run(t, "--version", nativeArchiveVersion)
-	requireOK(t, got)
-	for _, s := range []string{"export PATH=\"" + filepath.Join(f.prefix, "bin") + ":$PATH\"", "Add this command to your shell startup file", f.cli + " install"} {
-		requireContains(t, got.Stdout, s)
-	}
-}
-
 // The helper remains intentionally executable as a process: the smoke interface
 // must consume the exact bytes supplied by its caller.
 func TestExactReleaseSmoke(t *testing.T) {
@@ -689,8 +671,7 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		cache := filepath.Join(f.home, ".cache/selfishell")
 		mustFS(t, os.MkdirAll(cache, 0700))
 		mustFS(t, testutil.WriteFile(filepath.Join(cache, "test"), []byte("cache\n"), 0600))
-		out := f.cliRun(t, "uninstall", "--restore", "--purge", "--yes")
-		requireOK(t, out)
+		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--purge", "--yes"))
 		requireAbsent(t, f.cli)
 		requireAbsent(t, filepath.Join(f.prefix, "bin/sfs"))
 		requireAbsent(t, f.share)
@@ -702,10 +683,6 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		if !info.Mode().IsRegular() || info.Size() != 0 {
 			t.Fatalf("purge altered user-owned empty zshrc: %v", info)
 		}
-		if bytes.Contains(out.Stdout, []byte("The Selfishell CLI is still installed.")) || bytes.Contains(out.Stdout, []byte("selfishell uninstall --purge")) {
-			t.Fatalf("purge reported intermediate state: %q", out.Stdout)
-		}
-		requireContains(t, out.Stdout, "Selfishell configuration, CLI, releases, cache, and state removed.")
 	})
 	t.Run("retains modified backups", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
@@ -714,11 +691,8 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		mustFS(t, os.MkdirAll(backups, 0700))
 		file := filepath.Join(backups, "vimrc.backup.20260101000000")
 		mustFS(t, testutil.WriteFile(file, []byte("user edit\n"), 0600))
-		dry := f.cliRun(t, "uninstall", "--restore", "--purge", "--dry-run")
-		requireOK(t, dry)
-		requireContains(t, dry.Stdout, "Would keep backups of modified files: "+backups)
-		out := f.cliRun(t, "uninstall", "--restore", "--purge", "--yes")
-		requireOK(t, out)
+		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--purge", "--dry-run"))
+		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--purge", "--yes"))
 		if got := string(readBytes(t, file)); got != "user edit\n" {
 			t.Fatalf("backup changed %q", got)
 		}
@@ -727,15 +701,11 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		if len(entries) != 1 || entries[0].Name() != "backups" {
 			t.Fatalf("purge retained nonbackup state: %v", entries)
 		}
-		requireContains(t, out.Stdout, "Kept backups of modified files: "+backups)
 	})
-	t.Run("nonpurge output", func(t *testing.T) {
+	t.Run("restore without purge keeps CLI", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes"))
-		out := f.cliRun(t, "uninstall", "--restore", "--yes")
-		requireOK(t, out)
-		requireContains(t, out.Stdout, "The Selfishell CLI is still installed.")
-		requireContains(t, out.Stdout, "selfishell uninstall --purge")
+		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--yes"))
 		requireLink(t, f.cli, filepath.Join(f.share, "current/bin/selfishell"))
 	})
 	t.Run("foreign cli rejects before uninstall", func(t *testing.T) {

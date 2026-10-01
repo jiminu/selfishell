@@ -198,7 +198,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 				}
 				select {
 				case err := <-done:
-					if err == nil || !strings.Contains(output.String(), "context canceled") {
+					if err == nil || cmd.ProcessState.ExitCode() != 130 || !strings.Contains(output.String(), "context canceled") || !strings.Contains(output.String(), "Activated Selfishell CLI: 1.0.0 -> 2.0.0") {
 						t.Fatalf("continuation cancellation: %v %s", err, output.String())
 					}
 				case <-time.After(2 * time.Second):
@@ -332,6 +332,9 @@ exec /bin/sleep 30
 			current, err := os.Readlink(share + "/current")
 			if err != nil || current != "releases/1.0.0" {
 				t.Fatalf("interrupted release activated: %q %v", current, err)
+			}
+			if entries, err := os.ReadDir(share + "/releases"); err != nil || len(entries) != 1 {
+				t.Fatalf("interrupted release left a partial target or stage: %v %v", entries, err)
 			}
 		})
 	}

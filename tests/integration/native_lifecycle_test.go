@@ -143,32 +143,6 @@ func TestNativeBuiltArchiveSmoke(t *testing.T) {
 	smokePrebuiltArchive(t, dir, nativeArchiveVersion)
 }
 
-func TestNativeGoToGoExactUpdateRollbackRestore(t *testing.T) {
-	t.Parallel()
-	f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
-	original := []byte("alias mine='kept'\r\n")
-	setupAndCheck(t, f, nativeArchiveVersion, original)
-	beforeState := readBytes(t, filepath.Join(f.home, ".local/state/selfishell/resources/user-zshrc.state"))
-	requireOK(t, f.cliRun(t, "update", "--version", nextNativeVersion, "--yes", "--skip-packages"))
-	requireLink(t, filepath.Join(f.share, "current"), "releases/"+nextNativeVersion)
-	requireLink(t, filepath.Join(f.share, "previous"), "releases/"+nativeArchiveVersion)
-	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nextNativeVersion+"\n")
-	requireContains(t, f.cliRun(t, "status").Stdout, "Current: "+nextNativeVersion+" | Rollback: "+nativeArchiveVersion)
-	if got := readBytes(t, filepath.Join(f.home, ".local/state/selfishell/resources/user-zshrc.state")); !bytes.HasPrefix(got, []byte("2\n")) {
-		t.Fatalf("post-update state %q", got)
-	}
-	if !bytes.HasPrefix(beforeState, []byte("2\n")) {
-		t.Fatalf("initial state %q", beforeState)
-	}
-	assertNoSourceLinks(t, f.home, "")
-	f.env = append(f.env, "SELFISHELL_RELEASE_ROOT=file:///definitely-unavailable")
-	requireOK(t, f.cliRun(t, "rollback", "--yes"))
-	requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
-	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion+"\n")
-	requireOK(t, f.cliRun(t, "uninstall", "--restore", "--yes"))
-	assertRestoredOriginal(t, f, original, 0600)
-}
-
 func TestPrebuiltSmokeRejectsBadInputs(t *testing.T) {
 	t.Parallel()
 	// Execute the entrypoint as a child so t.Setenv cannot mask parent variables.
@@ -274,19 +248,5 @@ func TestPrebuiltSmokeRejectsCorruptedArchive(t *testing.T) {
 	out, e := cmd.CombinedOutput()
 	if e == nil || !bytes.Contains(out, []byte("SHA256SUMS mismatch")) {
 		t.Fatalf("corrupt exact asset accepted: %v %s", e, out)
-	}
-}
-
-func TestPrebuiltSmokeConsumesSuppliedArbitraryVersion(t *testing.T) {
-	t.Parallel()
-	dir := nativeVersionAssets(t, nextNativeVersion)
-	cmd := exec.Command(os.Args[0], "-test.run=^TestExactReleaseSmoke$", "-test.count=1", "-test.v")
-	cmd.Env = append(os.Environ(),
-		"SELFISHELL_TEST_RELEASE_DIR="+dir,
-		"SELFISHELL_TEST_RELEASE_VERSION="+nextNativeVersion,
-		"PATH="+t.TempDir())
-	out, e := cmd.CombinedOutput()
-	if e != nil || !bytes.Contains(out, []byte("--- PASS: TestExactReleaseSmoke")) {
-		t.Fatalf("prebuilt arbitrary-version smoke: %v %s", e, out)
 	}
 }

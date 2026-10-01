@@ -249,12 +249,8 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 	if err != nil {
 		return err
 	}
-	removeAll := os.RemoveAll
-	if o.lazyRemoveAll != nil {
-		removeAll = o.lazyRemoveAll
-	}
 	defer func() {
-		if err := removeAll(stage); err != nil {
+		if err := os.RemoveAll(stage); err != nil {
 			o.warn(fmt.Sprintf("Could not clean up lazy.nvim staging path %s: %v", stage, err))
 		}
 	}()
@@ -287,7 +283,7 @@ func (o *PackageOperation) installLazy(ctx context.Context, paths Paths, dep Dep
 		return err
 	}
 	if moved {
-		if err := removeAll(old); err != nil {
+		if err := os.RemoveAll(old); err != nil {
 			o.warn(fmt.Sprintf("Could not clean up previous lazy.nvim checkout %s: %v", old, err))
 		}
 	}

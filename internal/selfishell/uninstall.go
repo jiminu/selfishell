@@ -210,10 +210,6 @@ func (m *managed) removeResource(record ResourceState, restore bool) error {
 			} else {
 				m.say(reportPreview, "Would remove managed file: %s", s.Target)
 			}
-		} else if m.removePath != nil {
-			if err = m.removePath(s.Target); err != nil {
-				return err
-			}
 		} else if err = os.Remove(s.Target); err != nil {
 			return err
 		}

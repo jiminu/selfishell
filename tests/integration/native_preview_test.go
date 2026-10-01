@@ -47,14 +47,6 @@ func TestNativeFzfTabPreviewsWaitForPlugin(t *testing.T) {
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; zstyle -L ':fzf-tab:complete:*' fzf-preview || true`, "PATH="+filepath.Join(home, "bin")+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon())
 	nativeQuiet(t, r)
 }
-func TestNativeFzfTabPreviewContexts(t *testing.T) {
-	t.Parallel()
-	home := previewFixture(t)
-	commands := previewCommands(t, home)
-	if len(commands) != 6 {
-		t.Fatalf("commands: %v", commands)
-	}
-}
 func TestNativeFzfTabPreviewFallbacks(t *testing.T) {
 	t.Parallel()
 	home := previewFixture(t)

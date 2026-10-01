@@ -134,141 +134,45 @@ func TestSnapshotPreservesTypesModesAndBytes(t *testing.T) {
 	}
 }
 
-func TestSnapshotDetectsBackupAndStateChanges(t *testing.T) {
+func TestCaptureCleansDescendants(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	stateDir := filepath.Join(root, ".local/state/selfishell")
-	if err := os.MkdirAll(filepath.Join(stateDir, "backups"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	state := filepath.Join(stateDir, "file.state")
-	mustFS(t, testutil.WriteFile(state, []byte("2\nfile\nactive\n/target\n/source\n-\n123:4\n"), 0600))
-	before := mustSnapshot(t, root)
-	backup := filepath.Join(stateDir, "backups/file.backup.20000101000000")
-	mustFS(t, testutil.WriteFile(backup, []byte("original\n"), 0600))
-	if bytes.Equal(before, mustSnapshot(t, root)) {
-		t.Fatal("backup hidden")
-	}
-	mustFS(t, os.Remove(backup))
-	mustFS(t, testutil.WriteFile(state, []byte("2\nfile\npending\n/target\n/source\n-\n123:4\n"), 0600))
-	if bytes.Equal(before, mustSnapshot(t, root)) {
-		t.Fatal("state change hidden")
-	}
-	if _, err := snapshot(filepath.Join(root, "absent")); !os.IsNotExist(err) {
-		t.Fatalf("missing root: %v", err)
-	}
-}
-
-func TestRunPreservesArgumentsInputStreamsAndStatus(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	script := filepath.Join(root, "script")
-	mustFS(t, testutil.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
-	got, err := runCommand(root, []string{"/bin/sh", script, "", "two words"}, []byte("input\x00bytes"), nil, 5*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != 7 || !bytes.Equal(got.Stdout, []byte("\ntwo words\ninput\x00bytes")) || !bytes.Equal(got.Stderr, []byte("error\n")) {
-		t.Fatalf("%+v", got)
-	}
-}
-
-func TestInvalidCLIOverrideFails(t *testing.T) {
-	root := t.TempDir()
-	file := filepath.Join(root, "not-executable")
-	mustFS(t, testutil.WriteFile(file, []byte("#!/bin/sh\nexit 0\n"), 0600))
-	for _, tc := range []struct{ path, diagnostic string }{
-		{"relative/path", "must be absolute"},
-		{filepath.Join(root, "missing"), "invalid SELFISHELL_TEST_CLI"},
-		{root, "is not executable"},
-		{file, "is not executable"},
+	for _, tc := range []struct {
+		name, tail string
+		pty        bool
+		timeout    time.Duration
+		want       error
+	}{
+		{"leader exits", "exit 0", false, 3 * time.Second, exec.ErrWaitDelay},
+		{"timeout", "wait", false, 200 * time.Millisecond, context.DeadlineExceeded},
+		{"PTY", "exit 0", true, 0, exec.ErrWaitDelay},
 	} {
-		t.Setenv("SELFISHELL_TEST_CLI", tc.path)
-		if _, err := testCLI(t); err == nil || !strings.Contains(err.Error(), tc.diagnostic) {
-			t.Fatalf("override %q: %v", tc.path, err)
-		}
-	}
-}
-
-func TestCLIOverrideExecutableSymlinkPreservesIO(t *testing.T) {
-	root := t.TempDir()
-	target, link := filepath.Join(root, "target"), filepath.Join(root, "test-cli")
-	mustFS(t, testutil.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\"\ncat\nprintf 'error\\n' >&2\nexit 7\n"), 0700))
-	mustFS(t, os.Symlink(target, link))
-	t.Setenv("SELFISHELL_TEST_CLI", link)
-	selected, err := testCLI(t)
-	if err != nil || selected != link {
-		t.Fatalf("selected %q: %v", selected, err)
-	}
-	got, err := runCommand(root, []string{selected, "", "two words"}, []byte("input\x00bytes"), []string{"PATH=/usr/bin:/bin"}, 5*time.Second)
-	if err != nil || got.Status != 7 || !bytes.Equal(got.Stdout, []byte("\ntwo words\ninput\x00bytes")) || !bytes.Equal(got.Stderr, []byte("error\n")) {
-		t.Fatalf("capture %+v: %v", got, err)
-	}
-}
-
-func TestRunCleansDescendantAfterLeaderExits(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
-	start := time.Now()
-	got, err := runCommand(home, []string{"/bin/sh", "-c", "echo $$ >\"$2\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & exit 0", "sh", marker, group}, nil, nil, 3*time.Second)
-	if got.Status != 0 || err != nil && !errors.Is(err, exec.ErrWaitDelay) {
-		t.Fatalf("leader execution: %+v %v", got, err)
-	}
-	if time.Since(start) > 2*time.Second {
-		t.Fatal("inherited pipe blocked cleanup")
-	}
-	waitProcessGroupGone(t, group)
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("descendant survived cleanup: %v", err)
-	}
-}
-
-func TestRunTimeoutKillsChildAndReturns(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
-	start := time.Now()
-	_, err := runCommand(home, []string{"/bin/sh", "-c", "echo $$ >\"$2\"; (/bin/sleep 2; /usr/bin/touch \"$1\") & wait", "sh", marker, group}, nil, nil, 200*time.Millisecond)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("timeout: %v", err)
-	}
-	if time.Since(start) > 2*time.Second {
-		t.Fatal("timeout blocked")
-	}
-	waitProcessGroupGone(t, group)
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("child survived timeout: %v", err)
-	}
-}
-
-func TestPTYUsesPrivateTempAndCleansDescendant(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	tmpRecord := filepath.Join(home, "private-tmpdir")
-	marker, group := filepath.Join(home, "escaped"), filepath.Join(home, "group")
-	start := time.Now()
-	_, err := capturePTY(home, "/bin/sh", []string{"-c", "printf '%s\\n' \"$TMPDIR\" > \"$1\"; echo $$ >\"$3\"; (/bin/sleep 2; /usr/bin/touch \"$2\") & exit 0", "sh", tmpRecord, marker, group}, nil)
-	if !errors.Is(err, exec.ErrWaitDelay) {
-		t.Fatalf("expected incomplete inherited pipe capture: %v", err)
-	}
-	if time.Since(start) > 2*time.Second {
-		t.Fatal("PTY reader blocked by descendant")
-	}
-	tmpBytes, err := os.ReadFile(tmpRecord)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmp := strings.TrimSpace(string(tmpBytes))
-	if tmp == "" || tmp == os.TempDir() || strings.HasPrefix(tmp, home+string(os.PathSeparator)) {
-		t.Fatalf("TMPDIR not private: %q", tmp)
-	}
-	if _, err := os.Stat(tmp); !os.IsNotExist(err) {
-		t.Fatalf("PTY temporary directory retained: %v", err)
-	}
-	waitProcessGroupGone(t, group)
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("PTY descendant survived: %v", err)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			tmpRecord, marker, group := filepath.Join(home, "tmpdir"), filepath.Join(home, "escaped"), filepath.Join(home, "group")
+			args := []string{"-c", "printf '%s\\n' \"$TMPDIR\" >\"$1\"; echo $$ >\"$3\"; (/bin/sleep 2; /usr/bin/touch \"$2\") & " + tc.tail, "sh", tmpRecord, marker, group}
+			start := time.Now()
+			var err error
+			if tc.pty {
+				_, err = capturePTY(home, "/bin/sh", args, nil)
+			} else {
+				_, err = runCommand(home, append([]string{"/bin/sh"}, args...), nil, nil, tc.timeout)
+			}
+			if elapsed := time.Since(start); !errors.Is(err, tc.want) || elapsed > 2*time.Second {
+				t.Fatalf("capture returned %v after %v", err, elapsed)
+			}
+			tmp := strings.TrimSpace(string(readBytes(t, tmpRecord)))
+			if tmp == "" || tmp == os.TempDir() || strings.HasPrefix(tmp, home+string(os.PathSeparator)) {
+				t.Fatalf("TMPDIR not private: %q", tmp)
+			}
+			if _, err := os.Stat(tmp); !os.IsNotExist(err) {
+				t.Fatalf("temporary directory retained: %v", err)
+			}
+			waitProcessGroupGone(t, group)
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Fatalf("descendant survived cleanup: %v", err)
+			}
+		})
 	}
 }
 

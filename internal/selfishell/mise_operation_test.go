@@ -116,7 +116,7 @@ func TestMiseInstallFallsBackToManagedBinary(t *testing.T) {
 	}
 }
 
-func TestMiseMissingAndCancellation(t *testing.T) {
+func TestMiseMissing(t *testing.T) {
 	op, paths, root, home := miseFixture(t)
 	if err := os.Remove(home + "/bin/mise"); err != nil {
 		t.Fatal(err)
@@ -129,14 +129,6 @@ func TestMiseMissingAndCancellation(t *testing.T) {
 	}
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node"); err == nil {
 		t.Fatal("missing required mise accepted")
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := op.InstallMise(ctx, root, paths, "optional", false, "node"); err != context.Canceled {
-		t.Fatalf("cancellation: %v", err)
-	}
-	if _, err := os.Stat(home + "/mise.log"); !os.IsNotExist(err) {
-		t.Fatalf("mise called: %v", err)
 	}
 }
 

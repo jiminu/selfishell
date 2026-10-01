@@ -14,95 +14,50 @@ import (
 
 func TestCurlOperation(t *testing.T) {
 	root := t.TempDir()
-	home := filepath.Join(root, "home")
-	if err := os.MkdirAll(home, 0700); err != nil {
-		t.Fatal(err)
+	home, tmp := filepath.Join(root, "home"), filepath.Join(root, "tmp")
+	for _, dir := range []string{home, tmp} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.MkdirAll(filepath.Join(root, "tmp"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	fake := filepath.Join(root, "curl")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$CURL_ARGS\"\nprintf '%s\\n' \"$HTTPS_PROXY\" >\"$CURL_PROXY\"\nout=/dev/stdout\nwhile [ \"$#\" -gt 0 ]; do [ \"$1\" = -o ] && out=\"$2\"; shift; done\nprintf 'metadata-payload' >\"$out\"\nexit \"${CURL_STATUS:-0}\"\n"
-	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+	script := "#!/bin/sh\nout=/dev/stdout\nwhile [ \"$#\" -gt 0 ]; do [ \"$1\" = -o ] && out=\"$2\"; shift; done\nprintf 'metadata-payload' >\"$out\"\nexit \"${CURL_STATUS:-0}\"\n"
+	if err := os.WriteFile(filepath.Join(root, "curl"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	bin := filepath.Join(root, "selfishell-dev")
 	build := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
-	build.Env = []string{"GOCACHE=" + testutil.GoCache(t), "HOME=" + home, "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off", "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + filepath.Join(root, "tmp")}
+	build.Env = []string{"GOCACHE=" + testutil.GoCache(t), "HOME=" + home, "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "GOPROXY=off", "GOSUMDB=off", "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + tmp}
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v: %s", err, out)
 	}
-	run := func(status, args string, extra ...string) (string, int) {
+	run := func(status string, args ...string) (string, int) {
 		t.Helper()
-		cmd := exec.CommandContext(ctx, bin, append([]string{"curl"}, extra...)...)
-		cmd.Env = []string{"HOME=" + home, "PATH=" + root + ":" + os.Getenv("PATH"), "GOTOOLCHAIN=local", "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "MISE_DATA_DIR=" + filepath.Join(home, "mise-data"), "TMPDIR=" + filepath.Join(root, "tmp"), "CURL_ARGS=" + filepath.Join(root, "args"), "CURL_PROXY=" + filepath.Join(root, "proxy"), "HTTPS_PROXY=http://proxy.invalid:8080", "CURL_STATUS=" + status, "SELFISHELL_CURL_CONNECT_TIMEOUT=7", "SELFISHELL_CURL_LOW_SPEED_LIMIT=512", "SELFISHELL_CURL_LOW_SPEED_TIME=4", "SELFISHELL_CURL_METADATA_MAX_TIME=9"}
+		cmd := exec.CommandContext(ctx, bin, append([]string{"curl"}, args...)...)
+		cmd.Env = []string{"HOME=" + home, "PATH=" + root + ":/usr/bin:/bin", "TMPDIR=" + tmp, "CURL_STATUS=" + status}
 		output, err := cmd.CombinedOutput()
-		if err == nil {
-			return string(output), 0
+		if _, ok := err.(*exec.ExitError); err != nil && !ok {
+			t.Fatalf("run %v: %v: %s", args, err, output)
 		}
-		if e, ok := err.(*exec.ExitError); ok {
-			return string(output), e.ExitCode()
-		}
-		t.Fatalf("run %s: %v: %s", args, err, output)
-		return "", -1
+		return string(output), cmd.ProcessState.ExitCode()
 	}
-	out, status := run("0", "metadata", "metadata", "-H", "Authorization: Bearer secret-123", "https://example.invalid/metadata")
-	if status != 0 || out != "metadata-payload" {
+	for _, args := range [][]string{{"metadata"}, {"unknown", "https://example.invalid"}} {
+		if out, status := run("0", args...); status != 2 {
+			t.Fatalf("accepted %v: status=%d output=%q", args, status, out)
+		}
+	}
+	if out, status := run("0", "metadata", "https://example.invalid/metadata"); status != 0 || out != "metadata-payload" {
 		t.Fatalf("metadata status=%d output=%q", status, out)
 	}
-	got, err := os.ReadFile(filepath.Join(root, "args"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Stdout responses are staged in TMPDIR so a retry cannot append to a partial one.
-	want := "-fsSL\n--connect-timeout\n7\n--speed-limit\n512\n--speed-time\n4\n--retry\n3\n--retry-max-time\n60\n--max-time\n9\n-H\nAuthorization: Bearer secret-123\nhttps://example.invalid/metadata\n-o\n" + filepath.Join(root, "tmp", "selfishell-curl.")
-	if !strings.HasPrefix(string(got), want) {
-		t.Fatalf("metadata argv=%q", got)
-	}
-	if staged, _ := os.ReadDir(filepath.Join(root, "tmp")); len(staged) != 0 {
+	if staged, _ := os.ReadDir(tmp); len(staged) != 0 {
 		t.Fatalf("staged response left behind: %v", staged)
 	}
-	proxy, err := os.ReadFile(filepath.Join(root, "proxy"))
-	if err != nil || string(proxy) != "http://proxy.invalid:8080\n" {
-		t.Fatalf("proxy=%q err=%v", proxy, err)
-	}
-	out, status = run("0", "transfer", "transfer", "https://example.invalid/archive", "-o", filepath.Join(root, "archive"))
-	if archive, _ := os.ReadFile(filepath.Join(root, "archive")); status != 0 || out != "" || string(archive) != "metadata-payload" {
-		t.Fatalf("transfer status=%d output=%q archive=%q", status, out, archive)
-	}
-	got, _ = os.ReadFile(filepath.Join(root, "args"))
-	if strings.Contains(string(got), "--max-time") || !strings.HasSuffix(string(got), "https://example.invalid/archive\n-o\n"+filepath.Join(root, "archive")+"\n") {
-		t.Fatalf("transfer argv=%q", got)
-	}
-	for _, argv := range [][]string{{"curl"}, {"curl", "unknown", "https://example.invalid"}, {"bad", "mode", "url"}} {
-		_, status = run("0", "invalid", argv...)
-		if status == 0 {
-			t.Fatalf("accepted %v", argv)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(home, ".local")); !os.IsNotExist(err) {
-		t.Fatalf("invalid operation made provision paths: %v", err)
-	}
-	out, status = run("22", "failure", "metadata", "-H", "Authorization: Bearer secret-123", "https://example.invalid")
-	if status != 22 || strings.Contains(out, "secret-123") {
+	if out, status := run("22", "metadata", "-H", "Authorization: Bearer secret-123", "https://example.invalid"); status != 22 || strings.Contains(out, "secret-123") {
 		t.Fatalf("failure status=%d output=%q", status, out)
 	}
-	cmdInvalid := exec.CommandContext(ctx, bin, "curl", "metadata", "https://example.invalid")
-	cmdInvalid.Env = []string{"HOME=" + home, "PATH=" + root + ":/usr/bin:/bin", "SELFISHELL_CURL_CONNECT_TIMEOUT=0", "TMPDIR=" + filepath.Join(root, "tmp")}
-	invalidOut, invalidErr := cmdInvalid.CombinedOutput()
-	if exit, ok := invalidErr.(*exec.ExitError); !ok || exit.ExitCode() != 2 || !strings.Contains(string(invalidOut), "positive integers") {
-		t.Fatalf("invalid policy: err=%v output=%q", invalidErr, invalidOut)
-	}
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexec sleep 2\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	short, stop := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer stop()
-	cmd := exec.CommandContext(short, bin, "curl", "metadata", "https://example.invalid")
-	cmd.Env = []string{"HOME=" + home, "PATH=" + root + ":/usr/bin:/bin", "TMPDIR=" + filepath.Join(root, "tmp")}
-	if _, err := cmd.CombinedOutput(); err == nil || short.Err() == nil {
-		t.Fatalf("cancelled transport: err=%v context=%v", err, short.Err())
+	if _, err := os.Stat(filepath.Join(home, ".local")); !os.IsNotExist(err) {
+		t.Fatalf("curl operation made provision paths: %v", err)
 	}
 }

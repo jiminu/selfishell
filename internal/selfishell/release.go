@@ -17,8 +17,6 @@ import (
 type releaseOperation struct {
 	Root    string
 	Process Process
-	// promote permits an operation-local failure fixture for the rename boundary.
-	promote func(source, target string) error
 	link    func(target, path string) error
 }
 
@@ -474,11 +472,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 			return "", err
 		}
 		if _, err := os.Lstat(target); os.IsNotExist(err) {
-			promote := o.promote
-			if promote == nil {
-				promote = os.Rename
-			}
-			if err := promote(payload, target); err != nil {
+			if err := os.Rename(payload, target); err != nil {
 				if _, validErr := validReleaseDirectory(l.releases, version); validErr != nil {
 					return "", err
 				}

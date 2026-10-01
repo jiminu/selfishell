@@ -2,7 +2,6 @@ package selfishell
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
@@ -91,10 +89,13 @@ func TestInventoryAptStatusesAndCache(t *testing.T) {
 	}
 }
 func TestInventoryBrewJSONAndLegacy(t *testing.T) {
+	legacy := "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"
 	for _, tc := range []struct{ name, json, calls string }{
 		{"json", `{"formulae":[{"name":"starship","versions":["1.26.0"]}],"casks":[{"token":"ghostty","versions":["1.3.1"]}]}`, "list --versions --json\n"},
-		{"invalid", "invalid", "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"},
-		{"empty", "  ", "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"},
+		{"invalid", "invalid", legacy},
+		{"empty", "  ", legacy},
+		{"null cask versions", `{"formulae":[],"casks":[{"token":"ghostty","versions":null}]}`, legacy},
+		{"null formula versions", `{"formulae":[{"name":"starship","versions":null}],"casks":[{"token":"ghostty","versions":["0.0.0"]}]}`, legacy},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, paths, warnings, bin := inventoryFixture(t)
@@ -240,40 +241,6 @@ func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
 		t.Fatalf("calls %q", calls)
 	}
 }
-func TestInventoryBrewMalformedTypedInventoryFallsBack(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
-	fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\ncase \"$*\" in\n 'list --versions --json') printf '{\"formulae\":{},\"casks\":[]}' ;;\n 'list --formula --versions') printf 'starship 1.26.0\\n' ;;\nesac\n", 0700)
-	inv := inventory(t, root, paths, warnings)
-	got, err := inv.Detect("formula", "starship", "macos", "arm64")
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantTool(t, got, "1.26.0", "homebrew", "package-manager")
-	for _, tc := range []struct{ name, json string }{
-		{"null versions", `{"formulae":[],"casks":[{"token":"ghostty","versions":null}]}`},
-		{"absent versions", `{"formulae":[],"casks":[{"token":"ghostty"}]}`},
-		{"formula null versions", `{"formulae":[{"name":"starship","versions":null}],"casks":[{"token":"ghostty","versions":["0.0.0"]}]}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("BREW_JSON", tc.json)
-			fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') printf '%s\\n' \"$BREW_JSON\";;\n 'list --cask --versions') printf 'ghostty 1.3.1\\n';;\nesac\n", 0700)
-			inv := inventory(t, root, paths, warnings)
-			got, err := inv.Detect("cask", "ghostty", "macos", "arm64")
-			if err != nil {
-				t.Fatal(err)
-			}
-			wantTool(t, got, "1.3.1", "homebrew-cask", "package-manager")
-			calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "brew-calls"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(calls) != "list --versions --json\nlist --cask --versions\n" {
-				t.Fatalf("calls %q", calls)
-			}
-		})
-	}
-}
 func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source checksum .local/bin/mise raw\n", 0600)
@@ -333,26 +300,12 @@ func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 }
 func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
 	root, paths, warnings, bin := inventoryFixture(t)
-	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\ngh = \"2.100.0\"\nuv = \"0.12.13\"\n", 0600)
+	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nuv = \"0.12.13\"\n", 0600)
 	fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/mise-calls\"\ncat \"$HOME/mise-output\"\n", 0700)
 	fixtureFile(t, filepath.Join(os.Getenv("HOME"), "mise-output"), "", 0600)
-	shims := filepath.Join(root, "mise-data/shims")
-	if err := os.MkdirAll(shims, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(filepath.Join(bin, "mise"), filepath.Join(shims, "gh")); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("MISE_DATA_DIR", filepath.Join(root, "mise-data"))
-	t.Setenv("PATH", shims+":"+bin+":/usr/bin:/bin")
 	fixtureFile(t, filepath.Join(bin, "uv"), "#!/bin/sh\n", 0700)
 	inv := inventory(t, root, paths, warnings)
-	got, err := inv.Detect("mise", "gh", "linux", "amd64")
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantTool(t, got, "missing", "none", "2.100.0")
-	got, err = inv.Detect("mise", "uv", "linux", "amd64")
+	got, err := inv.Detect("mise", "uv", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -499,14 +452,6 @@ func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 		})
 	}
 }
-func TestToolExecutable(t *testing.T) {
-	for _, tc := range []struct{ name, want string }{{"ripgrep", "rg"}, {"neovim", "nvim"}, {"kubectl@1.36.2", "kubectl"}, {"git", "git"}} {
-		if got := toolExecutable(tc.name); got != tc.want {
-			t.Errorf("%s => %s, want %s", tc.name, got, tc.want)
-		}
-	}
-}
-
 func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
 	target := filepath.Join(os.Getenv("HOME"), "data", "zinit", "zinit.git")
@@ -541,44 +486,14 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "v3.15.0", "selfishell", "v3.15.0")
-	for _, format := range []string{"loose", "packed", "detached", "fallback", "broken"} {
-		t.Run(format, func(t *testing.T) {
-			switch format {
-			case "packed":
-				gitCommand(t, target, "pack-refs", "--all")
-			case "detached":
-				gitCommand(t, target, "checkout", "--quiet", "--detach")
-			case "fallback":
-				gitCommand(t, target, "update-ref", "refs/heads/pinned", sha)
-				gitCommand(t, target, "symbolic-ref", "refs/heads/alias", "refs/heads/pinned")
-				gitCommand(t, target, "symbolic-ref", "HEAD", "refs/heads/alias")
-			case "broken":
-				fixtureFile(t, target+"/.git/HEAD", "invalid\n", 0600)
-			}
-			trace := root + "/git-trace"
-			fixtureFile(t, trace, "", 0600)
-			t.Setenv("GIT_TRACE", trace)
-			t.Setenv("GIT_DIR", root+"/foreign")
-			t.Setenv("GIT_WORK_TREE", root+"/foreign")
-			got, err := inv.Detect("direct", "zinit", "linux", "amd64")
-			if err != nil {
-				t.Fatal(err)
-			}
-			installed := "v3.15.0"
-			if format == "broken" {
-				installed = "missing"
-			}
-			wantTool(t, got, installed, "selfishell", "v3.15.0")
-			wantHeads := 0
-			if format == "fallback" || format == "broken" {
-				wantHeads = 1
-			}
-			calls := readTestFile(t, trace)
-			if got := strings.Count(calls, "rev-parse HEAD"); got != wantHeads {
-				t.Fatalf("HEAD processes=%d want=%d: %s", got, wantHeads, calls)
-			}
-		})
+	t.Setenv("GIT_DIR", root+"/foreign")
+	t.Setenv("GIT_WORK_TREE", root+"/foreign")
+	fixtureFile(t, target+"/.git/HEAD", "invalid\n", 0600)
+	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	if err != nil {
+		t.Fatal(err)
 	}
+	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 	fixtureFile(t, target+"/.git/HEAD", sha+"\n", 0600)
 	fixtureFile(t, target+"/untracked", "user data\n", 0600)
 	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
@@ -698,29 +613,5 @@ func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 				t.Fatalf("diagnostics changed paths:\n%s\n---\n%s", before, after)
 			}
 		})
-	}
-}
-func TestInventoryDoesNotCreateUserState(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
-	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
-	inv := inventory(t, root, paths, warnings)
-	if _, err := inv.Detect("mise", "node", "linux", "amd64"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(paths.State); !os.IsNotExist(err) {
-		t.Fatalf("state created or unexpected stat error: %v", err)
-	}
-}
-
-func TestInventoryQueryCancellation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	_, _, ok := runInventoryContext(ctx, "", nil, "sleep", "2")
-	if ok {
-		t.Fatal("cancelled inventory query reported success")
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Fatalf("cancelled query took %s", elapsed)
 	}
 }

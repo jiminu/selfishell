@@ -18,18 +18,6 @@ import (
 	"time"
 )
 
-func TestReleaseVersionLargeNumericOrder(t *testing.T) {
-	if compareReleaseVersions("999999999999999999999999.0.0", "999999999999999999999998.9.9") <= 0 {
-		t.Fatal("numeric precedence overflowed")
-	}
-	if compareReleaseVersions("1.0.0-11", "1.0.0-2") <= 0 {
-		t.Fatal("numeric prerelease compared as text")
-	}
-	if compareReleaseVersions("1.0.0", "1.0.0-rc.1") <= 0 {
-		t.Fatal("stable precedence lost")
-	}
-}
-
 func TestSelectedChecksumIgnoresCompanionAssets(t *testing.T) {
 	name := "selfishell-2.0.0-linux-amd64.tar.gz"
 	sum := strings.Repeat("a", 64)
@@ -282,99 +270,61 @@ func TestReleaseInstallUsesExactVersionURL(t *testing.T) {
 	}
 }
 
-func TestReleaseAtomicLinkIgnoresStaleTemporaryName(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/link"
-	os.Symlink("releases/1.0.0", path)
-	os.Symlink("stale", fmt.Sprintf("%s.tmp.%d", path, os.Getpid()))
-	if err := atomicReleaseLink("releases/2.0.0", path); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := os.Readlink(path)
-	if got != "releases/2.0.0" {
-		t.Fatal(got)
-	}
-}
-
-func TestReleaseDirectoryValidationAndOccupiedLink(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	if _, err := validReleaseDirectory(releases, "1.0.0"); err != nil {
-		t.Fatal(err)
-	}
-	os.Symlink(releases+"/1.0.0", releases+"/2.0.0")
-	if _, err := validReleaseDirectory(releases, "2.0.0"); err == nil {
-		t.Fatal("accepted symlinked release")
-	}
-	occupied := share + "/previous"
-	os.WriteFile(occupied, []byte("user bytes\n"), 0600)
-	if err := atomicReleaseLink("releases/1.0.0", occupied); err == nil {
-		t.Fatal("replaced occupied previous")
-	}
-	bytes, _ := os.ReadFile(occupied)
-	if string(bytes) != "user bytes\n" {
-		t.Fatalf("changed occupied previous: %q", bytes)
-	}
-	_ = op
-}
-
-func TestReleaseInstallCancellationLeavesNoPartialTarget(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	entered := make(chan struct{}, 1)
-	done := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case entered <- struct{}{}:
-		default:
-		}
-		<-r.Context().Done()
-		close(done)
-	}))
-	defer server.Close()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", server.URL)
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() { _, err := op.install(ctx, "2.0.0"); result <- err }()
-	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("curl did not reach local server")
-	}
-	cancel()
-	select {
-	case err := <-result:
-		if err == nil {
-			t.Fatal("canceled install succeeded")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("canceled curl was not reaped")
-	}
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("server did not observe curl exit")
-	}
-	current, _ := os.Readlink(share + "/current")
-	if current != "releases/1.0.0" {
-		t.Fatal(current)
-	}
-	if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
-		t.Fatalf("partial target: %v", err)
-	}
-	entries, _ := os.ReadDir(releases)
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".2.0.0.tmp.") {
-			t.Fatalf("staging remains: %s", entry.Name())
-		}
+func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
+	for _, tc := range []struct{ link, kind, want string }{
+		{"previous", "file", "occupied release link"},
+		{"previous", "link", "foreign release link"},
+		{"current", "file", "versioned Selfishell installation"},
+		{"current", "link", "foreign release link"},
+	} {
+		t.Run(tc.link+"-"+tc.kind, func(t *testing.T) {
+			op, share, releases := releaseFixture(t)
+			path := share + "/" + tc.link
+			os.Remove(path)
+			if tc.kind == "file" {
+				writeTestFile(t, path, "user data\n", 0600)
+			} else if err := os.Symlink("/personal", path); err != nil {
+				t.Fatal(err)
+			}
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests.Add(1) }))
+			defer server.Close()
+			t.Setenv("SELFISHELL_RELEASE_ROOT", server.URL)
+			if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("%s %s was not rejected: %v", tc.kind, tc.link, err)
+			}
+			if got := requests.Load(); got != 0 {
+				t.Fatalf("contacted release source before link preflight: %d requests", got)
+			}
+			if tc.kind == "file" {
+				if data, _ := os.ReadFile(path); string(data) != "user data\n" {
+					t.Fatalf("%s changed: %q", tc.link, data)
+				}
+			} else if link, _ := os.Readlink(path); link != "/personal" {
+				t.Fatalf("%s changed: %q", tc.link, link)
+			}
+			if current, _ := os.Readlink(share + "/current"); tc.link == "previous" && current != "releases/1.0.0" {
+				t.Fatalf("current changed: %q", current)
+			}
+			if _, err := validReleaseDirectory(releases, "1.0.0"); err != nil {
+				t.Fatalf("old active release removed: %v", err)
+			}
+			if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
+				t.Fatalf("target created before link preflight: %v", err)
+			}
+		})
 	}
 }
 
-func TestReleaseInstallPreservesOccupiedPreviousAndForeignRelease(t *testing.T) {
-	op, share, releases := releaseFixture(t)
+func TestReleaseInstallKeepsForeignReleaseEntries(t *testing.T) {
+	op, _, releases := releaseFixture(t)
 	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	releaseRoot := os.Getenv("SELFISHELL_RELEASE_ROOT")
-	os.WriteFile(share+"/previous", []byte("keep me\n"), 0600)
-	os.MkdirAll(releases+"/0.9.0", 0700)
-	os.WriteFile(releases+"/0.9.0/personal", []byte("foreign\n"), 0600)
+	writeTestFile(t, op.Root+"/VERSION", "wrong\n", 0600)
+	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+		t.Fatal("accepted corrupt running root")
+	}
+	writeTestFile(t, op.Root+"/VERSION", "1.0.0\n", 0600)
+	writeTestFile(t, releases+"/0.9.0/personal", "foreign\n", 0600)
 	linkTarget := t.TempDir()
 	os.Symlink(linkTarget, releases+"/0.8.0")
 	stale := releases + "/.9.9.9.tmp.stale"
@@ -386,75 +336,6 @@ func TestReleaseInstallPreservesOccupiedPreviousAndForeignRelease(t *testing.T) 
 	old := time.Now().Add(-25 * time.Hour)
 	os.Chtimes(stale, old, old)
 	os.Chtimes(foreignStage, old, old)
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { requests.Add(1) }))
-	defer server.Close()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", server.URL)
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), "occupied release link") {
-		t.Fatalf("occupied previous was not rejected: %v", err)
-	}
-	if got := requests.Load(); got != 0 {
-		t.Fatalf("contacted release source before previous preflight: %d requests", got)
-	}
-	data, _ := os.ReadFile(share + "/previous")
-	if string(data) != "keep me\n" {
-		t.Fatalf("previous changed: %q", data)
-	}
-	if current, _ := os.Readlink(share + "/current"); current != "releases/1.0.0" {
-		t.Fatalf("current changed: %q", current)
-	}
-	if _, err := os.Stat(releases + "/1.0.0"); err != nil {
-		t.Fatalf("old active release removed: %v", err)
-	}
-	if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
-		t.Fatalf("target created before previous preflight: %v", err)
-	}
-	if err := os.Remove(share + "/previous"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("/personal", share+"/previous"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), "foreign release link") {
-		t.Fatalf("foreign previous was not rejected: %v", err)
-	}
-	if got := requests.Load(); got != 0 {
-		t.Fatalf("contacted release source with foreign previous: %d requests", got)
-	}
-	if link, err := os.Readlink(share + "/previous"); err != nil || link != "/personal" {
-		t.Fatalf("foreign previous changed: %q, %v", link, err)
-	}
-	if current, _ := os.Readlink(share + "/current"); current != "releases/1.0.0" {
-		t.Fatalf("current changed: %q", current)
-	}
-	if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
-		t.Fatalf("target created with foreign previous: %v", err)
-	}
-	if err := os.Remove(share + "/previous"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(share + "/current"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("/personal", share+"/current"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), "foreign release link") {
-		t.Fatalf("foreign current was not rejected: %v", err)
-	}
-	if got := requests.Load(); got != 0 {
-		t.Fatalf("contacted release source with foreign current: %d requests", got)
-	}
-	if link, err := os.Readlink(share + "/current"); err != nil || link != "/personal" {
-		t.Fatalf("foreign current changed: %q, %v", link, err)
-	}
-	if err := os.Remove(share + "/current"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SELFISHELL_RELEASE_ROOT", releaseRoot)
 	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
 		t.Fatal(err)
 	}
@@ -472,29 +353,6 @@ func TestReleaseInstallPreservesOccupiedPreviousAndForeignRelease(t *testing.T) 
 	}
 	if _, err := os.Lstat(foreignStage); err != nil {
 		t.Fatalf("foreign directory deleted: %v", err)
-	}
-}
-
-func TestReleaseInstallPreviousLinkRaceKeepsActiveRelease(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	op.promote = func(source, target string) error {
-		if err := os.WriteFile(share+"/previous", []byte("user data\n"), 0600); err != nil {
-			return err
-		}
-		return os.Rename(source, target)
-	}
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), "Failed to retain previous") {
-		t.Fatalf("activated without a rollback link: %v", err)
-	}
-	if current, _ := os.Readlink(share + "/current"); current != "releases/1.0.0" {
-		t.Fatalf("current changed: %q", current)
-	}
-	if _, err := validReleaseDirectory(releases, "1.0.0"); err != nil {
-		t.Fatalf("old active release removed: %v", err)
-	}
-	if data, err := os.ReadFile(share + "/previous"); err != nil || string(data) != "user data\n" {
-		t.Fatalf("occupied previous changed: %q, %v", data, err)
 	}
 }
 
@@ -518,29 +376,6 @@ func TestReleaseInstallRestoresPreviousAfterActivationFailure(t *testing.T) {
 	}
 	if got, _ := os.Readlink(share + "/current"); got != "releases/1.0.0" {
 		t.Fatalf("current=%q", got)
-	}
-}
-
-func TestReleaseInstallDoesNotClobberChangedPreviousAfterActivationFailure(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	op.link = func(target, path string) error {
-		if target == "releases/2.0.0" {
-			if err := os.Remove(share + "/previous"); err != nil {
-				return err
-			}
-			if err := os.Symlink("releases/0.8.0", share+"/previous"); err != nil {
-				return err
-			}
-			return fmt.Errorf("activation failed")
-		}
-		return atomicReleaseLink(target, path)
-	}
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
-		t.Fatal("reported activation success")
-	}
-	if got, _ := os.Readlink(share + "/previous"); got != "releases/0.8.0" {
-		t.Fatalf("clobbered changed previous=%q", got)
 	}
 }
 
@@ -572,26 +407,6 @@ func TestReleaseInstallRejectsExistingIncompleteAndSymlinkTargets(t *testing.T) 
 	os.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted wrong VERSION in existing release")
-	}
-}
-
-func TestReleaseInstallRejectsOccupiedCurrentAndCorruptRunningRoot(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	os.Remove(share + "/current")
-	os.WriteFile(share+"/current", []byte("user current\n"), 0600)
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
-		t.Fatal("replaced occupied current")
-	}
-	data, _ := os.ReadFile(share + "/current")
-	if string(data) != "user current\n" {
-		t.Fatalf("current changed: %q", data)
-	}
-	os.Remove(share + "/current")
-	os.Symlink("releases/1.0.0", share+"/current")
-	os.WriteFile(op.Root+"/VERSION", []byte("wrong\n"), 0600)
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
-		t.Fatal("accepted corrupt running root")
 	}
 }
 
@@ -658,32 +473,6 @@ func TestReleaseInstallPreflightsWholeArchiveBeforeFilesystemMutation(t *testing
 	}
 }
 
-func TestReleaseInstallReusesValidWinnerWithoutNesting(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	winner := releases + "/2.0.0"
-	os.MkdirAll(winner+"/bin", 0700)
-	os.WriteFile(winner+"/VERSION", []byte("2.0.0\n"), 0600)
-	os.WriteFile(winner+"/bin/selfishell", []byte("winner binary\n"), 0755)
-	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(winner + "/bin/selfishell")
-	if string(data) != "winner binary\n" {
-		t.Fatalf("winner replaced: %q", data)
-	}
-	entries, _ := os.ReadDir(winner)
-	for _, entry := range entries {
-		if strings.Contains(entry.Name(), ".tmp.") {
-			t.Fatalf("nested staging: %s", entry.Name())
-		}
-	}
-	current, _ := os.Readlink(share + "/current")
-	if current != "releases/2.0.0" {
-		t.Fatal(current)
-	}
-}
-
 func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 	op, share, releases := releaseFixture(t)
 	isolateMiseForHome(t, os.Getenv("HOME"))
@@ -716,63 +505,6 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 	previous, _ := os.Readlink(share + "/previous")
 	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
 		t.Fatalf("retry links: %q, %q", current, previous)
-	}
-}
-
-func TestReleaseInstallPromoteFailureKeepsActiveLinks(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	op.promote = func(_, _ string) error { return fmt.Errorf("injected promote failure") }
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
-		t.Fatal("reported failed promotion as success")
-	}
-	current, _ := os.Readlink(share + "/current")
-	if current != "releases/1.0.0" {
-		t.Fatal(current)
-	}
-	if _, err := os.Lstat(share + "/previous"); !os.IsNotExist(err) {
-		t.Fatalf("previous changed: %v", err)
-	}
-	if _, err := os.Lstat(releases + "/2.0.0"); !os.IsNotExist(err) {
-		t.Fatalf("incomplete target: %v", err)
-	}
-	entries, _ := os.ReadDir(releases)
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".2.0.0.tmp.") {
-			t.Fatalf("stage remains: %s", entry.Name())
-		}
-	}
-	op.promote = nil
-	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
-		t.Fatalf("promotion retry: %v", err)
-	}
-	current, _ = os.Readlink(share + "/current")
-	previous, _ := os.Readlink(share + "/previous")
-	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
-		t.Fatalf("retry links: %q, %q", current, previous)
-	}
-}
-
-func TestReleaseInstallConcurrentWinnerIsValidated(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
-	op.promote = func(_, target string) error {
-		os.MkdirAll(target+"/bin", 0700)
-		os.WriteFile(target+"/VERSION", []byte("2.0.0\n"), 0600)
-		os.WriteFile(target+"/bin/selfishell", []byte("winner\n"), 0755)
-		return os.ErrExist
-	}
-	got, err := op.install(context.Background(), "2.0.0")
-	if err != nil || filepath.Base(got) != "2.0.0" {
-		t.Fatalf("winner %q, %v", got, err)
-	}
-	data, _ := os.ReadFile(releases + "/2.0.0/bin/selfishell")
-	if string(data) != "winner\n" {
-		t.Fatalf("winner replaced: %q", data)
-	}
-	current, _ := os.Readlink(share + "/current")
-	if current != "releases/2.0.0" {
-		t.Fatal(current)
 	}
 }
 

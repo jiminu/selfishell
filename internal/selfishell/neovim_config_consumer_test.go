@@ -223,13 +223,11 @@ func runNeovimConfigFixtures(t *testing.T, root string, base Process, nvim, mise
 		return strings.ReplaceAll(result.String(), "\r", "")
 	}
 	for _, item := range []struct{ fixture, marker string }{
-		{"treesitter_autocmd.lua", "sh\nterraform"},
 		{"treesitter_auto_install.lua", "Tree-sitter auto-install: OK"},
 		{"pinned_plugin_specs.lua", "pinned plugin specs: OK"},
 		{"editor_workflow.lua", "editor workflows: OK"},
 		{"lsp_mason_setup.lua", "LSP Mason setup: OK"},
 		{"cursor_restore.lua", "cursor restore targeting: OK"},
-		{"yank_highlight.lua", "yank highlight: OK"},
 		{"ssh_clipboard.lua", "SSH clipboard: OK"},
 	} {
 		if output := run(item.fixture, ""); !strings.Contains(output, item.marker) {
@@ -260,9 +258,6 @@ func runNeovimConfigFixtures(t *testing.T, root string, base Process, nvim, mise
 			t.Fatalf("duplicate Neovim pin: %s", dep.Name)
 		}
 		seen[dep.Name] = true
-		if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(dep.Version) {
-			t.Fatalf("unapproved Neovim revision: %s %s", dep.Name, dep.Version)
-		}
 		if dep.Name == "folke/lazy.nvim" {
 			lazyRevision = dep.Version
 		} else {

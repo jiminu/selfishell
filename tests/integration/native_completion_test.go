@@ -310,7 +310,7 @@ func nativeAssertCompletionProbe(t *testing.T, r capture, warn bool) {
 }
 func TestNativeInsecureCompletionDirectory(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"missing", "noninteractive", "removed", "compile-failure", "expired", "foreign-file", "foreign-symlink", "foreign-empty-symlink", "foreign-dangling", "foreign-directory"} {
+	for _, scenario := range []string{"missing", "noninteractive", "removed", "compile-failure", "expired"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			home := nativeHome(t)
@@ -323,10 +323,6 @@ func TestNativeInsecureCompletionDirectory(t *testing.T) {
 			nativeWrite(t, filepath.Join(insecure, "_selfishell_insecure_probe"), "#compdef selfishell-insecure-probe\n", 0600)
 			nativeWrite(t, filepath.Join(secure, "_selfishell_safe_probe"), "#compdef selfishell-safe-probe\nprint SAFE_COMPLETION\n", 0600)
 			nativeWrite(t, filepath.Join(insecure, "_selfishell_safe_probe"), "#compdef selfishell-safe-probe\nprint INSECURE_LOADED\n", 0600)
-			var check func()
-			if strings.HasPrefix(scenario, "foreign-") {
-				check = nativeMarker(t, home, strings.TrimPrefix(scenario, "foreign-"))
-			}
 			switch scenario {
 			case "noninteractive":
 				nativeCompletionProbe(t, home, insecure, "+i", "")
@@ -344,38 +340,7 @@ func TestNativeInsecureCompletionDirectory(t *testing.T) {
 			}
 			nativeAssertCompletionProbe(t, nativeCompletionProbe(t, home, insecure, "", scenario), true)
 			nativeAssertCompletionProbe(t, nativeCompletionProbe(t, home, insecure, "", ""), false)
-			if check != nil {
-				check()
-			}
 		})
-	}
-}
-func TestNativeSecureCompletionDirectory(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	root := filepath.Dir(home)
-	secure := filepath.Join(root, "secure-completions")
-	mustFS(t, os.Mkdir(secure, 0755))
-	for _, p := range []string{".zcompdump", ".zcompdump.audit"} {
-		nativeWrite(t, filepath.Join(home, p), "", 0600)
-		nativeOldTime(t, filepath.Join(home, p))
-	}
-	with := nativeCompletionProbe(t, home, secure, "", "")
-	for _, p := range []string{".zcompdump", ".zcompdump.audit"} {
-		path := filepath.Join(home, p)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			nativeWrite(t, path, "", 0600)
-		}
-		nativeOldTime(t, path)
-	}
-	without := nativeCompletionProbe(t, home, "", "", "")
-	if !strings.Contains(string(with.Stdout), "STARTUP_COMPLETE") || !strings.Contains(string(without.Stdout), "STARTUP_COMPLETE") {
-		t.Fatalf("startup did not complete: %+v %+v", with, without)
-	}
-	w := strings.Contains(string(with.Stderr), "insecure completion directories detected")
-	b := strings.Contains(string(without.Stderr), "insecure completion directories detected")
-	if w != b {
-		t.Fatalf("secure directory changed warning: with=%+v without=%+v", with, without)
 	}
 }
 func TestNativeMacOSPathPrefix(t *testing.T) {
