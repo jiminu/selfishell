@@ -17,6 +17,7 @@ import (
 type PackageOperation struct {
 	Process                           Process
 	SkippedOptional                   []string
+	installedCasks                    []string // casks this operation installed
 	UnchangedCount                    int
 	dependencyManifest                string
 	dependencies                      []Dependency

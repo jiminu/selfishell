@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
+
+// Ghostty draws Nerd Font icons itself; other macOS terminals need this font
+// selected, so the hint appears once, when the cask is first installed.
+const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrainsMono Nerd Font Mono"
 
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
@@ -60,6 +65,9 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 	}
 	if platform == "macos" && ghostty {
 		return o.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
+	}
+	if platform == "macos" && slices.Contains(o.installedCasks, terminalFontCask) {
+		c.report("Notes", reportInfo, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
 	}
 	return nil
 }
