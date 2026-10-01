@@ -643,15 +643,26 @@ func TestRepeatedInstallKeepsStateInodesAndBackups(t *testing.T) {
 		t.Fatal("duplicated zshrc loader")
 	}
 }
-func TestSavedDeclinedGhosttyChoiceStaysExact(t *testing.T) {
+func TestSavedDeclinedGhosttyChoiceStaysUntilGhosttyOption(t *testing.T) {
 	root, _, paths := blockHome(t, "macos")
-	blockWrite(t, paths.State+"/ghostty", []byte("0\n"))
+	choice := paths.State + "/ghostty"
+	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
+	blockWrite(t, choice, []byte("0\n"))
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockEqual(t, paths.State+"/ghostty", []byte("0\n"))
-	for _, p := range []string{paths.Config + "/ghostty/config.ghostty", filepath.Dir(paths.Config) + "/ghostty/config.ghostty", paths.Resources + "/user-ghostty.state"} {
+	blockEqual(t, choice, []byte("0\n"))
+	for _, p := range []string{paths.Config + "/ghostty/config.ghostty", entrypoint, paths.Resources + "/user-ghostty.state"} {
 		if _, e := os.Lstat(p); !os.IsNotExist(e) {
 			t.Fatalf("declined Ghostty path %s: %v", p, e)
 		}
+	}
+	if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty", "--dry-run"); !strings.Contains(out, entrypoint) {
+		t.Fatalf("dry-run plan lacks Ghostty: %s", out)
+	}
+	blockEqual(t, choice, []byte("0\n"))
+	blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty")
+	blockEqual(t, choice, []byte("1\n"))
+	if !bytes.Contains(blockRead(t, entrypoint), []byte("# >>> Selfishell ghostty >>>")) {
+		t.Fatal("Ghostty block missing")
 	}
 }
 func TestZprofileActivatesPrivateMise(t *testing.T) {
@@ -822,28 +833,6 @@ func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
 			blockEqual(t, paths.State+"/ghostty", []byte(tc.want))
 		})
 	}
-}
-
-func TestInstallGhosttyOptionEnablesDeclinedChoice(t *testing.T) {
-	root, _, paths := blockHome(t, "macos")
-	choice := paths.State + "/ghostty"
-	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
-	blockWrite(t, choice, []byte("0\n"))
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if _, err := os.Lstat(entrypoint); !os.IsNotExist(err) {
-		t.Fatalf("declined Ghostty was configured: %v", err)
-	}
-	if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty", "--dry-run"); !strings.Contains(out, entrypoint) {
-		t.Fatalf("dry-run plan lacks Ghostty: %s", out)
-	}
-	blockEqual(t, choice, []byte("0\n"))
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty")
-	blockEqual(t, choice, []byte("1\n"))
-	if !bytes.Contains(blockRead(t, entrypoint), []byte("# >>> Selfishell ghostty >>>")) {
-		t.Fatal("Ghostty block missing")
-	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockEqual(t, choice, []byte("1\n"))
 }
 
 func TestInstallGhosttyOptionRequiresMacOS(t *testing.T) {

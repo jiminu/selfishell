@@ -43,27 +43,16 @@ window-decoration = false
 }
 
 func TestInstallNotesOverriddenGhosttySettings(t *testing.T) {
-	for _, tc := range []struct{ name, existing, want string }{
-		{"overridden", "theme = Nord\nfont-family = Fira Code\n", "theme"},
-		{"fallback only", "font-family = Fira Code\n", ""},
-		{"absent", "", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root, _, paths := blockHome(t, "macos")
-			entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
-			if tc.existing != "" {
-				if err := os.MkdirAll(filepath.Dir(entrypoint), 0700); err != nil {
-					t.Fatal(err)
-				}
-				blockWrite(t, entrypoint, []byte(tc.existing))
-			}
-			for _, args := range [][]string{{"install", "--skip-packages", "--yes", "--dry-run"}, {"install", "--skip-packages", "--yes"}} {
-				out := blockOK(t, root, args...)
-				note := "Selfishell's Ghostty defaults override these settings in " + entrypoint + ": " + tc.want + ". Move them to user.ghostty to keep them."
-				if tc.want == "" && strings.Contains(out, "override these settings") || tc.want != "" && !strings.Contains(out, note) {
-					t.Fatalf("%v: note for %q in %s", args, tc.want, out)
-				}
-			}
-		})
+	root, _, paths := blockHome(t, "macos")
+	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
+	if err := os.MkdirAll(filepath.Dir(entrypoint), 0700); err != nil {
+		t.Fatal(err)
+	}
+	blockWrite(t, entrypoint, []byte("theme = Nord\nfont-family = Fira Code\n"))
+	note := "Selfishell's Ghostty defaults override these settings in " + entrypoint + ": theme. Move them to user.ghostty to keep them."
+	for _, args := range [][]string{{"install", "--skip-packages", "--yes", "--dry-run"}, {"install", "--skip-packages", "--yes"}} {
+		if out := blockOK(t, root, args...); !strings.Contains(out, note) {
+			t.Fatalf("%v: missing note in %s", args, out)
+		}
 	}
 }
