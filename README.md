@@ -29,7 +29,7 @@ The bootstrap installs only the CLI. If it reports that `~/.local/bin` is not in
 `PATH`, run the `export PATH=…` command it prints before continuing. See the
 [installation guide](docs/INSTALLATION.md) for exact-version and
 non-interactive installation, configuration-only setup, uninstallation,
-Ghostty, and platform notes.
+Ghostty, other terminals, and platform notes.
 
 ## What You Get
 
@@ -77,8 +77,8 @@ startup.
 
 ### User guides
 
-- [Installation](docs/INSTALLATION.md) — setup, uninstallation, Ghostty, and
-  platform notes.
+- [Installation](docs/INSTALLATION.md) — setup, uninstallation, Ghostty, other
+  terminals, and platform notes.
 - [Environment](docs/ENVIRONMENT.md) — managed tools and Neovim workflow.
 - [Python development](docs/PYTHON.md) — Python tooling and project setup.
 - [Updates and rollback](docs/UPDATES.md) — release updates and recovery.
