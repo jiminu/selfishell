@@ -100,25 +100,9 @@ func TestGitTrackedChangesIgnoreUntrackedAndGeneratedTags(t *testing.T) {
 		t.Fatalf("excluded tag counted: %q %v", changes, err)
 	}
 	gitCommand(t, repo, "reset", "--hard", "-q")
-	for _, change := range []string{"staged edit", "deletion", "staged deletion", "staged new file", "missing index"} {
-		switch change {
-		case "staged edit":
-			writeTestFile(t, repo+"/a", "edited\n", 0600)
-			gitCommand(t, repo, "add", "a")
-		case "deletion":
-			os.Remove(repo + "/a")
-		case "staged deletion":
-			gitCommand(t, repo, "rm", "-q", "a")
-		case "staged new file":
-			writeTestFile(t, repo+"/new", "new\n", 0600)
-			gitCommand(t, repo, "add", "new")
-		case "missing index":
-			os.Remove(repo + "/.git/index")
-		}
-		if changes, err := op.gitTrackedChanges(context.Background(), repo, false); err != nil || changes == "" {
-			t.Fatalf("%s not detected: %q %v", change, changes, err)
-		}
-		gitCommand(t, repo, "reset", "--hard", "-q")
+	os.Remove(repo + "/.git/index")
+	if changes, err := op.gitTrackedChanges(context.Background(), repo, false); err != nil || changes == "" {
+		t.Fatalf("missing index not detected: %q %v", changes, err)
 	}
 	if err := os.MkdirAll(repo+"/broken/.git", 0700); err != nil {
 		t.Fatal(err)

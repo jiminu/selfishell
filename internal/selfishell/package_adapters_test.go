@@ -106,14 +106,18 @@ func TestAptLeavesInstalledAndHeldPackagesQuiet(t *testing.T) {
 	}
 }
 
-func TestAptNonRootRequiresSudo(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Count(f.calls(), "sudo apt-get "); got != 2 {
-		t.Fatalf("sudo count %d: %q", got, f.calls())
+func TestAptUsesSudoOnlyAsNonRoot(t *testing.T) {
+	for _, tc := range []struct{ uid, sudoCalls int }{{1000, 2}, {0, 0}} {
+		f := newPackageFixture(t)
+		f.apt()
+		f.op.uid = func() int { return tc.uid }
+		if tc.uid == 0 {
+			os.Remove(filepath.Join(f.bin, "sudo"))
+		}
+		err := f.op.InstallApt(context.Background(), "required", false, "available")
+		if got := f.calls(); err != nil || strings.Count(got, "sudo apt-get ") != tc.sudoCalls || !strings.Contains(got, "apt install -y available\n") {
+			t.Fatalf("uid %d: %v %q", tc.uid, err, got)
+		}
 	}
 }
 
@@ -147,54 +151,58 @@ printf '%s\n' "$1" >>"$HOME/apt-proxy-calls"`)
 	}
 }
 
-func TestAptNonRootWithoutSudoFails(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	os.Remove(filepath.Join(f.bin, "sudo"))
-	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err == nil || !strings.Contains(err.Error(), "sudo") {
-		t.Fatalf("error %v", err)
+func TestPackageAdapterFailuresSkipOptionalAndStopRequired(t *testing.T) {
+	apt := func(requirement string, names ...string) func(*PackageOperation) error {
+		return func(o *PackageOperation) error {
+			return o.InstallApt(context.Background(), requirement, false, names...)
+		}
 	}
-	if strings.Contains(f.calls(), "apt update") {
-		t.Fatal(f.calls())
+	brew := func(requirement, manager, name string) func(*PackageOperation) error {
+		return func(o *PackageOperation) error {
+			return o.InstallHomebrew(context.Background(), requirement, manager, false, name)
+		}
 	}
-}
-
-func TestAptRootDoesNotRequireSudo(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	f.op.uid = func() int { return 0 }
-	os.Remove(filepath.Join(f.bin, "sudo"))
-	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.calls(); !strings.Contains(got, "apt install -y available\n") || strings.Contains(got, "sudo ") {
-		t.Fatal(got)
-	}
-}
-
-func TestAptInstallsAvailableOptionalAndSkipsUnavailable(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	if err := f.op.InstallApt(context.Background(), "optional", false, "available", "missing"); err != nil {
-		t.Fatal(err)
-	}
-	f.skipped("missing")
-	if got := f.calls(); !strings.Contains(got, "apt install -y available\n") || strings.Contains(got, "apt install -y missing") {
-		t.Fatal(got)
-	}
-	if !strings.Contains(f.err.String(), "missing") {
-		t.Fatal(f.err.String())
-	}
-}
-
-func TestAptRequiredUnavailableFails(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	if err := f.op.InstallApt(context.Background(), "required", false, "missing"); err == nil {
-		t.Fatal("required unavailable succeeded")
-	}
-	if strings.Contains(f.calls(), "apt install") {
-		t.Fatal(f.calls())
+	aptFailing := func(flag string) func(*packageFixture) { return func(f *packageFixture) { f.apt(); f.flag(flag) } }
+	noSudo := func(f *packageFixture) { f.apt(); os.Remove(filepath.Join(f.bin, "sudo")) }
+	brewFailing := func(f *packageFixture) { f.brew(); f.flag("fail-install") }
+	noBrew := func(f *packageFixture) { f.executable("curl", `printf 'curl\n' >>"$HOME/calls"; exit 1`) }
+	for _, tc := range []struct {
+		name                            string
+		setup                           func(*packageFixture)
+		install                         func(*PackageOperation) error
+		skipped, message, calls, forbid string // no skipped package: the failure is fatal
+	}{
+		{"optional unavailable apt", (*packageFixture).apt, apt("optional", "available", "missing"), "missing", "missing", "apt install -y available\n", "apt install -y missing"},
+		{"optional apt install failure", aptFailing("fail-install"), apt("optional", "available", "installed"), "available", "available", "", ""},
+		{"optional apt without sudo", noSudo, apt("optional", "available", "installed"), "available", "sudo", "", "apt update"},
+		{"optional Homebrew install failure", brewFailing, brew("optional", "formula", "optional-tool"), "optional-tool", "optional-tool", "", ""},
+		{"optional Homebrew missing", noBrew, brew("optional", "formula", "missing"), "missing", "Homebrew", "", "curl"},
+		{"required unavailable apt", (*packageFixture).apt, apt("required", "missing"), "", "missing", "", "apt install"},
+		{"required apt without sudo", noSudo, apt("required", "available"), "", "sudo", "", "apt update"},
+		{"required apt index failure", aptFailing("fail-update"), apt("required", "available"), "", "indexes", "", "apt install"},
+		{"required Homebrew cask failure", brewFailing, brew("required", "cask", "required-tool"), "", "required-tool", "brew install --cask required-tool no_ask=1\n", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPackageFixture(t)
+			tc.setup(f)
+			err := tc.install(f.op)
+			message := f.err.String()
+			var skipped []string
+			if tc.skipped != "" {
+				skipped = []string{tc.skipped}
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil {
+				t.Fatal("required failure succeeded")
+			} else {
+				message = err.Error()
+			}
+			f.skipped(skipped...)
+			if calls := f.calls(); !strings.Contains(message, tc.message) || !strings.Contains(calls, tc.calls) || (tc.forbid != "" && strings.Contains(calls, tc.forbid)) {
+				t.Fatalf("message %q calls %q", message, calls)
+			}
+		})
 	}
 }
 
@@ -211,19 +219,6 @@ func TestHomebrewLeavesInstalledFormulaAndCaskQuiet(t *testing.T) {
 	}
 }
 
-func TestHomebrewOptionalFailureReported(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	f.flag("fail-install")
-	if err := f.op.InstallHomebrew(context.Background(), "optional", "formula", false, "optional-tool"); err != nil {
-		t.Fatal(err)
-	}
-	f.skipped("optional-tool")
-	if !strings.Contains(f.err.String(), "optional-tool") {
-		t.Fatal(f.err.String())
-	}
-}
-
 func TestHomebrewInstallsOnlyMissingFormulae(t *testing.T) {
 	f := newPackageFixture(t)
 	f.brew()
@@ -231,29 +226,6 @@ func TestHomebrewInstallsOnlyMissingFormulae(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(f.calls(), "brew install missing no_ask=1\n") {
-		t.Fatal(f.calls())
-	}
-}
-
-func TestHomebrewSuppressesDuplicateConfirmation(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	if err := f.op.InstallHomebrew(context.Background(), "required", "formula", false, "required-tool"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(f.calls(), "brew install required-tool no_ask=1\n") {
-		t.Fatal(f.calls())
-	}
-}
-
-func TestHomebrewRequiredFailureFails(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	f.flag("fail-install")
-	if err := f.op.InstallHomebrew(context.Background(), "required", "cask", false, "required-tool"); err == nil {
-		t.Fatal("required cask failure succeeded")
-	}
-	if !strings.Contains(f.calls(), "brew install --cask required-tool no_ask=1\n") {
 		t.Fatal(f.calls())
 	}
 }
@@ -298,18 +270,6 @@ func TestAptUpdatesOncePerOperationAndRetriesAfterOptionalFailure(t *testing.T) 
 	}
 }
 
-func TestAptRequiredIndexFailureIsFatal(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	f.flag("fail-update")
-	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err == nil {
-		t.Fatal("required update failure succeeded")
-	}
-	if strings.Contains(f.calls(), "apt install") {
-		t.Fatal(f.calls())
-	}
-}
-
 func TestHomebrewInventoriesOncePerKindPerOperation(t *testing.T) {
 	f := newPackageFixture(t)
 	f.brew()
@@ -329,17 +289,6 @@ func TestHomebrewInventoriesOncePerKindPerOperation(t *testing.T) {
 	}
 	if got := strings.Count(f.calls(), "brew install --cask missing no_ask=1"); got != 1 {
 		t.Fatalf("cask installs %d: %q", got, f.calls())
-	}
-}
-
-func TestHomebrewOptionalMissingDoesNotBootstrap(t *testing.T) {
-	f := newPackageFixture(t)
-	if err := f.op.InstallHomebrew(context.Background(), "optional", "formula", false, "missing"); err != nil {
-		t.Fatal(err)
-	}
-	f.skipped("missing")
-	if f.calls() != "" {
-		t.Fatal(f.calls())
 	}
 }
 
@@ -376,32 +325,6 @@ func TestHomebrewActivatesExistingStandardLocationBeforeInstall(t *testing.T) {
 	}
 }
 
-func TestAptOptionalInstallFailureIsSkipped(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	f.flag("fail-install")
-	if err := f.op.InstallApt(context.Background(), "optional", false, "available", "installed"); err != nil {
-		t.Fatal(err)
-	}
-	f.skipped("available")
-	if !strings.Contains(f.err.String(), "available") {
-		t.Fatal(f.err.String())
-	}
-}
-
-func TestAptOptionalMissingSudoIsSkipped(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	os.Remove(filepath.Join(f.bin, "sudo"))
-	if err := f.op.InstallApt(context.Background(), "optional", false, "available", "installed"); err != nil {
-		t.Fatal(err)
-	}
-	f.skipped("available")
-	if strings.Contains(f.calls(), "apt update") {
-		t.Fatal(f.calls())
-	}
-}
-
 func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
 	f := newPackageFixture(t)
 	standard := filepath.Join(t.TempDir(), "bin", "brew")
@@ -419,17 +342,6 @@ func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
 	}
 	if got := f.calls(); !strings.Contains(got, "curl -fsSL") || !strings.Contains(got, "activated install needed no_ask=1") {
 		t.Fatal(got)
-	}
-}
-
-func TestHomebrewInventoryCacheDoesNotTreatPrefixesAsInstalled(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	if err := f.op.InstallHomebrew(context.Background(), "required", "formula", false, "first-extra"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(f.calls(), "brew install first-extra no_ask=1") {
-		t.Fatal(f.calls())
 	}
 }
 

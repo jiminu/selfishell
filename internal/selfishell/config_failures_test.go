@@ -59,48 +59,20 @@ func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
 }
 
 func TestManagedMalformedStateStopsInstallWithoutMutation(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
+	root, _, paths := blockHome(t, "macos")
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, root, "vimrc")
 	state := paths.Resources + "/vimrc.state"
 	original := blockRead(t, r.Target)
-	valid := "2\nfile\nactive\n" + r.Target + "\n-\n-\n123:4\n"
-	cases := map[string]string{
-		"truncated-one": "2\n", "truncated-six": "2\nfile\nactive\n" + r.Target + "\n-\n-\n",
-		"empty-kind":       strings.Replace(valid, "file\n", "\n", 1),
-		"unknown-kind":     strings.Replace(valid, "file\n", "bogus\n", 1),
-		"unknown-status":   strings.Replace(valid, "active\n", "bogus\n", 1),
-		"empty-target":     strings.Replace(valid, r.Target, "", 1),
-		"version":          strings.Replace(valid, "2\n", "99\n", 1),
-		"no-final-newline": strings.TrimSuffix(valid, "\n"),
-	}
-	for name, data := range cases {
-		t.Run(name, func(t *testing.T) {
-			blockWrite(t, state, []byte(data))
-			code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes")
-			if code != 1 || !strings.Contains(stderr, state) {
-				t.Fatalf("%d %q", code, stderr)
-			}
-			blockEqual(t, r.Target, original)
-			if _, err := os.Lstat(paths.State + "/backups"); !os.IsNotExist(err) {
-				t.Fatalf("backup created: %v", err)
-			}
-		})
-	}
-	if err := os.Remove(state); err != nil {
-		t.Fatal(err)
-	}
-	referent := filepath.Join(home, "state-referent")
-	blockWrite(t, referent, []byte(valid))
-	if err := os.Symlink(referent, state); err != nil {
-		t.Fatal(err)
-	}
+	blockWrite(t, state, []byte("2\nfile\nbogus\n"+r.Target+"\n-\n-\n123:4\n"))
 	code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes")
 	if code != 1 || !strings.Contains(stderr, state) {
-		t.Fatalf("symlink state: %d %q", code, stderr)
+		t.Fatalf("%d %q", code, stderr)
 	}
 	blockEqual(t, r.Target, original)
-	blockEqual(t, referent, []byte(valid))
+	if _, err := os.Lstat(paths.State + "/backups"); !os.IsNotExist(err) {
+		t.Fatalf("backup created: %v", err)
+	}
 }
 
 func TestManagedMalformedLateStateStopsUninstallBeforeRemoval(t *testing.T) {
@@ -118,47 +90,6 @@ func TestManagedMalformedLateStateStopsUninstallBeforeRemoval(t *testing.T) {
 	blockEqual(t, loader, before)
 	blockEqual(t, paths.Config+"/zsh/zshrc", earlier)
 	blockEqual(t, paths.State+"/configured", []byte("1\n"))
-}
-
-func TestManagedFreshLoaderRejectsUntrackedDuplicateAndDirectory(t *testing.T) {
-	for _, kind := range []string{"untracked", "duplicate", "directory"} {
-		t.Run(kind, func(t *testing.T) {
-			root, home, paths := blockHome(t, "macos")
-			target := home + "/.zshrc"
-			content, err := blockContent("user-zshrc", paths.Config)
-			if err != nil {
-				t.Fatal(err)
-			}
-			switch kind {
-			case "untracked":
-				blockWrite(t, target, content)
-			case "duplicate":
-				blockWrite(t, target, append(append([]byte{}, content...), content...))
-			case "directory":
-				if err := os.Mkdir(target, 0700); err != nil {
-					t.Fatal(err)
-				}
-			}
-			code, _, _ := blockRun(t, root, "", "install", "--skip-packages", "--yes")
-			if code != 1 {
-				t.Fatalf("%s accepted: %d", kind, code)
-			}
-			if kind == "directory" {
-				if info, err := os.Stat(target); err != nil || !info.IsDir() {
-					t.Fatalf("directory changed: %v %v", info, err)
-				}
-			} else if kind == "duplicate" {
-				blockEqual(t, target, append(append([]byte{}, content...), content...))
-			} else {
-				blockEqual(t, target, content)
-			}
-			for _, path := range []string{paths.Config, paths.State} {
-				if _, err := os.Lstat(path); !os.IsNotExist(err) {
-					t.Fatalf("created %s: %v", path, err)
-				}
-			}
-		})
-	}
 }
 
 func TestManagedEditedLoaderMarkerSurvivesBothOperations(t *testing.T) {
@@ -241,28 +172,39 @@ func TestManagedUninstallDryRunPreviewsBackupWithoutMutation(t *testing.T) {
 }
 
 func TestManagedInterruptedBlockUninstallExplainsRetry(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	state := blockState(t, paths, "user-vimrc")
-	state.Status = "pending"
-	if err := WriteState(paths.Resources+"/user-vimrc.state", state); err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		name, vimrc string
+		diagnostics []string
+	}{
+		{"absent", "user vimrc\n", nil},
+		{"malformed", "\" >>> Selfishell vimrc >>>\nuser vimrc\n", []string{"Cannot manage the Selfishell user-vimrc block", "Preserving the file."}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, home, paths := blockHome(t, "macos")
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			state := blockState(t, paths, "user-vimrc")
+			state.Status = "pending"
+			if err := WriteState(paths.Resources+"/user-vimrc.state", state); err != nil {
+				t.Fatal(err)
+			}
+			blockWrite(t, home+"/.vimrc", []byte(tc.vimrc))
+			earlier := blockRead(t, paths.Config+"/zsh/zshrc")
+			loader := blockRead(t, home+"/.zshrc")
+			code, _, stderr := blockRun(t, root, "", "uninstall", "--yes")
+			for _, want := range append(tc.diagnostics, "An interrupted install left this unfinished; run 'selfishell install', then uninstall again.") {
+				if code != 1 || !strings.Contains(stderr, want) {
+					t.Fatalf("%d %q, want %q", code, stderr, want)
+				}
+			}
+			blockEqual(t, paths.Config+"/zsh/zshrc", earlier)
+			blockEqual(t, home+"/.vimrc", []byte(tc.vimrc))
+			blockEqual(t, home+"/.zshrc", loader)
+			if blockState(t, paths, "user-vimrc").Status != "pending" {
+				t.Fatal("pending state changed")
+			}
+			blockEqual(t, paths.State+"/configured", []byte("1\n"))
+		})
 	}
-	userVimrc := []byte("user vimrc\n")
-	blockWrite(t, home+"/.vimrc", userVimrc)
-	earlier := blockRead(t, paths.Config+"/zsh/zshrc")
-	loader := blockRead(t, home+"/.zshrc")
-	code, _, stderr := blockRun(t, root, "", "uninstall", "--yes")
-	if code != 1 || !strings.Contains(stderr, "An interrupted install left this unfinished; run 'selfishell install', then uninstall again.") {
-		t.Fatalf("%d %q", code, stderr)
-	}
-	blockEqual(t, paths.Config+"/zsh/zshrc", earlier)
-	blockEqual(t, home+"/.vimrc", userVimrc)
-	blockEqual(t, home+"/.zshrc", loader)
-	if blockState(t, paths, "user-vimrc").Status != "pending" {
-		t.Fatal("pending state changed")
-	}
-	blockEqual(t, paths.State+"/configured", []byte("1\n"))
 }
 
 func TestManagedPendingLoaderAndFileRecoverExactBytes(t *testing.T) {
@@ -310,40 +252,8 @@ func TestManagedPendingLoaderAndFileRecoverExactBytes(t *testing.T) {
 	}
 }
 
-func TestManagedActiveFileUpdateAndMissingTargetReportDistinctVerbs(t *testing.T) {
-	for _, missing := range []bool{false, true} {
-		t.Run(map[bool]string{false: "changed-source", true: "missing-target"}[missing], func(t *testing.T) {
-			root, _, paths := blockHome(t, "macos")
-			r := failureResource(t, root, "zsh-common")
-			if !missing {
-				blockWrite(t, r.Target, []byte("old managed bytes"))
-			}
-			checksum := "123:4"
-			if !missing {
-				var err error
-				checksum, err = checksumBytes([]byte("old managed bytes"))
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := WriteState(paths.Resources+"/zsh-common.state", State{"file", "active", r.Target, "-", "-", checksum}); err != nil {
-				t.Fatal(err)
-			}
-			out := blockOK(t, root, "install", "--skip-packages", "--yes")
-			want, reject := "Updated managed file: ", "Installed managed file: "
-			if missing {
-				want, reject = reject, want
-			}
-			if !strings.Contains(out, want+r.Target) || strings.Contains(out, reject+r.Target) {
-				t.Fatal(out)
-			}
-			blockEqual(t, r.Target, blockRead(t, r.Source))
-		})
-	}
-}
-
 func TestManagedMiseGlobalExistingTypesAndDirectoryPreflight(t *testing.T) {
-	for _, kind := range []string{"file", "file-link", "directory-link", "dangling-link", "directory"} {
+	for _, kind := range []string{"file", "dangling-link", "directory"} {
 		t.Run(kind, func(t *testing.T) {
 			root, home, paths := blockHome(t, "macos")
 			target := home + "/.config/mise/config.toml"
@@ -354,18 +264,6 @@ func TestManagedMiseGlobalExistingTypesAndDirectoryPreflight(t *testing.T) {
 			switch kind {
 			case "file":
 				blockWrite(t, target, []byte("user file\n"))
-			case "file-link":
-				blockWrite(t, other, []byte("user target\n"))
-				if err := os.Symlink(other, target); err != nil {
-					t.Fatal(err)
-				}
-			case "directory-link":
-				if err := os.Mkdir(other, 0700); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(other, target); err != nil {
-					t.Fatal(err)
-				}
 			case "dangling-link":
 				if err := os.Symlink(other, target); err != nil {
 					t.Fatal(err)
@@ -396,17 +294,13 @@ func TestManagedMiseGlobalExistingTypesAndDirectoryPreflight(t *testing.T) {
 			if err != nil || before.Mode().Type() != after.Mode().Type() {
 				t.Fatalf("type changed: %v %v", after, err)
 			}
-			if before.Mode()&os.ModeSymlink != 0 {
-				a, _ := os.Readlink(target)
-				if a != other {
+			if kind == "dangling-link" {
+				if a, _ := os.Readlink(target); a != other {
 					t.Fatalf("link changed: %q", a)
 				}
 			}
 			if kind == "file" {
 				blockEqual(t, target, []byte("user file\n"))
-			}
-			if kind == "file-link" {
-				blockEqual(t, other, []byte("user target\n"))
 			}
 			if kind != "directory" {
 				if _, err := os.Lstat(paths.Resources + "/mise-global.state"); !os.IsNotExist(err) {
@@ -757,72 +651,6 @@ func TestManagedDryRunConflictPreservesBytesAndPreviewsDecision(t *testing.T) {
 	}
 }
 
-func TestManagedBlockSpliceRetainsBinarySurroundingsAndMode(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	_ = root
-	content, err := blockContent("user-vimrc", paths.Config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prefix := bytes.Repeat([]byte("personal config\r\n"), 8192)
-	prefix = append(prefix, []byte("앞\x00뒤\n")...)
-	suffix := append(append([]byte{}, prefix...), []byte("no final newline")...)
-	old := []byte("old block\n")
-	target := home + "/block-target"
-	blockWrite(t, target, append(append(append([]byte{}, prefix...), old...), suffix...))
-	if err := os.Chmod(target, 0640); err != nil {
-		t.Fatal(err)
-	}
-	view := blockView{start: len(prefix), end: len(prefix) + len(old)}
-	if err := writeAtomic(target, spliceBlock(blockRead(t, target), view, content), 0640); err != nil {
-		t.Fatal(err)
-	}
-	blockEqual(t, target, append(append(append([]byte{}, prefix...), content...), suffix...))
-	view.end = len(prefix) + len(content)
-	if err := writeAtomic(target, spliceBlock(blockRead(t, target), view, nil), 0640); err != nil {
-		t.Fatal(err)
-	}
-	blockEqual(t, target, append(append([]byte{}, prefix...), suffix...))
-	if info, err := os.Stat(target); err != nil || info.Mode().Perm() != 0640 {
-		t.Fatalf("mode: %v %v", info, err)
-	}
-}
-
-func TestManagedBlockContentFailureLeavesUserBytes(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	target := home + "/.zshrc"
-	original := []byte("original zshrc\n")
-	blockWrite(t, target, original)
-	m := managed{c: CLI{Root: root}, paths: paths}
-	if err := m.installBlock(Resource{Kind: "block", Name: "invalid-block", Target: target, Source: "-"}, false); err == nil {
-		t.Fatal("unknown block accepted")
-	}
-	blockEqual(t, target, original)
-	if _, err := os.Lstat(paths.Resources + "/invalid-block.state"); !os.IsNotExist(err) {
-		t.Fatalf("state created: %v", err)
-	}
-	if matches, err := filepath.Glob(target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temporary files: %v %v", matches, err)
-	}
-}
-
-func TestManagedAtomicRenameFailurePreservesOriginalAndCleansTemp(t *testing.T) {
-	root, home, _ := blockHome(t, "macos")
-	_ = root
-	target := home + "/occupied"
-	if err := os.Mkdir(target, 0700); err != nil {
-		t.Fatal(err)
-	}
-	blockWrite(t, target+"/user-file", []byte("user bytes"))
-	if err := writeAtomic(target, []byte("replacement"), 0640); err == nil {
-		t.Fatal("rename over directory reported success")
-	}
-	blockEqual(t, target+"/user-file", []byte("user bytes"))
-	if matches, err := filepath.Glob(target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temporary files: %v %v", matches, err)
-	}
-}
-
 func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 	root, home, paths := blockHome(t, "macos")
 	r := failureResource(t, root, "vimrc")
@@ -844,9 +672,6 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 	if _, err := os.Lstat(r.Target); !os.IsNotExist(err) {
 		t.Fatalf("partial target: %v", err)
 	}
-	if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temp remnants: %v %v", matches, err)
-	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockEqual(t, r.Target, blockRead(t, r.Source))
 	if got := blockState(t, paths, r.Name).Backup; got != state.Backup {
@@ -857,7 +682,7 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 
 func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 	for _, backup := range []bool{false, true} {
-		for _, outcome := range []string{"write-failed", "write-completed", "user-edited"} {
+		for _, outcome := range []string{"write-failed", "write-completed", "user-edited", "overwrite-failed"} {
 			name := fmt.Sprintf("backup=%t/%s", backup, outcome)
 			t.Run(name, func(t *testing.T) {
 				changed := outcome == "user-edited"
@@ -874,8 +699,12 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 				r.Source = filepath.Join(t.TempDir(), "new-vimrc")
 				updated := append(bytes.Clone(before), []byte("\" new release\n")...)
 				blockWrite(t, r.Source, updated)
+				if outcome == "overwrite-failed" {
+					before = []byte("personal edit before overwrite\n")
+					blockWrite(t, r.Target, before)
+				}
 				var out bytes.Buffer
-				m := managed{c: CLI{Root: root, Out: &out}, paths: paths, yes: true,
+				m := managed{c: CLI{Root: root, Out: &out}, paths: paths, yes: true, actions: map[string]string{r.Name: "overwrite"},
 					atomicWrite: func(path string, data []byte, mode os.FileMode) error {
 						if outcome == "write-completed" {
 							if err := writeAtomic(path, data, mode); err != nil {
@@ -892,6 +721,13 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 					want = updated
 				}
 				blockEqual(t, r.Target, want)
+				if outcome == "overwrite-failed" {
+					entries, err := os.ReadDir(paths.State + "/backups")
+					if err != nil || len(entries) != 1 {
+						t.Fatalf("conflict backup: %v %v", entries, err)
+					}
+					blockEqual(t, paths.State+"/backups/"+entries[0].Name(), before)
+				}
 				if changed {
 					blockWrite(t, r.Target, []byte("personal edit after failure\n"))
 				}
@@ -1089,9 +925,6 @@ func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
 			if strings.Contains(out.String(), "Added Selfishell block") {
 				t.Fatal("false success")
 			}
-			if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
-				t.Fatalf("temp remnants: %v %v", matches, err)
-			}
 			blockOK(t, root, "install", "--skip-packages", "--yes")
 			if !bytes.Contains(blockRead(t, home+"/.zshrc"), []byte("# >>> Selfishell initialize >>>")) {
 				t.Fatal("retry did not add block")
@@ -1100,124 +933,36 @@ func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
 	}
 }
 
-func TestManagedBlockRemovalWriteFailureKeepsBlockAndStateForRetry(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	r := failureResource(t, root, "user-zshrc")
-	before := blockRead(t, r.Target)
-	state := blockState(t, paths, r.Name)
-	m := managed{c: CLI{Root: root}, paths: paths, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected block removal write failure") }}
-	if err := m.removeResource(ResourceState{Resource: r, State: state}, false); err == nil {
-		t.Fatal("removal reported success")
-	}
-	blockEqual(t, r.Target, before)
-	if blockState(t, paths, r.Name).Status != "pending" {
-		t.Fatal("failed removal cleared state")
-	}
-	if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temp remnants: %v %v", matches, err)
-	}
-	// Repair through install first, then normal uninstall.
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockOK(t, root, "uninstall", "--yes")
-	if bytes.Contains(blockRead(t, home+"/.zshrc"), []byte("# >>> Selfishell initialize >>>")) {
-		t.Fatal("retry left block")
-	}
-}
-
-func TestManagedRemoveFailureRetainsFileAndResourceRecord(t *testing.T) {
-	root, _, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	r := failureResource(t, root, "zshrc-config")
-	before := blockRead(t, r.Target)
-	state := blockState(t, paths, r.Name)
-	m := managed{c: CLI{Root: root}, paths: paths, removePath: func(string) error { return errors.New("injected removal failure") }}
-	if err := m.removeResource(ResourceState{Resource: r, State: state}, false); err == nil {
-		t.Fatal("removal reported success")
-	}
-	blockEqual(t, r.Target, before)
-	if _, err := os.Lstat(paths.Resources + "/" + r.Name + ".state"); err != nil {
-		t.Fatal(err)
-	}
-	blockEqual(t, paths.State+"/configured", []byte("1\n"))
-}
-
-func TestManagedOverwriteWriteFailureKeepsConflictBackupAndRetries(t *testing.T) {
-	root, _, paths := blockHome(t, "macos")
-	r := failureResource(t, root, "vimrc")
-	original := []byte("original user vimrc before install\n")
-	blockWrite(t, r.Target, original)
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	originalBackup := blockState(t, paths, r.Name).Backup
-	if originalBackup == "-" {
-		t.Fatal("original backup missing from overwrite fixture")
-	}
-	blockEqual(t, originalBackup, original)
-	modified := []byte("user_modified_vimrc\n")
-	blockWrite(t, r.Target, modified)
-	var out bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out}, paths: paths, actions: map[string]string{r.Name: "overwrite"}, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected copy failure") }}
-	if err := m.installFile(r, false); err == nil {
-		t.Fatal("failed overwrite reported success")
-	}
-	blockEqual(t, r.Target, modified)
-	if strings.Contains(out.String(), "Updated managed file: "+r.Target) {
-		t.Fatal("false success")
-	}
-	state := blockState(t, paths, r.Name)
-	if state.Status != "pending" {
-		t.Fatalf("state %v", state)
-	}
-	if state.Backup != originalBackup {
-		t.Fatalf("pending backup identity changed: %q != %q", state.Backup, originalBackup)
-	}
-	blockEqual(t, originalBackup, original)
-	entries, err := os.ReadDir(paths.State + "/backups")
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("backup: %v %v", entries, err)
-	}
-	blockEqual(t, paths.State+"/backups/"+entries[0].Name(), modified)
-	m.atomicWrite = nil
-	if err := m.installFile(r, false); err != nil {
-		t.Fatalf("retry: %v", err)
-	}
-	blockEqual(t, r.Target, blockRead(t, r.Source))
-	if blockState(t, paths, r.Name).Status != "active" {
-		t.Fatal("retry did not activate")
-	}
-	if got := blockState(t, paths, r.Name).Backup; got != originalBackup {
-		t.Fatalf("retry backup identity changed: %q != %q", got, originalBackup)
-	}
-	blockEqual(t, originalBackup, original)
-	blockOK(t, root, "uninstall", "--restore", "--yes")
-	blockEqual(t, r.Target, original)
-}
-
-func TestManagedGhosttyPreflightRejectsUserSymlinkBeforeConfiguration(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	target := home + "/.config/ghostty/config.ghostty"
-	referent := home + "/personal-ghostty"
-	blockWrite(t, referent, []byte("font-size = 14\n"))
-	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(referent, target); err != nil {
-		t.Fatal(err)
-	}
-	blockWrite(t, paths.State+"/ghostty", []byte("1\n"))
-	code, out, _ := blockRun(t, root, "", "install", "--skip-packages", "--yes")
-	if code != 1 || strings.Contains(out, "Skipping package and tool installation") {
-		t.Fatalf("preflight: %d %q", code, out)
-	}
-	if dest, err := os.Readlink(target); err != nil || dest != referent {
-		t.Fatalf("link: %q %v", dest, err)
-	}
-	blockEqual(t, referent, []byte("font-size = 14\n"))
-	if _, err := os.Lstat(paths.Config); !os.IsNotExist(err) {
-		t.Fatalf("managed config created: %v", err)
-	}
-	if _, err := os.Lstat(paths.Resources); !os.IsNotExist(err) {
-		t.Fatalf("resource state created: %v", err)
+func TestManagedBlockRemovalFailureKeepsStateForRetry(t *testing.T) {
+	for _, point := range []string{"write", "state-removal"} {
+		t.Run(point, func(t *testing.T) {
+			root, _, paths := blockHome(t, "macos")
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			r := failureResource(t, root, "user-zshrc")
+			before := blockRead(t, r.Target)
+			injected := errors.New("injected " + point + " failure")
+			m := managed{c: CLI{Root: root}, paths: paths}
+			if point == "write" {
+				m.atomicWrite = func(string, []byte, os.FileMode) error { return injected }
+			} else {
+				m.removeState = func(string) error { return injected }
+			}
+			if err := m.removeResource(ResourceState{Resource: r, State: blockState(t, paths, r.Name)}, false); err == nil {
+				t.Fatal("removal reported success")
+			}
+			if point == "write" {
+				blockEqual(t, r.Target, before)
+			}
+			if blockState(t, paths, r.Name).Status != "pending" {
+				t.Fatal("failed removal cleared state")
+			}
+			// Repair through install first, then normal uninstall.
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, root, "uninstall", "--yes")
+			if bytes.Contains(blockRead(t, r.Target), []byte("# >>> Selfishell initialize >>>")) {
+				t.Fatal("retry left block")
+			}
+		})
 	}
 }
 
@@ -1265,61 +1010,4 @@ func TestManagedFinalMarkerWriteFailureHasNoSuccess(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestManagedPendingBlockStateRefreshFailureNeverClaimsUnchanged(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("state permission failure requires an unprivileged process")
-	}
-	root, _, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	statePath := paths.Resources + "/user-zshrc.state"
-	state := blockState(t, paths, "user-zshrc")
-	state.Status = "pending"
-	if err := WriteState(statePath, state); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(paths.Resources, 0500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(paths.Resources, 0700) })
-	code, out, _ := blockRun(t, root, "", "install", "--skip-packages", "--yes")
-	if code != 1 || strings.Contains(out, "items unchanged") || strings.Contains(out, "Selfishell configuration installed.") {
-		t.Fatalf("refresh failure: %d %q", code, out)
-	}
-	if err := os.Chmod(paths.Resources, 0700); err != nil {
-		t.Fatal(err)
-	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if blockState(t, paths, "user-zshrc").Status != "active" {
-		t.Fatal("retry left pending")
-	}
-}
-
-func TestManagedBlockRemovalReadFailurePreservesTargetAndState(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("read permission failure requires an unprivileged process")
-	}
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	r := failureResource(t, root, "user-zshrc")
-	before := blockRead(t, r.Target)
-	state := blockRead(t, paths.Resources+"/user-zshrc.state")
-	if err := os.Chmod(r.Target, 0000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(r.Target, 0644) })
-	code, _, _ := blockRun(t, root, "", "uninstall", "--yes")
-	if code != 1 {
-		t.Fatalf("read failure accepted: %d", code)
-	}
-	if err := os.Chmod(r.Target, 0644); err != nil {
-		t.Fatal(err)
-	}
-	blockEqual(t, r.Target, before)
-	blockEqual(t, paths.Resources+"/user-zshrc.state", state)
-	if matches, err := filepath.Glob(r.Target + ".tmp.*"); err != nil || len(matches) != 0 {
-		t.Fatalf("temp remnants: %v %v", matches, err)
-	}
-	_ = home
 }

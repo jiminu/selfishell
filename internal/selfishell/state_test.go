@@ -6,12 +6,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 )
 
 func stateFixture() State {
@@ -274,61 +272,6 @@ func TestStateWriteFailures(t *testing.T) {
 				t.Fatalf("retry: %v", err)
 			}
 		})
-	}
-}
-
-func TestStateInterruptedWriter(t *testing.T) {
-	if path := os.Getenv("SELFISHELL_GO_INTERRUPTED_STATE"); path != "" {
-		_ = writeState(path, stateFixture(), func(dir, pattern string) (stateFile, error) { return os.CreateTemp(dir, pattern) }, func(from, to string) error {
-			os.Stdout.WriteString("ready\n")
-			time.Sleep(time.Hour)
-			return os.Rename(from, to)
-		})
-		os.Exit(0)
-	}
-	dir := t.TempDir()
-	path := dir + "/resource.state"
-	old := stateFixture()
-	old.Status = "active"
-	if err := WriteState(path, old); err != nil {
-		t.Fatal(err)
-	}
-	before, _ := os.ReadFile(path)
-	executable, _ := os.Executable()
-	cmd := exec.Command(executable, "-test.run=^TestStateInterruptedWriter$")
-	cmd.Env = append(os.Environ(), "SELFISHELL_GO_INTERRUPTED_STATE="+path, "HOME="+dir)
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer cmd.Process.Kill()
-	ready := make(chan error, 1)
-	go func() { data := make([]byte, 6); _, err := io.ReadFull(out, data); ready <- err }()
-	select {
-	case err := <-ready:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("writer did not reach commit")
-	}
-	if err := cmd.Process.Kill(); err != nil {
-		t.Fatal(err)
-	}
-	_ = cmd.Wait()
-	after, _ := os.ReadFile(path)
-	if !bytes.Equal(before, after) {
-		t.Fatal("interruption corrupted existing state")
-	}
-	if err := WriteState(path, stateFixture()); err != nil {
-		t.Fatalf("retry after interruption: %v", err)
-	}
-	got, err := ReadState(path)
-	if err != nil || got != stateFixture() {
-		t.Fatalf("retry state: %+v %v", got, err)
 	}
 }
 

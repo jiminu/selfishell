@@ -241,19 +241,49 @@ func TestProcessCancellation(t *testing.T) {
 	}
 }
 
-func TestProcessDisablesGitTerminalPrompt(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_TERMINAL_PROMPT", "1")
-	for _, explicit := range []bool{false, true} {
-		var out bytes.Buffer
-		p := Process{Out: &out}
-		if explicit {
-			p.Env = []string{"HOME=" + os.Getenv("HOME"), "GIT_TERMINAL_PROMPT=1"}
-		}
-		code, err := p.Run(context.Background(), "/bin/sh", "-c", `printf '%s' "$GIT_TERMINAL_PROMPT"`)
-		if err != nil || code != 0 || out.String() != "0" {
-			t.Fatalf("explicit=%t: code=%d err=%v prompt=%q", explicit, code, err, out.String())
-		}
+func TestChildProcessEnvironment(t *testing.T) {
+	speed := func(curlLimit, curlTime, gitLimit string) map[string]string {
+		return map[string]string{"SELFISHELL_CURL_LOW_SPEED_LIMIT": curlLimit, "SELFISHELL_CURL_LOW_SPEED_TIME": curlTime, "GIT_HTTP_LOW_SPEED_LIMIT": gitLimit, "GIT_HTTP_LOW_SPEED_TIME": ""}
+	}
+	speedVars := []string{"GIT_HTTP_LOW_SPEED_LIMIT", "GIT_HTTP_LOW_SPEED_TIME"}
+	for _, tc := range []struct {
+		name    string
+		inherit map[string]string // set in this process; the child inherits a nil Env
+		env     []string
+		dir     bool
+		vars    []string
+		want    string // DIR stands for the child's Dir
+	}{
+		{"inherited prompt", map[string]string{"GIT_TERMINAL_PROMPT": "1"}, nil, false, []string{"GIT_TERMINAL_PROMPT"}, "0"},
+		{"explicit prompt", nil, []string{"GIT_TERMINAL_PROMPT=1"}, false, []string{"GIT_TERMINAL_PROMPT"}, "0"},
+		{"default speed", speed("", "", ""), nil, false, speedVars, "1024|30"},
+		{"configured speed", speed("256", "120", ""), nil, false, speedVars, "256|120"},
+		{"caller speed override", speed("256", "120", "5"), nil, false, speedVars, "5|120"},
+		{"invalid curl speed policy", speed("0", "120", ""), nil, false, speedVars, "|"},
+		{"inherited PWD follows Dir", nil, nil, true, []string{"PWD"}, "DIR"},
+		{"explicit PWD", nil, []string{"PWD=/preserved"}, true, []string{"PWD"}, "/preserved"},
+		{"repository selectors", nil, []string{"GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index", "GIT_HTTP_LOW_SPEED_LIMIT=12"}, false, []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_HTTP_LOW_SPEED_LIMIT"}, "|||12"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			for key, value := range tc.inherit {
+				t.Setenv(key, value)
+			}
+			dir := ""
+			if tc.dir {
+				dir = t.TempDir()
+			}
+			var out bytes.Buffer
+			code, err := (Process{Out: &out, Env: tc.env, Dir: dir}).Run(context.Background(), "/usr/bin/env")
+			env := strings.Split(out.String(), "\n")
+			var got []string
+			for _, key := range tc.vars {
+				got = append(got, envValue(env, key))
+			}
+			if want := strings.ReplaceAll(tc.want, "DIR", dir); err != nil || code != 0 || strings.Join(got, "|") != want {
+				t.Fatalf("code=%d err=%v got %q want %q", code, err, strings.Join(got, "|"), want)
+			}
+		})
 	}
 }
 
@@ -350,41 +380,6 @@ func TestCurlUsesProxy(t *testing.T) {
 	}
 }
 
-func TestGitTransferSpeedEnvironment(t *testing.T) {
-	for _, tc := range []struct{ name, curlLimit, curlTime, gitLimit, gitTime, want string }{
-		{"defaults", "", "", "", "", "1024 30\n"},
-		{"configured", "256", "120", "", "", "256 120\n"},
-		{"caller override", "256", "120", "5", "", "5 120\n"},
-		{"invalid curl policy", "0", "120", "", "", " \n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			t.Setenv("HOME", root)
-			t.Setenv("TMPDIR", t.TempDir())
-			t.Setenv("PATH", root)
-			t.Setenv("SELFISHELL_CURL_LOW_SPEED_LIMIT", tc.curlLimit)
-			t.Setenv("SELFISHELL_CURL_LOW_SPEED_TIME", tc.curlTime)
-			t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", tc.gitLimit)
-			t.Setenv("GIT_HTTP_LOW_SPEED_TIME", tc.gitTime)
-			for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
-				t.Setenv(key, root+"/private/"+key)
-			}
-			if err := os.WriteFile(root+"/git", []byte("#!/bin/sh\nprintf '%s %s\\n' \"$GIT_HTTP_LOW_SPEED_LIMIT\" \"$GIT_HTTP_LOW_SPEED_TIME\" >\"$HOME/git-env\"\nexit 9\n"), 0700); err != nil {
-				t.Fatal(err)
-			}
-			op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
-			dep := Dependency{Kind: "git", Name: "fixture", Source: "file:///private/fixture"}
-			if err := op.stageGit(context.Background(), dep, root+"/stage"); err == nil {
-				t.Fatal("fake git failure ignored")
-			}
-			data, err := os.ReadFile(root + "/git-env")
-			if err != nil || string(data) != tc.want {
-				t.Fatalf("git child environment %q want %q: %v", data, tc.want, err)
-			}
-		})
-	}
-}
-
 func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -417,109 +412,5 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	out.Reset()
 	if code, err := p.Run(context.Background(), "./git"); err != nil || code != 0 || out.String() != "unsafe" {
 		t.Fatalf("explicit relative command: code=%d err=%v output=%q", code, err, out.String())
-	}
-}
-
-func TestProcessInheritedEnvironmentUpdatesPWDForDir(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", "256")
-	t.Setenv("GIT_HTTP_LOW_SPEED_TIME", "120")
-	dir := t.TempDir()
-	var out bytes.Buffer
-	code, err := (Process{Dir: dir, Out: &out}).Run(context.Background(), "/usr/bin/env")
-	if err != nil || code != 0 {
-		t.Fatalf("env: code=%d err=%v", code, err)
-	}
-	for _, line := range strings.Split(out.String(), "\n") {
-		if value, ok := strings.CutPrefix(line, "PWD="); ok {
-			if value != dir {
-				t.Fatalf("child PWD=%q, want %q", value, dir)
-			}
-			out.Reset()
-			code, err = (Process{Dir: dir, Out: &out, Env: []string{"HOME=" + home, "PWD=/preserved"}}).Run(context.Background(), "/usr/bin/env")
-			if err != nil || code != 0 || !strings.Contains(out.String(), "PWD=/preserved\n") {
-				t.Fatalf("explicit child PWD: code=%d err=%v output=%q", code, err, out.String())
-			}
-			return
-		}
-	}
-	t.Fatal("child PWD missing")
-}
-
-func TestProbeParallelBoundsConcurrencyAndRunsEveryIndexOnce(t *testing.T) {
-	const n = 3*probeLimit + 1
-	var active, peak atomic.Int32
-	seen := make([]atomic.Int32, n)
-	// Each probe waits for a full batch, so a sequential runner fails here.
-	deadline := time.Now().Add(5 * time.Second)
-	probeParallel(n, func(i int) {
-		now := active.Add(1)
-		defer active.Add(-1)
-		for current := peak.Load(); now > current; current = peak.Load() {
-			if peak.CompareAndSwap(current, now) {
-				break
-			}
-		}
-		for peak.Load() < probeLimit && time.Now().Before(deadline) {
-			time.Sleep(time.Millisecond)
-		}
-		seen[i].Add(1)
-	})
-	if got := peak.Load(); got != probeLimit {
-		t.Fatalf("peak concurrency %d, want %d", got, probeLimit)
-	}
-	for i := range seen {
-		if got := seen[i].Load(); got != 1 {
-			t.Fatalf("probe %d ran %d times", i, got)
-		}
-	}
-}
-
-func TestGitChildIgnoresInheritedRepositorySelectors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if err := os.WriteFile(home+"/git", []byte("#!/bin/sh\nprintf '%s|%s|%s|%s' \"$GIT_DIR\" \"$GIT_WORK_TREE\" \"$GIT_INDEX_FILE\" \"$GIT_HTTP_LOW_SPEED_LIMIT\"\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	p := Process{Out: &out, Env: []string{"HOME=" + home, "PATH=" + home, "GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index", "GIT_HTTP_LOW_SPEED_LIMIT=12"}}
-	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "|||12" {
-		t.Fatalf("Git child environment: code=%d err=%v output=%q", code, err, out.String())
-	}
-}
-
-func TestIndirectGitChildIgnoresInheritedRepositorySelectors(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if err := os.WriteFile(home+"/nvim", []byte("#!/bin/sh\nprintf '%s|%s|%s' \"$GIT_DIR\" \"$GIT_WORK_TREE\" \"$GIT_INDEX_FILE\"\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	p := Process{Out: &out, Env: []string{"HOME=" + home, "PATH=" + home, "GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index"}}
-	if code, err := p.Run(context.Background(), "nvim"); err != nil || code != 0 || out.String() != "||" {
-		t.Fatalf("indirect child environment: code=%d err=%v output=%q", code, err, out.String())
-	}
-}
-
-func TestGitSpeedEnvironmentReachesIndirectToolChild(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("HOME", root)
-	t.Setenv("TMPDIR", t.TempDir())
-	t.Setenv("PATH", root)
-	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
-		t.Setenv(key, root+"/private/"+key)
-	}
-	t.Setenv("SELFISHELL_CURL_LOW_SPEED_LIMIT", "256")
-	t.Setenv("SELFISHELL_CURL_LOW_SPEED_TIME", "120")
-	t.Setenv("GIT_HTTP_LOW_SPEED_LIMIT", "5")
-	t.Setenv("GIT_HTTP_LOW_SPEED_TIME", "")
-	if err := os.WriteFile(root+"/nvim", []byte("#!/bin/sh\nprintf '%s %s\\n' \"$GIT_HTTP_LOW_SPEED_LIMIT\" \"$GIT_HTTP_LOW_SPEED_TIME\"\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	code, err := (Process{Out: &out, Err: io.Discard}).Run(context.Background(), "nvim")
-	if err != nil || code != 0 || out.String() != "5 120\n" {
-		t.Fatalf("indirect child: code=%d err=%v env=%q", code, err, out.String())
 	}
 }

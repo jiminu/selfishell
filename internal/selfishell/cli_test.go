@@ -20,6 +20,9 @@ func TestCLI(t *testing.T) {
 	}{
 		{[]string{"version"}, 0, "selfishell development\n", ""},
 		{[]string{"--version"}, 0, "selfishell development\n", ""},
+		{[]string{"-v"}, 0, "selfishell development\n", ""},
+		{[]string{"version", "--help"}, 0, "Usage: selfishell version [--available]\n", ""},
+		{[]string{"version", "help", "extra"}, 0, "Usage: selfishell version [--available]\n", ""},
 		{[]string{"version", "", "ignored"}, 0, "selfishell development\n", ""},
 		{[]string{"version", "-h", "ignored"}, 0, "Usage: selfishell version [--available]\n", ""},
 		{[]string{"version", "extra"}, 2, "", "selfishell: Usage: selfishell version [--available]\n"},

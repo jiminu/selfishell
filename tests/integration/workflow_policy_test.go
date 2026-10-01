@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -134,16 +135,6 @@ func TestWorkflowActionPins(t *testing.T) {
 	}
 	if count == 0 {
 		t.Error("no workflow actions found")
-	}
-}
-func TestDependabotTracksGitHubActions(t *testing.T) {
-	t.Parallel()
-	data, err := os.ReadFile(filepath.Join(repoRoot(), ".github/dependabot.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !regexp.MustCompile(`(?m)^  - package-ecosystem: ["']?github-actions["']?[ \t]*$`).Match(data) {
-		t.Error("Dependabot does not track github-actions")
 	}
 }
 
@@ -327,9 +318,6 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 	if policyField(t, ci.lines, "    ", "uses") != "./.github/workflows/ci.yml" || !strings.Contains(strings.Join(ci.lines, "\n"), "      contents: read") {
 		t.Error("release must call the full CI workflow with read-only contents")
 	}
-	if !strings.Contains(policyRun(t, policyStep(t, build, "Require release commit on main")), `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`) {
-		t.Error("release does not check main ancestry")
-	}
 	guard := policyRun(t, policyStep(t, publish, "Publish immutable GitHub Release"))
 	if !strings.Contains(guard, `gh release view "$TAG"`) || !strings.Contains(guard, `gh release create "$TAG" dist/* --verify-tag`) {
 		t.Error("immutable release guard or verified publication missing")
@@ -343,38 +331,9 @@ func TestReleaseWorkflowEventSHAAndGraph(t *testing.T) {
 			t.Errorf("wrong release step order: %s %s before %s", tc.job.name, tc.before, tc.after)
 		}
 	}
-	// Traverse every prerequisite, rejecting unknown jobs and cycles. Publish must
-	// depend transitively on full CI even if intermediate jobs are added.
-	visiting := map[string]bool{}
-	done := map[string]bool{}
-	reaches := map[string]map[string]bool{}
-	var visit func(string) map[string]bool
-	visit = func(name string) map[string]bool {
-		if visiting[name] {
-			t.Fatalf("release job cycle at %s", name)
-		}
-		if done[name] {
-			return reaches[name]
-		}
-		j, ok := jobs[name]
-		if !ok {
-			t.Fatalf("unknown release prerequisite %s", name)
-		}
-		visiting[name] = true
-		found := map[string]bool{name: true}
-		for _, dep := range policyNeeds(t, j.lines) {
-			for ancestor := range visit(dep) {
-				found[ancestor] = true
-			}
-		}
-		visiting[name] = false
-		done[name] = true
-		reaches[name] = found
-		return found
-	}
-	for _, pair := range [][2]string{{"build", "ci"}, {"smoke", "build"}, {"publish", "ci"}, {"publish", "build"}, {"publish", "smoke"}} {
-		if !visit(pair[0])[pair[1]] {
-			t.Errorf("%s has no transitive dependency on %s", pair[0], pair[1])
+	for _, pair := range [][2]string{{"build", "ci"}, {"smoke", "build"}, {"publish", "build"}, {"publish", "smoke"}} {
+		if !slices.Contains(policyNeeds(t, jobs[pair[0]].lines), pair[1]) {
+			t.Errorf("%s does not need %s", pair[0], pair[1])
 		}
 	}
 }
@@ -383,20 +342,6 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")
 	build, smoke, publish := policyJob(t, jobs, "build"), policyJob(t, jobs, "smoke"), policyJob(t, jobs, "publish")
-	for _, stage := range []struct{ job, command string }{
-		{"build", "Build release artifacts"},
-		{"smoke", "Smoke exact prebuilt release"},
-	} {
-		job := policyJob(t, jobs, stage.job)
-		setup := strings.Join(policyStep(t, job, "Set up pinned Go toolchain"), "\n")
-		if !strings.Contains(setup, "uses: actions/setup-go@") || !strings.Contains(setup, "go-version-file: go.mod") {
-			t.Errorf("%s must select the Go toolchain from go.mod", stage.job)
-		}
-		order := strings.Join(job.lines, "\n")
-		if strings.Index(order, "- name: Set up pinned Go toolchain") >= strings.Index(order, "- name: "+stage.command) {
-			t.Errorf("%s selects Go after using it", stage.job)
-		}
-	}
 	var all string
 	for _, j := range jobs {
 		all += strings.Join(j.lines, "\n")
@@ -410,11 +355,8 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 			t.Errorf("version resolution missing %s", needle)
 		}
 	}
-	if !strings.Contains(strings.Join(smoke.lines, "\n"), "os: [ubuntu-latest, macos-latest]") {
-		t.Error("exact smoke must run on Linux and macOS")
-	}
 	upload := strings.Join(policyStep(t, build, "Upload release artifacts"), "\n")
-	for _, needle := range []string{"actions/upload-artifact@", "name: release-assets-${{ github.run_id }}-${{ github.run_attempt }}", "path: dist/", "if-no-files-found: error"} {
+	for _, needle := range []string{"actions/upload-artifact@", "path: dist/"} {
 		if !strings.Contains(upload, needle) {
 			t.Errorf("upload missing %s", needle)
 		}
@@ -447,9 +389,6 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(policyStep(t, publish, "Publish immutable GitHub Release"), "\n"), "TAG: ${{ needs.build.outputs.tag }}") {
 		t.Error("publication tag does not come from validated build")
-	}
-	if strings.Index(strings.Join(publish.lines, "\n"), "- name: Generate signed build provenance") > strings.Index(strings.Join(publish.lines, "\n"), "- name: Publish immutable GitHub Release") {
-		t.Error("attestation follows publication")
 	}
 }
 

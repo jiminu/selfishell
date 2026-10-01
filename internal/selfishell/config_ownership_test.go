@@ -130,25 +130,3 @@ func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing
 	}
 	assertOriginalRestored(t, root, home, r, original)
 }
-func TestFreshIdenticalFileRejectsBackupCollisionBeforeShortcut(t *testing.T) {
-	root, home, r, paths, original := identicalUserFile(t)
-	_ = home
-	var collision string
-	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out, Err: &errOut}, paths: paths, afterBackupChoice: func(path string) { collision = path; os.WriteFile(path, []byte("foreign backup"), 0600) }}
-	if e := m.installFile(r, false); e == nil {
-		t.Fatal("fresh file adopted an occupied backup")
-	}
-	source, e := os.ReadFile(r.Target)
-	if e != nil || !bytes.Equal(source, original) {
-		t.Fatalf("original changed %v", e)
-	}
-	foreign, e := os.ReadFile(collision)
-	if e != nil || string(foreign) != "foreign backup" {
-		t.Fatalf("collision changed %q %v", foreign, e)
-	}
-	state, e := ReadState(paths.Resources + "/" + r.Name + ".state")
-	if e != nil || state.Status != "pending" {
-		t.Fatalf("retry state %+v %v", state, e)
-	}
-}

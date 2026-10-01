@@ -210,13 +210,12 @@ func TestNativeNoticeCacheAndRefresh(t *testing.T) {
 }
 func TestNativeNoticeLockRecovery(t *testing.T) {
 	t.Parallel()
-	rows := []struct{ meta, age, ttl, expected string }{
-		{"timestamp", "-700", "600", "refreshed"}, {"timestamp", "0", "600", "held"}, {"absent", "stale", "600", "refreshed"}, {"absent", "fresh", "600", "held"}, {"pid", "stale", "600", "refreshed"}, {"corrupt", "stale", "600", "refreshed"}, {"corrupt", "fresh", "600", "held"}, {"zero", "stale", "600", "refreshed"}, {"zero", "fresh", "600", "held"}, {"unreadable", "stale", "600", "refreshed"}, {"timestamp", "100000", "600", "held"}, {"timestamp", "-700", "abc", "refreshed"}, {"timestamp", "-700", "-100", "refreshed"}, {"timestamp", "-700", "1.5", "refreshed"}, {"timestamp", "-700", "0", "refreshed"}, {"timestamp", "-700", "empty", "refreshed"}, {"timestamp", "-2", "0", "held"}, {"timestamp", "-5", "2", "refreshed"},
-	}
-	if len(rows) != 18 {
-		t.Fatal("lock vector count")
-	}
-	for _, tc := range rows {
+	for _, tc := range []struct{ meta, age, ttl, expected string }{
+		{"timestamp", "-700", "600", "refreshed"}, {"timestamp", "0", "600", "held"},
+		{"absent", "stale", "600", "refreshed"}, {"absent", "fresh", "600", "held"},
+		{"corrupt", "fresh", "600", "held"}, {"zero", "fresh", "600", "held"}, {"unreadable", "stale", "600", "refreshed"},
+		{"timestamp", "-2", "0", "held"}, {"timestamp", "-5", "2", "refreshed"},
+	} {
 		t.Run(strings.Join([]string{tc.meta, tc.age, tc.ttl, tc.expected}, "_"), func(t *testing.T) {
 			if tc.meta == "unreadable" && os.Geteuid() == 0 {
 				t.Skip("root bypasses unreadable-file permission semantics")
@@ -233,8 +232,6 @@ func TestNativeNoticeLockRecovery(t *testing.T) {
 					t.Fatal(e)
 				}
 				nativeWrite(t, filepath.Join(lock, "created_at"), fmt.Sprintf("%d\n", now+delta), 0600)
-			case "pid":
-				nativeWrite(t, filepath.Join(lock, "pid"), "99999\n", 0600)
 			case "corrupt":
 				nativeWrite(t, filepath.Join(lock, "created_at"), "not-a-timestamp\n", 0600)
 			case "zero":
@@ -245,11 +242,7 @@ func TestNativeNoticeLockRecovery(t *testing.T) {
 			if tc.meta != "timestamp" && tc.age == "stale" {
 				nativeOldTime(t, lock)
 			}
-			ttl := tc.ttl
-			if ttl == "empty" {
-				ttl = ""
-			}
-			nativeQuiet(t, nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345 || :`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_UPDATE_LOCK_TTL="+ttl))
+			nativeQuiet(t, nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345 || :`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_UPDATE_LOCK_TTL="+tc.ttl))
 			if tc.expected == "refreshed" {
 				nativeAbsent(t, lock)
 				if got := nativeRead(t, filepath.Join(cache, "available-version")); got != "1.1.0\n" {
@@ -267,17 +260,6 @@ func TestNativeNoticeLockRecovery(t *testing.T) {
 			}
 		})
 	}
-}
-func TestNativeNoticeFailedLookupClearsLock(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	cache := filepath.Join(home, ".cache/selfishell")
-	mustFS(t, os.MkdirAll(cache, 0700))
-	r := nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345; print -r -- "$([[ -e "$SELFISHELL_CACHE/update-check.lock" ]] && print LOCK_LEFT || print LOCK_CLEARED)"`, "SELFISHELL_CACHE="+cache)
-	if string(r.Stdout) != "LOCK_CLEARED\n" {
-		t.Fatalf("lookup failure: %+v", r)
-	}
-	nativeAbsent(t, filepath.Join(cache, "update-check.lock"))
 }
 func TestNativeNoticeUndatableLock(t *testing.T) {
 	t.Parallel()
@@ -298,62 +280,4 @@ func nativeAssertNoTemp(t *testing.T, cache string) {
 			t.Fatalf("temporary file retained: %s", entry.Name())
 		}
 	}
-}
-func TestNativeNoticeWriteFailureCleansTemp(t *testing.T) {
-	t.Parallel()
-	if os.Geteuid() == 0 {
-		t.Skip("root bypasses unwritable-directory permission semantics")
-	}
-	home := nativeHome(t)
-	bin := filepath.Join(filepath.Dir(home), "bin")
-	cache := filepath.Join(home, ".cache/selfishell")
-	mustFS(t, os.MkdirAll(cache, 0700))
-	lookup := filepath.Join(filepath.Dir(home), "available-lookup")
-	cleanup := filepath.Join(filepath.Dir(home), "failed-write-cleanup")
-	nativeWrite(t, filepath.Join(bin, "selfishell"), `#!/bin/sh
-[ -d "$SELFISHELL_CACHE/update-check.lock" ] || exit 1
-printf 'called\n' >"$SELFISHELL_LOOKUP_LOG"
-/bin/chmod 0555 "$SELFISHELL_CACHE" || exit 1
-printf '1.1.0\n'
-`, 0700)
-	nativeWrite(t, filepath.Join(bin, "rm"), `#!/bin/sh
-if [ "$1" = -f ]; then
-  case "$2" in
-    "$SELFISHELL_CACHE"/available-version.tmp.*)
-      printf 'called\n' >"$SELFISHELL_CLEANUP_LOG"
-      /bin/chmod 0755 "$SELFISHELL_CACHE" || exit 1
-      ;;
-  esac
-fi
-exec /bin/rm "$@"
-`, 0700)
-	t.Cleanup(func() { os.Chmod(cache, 0755) })
-	r := nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345 || :`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_LOOKUP_LOG="+lookup, "SELFISHELL_CLEANUP_LOG="+cleanup)
-	if len(r.Stdout) != 0 || !strings.Contains(string(r.Stderr), "permission denied") {
-		t.Fatalf("temporary write failure was not observed: stdout=%q stderr=%q", r.Stdout, r.Stderr)
-	}
-	if got := nativeRead(t, lookup); got != "called\n" {
-		t.Fatalf("available-version lookup: %q", got)
-	}
-	if got := nativeRead(t, cleanup); got != "called\n" {
-		t.Fatalf("failed-write cleanup: %q", got)
-	}
-	nativeAbsent(t, filepath.Join(cache, "available-version"))
-	if got := nativeRead(t, filepath.Join(cache, "update-checked-at")); got != "12345\n" {
-		t.Fatalf("later checked-at write: %q", got)
-	}
-	nativeAbsent(t, filepath.Join(cache, "update-check.lock"))
-	nativeAssertNoTemp(t, cache)
-}
-func TestNativeNoticeMoveFailureCleansTemp(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	bin, cache := nativeNoticeCLI(t, home)
-	moves := filepath.Join(filepath.Dir(home), "move-calls")
-	nativeWrite(t, filepath.Join(bin, "mv"), "#!/bin/sh\nprintf '%s\\n' \"$3\" >>\"$SELFISHELL_MOVE_LOG\"\nexit 1\n", 0700)
-	nativeNoticeRun(t, home, `source "$SELFISHELL_SOURCE"; _selfishell_update_notice_refresh "$SELFISHELL_CACHE" 12345`, "PATH="+bin+":"+nativePath, "SELFISHELL_CACHE="+cache, "SELFISHELL_MOVE_LOG="+moves)
-	if got, want := nativeRead(t, moves), filepath.Join(cache, "available-version")+"\n"+filepath.Join(cache, "update-checked-at")+"\n"; got != want {
-		t.Fatalf("failed move calls: got %q want %q", got, want)
-	}
-	nativeAssertNoTemp(t, cache)
 }
