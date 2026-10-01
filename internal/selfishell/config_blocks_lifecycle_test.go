@@ -885,3 +885,17 @@ func blockBackupNames(t *testing.T, home string) []string {
 	}
 	return names
 }
+
+func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
+	for _, tc := range []struct{ answer, want string }{{"", "1\n"}, {"y", "1\n"}, {"n", "0\n"}, {"no", "0\n"}} {
+		t.Run("answer="+tc.answer, func(t *testing.T) {
+			root, _, paths := blockHome(t, "macos")
+			t.Setenv("SELFISHELL_TEST_TTY", "1")
+			code, out, stderr := blockRun(t, root, "y\n"+tc.answer+"\n", "install", "--skip-packages")
+			if code != 0 || !strings.Contains(out, "Install Ghostty terminal and managed configuration (recommended)? [Y/n] ") {
+				t.Fatalf("%d %s %s", code, out, stderr)
+			}
+			blockEqual(t, paths.State+"/ghostty", []byte(tc.want))
+		})
+	}
+}

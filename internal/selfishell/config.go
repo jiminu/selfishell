@@ -192,9 +192,9 @@ func (c CLI) prepareConfig(platform string, dry, yes, update bool) (preparedConf
 		} else if !update {
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
-				fmt.Fprint(c.Out, "Install Ghostty terminal and managed configuration? [y/N] ")
+				fmt.Fprint(c.Out, "Install Ghostty terminal and managed configuration (recommended)? [Y/n] ")
 				answer, _ := c.readAnswer()
-				ghostty = affirmative(answer)
+				ghostty = !negative(answer)
 			}
 		}
 	}
@@ -367,3 +367,4 @@ func (c CLI) readAnswer() (string, error) {
 	}
 }
 func affirmative(s string) bool { return s == "y" || s == "Y" || s == "yes" || s == "YES" }
+func negative(s string) bool    { return s == "n" || s == "N" || s == "no" || s == "NO" }
