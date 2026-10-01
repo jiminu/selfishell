@@ -3,7 +3,6 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -305,18 +304,6 @@ func captureCommand(home, executable string, args []string, extraEnv []string) (
 	return result, err
 }
 
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err = io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
 func copyFile(from, to string) error {
 	b, e := os.ReadFile(from)
 	if e != nil {

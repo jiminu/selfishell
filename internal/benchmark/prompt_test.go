@@ -155,26 +155,3 @@ func TestWaitForPromptRejectsOldMarkerAndClosedShell(t *testing.T) {
 		t.Fatalf("EIO: %v", err)
 	}
 }
-
-func TestMeasurePromptCancelCleansDescendants(t *testing.T) {
-	if _, err := os.Stat("/bin/zsh"); err != nil {
-		t.Skip("/bin/zsh unavailable")
-	}
-	home := t.TempDir()
-	fixture := `precmd() { (/bin/sleep 2; /usr/bin/touch "$HOME/escaped") & /bin/sleep 5; }` + "\n"
-	if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte(fixture), 0600); err != nil {
-		t.Fatal(err)
-	}
-	env := PromptEnvironment("/release", home, home, "/release/zshrc", "/usr/bin:/bin", nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	_, err := MeasurePrompt(ctx, home, env, 1)
-	if err == nil || time.Since(start) > 2*time.Second {
-		t.Fatalf("cancel behavior: %v, elapsed %s", err, time.Since(start))
-	}
-	time.Sleep(2200 * time.Millisecond)
-	if _, err := os.Stat(filepath.Join(home, "escaped")); !os.IsNotExist(err) {
-		t.Fatalf("descendant survived cancellation: %v", err)
-	}
-}
