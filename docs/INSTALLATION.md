@@ -248,7 +248,7 @@ or Neovim plugin checkouts.
 ## Platform notes
 
 - On WSL, install and select a Nerd Font in Windows Terminal or VS Code so
-  Starship icons render correctly.
+  icons in Neovim's pickers and Markdown preview render correctly.
 - On macOS, restart Ghostty after installation to apply its configuration.
 - Optional packages that are unavailable or fail to install are reported
   without stopping required setup; missing required packages stop installation.
