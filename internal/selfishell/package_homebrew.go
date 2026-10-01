@@ -175,6 +175,9 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 	for _, name := range missing {
 		installed[name] = true
 	}
+	if manager == "cask" {
+		o.installedCasks = append(o.installedCasks, missing...)
+	}
 	if o.Process.progress != nil {
 		o.report(reportSuccess, "Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
 	}
