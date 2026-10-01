@@ -7,7 +7,7 @@ import (
 
 // Ghostty applies config-file includes after the including file, so a key or
 // same-trigger keybind outside the block loses to the managed defaults.
-// font-family values append fallbacks instead and are never overridden.
+// Repeatable font keys combine with the defaults instead and are not reported.
 func ghosttyOverridden(defaults, entrypoint []byte) []string {
 	keys, triggers := map[string]bool{}, map[string]bool{}
 	ghosttySettings(defaults, func(key, value string) {
@@ -26,7 +26,7 @@ func ghosttyOverridden(defaults, entrypoint []byte) []string {
 				return
 			}
 			name = "keybind " + ghosttyTrigger(value)
-		} else if !keys[key] || strings.HasPrefix(key, "font-family") {
+		} else if !keys[key] || ghosttyRepeatableFont(key) {
 			return
 		}
 		if !seen[name] {
@@ -35,6 +35,10 @@ func ghosttyOverridden(defaults, entrypoint []byte) []string {
 		}
 	})
 	return found
+}
+
+func ghosttyRepeatableFont(key string) bool {
+	return strings.HasPrefix(key, "font-family") || key == "font-feature" || key == "font-codepoint-map"
 }
 
 func ghosttySettings(data []byte, visit func(key, value string)) {

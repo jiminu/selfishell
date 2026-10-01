@@ -24,5 +24,8 @@ shell-integration-features = no-cursor,ssh-env,ssh-terminfo
 
 mouse-hide-while-typing = true
 
-font-family = "MesloLGS Nerd Font Mono"
-font-family = "Noto Sans CJK KR"
+# Ghostty's built-in JetBrains Mono and Nerd Font symbols need no install.
+# Unpinned Hangul falls back to any monospace Hangul font (D2Coding, PCMyungjo);
+# the map pins the macOS font, and Ghostty size-matches mapped fonts to cells.
+font-codepoint-map = U+1100-U+11FF,U+3130-U+318F,U+A960-U+A97F,U+AC00-U+D7AF,U+D7B0-U+D7FF=Apple SD Gothic Neo
+font-feature = -calt, -liga, -dlig
