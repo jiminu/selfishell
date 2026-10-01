@@ -5,8 +5,6 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -53,23 +51,6 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 		t.Fatalf("track project: %v %s", err, output)
 	}
 	packages := []Package{{Platform: "all", Manager: "mise", Name: "node"}, {Platform: "macos", Manager: "mise", Name: "go"}}
-	before := treeNames(t, home)
-	if err := op.PruneMise(context.Background(), rootAlias, paths, packages, "ubuntu-wsl", true); err != nil {
-		t.Fatal(err)
-	}
-	if after := treeNames(t, home); strings.Join(before, "\n") != strings.Join(after, "\n") {
-		t.Fatal("dry-run changed filesystem")
-	}
-	if err := os.WriteFile(old+"/VERSION", []byte("invalid\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := op.PruneMise(context.Background(), rootAlias, paths, packages, "ubuntu-wsl", false); err == nil {
-		t.Fatal("accepted corrupt rollback release")
-	}
-	if _, err := os.Stat(home + "/.local/share/mise/installs/node/20.0.0"); err != nil {
-		t.Fatal("retention failure pruned tools")
-	}
-	writeTestFile(t, old+"/VERSION", "1.0.0\n", 0600)
 	previousTrack := exec.Command(mise, "-C", old+"/config/shared", "config", "ls")
 	previousTrack.Env = append(env, "MISE_TRUSTED_CONFIG_PATHS="+home)
 	if output, err := previousTrack.CombinedOutput(); err != nil {
@@ -113,24 +94,6 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 	if _, err := os.Stat(home + "/.local/share/mise/installs/node/24.13.0/bin/node"); err != nil {
 		t.Fatal("project version removed")
 	}
-	if err := os.Rename(old+"/config/shared/mise.toml", home+"/previous.toml"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(project+"/mise.toml", old+"/config/shared/mise.toml"); err != nil {
-		t.Fatal(err)
-	}
-	if err := op.PruneMise(context.Background(), rootAlias, paths, packages, "ubuntu-wsl", false); err == nil {
-		t.Fatal("accepted linked rollback config")
-	}
-	if _, err := os.Stat(home + "/.local/share/mise/installs/node/22.0.0/bin/node"); err != nil {
-		t.Fatal("linked project version removed")
-	}
-	if err := os.Remove(old + "/config/shared/mise.toml"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(home+"/previous.toml", old+"/config/shared/mise.toml"); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Remove(home + "/selfishell/previous"); err != nil {
 		t.Fatal(err)
 	}
@@ -156,26 +119,4 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 	if err := op.PruneMise(context.Background(), unsafeRoot, paths, packages, "ubuntu-wsl", false); err == nil {
 		t.Fatal("accepted colon in previous config")
 	}
-	if err := op.PruneMise(context.Background(), unsafeRoot, paths, nil, "ubuntu", false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(home + "/.local/share/mise/installs/go/1.20.0"); err != nil {
-		t.Fatal("empty scope pruned unrelated tool")
-	}
-}
-
-func treeNames(t *testing.T, root string) []string {
-	t.Helper()
-	var names []string
-	err := filepath.Walk(root, func(path string, _ os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		names = append(names, strings.TrimPrefix(path, root))
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return names
 }

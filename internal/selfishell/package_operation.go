@@ -21,7 +21,6 @@ type PackageOperation struct {
 	dependencyManifest                string
 	dependencies                      []Dependency
 	dependencyFault                   func(string) error // focused filesystem-failure test seam
-	lazyRemoveAll                     func(string) error // focused cleanup-failure test seam
 	aptUpdated                        bool
 	brewFormulae, brewCasks           map[string]bool
 	brewFormulaeReady, brewCasksReady bool

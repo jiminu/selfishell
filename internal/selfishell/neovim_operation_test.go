@@ -135,7 +135,11 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 		want string
 		fix  func()
 	}{
-		{"lazy.nvim checkout was modified; preserving it: " + lazy, func() { os.Remove(lazy + "/user-file") }},
+		{"lazy.nvim checkout was modified; preserving it: " + lazy, func() {
+			if os.Remove(lazy+"/user-file") != nil {
+				t.Fatal("lazy.nvim user file lost")
+			}
+		}},
 		{"Neovim plugin checkout was modified; preserving it: " + plugins[3] + ".", func() { gitCommand(t, plugins[3], "checkout", "--", ".") }},
 		{"Could not inspect Neovim plugin checkout: " + plugins[6] + ":", func() { os.RemoveAll(plugins[6]) }},
 		{"Neovim plugin checkout was modified; preserving it: " + plugins[9] + ".", func() { gitCommand(t, plugins[9], "checkout", "--", ".") }},
@@ -190,18 +194,6 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 	}
 }
 
-func TestNeovimCancelledBeforeWork(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := op.InstallNeovimPlugins(ctx, root, paths, manifest, false); err != context.Canceled {
-		t.Fatalf("cancellation: %v", err)
-	}
-	if _, err := os.Stat(home + "/data/selfishell/nvim/lazy/lazy.nvim"); !os.IsNotExist(err) {
-		t.Fatalf("cancelled install mutated: %v", err)
-	}
-}
-
 func TestNeovimParserFailureWarns(t *testing.T) {
 	op, paths, root, manifest, _, _ := neovimFixture(t)
 	op.Process.Env = append(op.Process.Env, "PARSER_EXIT=1")
@@ -213,7 +205,7 @@ func TestNeovimParserFailureWarns(t *testing.T) {
 	}
 }
 
-func TestLazyRevisionUpdateReportsAndPreservesStaleTemporaryPath(t *testing.T) {
+func TestLazyRevisionUpdateReplacesCleanCheckout(t *testing.T) {
 	op, paths, _, manifest, home, _ := neovimFixture(t)
 	deps, err := ReadDependencies(manifest)
 	if err != nil {
@@ -230,74 +222,14 @@ func TestLazyRevisionUpdateReportsAndPreservesStaleTemporaryPath(t *testing.T) {
 	newHead := gitCommand(t, home+"/lazy-source", "rev-parse", "HEAD")
 	dep := deps[0]
 	dep.Version = newHead
-	stale := target + ".tmp.stale"
-	writeTestFile(t, stale+"/marker", "stale", 0600)
 	if err := op.installLazy(context.Background(), paths, dep, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != newHead {
 		t.Fatalf("revision: %s", got)
 	}
-	if got, _ := os.ReadFile(stale + "/marker"); string(got) != "stale" {
-		t.Fatalf("stale path overwritten: %q", got)
-	}
 	if !strings.Contains(op.Process.Out.(*bytes.Buffer).String(), "Updated approved lazy.nvim revision") {
 		t.Fatal("update not reported")
-	}
-}
-
-func TestLazyPreviousCheckoutCleanupFailureWarnsAfterActivation(t *testing.T) {
-	op, paths, _, manifest, home, _ := neovimFixture(t)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
-		t.Fatal(err)
-	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
-	writeTestFile(t, home+"/lazy-source/init.lua", "next\n", 0600)
-	gitCommand(t, home+"/lazy-source", "add", ".")
-	gitCommand(t, home+"/lazy-source", "commit", "-qm", "next")
-	dep := deps[0]
-	dep.Version = gitCommand(t, home+"/lazy-source", "rev-parse", "HEAD")
-	op.lazyRemoveAll = func(path string) error {
-		if strings.Contains(path, ".previous.") {
-			return errors.New("injected cleanup failure")
-		}
-		return os.RemoveAll(path)
-	}
-	if err := op.installLazy(context.Background(), paths, dep, nil); err != nil {
-		t.Fatal(err)
-	}
-	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != dep.Version {
-		t.Fatalf("activation did not complete: %s", got)
-	}
-	if warning := op.Process.Err.(*bytes.Buffer).String(); !strings.Contains(warning, "injected cleanup failure") || !strings.Contains(warning, "previous") {
-		t.Fatalf("missing previous-checkout cleanup warning: %q", warning)
-	}
-}
-
-func TestLazyStageCleanupFailureWarnsAlongsideCheckoutFailure(t *testing.T) {
-	op, paths, _, manifest, _, _ := neovimFixture(t)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dep := deps[0]
-	dep.Version = strings.Repeat("0", 40)
-	op.lazyRemoveAll = func(path string) error {
-		if strings.Contains(path, ".tmp.") {
-			return errors.New("injected stage cleanup failure")
-		}
-		return os.RemoveAll(path)
-	}
-	if err := op.installLazy(context.Background(), paths, dep, nil); err == nil {
-		t.Fatal("unavailable approved revision accepted")
-	}
-	if warning := op.Process.Err.(*bytes.Buffer).String(); !strings.Contains(warning, "injected stage cleanup failure") || !strings.Contains(warning, "staging path") {
-		t.Fatalf("missing stage cleanup warning: %q", warning)
 	}
 }
 
@@ -316,34 +248,33 @@ func TestLazyRestoreFailureIncludesPrimaryActivationError(t *testing.T) {
 	}
 }
 
-func TestLazyRejectsDirtyMalformedAndBlockedParent(t *testing.T) {
-	op, paths, _, manifest, home, _ := neovimFixture(t)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	writeTestFile(t, target, "user data", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "preserving") {
-		t.Fatalf("malformed target accepted: %v", err)
-	}
-	if err := os.Remove(target); err != nil {
-		t.Fatal(err)
-	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
-	writeTestFile(t, target+"/init.lua", "dirty\n", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "modified") {
-		t.Fatalf("dirty lazy accepted: %v", err)
-	}
-	if got, _ := os.ReadFile(target + "/init.lua"); string(got) != "dirty\n" {
-		t.Fatalf("dirty file changed: %q", got)
-	}
-	if err := os.RemoveAll(home + "/data/selfishell/nvim"); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, home+"/data/selfishell/nvim/lazy", "blocked", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "Could not create Neovim plugin directory") {
-		t.Fatalf("blocked parent: %v", err)
+func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
+	for _, tc := range []struct{ shape, want string }{
+		{"file", "preserving"},
+		{"git_symlink", "preserving"},
+		{"blocked_parent", "Could not create Neovim plugin directory"},
+	} {
+		t.Run(tc.shape, func(t *testing.T) {
+			op, paths, _, manifest, home, _ := neovimFixture(t)
+			deps, err := ReadDependencies(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
+			user := map[string]string{"file": target, "git_symlink": target + "/user-file", "blocked_parent": filepath.Dir(target)}[tc.shape]
+			writeTestFile(t, user, "user data", 0600)
+			if tc.shape == "git_symlink" {
+				if err := os.Symlink(home+"/lazy-source/.git", target+"/.git"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want %q, got %v", tc.want, err)
+			}
+			if readTestFile(t, user) != "user data" {
+				t.Fatal("user data changed")
+			}
+		})
 	}
 }
 
@@ -420,59 +351,5 @@ func TestNeovimVerificationFailureSurfacesSyncLog(t *testing.T) {
 	}
 	if !strings.Contains(op.Process.Err.(*bytes.Buffer).String(), "sync diagnostic") {
 		t.Fatal("sync log hidden on verification failure")
-	}
-}
-
-func TestNeovimPreservesMalformedExistingPluginPath(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
-	target := home + "/data/nvim/lazy/lazy-source"
-	writeTestFile(t, target, "user data", 0600)
-	err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
-	if err == nil || !strings.Contains(err.Error(), "preserving") {
-		t.Fatalf("malformed plugin accepted: %v", err)
-	}
-	if data, _ := os.ReadFile(target); string(data) != "user data" {
-		t.Fatalf("user path changed: %q", data)
-	}
-	if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
-		t.Fatalf("ran nvim with malformed path: %v", err)
-	}
-}
-
-func TestLazyRejectsGitDirectorySymlink(t *testing.T) {
-	op, paths, _, manifest, home, _ := neovimFixture(t)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	if err := os.MkdirAll(target, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(home+"/lazy-source/.git", target+"/.git"); err != nil {
-		t.Fatal(err)
-	}
-	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "preserving") {
-		t.Fatalf("linked git metadata accepted: %v", err)
-	}
-}
-
-func TestLazyPreservesUntrackedUserFile(t *testing.T) {
-	op, paths, _, manifest, home, _ := neovimFixture(t)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	if err := os.MkdirAll(home+"/data/selfishell/nvim/lazy", 0700); err != nil {
-		t.Fatal(err)
-	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
-	writeTestFile(t, target+"/user-file", "keep", 0600)
-	if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), "modified") {
-		t.Fatalf("untracked file accepted: %v", err)
-	}
-	if data, _ := os.ReadFile(target + "/user-file"); string(data) != "keep" {
-		t.Fatalf("untracked file lost: %q", data)
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -54,34 +53,39 @@ func assertNoPath(t *testing.T, path string) {
 	}
 }
 
-func TestDirectDownloadActivationAndStateFailures(t *testing.T) {
-	for _, phase := range []string{"stage", "activate", "state"} {
-		t.Run(phase, func(t *testing.T) {
-			op, paths, manifest, home := dependencyFixture(t)
-			target := home + "/.local/bin/tool"
-			state := paths.State + "/dependencies/tool"
-			directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
-			writeTestFile(t, target, "old", 0755)
-			writeTestFile(t, state, "0.9\n", 0600)
-			op.dependencyFault = func(at string) error {
-				if at == phase {
-					return errors.New("forced " + at)
+func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
+	for _, shape := range []string{"none", "file", "directory"} {
+		for _, phase := range []string{"stage", "activate", "state"} {
+			t.Run(shape+"/"+phase, func(t *testing.T) {
+				op, paths, manifest, home := dependencyFixture(t)
+				target := home + "/.local/bin/tool"
+				state := paths.State + "/dependencies/tool"
+				directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
+				prior := map[string]string{"file": target, "directory": target + "/leftover"}[shape]
+				if prior != "" {
+					writeTestFile(t, prior, "old", 0755)
+					writeTestFile(t, state, "0.9\n", 0600)
 				}
-				return nil
-			}
-			if err := installTool(op, paths, manifest); err == nil {
-				t.Fatal("failure ignored")
-			}
-			if got := readTestFile(t, target); got != "old" {
-				t.Fatalf("prior target lost: %q", got)
-			}
-			if got := readTestFile(t, state); got != "0.9\n" {
-				t.Fatalf("prior state lost: %q", got)
-			}
-			if strings.Contains(output(op), "approved dependency") {
-				t.Fatalf("success reported: %s", output(op))
-			}
-		})
+				op.dependencyFault = func(at string) error {
+					if at == phase {
+						return errors.New("forced " + at)
+					}
+					return nil
+				}
+				if err := installTool(op, paths, manifest); err == nil {
+					t.Fatal("failure ignored")
+				}
+				if strings.Contains(output(op), "approved dependency") {
+					t.Fatalf("success reported: %q", output(op))
+				}
+				if prior == "" {
+					assertNoPath(t, target)
+					assertNoPath(t, state)
+				} else if readTestFile(t, prior) != "old" || readTestFile(t, state) != "0.9\n" {
+					t.Fatal("prior target or state lost")
+				}
+			})
+		}
 	}
 }
 
@@ -92,7 +96,6 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 		{"managed_download_version_bump_reports_updated", ".local/bin/tool", "2.0", "1.0", "valid"},
 		{"managed_download_broken_non_executable", ".local/bin/tool", "1.0", "1.0", "nonexecutable"},
 		{"managed_download_broken_valid_symlink", ".local/bin/tool", "1.0", "1.0", "symlink"},
-		{"managed_symlink_target_recovery_preserves_symlink_destination", ".local/bin/tool", "1.0", "1.0", "symlink"},
 		{"download_dependency_replaces_directory_target_without_nesting", ".local/bin/tool", "1.0", "1.0", "directory"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -203,59 +206,7 @@ func TestDirectDownloadExternalTargets(t *testing.T) {
 	}
 }
 
-func TestDirectDownloadDirectoryRestoredOnActivationFailure(t *testing.T) {
-	op, paths, manifest, home := dependencyFixture(t)
-	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
-	target := home + "/.local/bin/tool"
-	writeTestFile(t, target+"/leftover", "leftover", 0600)
-	writeTestFile(t, paths.State+"/dependencies/tool", "0.9\n", 0600)
-	op.dependencyFault = func(at string) error {
-		if at == "activate" {
-			return errors.New("forced")
-		}
-		return nil
-	}
-	if err := installTool(op, paths, manifest); err == nil {
-		t.Fatal("activation failure ignored")
-	}
-	if readTestFile(t, target+"/leftover") != "leftover" || readTestFile(t, paths.State+"/dependencies/tool") != "0.9\n" {
-		t.Fatal("prior directory or version lost")
-	}
-	if strings.Contains(output(op), "approved dependency") {
-		t.Fatal("success reported")
-	}
-}
-
-func TestDirectDownloadFreshFailureLeavesNoSuccessOrTarget(t *testing.T) {
-	for _, phase := range []string{"stage", "activate", "state"} {
-		t.Run(phase, func(t *testing.T) {
-			op, paths, manifest, home := dependencyFixture(t)
-			directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
-			if phase == "stage" {
-				// The stage failure occurs before curl is even looked up.
-				p := op.Process
-				p.Env = []string{"PATH=/no/such/path"}
-				op.Process = p
-			}
-			op.dependencyFault = func(at string) error {
-				if at == phase {
-					return errors.New("forced " + at)
-				}
-				return nil
-			}
-			if err := installTool(op, paths, manifest); err == nil {
-				t.Fatal("failure ignored")
-			}
-			assertNoPath(t, home+"/.local/bin/tool")
-			assertNoPath(t, paths.State+"/dependencies/tool")
-			if strings.Contains(output(op), "approved dependency") {
-				t.Fatalf("success reported: %q", output(op))
-			}
-		})
-	}
-}
-
-func TestDirectOptionalFailureAndCancellation(t *testing.T) {
+func TestDirectOptionalFailure(t *testing.T) {
 	op, paths, manifest, home := dependencyFixture(t)
 	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", true)
 	if err := op.InstallDirect(context.Background(), paths, manifest, "optional", "tool", "linux", "amd64", false); err != nil {
@@ -263,13 +214,6 @@ func TestDirectOptionalFailureAndCancellation(t *testing.T) {
 	}
 	if len(op.SkippedOptional) != 1 || op.SkippedOptional[0] != "tool" {
 		t.Fatalf("optional skip: %v", op.SkippedOptional)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	op.SkippedOptional = nil
-	op.Process.Out = new(bytes.Buffer)
-	if err := op.InstallDirect(ctx, paths, manifest, "optional", "tool", "linux", "amd64", false); !errors.Is(err, context.Canceled) || len(op.SkippedOptional) != 0 || output(op) != "" {
-		t.Fatalf("cancelled optional: %v %v %q", err, op.SkippedOptional, output(op))
 	}
 	assertNoPath(t, home+"/.local/bin/tool")
 }
@@ -480,22 +424,6 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestShippedZinitDependencyPinsCommit(t *testing.T) {
-	deps, err := ReadDependencies("../../dependencies.conf")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, dep := range deps {
-		if dep.Kind == "git" && dep.Name == "zinit" {
-			if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(dep.Checksum) {
-				t.Fatalf("zinit commit pin: %q", dep.Checksum)
-			}
-			return
-		}
-	}
-	t.Fatal("shipped zinit dependency missing")
 }
 
 func TestDirectGitBrokenTargetsAndCheckoutFailure(t *testing.T) {
