@@ -823,3 +823,36 @@ func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
 		})
 	}
 }
+
+func TestInstallGhosttyOptionEnablesDeclinedChoice(t *testing.T) {
+	root, _, paths := blockHome(t, "macos")
+	choice := paths.State + "/ghostty"
+	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
+	blockWrite(t, choice, []byte("0\n"))
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	if _, err := os.Lstat(entrypoint); !os.IsNotExist(err) {
+		t.Fatalf("declined Ghostty was configured: %v", err)
+	}
+	if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty", "--dry-run"); !strings.Contains(out, entrypoint) {
+		t.Fatalf("dry-run plan lacks Ghostty: %s", out)
+	}
+	blockEqual(t, choice, []byte("0\n"))
+	blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty")
+	blockEqual(t, choice, []byte("1\n"))
+	if !bytes.Contains(blockRead(t, entrypoint), []byte("# >>> Selfishell ghostty >>>")) {
+		t.Fatal("Ghostty block missing")
+	}
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockEqual(t, choice, []byte("1\n"))
+}
+
+func TestInstallGhosttyOptionRequiresMacOS(t *testing.T) {
+	root, _, paths := blockHome(t, "ubuntu")
+	code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes", "--ghostty")
+	if code != 2 || !strings.Contains(stderr, "--ghostty is available only on macOS.") {
+		t.Fatalf("%d %s", code, stderr)
+	}
+	if _, err := os.Lstat(paths.State + "/configured"); !os.IsNotExist(err) {
+		t.Fatalf("configured after a rejected option: %v", err)
+	}
+}

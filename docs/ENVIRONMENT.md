@@ -56,7 +56,8 @@ its configuration. Ghostty is the recommended terminal, so pressing Enter
 accepts; `--yes` also accepts, and a non-interactive run without `--yes`
 declines. The answer is saved in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/ghostty` and reused by later
-`install` and `update` runs without asking again. No option changes it:
+`install` and `update` runs without asking again. To add Ghostty after
+declining it, run `selfishell install --ghostty`. To turn it off,
 `selfishell uninstall` clears the saved choice, and the next
 `selfishell install` asks again. Uninstall leaves the Ghostty app installed.
 
