@@ -2,7 +2,7 @@
 
 Selfishell installs one development environment. `packages.conf` declares
 its packages: Zsh, Git, Vim, Starship, Zinit, Neovim, CLI tools, language
-runtimes, compiler tooling, and optional macOS terminal fonts.
+runtimes, compiler tooling, and an optional macOS terminal font.
 
 Selfishell installs a pinned mise binary and activates it for interactive Zsh.
 Its defaults live under `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/`,

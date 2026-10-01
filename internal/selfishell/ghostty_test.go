@@ -13,6 +13,8 @@ func TestGhosttyOverriddenSettings(t *testing.T) {
 keybind = global:cmd+grave_accent=toggle_quick_terminal
 keybind = ctrl+shift+k=scroll_page_lines:-5
 font-family = "MesloLGS Nerd Font Mono"
+font-feature = -calt, -liga, -dlig
+font-codepoint-map = U+AC00-U+D7AF=Apple SD Gothic Neo
 cursor-style = block
 `)
 	block, err := blockContent("user-ghostty", "/managed")
@@ -22,6 +24,8 @@ cursor-style = block
 	user := string(block) + `theme = Nord
 # cursor-style = bar
 font-family = Fira Code
+font-feature = ss01
+font-codepoint-map = U+E000-U+F8FF=Symbols Nerd Font
 keybind = cmd+grave_accent=toggle_quick_terminal
 keybind = ctrl+shift+t=new_tab
 cursor-style = bar` + "\r" + `
