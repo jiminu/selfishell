@@ -207,9 +207,10 @@ terminals, such as iTerm2, Terminal.app, or Windows Terminal, once the terminal
 provides what Ghostty's managed configuration sets up:
 
 - Font: Neovim's pickers and Markdown preview use Nerd Font icons. Select
-  JetBrainsMono Nerd Font Mono, which Selfishell installs on macOS, as the
-  terminal font; it matches Ghostty's built-in font. On Ubuntu Desktop, install
-  it yourself; the first setup in a local desktop session reminds you. Korean
+  JetBrainsMonoNL Nerd Font Mono, which Selfishell installs on macOS, as the
+  terminal font; it matches Ghostty's built-in font with ligatures off, and
+  JetBrainsMono Nerd Font Mono keeps them. On Ubuntu Desktop, install it
+  yourself; the first setup in a local desktop session reminds you. Korean
   needs no font: terminals fall back to the system's Korean font. In iTerm2,
   leave "Use a different font for non-ASCII text" off, since that font would
   also replace the Nerd Font icons.
@@ -272,7 +273,7 @@ or Neovim plugin checkouts.
 
 ## Platform notes
 
-- On WSL, install JetBrainsMono Nerd Font Mono on Windows and select it in
+- On WSL, install JetBrainsMonoNL Nerd Font Mono on Windows and select it in
   Windows Terminal or VS Code so icons in Neovim's pickers and Markdown preview
   render correctly. The first setup prints this reminder.
 - On macOS, restart Ghostty after installation to apply its configuration.
