@@ -21,7 +21,21 @@ return {
     -- Load before the initial buffer's FileType event so the plugin can attach.
     event = { "BufReadPre", "BufNewFile" },
     init = function()
+      -- VS Code's three bracket colors appear in no syntax group; vscode.nvim's
+      -- map reuses the keyword, string, and comment colors.
+      local highlight = { "RainbowDelimiterYellow", "RainbowDelimiterViolet", "RainbowDelimiterBlue" }
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        pattern = "vscode",
+        callback = function()
+          local colors = vim.o.background == "dark" and { "#FFD700", "#DA70D6", "#179FFF" }
+            or { "#0431FA", "#319331", "#7B3814" }
+          for index, group in ipairs(highlight) do
+            vim.api.nvim_set_hl(0, group, { fg = colors[index] })
+          end
+        end,
+      })
       vim.g.rainbow_delimiters = {
+        highlight = highlight,
         -- The global strategy marks every delimiter: seconds of freeze on a
         -- large file, minutes on a minified one. ~10 ms per 1,000 delimiters.
         condition = function(bufnr)
