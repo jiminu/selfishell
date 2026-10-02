@@ -29,8 +29,6 @@ mouse-hide-while-typing = true
 # the map pins the macOS font, and Ghostty size-matches mapped fonts to cells.
 font-codepoint-map = U+1100-U+11FF,U+3130-U+318F,U+A960-U+A97F,U+AC00-U+D7AF,U+D7B0-U+D7FF=Apple SD Gothic Neo
 font-feature = -calt, -liga, -dlig
-# Size-matched Hangul fills its rows; 6% taller cells give them room, and the
-# cursor fills the cell. Cells round to whole pixels: at 13pt, 5-7% gives a
-# 1.385 line height on both 1x and 2x displays (JetBrains Mono's own is 1.32).
+# Room for size-matched Hangul; only 5-7% rounds to equal rows on 1x and 2x.
 adjust-cell-height = 6%
 adjust-cursor-height = 6%
