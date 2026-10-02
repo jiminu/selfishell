@@ -11,7 +11,7 @@ import (
 // Ghostty draws Nerd Font icons itself; other macOS terminals need this font
 // selected, so the hint appears once, when the cask is first installed. Linux
 // installs no font and hints on first setup where a local terminal draws text.
-const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrainsMono Nerd Font Mono"
+const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrainsMonoNL Nerd Font Mono"
 
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
