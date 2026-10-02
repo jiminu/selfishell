@@ -79,6 +79,13 @@ end
 assert(rainbow_enabled(scratch({ "local x = { f(1) }" })), "rainbow-delimiters is off for an ordinary file")
 assert(not rainbow_enabled(scratch(long_file)), "rainbow-delimiters stays on beyond 5,000 lines")
 assert(not rainbow_enabled(scratch({ string.rep("[1,{}],", 100) })), "rainbow-delimiters stays on for minified text")
+for background, colors in pairs({ dark = { 0xFFD700, 0xDA70D6, 0x179FFF }, light = { 0x0431FA, 0x319331, 0x7B3814 } }) do
+  vim.o.background = background
+  vim.api.nvim_exec_autocmds("ColorScheme", { pattern = "vscode" })
+  for index, group in ipairs(vim.g.rainbow_delimiters.highlight) do
+    assert(vim.api.nvim_get_hl(0, { name = group }).fg == colors[index], background .. " bracket color differs from VS Code: " .. group)
+  end
+end
 
 local listchars = vim.opt.listchars:get()
 assert(listchars.tab == "  " and listchars.nbsp == "␣", "tabs or non-breaking spaces are not listed: " .. vim.inspect(listchars))
