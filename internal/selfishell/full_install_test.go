@@ -360,6 +360,9 @@ func TestFullInstallUnsupportedPlatformLeavesHomeUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", releaseFile)
+	procFile := filepath.Join(filepath.Dir(releaseFile), "proc-version")
+	writeTestFile(t, procFile, "Linux fixture\n", 0600)
+	t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", procFile)
 	var out, stderr bytes.Buffer
 	code := (CLI{Root: root, Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
 	if code != 1 || !strings.Contains(stderr.String(), "unavailable on unsupported-linux") {

@@ -65,15 +65,69 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 	if strings.Count(string(data), "Lazy! sync") != 1 || strings.Count(string(data), "nvim-treesitter") != 2 {
 		t.Fatalf("unnecessary sync: %s", data)
 	}
-	if err := os.Mkdir(home+"/data/nvim/lazy/removed-plugin", 0700); err != nil {
+	// lazy.nvim does not clean its legacy readme cache, files, or symlinks.
+	writeTestFile(t, home+"/data/nvim/lazy/readme/personal.txt", "keep", 0600)
+	writeTestFile(t, home+"/data/nvim/lazy/personal.txt", "keep", 0600)
+	if err := os.Symlink(home+"/lazy-source", home+"/data/nvim/lazy/local-plugin"); err != nil {
 		t.Fatal(err)
 	}
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(home + "/nvim.log")
+	if strings.Count(string(data), "Lazy! sync") != 1 {
+		t.Fatalf("ignored cleanup entries triggered sync: %s", data)
+	}
+	gitCommand(t, home, "clone", "-q", home+"/lazy-source", home+"/data/nvim/lazy/removed-plugin")
+	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(home + "/nvim.log")
 	if strings.Count(string(data), "Lazy! sync") != 2 {
 		t.Fatalf("extra plugin did not trigger sync: %s", data)
+	}
+}
+
+func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
+	for _, shape := range []string{"modified", "untracked", "ignored", "non-git", "broken-git", "bootstrap-name"} {
+		t.Run(shape, func(t *testing.T) {
+			op, paths, root, manifest, home, _ := neovimFixture(t)
+			target := home + "/data/nvim/lazy/removed-plugin"
+			if shape == "bootstrap-name" {
+				target = home + "/data/nvim/lazy/lazy.nvim"
+			}
+			userFile := target + "/personal.txt"
+			want := "preserving it"
+			switch shape {
+			case "modified", "untracked", "ignored":
+				gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
+				if shape == "modified" {
+					userFile = target + "/init.lua"
+				} else if shape == "ignored" {
+					writeTestFile(t, target+"/.gitignore", "personal.txt\n", 0600)
+					gitCommand(t, target, "add", ".gitignore")
+					gitCommand(t, target, "commit", "-qm", "ignore personal file")
+				}
+			case "broken-git":
+				if err := os.MkdirAll(target+"/.git", 0700); err != nil {
+					t.Fatal(err)
+				}
+				want = "Could not inspect Neovim plugin checkout"
+			}
+			writeTestFile(t, userFile, "keep personal data\n", 0600)
+			for range 2 {
+				err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
+				if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), target) {
+					t.Fatalf("unsafe plugin path: %v", err)
+				}
+				if got := readTestFile(t, userFile); got != "keep personal data\n" {
+					t.Fatalf("personal data changed: %q", got)
+				}
+				if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
+					t.Fatalf("invoked Neovim before cleanup preflight: %v", err)
+				}
+			}
+		})
 	}
 }
 
@@ -186,6 +240,8 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 	if err := os.Remove(home + "/bin/nvim"); err != nil {
 		t.Fatal(err)
 	}
+	// Keep an installed host Neovim from satisfying the missing-binary case.
+	op.Process = withEnvironment(op.Process, map[string]string{"PATH": home + "/bin"})
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err == nil || !strings.Contains(err.Error(), "Could not locate Neovim") {
 		t.Fatalf("missing nvim: %v", err)
 	}

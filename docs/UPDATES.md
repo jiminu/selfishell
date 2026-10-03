@@ -70,6 +70,13 @@ Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
 
+Neovim synchronization can remove plugin checkouts no longer used by its
+configuration. Before cleanup, Selfishell checks directories absent from the
+release's plugin manifest. A non-Git or unreadable checkout, local changes,
+or untracked or ignored files stop synchronization and preserve the directory.
+Move the reported directory outside `nvim/lazy` before retrying if you need to
+keep its contents. Clean unused Git checkouts can still be removed.
+
 Selfishell also verifies the bytes of its managed mise executable against the
 release's approved checksum. A manual `mise self-update` is replaced with the
 approved version on the next tools synchronization. An external mise installation
