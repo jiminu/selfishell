@@ -352,10 +352,10 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			invalid = err
 			break
 		}
-		declared[filepath.Base(path)] = true
 		if dep.Name == "folke/lazy.nvim" {
 			continue
 		}
+		declared[filepath.Base(path)] = true
 		if invalid = pluginPathError(path); invalid != nil {
 			break
 		}
@@ -407,10 +407,27 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	probe := PackageOperation{Process: o.gitRepositoryProcess()}
 	for _, entry := range entries {
-		if !declared[entry.Name()] {
-			synced = false
+		// lazy.nvim cleans only real directories, excluding its legacy readme
+		// cache. It leaves files and symlinks alone.
+		if declared[entry.Name()] || entry.Name() == "readme" || !entry.IsDir() {
+			continue
 		}
+		path := lazyDir + "/" + entry.Name()
+		if err := pluginPathError(path); err != nil {
+			return err
+		}
+		// Cleanup removes the whole checkout, including ignored and untracked
+		// files that ordinary pin updates deliberately leave untouched.
+		changes, err := probe.commandOutput(ctx, "git", "-C", path, "status", "--porcelain", "--untracked-files=all", "--ignored", "--")
+		if err != nil {
+			return fmt.Errorf("Could not inspect Neovim plugin checkout: %s: %w", path, err)
+		}
+		if changes != "" {
+			return fmt.Errorf("Neovim plugin checkout contains local changes or extra files; preserving it: %s. Move it out of the plugin directory, then retry.", path)
+		}
+		synced = false
 	}
 	if !synced {
 		syncLog, err := o.runNvim(ctx, root, nvim, mise, "--headless", `+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end`, "+qa")
