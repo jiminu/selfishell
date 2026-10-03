@@ -38,7 +38,7 @@ bash scripts/check.sh           # Syntax, format, vet, tests and four builds
 The source launcher never compiles on invocation. The production artifact
 builder is `bash scripts/build-release.sh --version VERSION --output DIR`; it writes
 four native archives, `VERSION` and `SHA256SUMS` without modifying the source
-checkout. The eight public commands run Go logic. The standalone Bash 3.2
+checkout. The seven public commands run Go logic. The standalone Bash 3.2
 bootstrap remains the installer transport, and maintenance scripts retain
 narrow shell glue where needed.
 

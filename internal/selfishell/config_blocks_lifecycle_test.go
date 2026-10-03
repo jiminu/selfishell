@@ -51,6 +51,9 @@ func blockHome(t *testing.T, platform string) (string, string, Paths) {
 			t.Fatal(err)
 		}
 		t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", release)
+		proc := filepath.Join(home, "proc-version")
+		blockWrite(t, proc, []byte("Linux fixture\n"))
+		t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", proc)
 	}
 	paths, err := UserPaths()
 	if err != nil {

@@ -186,6 +186,8 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 	if err := os.Remove(home + "/bin/nvim"); err != nil {
 		t.Fatal(err)
 	}
+	// Keep an installed host Neovim from satisfying the missing-binary case.
+	op.Process = withEnvironment(op.Process, map[string]string{"PATH": home + "/bin"})
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err == nil || !strings.Contains(err.Error(), "Could not locate Neovim") {
 		t.Fatalf("missing nvim: %v", err)
 	}
