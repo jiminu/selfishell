@@ -229,7 +229,11 @@ Windows Terminal's built-in `Dark+`. No custom scheme or fragment is installed.
 Profile names, launch commands, other profiles, the default profile,
 and other settings and comments are preserved. Existing settings use JSON with
 comments and trailing commas; Selfishell edits the selected values in place.
-Restart Windows Terminal after setup.
+Restart Windows Terminal after setup. On the first font installation, an
+already-open Terminal may briefly warn that it cannot find the font. Let setup
+finish, then close all Terminal windows and reopen your existing WSL profile.
+See [the font warning guidance](TROUBLESHOOTING.md#windows-terminal-cannot-find-the-font)
+if the warning remains.
 
 If the font family is already available to Windows, Selfishell preserves it.
 Otherwise it installs four pinned, SHA-256-verified Nerd Fonts 3.4.0 TTF files
