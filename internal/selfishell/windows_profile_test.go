@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ const terminalSettingsFixture = `{
     "defaults": {"font": {"size": 13}, "colorScheme": "Campbell"},
     "list": [
       {"guid": "{00000000-0000-0000-0000-000000000001}", "name": "PowerShell", "font": {"face": "Consolas"}},
-      {"guid": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}", "name": "My development shell", "source": "Windows.Terminal.Wsl", "font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, "startingDirectory": "~",},
+      {"guid": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}", "name": "My development shell", "source": "Windows.Terminal.Wsl", "commandline": "wsl.exe -d Ubuntu-24.04 --cd /work --exec zsh --login", "font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, "startingDirectory": "~",},
     ],
   },
 }
@@ -171,19 +172,82 @@ func TestWindowsProfileUninstallPreservesRawUserThemeAndRestoreRetry(t *testing.
 }
 
 func TestWindowsProfileUninstallPreservesCommentsInCreatedFont(t *testing.T) {
-	root, _, _, settings := existingWindowsProfileFixture(t)
-	data := `{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","source":"Windows.Terminal.Wsl","name":"Ubuntu"}]}}`
-	if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-	data = strings.Replace(string(blockRead(t, settings)), `{"face":`, `{/* user font note */ "face":`, 1)
-	if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	blockOK(t, root, "uninstall", "--yes")
-	if !bytes.Contains(blockRead(t, settings), []byte("/* user font note */")) {
-		t.Fatal("uninstall removed user comments in the font container")
+	for _, key := range []string{"face", "colorScheme"} {
+		for _, tc := range []struct{ name, property, comment string }{
+			{"before-key", `/* 사용자 메모 */ %s:`, "/* 사용자 메모 */"},
+			{"before-colon", `%s /* 사용자 메모 */:`, "/* 사용자 메모 */"},
+			{"before-value", `%s: /* 사용자 메모 */`, "/* 사용자 메모 */"},
+			{"line-comment", "%s: // 사용자 메모\n", "// 사용자 메모\n"},
+			{"line-comment-crlf", "%s: // 사용자 메모\r\n", "// 사용자 메모\r\n"},
+		} {
+			t.Run(key+"/"+tc.name, func(t *testing.T) {
+				root, _, _, settings := existingWindowsProfileFixture(t)
+				// Both appearance properties are absent before setup; other user
+				// settings, the other profile, comments, and BOM must survive.
+				original := "\xef\xbb\xbf" + strings.Replace(terminalSettingsFixture, `"font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, `, "", 1)
+				if err := testutil.WriteFile(settings, []byte(original), 0600); err != nil {
+					t.Fatal(err)
+				}
+				blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+				installed := string(blockRead(t, settings))
+				// Select the added property in the target profile, not the other
+				// profile's font or the global colorScheme default.
+				value := `"JetBrainsMonoNL Nerd Font Mono"`
+				if key == "colorScheme" {
+					value = `"Selfishell Dark+"`
+				}
+				quotedKey := `"` + key + `"`
+				data := strings.Replace(installed, quotedKey+": "+value, fmt.Sprintf(tc.property, quotedKey)+" "+value, 1)
+				if data == installed {
+					t.Fatal("test did not insert a user comment")
+				}
+				if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
+					t.Fatal(err)
+				}
+				blockOK(t, root, "uninstall", "--yes")
+				after := blockRead(t, settings)
+				if !bytes.Contains(after, []byte(tc.comment)) {
+					t.Fatalf("uninstall removed user comment or its newline: %s", after)
+				}
+				j, err := parseTerminalJSON(after)
+				if err != nil {
+					t.Fatal(err)
+				}
+				profile, err := j.profile("{963ff2f7-6aed-5ce3-9d91-90d99571f53a}")
+				if err != nil || profile == nil {
+					t.Fatal("profile identity changed", err)
+				}
+				if profile.property("font").property("face") != nil || profile.property("colorScheme") != nil {
+					t.Fatal("originally absent properties were not removed")
+				}
+				if key == "face" && profile.property("font") == nil {
+					t.Fatal("font container with a user comment was removed")
+				}
+				before, err := parseTerminalJSON([]byte(original))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var want, got map[string]any
+				if err := json.Unmarshal(before.clean, &want); err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal(j.clean, &got); err != nil {
+					t.Fatal(err)
+				}
+				// An empty font container retains the user's comment.
+				target := got["profiles"].(map[string]any)["list"].([]any)[1].(map[string]any)
+				if key == "face" {
+					delete(target, "font")
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Fatal("uninstall changed unrelated settings")
+				}
+				unchangedPrefix := original[:strings.Index(original, `      {"guid": "{963ff2f7`)]
+				if !bytes.HasPrefix(after, []byte(unchangedPrefix)) {
+					t.Fatal("uninstall changed the BOM, existing comments, other profile, or unrelated formatting")
+				}
+			})
+		}
 	}
 }
 

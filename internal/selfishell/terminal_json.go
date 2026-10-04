@@ -195,7 +195,15 @@ func (j *terminalJSON) set(n *terminalJSONNode, key string, value json.RawMessag
 			*edits = append(*edits, terminalJSONEdit{m.value.start, m.value.end, value})
 			return
 		}
-		*edits = append(*edits, terminalJSONEdit{m.start, m.value.end, nil})
+		// Comments are whitespace in punctuation. Retain their original bytes
+		// and line endings while removing the property's JSON tokens.
+		var preserved []byte
+		for p := m.start; p < m.value.end; p++ {
+			if terminalJSONSpace(j.punctuation[p]) {
+				preserved = append(preserved, j.data[p])
+			}
+		}
+		*edits = append(*edits, terminalJSONEdit{m.start, m.value.end, preserved})
 		// Remove only one separator; leave surrounding whitespace and comments.
 		from, to := m.value.end, n.end-1
 		if i+1 < len(n.members) {

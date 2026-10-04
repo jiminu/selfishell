@@ -92,7 +92,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			return err
 		}
 		if choice != nil && choice.Enabled {
-			c.report("Notes", reportInfo, "Restart Windows Terminal and choose Selfishell – %s.", choice.Distro)
+			c.report("Notes", reportInfo, "Restart Windows Terminal and reopen your configured WSL profile.")
 			return nil
 		}
 		c.report("Notes", reportInfo, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
