@@ -1,13 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-if ($request.operation -eq 'file-move') {
-    $source = Get-Item -LiteralPath $request.source -Force
-    if ($source.PSIsContainer) { [IO.Directory]::Move($request.source, $request.destination) }
-    else { [IO.File]::Move($request.source, $request.destination) }
-    '{}'
-    exit 0
-}
 if ($request.operation -eq 'probe' -or $request.operation -eq 'font-status') {
     Add-Type -AssemblyName System.Drawing
     $fonts = [Drawing.Text.InstalledFontCollection]::new()

@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf16"
 )
@@ -129,24 +128,7 @@ func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
-	if err := p.m.installWindowsProfile(choice, true); err != nil {
-		return err
-	}
-	r, err := choice.resource()
-	if err != nil {
-		return err
-	}
-	if err := p.m.installResource(r, true); err != nil {
-		return err
-	}
-	for i, existing := range p.resources {
-		if existing.Name == r.Name {
-			p.resources[i] = r
-			return nil
-		}
-	}
-	p.resources = append(p.resources, r)
-	return nil
+	return p.m.installWindowsProfile(choice, true)
 }
 
 func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
@@ -200,12 +182,6 @@ func (p Process) windowsPath(ctx context.Context, direction, path string) (strin
 		return "", fmt.Errorf("could not resolve Windows path: %s", path)
 	}
 	return result, nil
-}
-
-func (w windowsTerminalChoice) resource() (Resource, error) {
-	guid := strings.ToLower(strings.Trim(w.ProfileGUID, "{}"))
-	data, err := json.MarshalIndent(map[string]any{"schemes": []any{windowsTerminalDarkPlus}}, "", "  ")
-	return Resource{Kind: "file", Name: "windows-terminal", Target: w.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Selfishell/" + guid + ".json", Source: string(append(data, '\n'))}, err
 }
 
 func terminalGUID(value string) string {
@@ -302,43 +278,4 @@ func (c CLI) findWindowsProfile(p Process, distro string, windowsPaths, modernGU
 		return "", "", "", fmt.Errorf("could not uniquely identify an existing profile for WSL distribution %q; found %d candidates", distro, len(matches))
 	}
 	return matches[0].path, matches[0].guid, matches[0].name, nil
-}
-
-func resourceFileContent(r Resource) ([]byte, error) {
-	if r.Name == "windows-terminal" {
-		return []byte(r.Source), nil
-	}
-	return os.ReadFile(r.Source)
-}
-
-// DrvFs rejects RENAME_NOREPLACE. Windows File/Directory.Move retain the same
-// atomic no-overwrite contract when the Linux operation is unsupported.
-func (m *managed) moveBackup(r Resource, source, destination string) error {
-	err := moveBackupNoReplace(source, destination)
-	if r.Name != "windows-terminal" || (!errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOTSUP) && !errors.Is(err, syscall.ENOSYS)) {
-		return err
-	}
-	p := Process{Env: withEnvironment(Process{}, map[string]string{"HOME": rawParent(m.paths.State)}).Env}
-	ctx := m.c.invocationContext()
-	from, err := p.windowsPath(ctx, "-w", source)
-	if err != nil {
-		return err
-	}
-	to, err := p.windowsPath(ctx, "-w", destination)
-	if err != nil {
-		return err
-	}
-	_, err = p.windowsScript(ctx, map[string]string{"operation": "file-move", "source": from, "destination": to})
-	return err
-}
-
-// Dark+ from the same upstream palette Ghostty ships:
-// https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Dark%2B
-var windowsTerminalDarkPlus = map[string]string{
-	"name": "Selfishell Dark+", "background": "#1e1e1e", "foreground": "#cccccc",
-	"cursorColor": "#ffffff", "selectionBackground": "#3a3d41",
-	"black": "#000000", "red": "#cd3131", "green": "#0dbc79", "yellow": "#e5e510",
-	"blue": "#2472c8", "purple": "#bc3fbc", "cyan": "#11a8cd", "white": "#e5e5e5",
-	"brightBlack": "#666666", "brightRed": "#f14c4c", "brightGreen": "#23d18b", "brightYellow": "#f5f543",
-	"brightBlue": "#3b8eea", "brightPurple": "#d670d6", "brightCyan": "#29b8db", "brightWhite": "#e5e5e5",
 }

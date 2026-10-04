@@ -33,7 +33,6 @@ connects them to these locations; paths under `~/.config` follow
 | `~/.config/mise/conf.d/selfishell.toml` | Link to `~/.config/selfishell/mise/selfishell.toml` | Moved to a backup |
 | `~/.config/mise/config.toml` | Created empty if absent | Never changed |
 | Windows Terminal `settings.json` (WSL, if chosen) | Existing distro profile: `font.face` and `colorScheme` only | Original values and full file backed up |
-| `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell/<profile-id>.json` (WSL, if chosen) | Checksummed Dark+ color scheme only | Moved to a backup |
 | Files under `~/.config/selfishell` | Managed copies, checksummed | Moved to a backup |
 
 A backup sits beside its original path as `<path>.backup.<timestamp>`, with a
@@ -62,7 +61,7 @@ Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
 CI executes Selfishell on macOS ARM64 and Ubuntu 24.04 AMD64. The Linux ARM64
 and macOS AMD64 archives are built but not executed, and WSL 2 is covered only
 by isolated tests. Opt-in native checks cover read-only PowerShell/path
-interoperability and fragment backup/restore on a private Windows temporary
+interoperability and profile edits/restoration on a private Windows temporary
 directory; they do not install fonts or write font registry entries. See [verification coverage](../CONTRIBUTING.md#verification-coverage)
 for the exact CI jobs.
 
@@ -225,14 +224,12 @@ integration. Missing profiles are never created. Stable, Preview, and unpackaged
 settings locations are checked; multiple indistinguishable candidates are skipped.
 
 Only `font.face` and `colorScheme` in the selected profile's `settings.json` are
-changed. The font is JetBrainsMonoNL Nerd Font Mono; `Selfishell Dark+` uses the
-same Dark+ palette as Ghostty. A separate managed fragment under Windows
-`%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell` supplies only the
-color scheme. Profile names, launch commands, other profiles, the default profile,
+changed. The font is JetBrainsMonoNL Nerd Font Mono, and the color scheme is
+Windows Terminal's built-in `Dark+`. No custom scheme or fragment is installed.
+Profile names, launch commands, other profiles, the default profile,
 and other settings and comments are preserved. Existing settings use JSON with
 comments and trailing commas; Selfishell edits the selected values in place.
-Restart Windows Terminal after setup. See Microsoft's
-[JSON fragment documentation](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions).
+Restart Windows Terminal after setup.
 
 If the font family is already available to Windows, Selfishell preserves it.
 Otherwise it installs four pinned, SHA-256-verified Nerd Fonts 3.4.0 TTF files
@@ -255,9 +252,8 @@ changed font or theme requires the normal overwrite-or-skip decision; `--yes`
 and non-interactive updates preserve those changes and report a conflict.
 `status` diagnoses the two managed values. Uninstall always restores each value
 that still matches Selfishell's applied value, preserving later user changes to
-either value and all unrelated settings. It removes an intact managed scheme
-fragment and clears the saved choice and journal; original backups remain in the
-state directory's `backups` folder. Fonts remain installed,
+either value and all unrelated settings. It clears the saved choice and journal;
+original backups remain in the state directory's `backups` folder. Fonts remain installed,
 like other packages. Font updates use a new version directory and change only
 an ownership-checked Selfishell registration; older payloads are retained so
 loaded fonts never need to be replaced. Restart Windows Terminal after a font

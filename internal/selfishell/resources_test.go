@@ -145,7 +145,7 @@ func TestResources(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home+"/cache")
 	t.Setenv("XDG_DATA_HOME", home+"/data")
 	all, err := ManagedResources("/release/alias/..")
-	if err != nil || len(all) != 34 {
+	if err != nil || len(all) != 33 {
 		t.Fatalf("resources: %d %v", len(all), err)
 	}
 	if all[0].Target != home+"/alias/../config space/selfishell/zsh/zshrc" {

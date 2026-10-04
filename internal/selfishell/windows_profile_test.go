@@ -67,7 +67,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 				if string(blockRead(t, settings)) != data || !strings.Contains(out, "Skipping Windows Terminal setup") {
 					t.Fatal("unsafe or unreported profile selection", out)
 				}
-				if _, err := os.Stat(paths.Resources + "/windows-terminal.state"); !os.IsNotExist(err) {
+				if _, err := os.Stat(windowsProfileStatePath(paths)); !os.IsNotExist(err) {
 					t.Fatal("created integration without a unique target", err)
 				}
 				return
@@ -157,7 +157,7 @@ func TestWindowsProfileUninstallPreservesRawUserThemeAndRestoreRetry(t *testing.
 				}
 			} else {
 				personal := `{"dark": /* personal comment */ "Personal theme", "light": "Campbell"}`
-				data := strings.Replace(string(blockRead(t, settings)), `"Selfishell Dark+"`, personal, 1)
+				data := strings.Replace(string(blockRead(t, settings)), `"Dark+"`, personal, 1)
 				if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -194,7 +194,7 @@ func TestWindowsProfileUninstallPreservesCommentsInCreatedFont(t *testing.T) {
 				// profile's font or the global colorScheme default.
 				value := `"JetBrainsMonoNL Nerd Font Mono"`
 				if key == "colorScheme" {
-					value = `"Selfishell Dark+"`
+					value = `"Dark+"`
 				}
 				quotedKey := `"` + key + `"`
 				data := strings.Replace(installed, quotedKey+": "+value, fmt.Sprintf(tc.property, quotedKey)+" "+value, 1)
@@ -254,7 +254,7 @@ func TestWindowsProfileUninstallPreservesCommentsInCreatedFont(t *testing.T) {
 func TestWindowsProfileStatusDetectsChangedAppearance(t *testing.T) {
 	root, _, _, settings := existingWindowsProfileFixture(t)
 	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-	data := strings.Replace(string(blockRead(t, settings)), `"Selfishell Dark+"`, `"Personal theme"`, 1)
+	data := strings.Replace(string(blockRead(t, settings)), `"Dark+"`, `"Personal theme"`, 1)
 	if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +333,7 @@ func TestWindowsProfileMissingDefaultsAndChangedPathProtection(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Resume with the unchanged installed file, then restore absent properties.
-	installed := strings.Replace(data, `"name":"Ubuntu"`, `"name":"Ubuntu", "font": {"face": "JetBrainsMonoNL Nerd Font Mono"}, "colorScheme": "Selfishell Dark+"`, 1)
+	installed := strings.Replace(data, `"name":"Ubuntu"`, `"name":"Ubuntu", "font": {"face": "JetBrainsMonoNL Nerd Font Mono"}, "colorScheme": "Dark+"`, 1)
 	if err := testutil.WriteFile(settings, []byte(installed), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -381,24 +381,18 @@ func TestWindowsSetupUpdatesExistingRenamedProfile(t *testing.T) {
 	root, _, paths, settings := existingWindowsProfileFixture(t)
 	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	after := blockRead(t, settings)
-	if !bytes.Contains(after, []byte(`"face": "JetBrainsMonoNL Nerd Font Mono"`)) || !bytes.Contains(after, []byte(`"colorScheme": "Selfishell Dark+"`)) {
+	if !bytes.Contains(after, []byte(`"face": "JetBrainsMonoNL Nerd Font Mono"`)) || !bytes.Contains(after, []byte(`"colorScheme": "Dark+"`)) {
 		t.Fatalf("existing profile did not receive font and theme: %s", after)
 	}
 	want := strings.Replace(terminalSettingsFixture, `"face": "Cascadia Mono"`, `"face": "JetBrainsMonoNL Nerd Font Mono"`, 1)
-	want = strings.Replace(want, `{"dark": "Campbell", "light": "One Half Light"}`, `"Selfishell Dark+"`, 1)
+	want = strings.Replace(want, `{"dark": "Campbell", "light": "One Half Light"}`, `"Dark+"`, 1)
 	if string(after) != want {
 		t.Fatal("setup changed settings outside the two selected values")
 	}
-	state, err := ReadState(paths.Resources + "/windows-terminal.state")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fragment map[string]json.RawMessage
-	if err := json.Unmarshal(blockRead(t, state.Target), &fragment); err != nil {
-		t.Fatal(err)
-	}
-	if len(fragment["profiles"]) != 0 {
-		t.Fatal("setup added a terminal profile")
+	for _, path := range []string{paths.Resources + "/windows-terminal.state", rawParent(settings) + "/Fragments"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("setup created a scheme fragment or record: %s: %v", path, err)
+		}
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
@@ -408,9 +402,6 @@ func TestWindowsSetupUpdatesExistingRenamedProfile(t *testing.T) {
 	blockOK(t, root, "uninstall", "--yes")
 	if string(blockRead(t, settings)) != terminalSettingsFixture {
 		t.Fatal("uninstall failed to restore the original values")
-	}
-	if _, err := os.Stat(state.Target); !os.IsNotExist(err) {
-		t.Fatal("scheme fragment left behind", err)
 	}
 }
 

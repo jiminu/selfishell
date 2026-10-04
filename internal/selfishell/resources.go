@@ -56,7 +56,6 @@ func ManagedResources(root string) ([]Resource, error) {
 		{Kind: "block", Name: "user-vimrc", Target: home + "/.vimrc", Source: "-"},
 		{Kind: "link", Name: "user-nvim", Target: configHome + "/nvim", Source: paths.Config + "/nvim"},
 		{Kind: "block", Name: "user-ghostty", Target: configHome + "/ghostty/config.ghostty", Source: "-"},
-		{Kind: "file", Name: "windows-terminal", Target: "-", Source: "-"},
 	}, nil
 }
 
@@ -73,8 +72,6 @@ func ResourcesForPlatform(root, platform string, ghostty bool) ([]Resource, erro
 	selected := make([]Resource, 0, len(all))
 	for _, resource := range all {
 		switch resource.Name {
-		case "windows-terminal":
-			continue
 		case "zshrc-config":
 			if platform != "macos" {
 				resource.Source = root + "/config/ubuntu/zshrc"
@@ -89,23 +86,6 @@ func ResourcesForPlatform(root, platform string, ghostty bool) ([]Resource, erro
 			}
 		}
 		selected = append(selected, resource)
-	}
-	if platform == "ubuntu-wsl" {
-		paths, err := UserPaths()
-		if err != nil {
-			return nil, err
-		}
-		choice, err := readWindowsTerminalChoice(paths)
-		if err != nil {
-			return nil, err
-		}
-		if choice != nil && choice.Enabled {
-			r, err := choice.resource()
-			if err != nil {
-				return nil, err
-			}
-			selected = append(selected, r)
-		}
 	}
 	return selected, nil
 }

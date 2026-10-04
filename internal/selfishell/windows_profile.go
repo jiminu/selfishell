@@ -184,7 +184,7 @@ func (m *managed) installWindowsProfile(choice *windowsTerminalChoice, preflight
 	}
 	face, scheme := j.value(profile.property("font").property("face")), j.value(profile.property("colorScheme"))
 	appliedFace, _ := json.Marshal(terminalFont)
-	appliedScheme := json.RawMessage(`"Selfishell Dark+"`)
+	appliedScheme := json.RawMessage(`"Dark+"`)
 	if s != nil {
 		intact := bytes.Equal(face, s.AppliedFace) && bytes.Equal(scheme, s.AppliedScheme)
 		if s.Status == "pending" {

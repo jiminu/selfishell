@@ -83,58 +83,39 @@ esac
 
 func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	root, _, paths, windowsHome := windowsTerminalFixture(t)
+	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
+	original := blockRead(t, settings)
 	code, out, stderr := blockRun(t, root, "y\nn\n", "install", "--skip-packages")
 	if code != 0 || !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("choice: %d %s %s", code, out, stderr)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if _, err := os.Stat(windowsHome + "/Microsoft/Windows Terminal/Fragments"); !os.IsNotExist(err) {
-		t.Fatalf("declined choice was not retained: %v", err)
+	if string(blockRead(t, settings)) != string(original) {
+		t.Fatal("declined choice was not retained")
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
-	state, err := ReadState(paths.Resources + "/windows-terminal.state")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(state.Target, windowsHome+"/Microsoft/Windows Terminal/Fragments/Selfishell/") {
-		t.Fatalf("wrong fragment path: %s", state.Target)
-	}
-	before := blockRead(t, state.Target)
-	var fragment map[string]json.RawMessage
-	if err := json.Unmarshal(before, &fragment); err != nil {
-		t.Fatal(err)
-	}
-	if len(fragment["profiles"]) != 0 || len(fragment["schemes"]) == 0 {
-		t.Fatalf("unexpected fragment: %s", before)
+	before := blockRead(t, settings)
+	if !strings.Contains(string(before), `"colorScheme": "Dark+"`) {
+		t.Fatalf("existing profile did not receive built-in Dark+: %s", before)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
-	if string(blockRead(t, state.Target)) != string(before) {
+	if string(blockRead(t, settings)) != string(before) {
 		t.Fatal("reinstall/update changed the profile")
 	}
-	if err := testutil.AppendFile(state.Target, []byte("\n ")); err != nil {
-		t.Fatal(err)
-	}
-	code, _, stderr = blockRun(t, root, "", "update", "--tools-only", "--yes")
-	if code == 0 || !strings.Contains(stderr, "modified") {
-		t.Fatalf("modified profile update: %d %s", code, stderr)
-	}
-	code, _, _ = blockRun(t, root, "", "uninstall", "--yes")
-	if code == 0 {
-		t.Fatal("uninstall accepted a changed fragment")
-	}
-	if _, err := os.Stat(os.Getenv("HOME") + "/.zshrc"); err != nil {
-		t.Fatal("uninstall removed resources before preflight")
-	}
-	if err := testutil.WriteFile(state.Target, before, 0644); err != nil {
-		t.Fatal(err)
-	}
 	blockOK(t, root, "uninstall", "--restore", "--yes")
-	if _, err := os.Stat(state.Target); !os.IsNotExist(err) {
-		t.Fatalf("fragment left after uninstall: %v", err)
+	j, err := parseTerminalJSON(blockRead(t, settings))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(paths.State + "/windows-terminal.json"); !os.IsNotExist(err) {
-		t.Fatalf("saved choice left after uninstall: %v", err)
+	profile, err := j.profile("{963ff2f7-6aed-5ce3-9d91-90d99571f53a}")
+	if err != nil || profile == nil || profile.property("font") != nil || profile.property("colorScheme") != nil {
+		t.Fatal("uninstall left originally absent appearance values", err)
+	}
+	for _, path := range []string{paths.State + "/windows-terminal.json", windowsProfileStatePath(paths), paths.Resources + "/windows-terminal.state", windowsHome + "/Microsoft/Windows Terminal/Fragments"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("terminal state or fragment left after uninstall: %s: %v", path, err)
+		}
 	}
 }
 
@@ -235,31 +216,17 @@ printf '%s\n' '{"fontInstalled":true}'
 	}
 }
 
-func TestWindowsTerminalFragmentBackupAndPlatformGuard(t *testing.T) {
-	root, _, paths, _ := windowsTerminalFixture(t)
-	choice, err := (CLI{Root: root, Out: io.Discard, Err: io.Discard}).prepareWindowsTerminal(paths, false, true, false, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resource, err := choice.resource()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := []byte(`{"profiles":[],"personal":true}`)
-	if err := os.MkdirAll(rawParent(resource.Target), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(resource.Target, original, 0600); err != nil {
-		t.Fatal(err)
-	}
+func TestWindowsTerminalProfileBackupAndPlatformGuard(t *testing.T) {
+	root, _, paths, settings := existingWindowsProfileFixture(t)
+	original := blockRead(t, settings)
 	blockOK(t, root, "install", "--windows-terminal", "--skip-packages", "--yes")
-	first, err := ReadState(paths.Resources + "/windows-terminal.state")
-	if err != nil {
-		t.Fatal(err)
+	first, err := readWindowsProfileState(paths)
+	if err != nil || first == nil {
+		t.Fatal("profile journal missing", err)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	second, err := ReadState(paths.Resources + "/windows-terminal.state")
-	if err != nil || first.Backup != second.Backup {
+	second, err := readWindowsProfileState(paths)
+	if err != nil || second == nil || first.Backup != second.Backup {
 		t.Fatal("backup changed", err)
 	}
 	if string(blockRead(t, first.Backup)) != string(original) {
@@ -274,7 +241,7 @@ func TestWindowsTerminalFragmentBackupAndPlatformGuard(t *testing.T) {
 		t.Fatalf("%d %s", code, stderr)
 	}
 	blockOK(t, root, "uninstall", "--restore", "--yes")
-	if string(blockRead(t, resource.Target)) != string(original) {
+	if string(blockRead(t, settings)) != string(original) {
 		t.Fatal("original profile not restored")
 	}
 }
@@ -343,56 +310,6 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 	}
 }
 
-func TestWindowsFragmentNativeFilesystem(t *testing.T) {
-	base := os.Getenv("SELFISHELL_TEST_WINDOWS_TEMP")
-	if base == "" {
-		t.Skip("requires a private scratch directory on Windows filesystem")
-	}
-	t.Parallel()
-	scratch, err := os.MkdirTemp(base, "selfishell-terminal-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(scratch) })
-	home := t.TempDir()
-	paths := Paths{State: home + "/state", Resources: home + "/state/resources"}
-	m := managed{paths: paths, c: CLI{Out: io.Discard, Err: io.Discard}, yes: true, actions: map[string]string{}}
-	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppDataPath: scratch, AppData: "C:\\fixture"}
-	r, err := w.resource()
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := []byte(`{"profiles":[]}`)
-	if err := os.MkdirAll(rawParent(r.Target), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(r.Target, original, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.installResource(r, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.installResource(r, false); err != nil {
-		t.Fatal(err)
-	}
-	state, err := ReadState(paths.Resources + "/windows-terminal.state")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(blockRead(t, state.Backup)) != string(original) {
-		t.Fatal("native backup differs")
-	}
-	if err := m.preflightUninstall(ResourceState{r, state}, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.removeResource(ResourceState{r, state}, true); err != nil {
-		t.Fatal(err)
-	}
-	if string(blockRead(t, r.Target)) != string(original) {
-		t.Fatal("native restoration differs")
-	}
-}
-
 func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	root, home, paths, windowsHome := windowsTerminalFixture(t)
 	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
@@ -453,22 +370,27 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 
 }
 
-func TestWindowsTerminalSchemeDoesNotCreateProfiles(t *testing.T) {
-	t.Parallel()
-	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppData: "C:/fixture", AppDataPath: "/windows", SettingsPath: "/windows/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
-	r, err := w.resource()
-	if err != nil {
+func TestWindowsTerminalPreservesExistingSchemes(t *testing.T) {
+	root, _, _, windowsHome := windowsTerminalFixture(t)
+	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
+	personal := `"schemes":[{"name":"Dark+","background":"#010203"}]`
+	original := strings.TrimSuffix(string(blockRead(t, settings)), "}") + "," + personal + "}"
+	if err := testutil.WriteFile(settings, []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
-	var fragment struct {
-		Profiles []json.RawMessage
-		Schemes  []map[string]string
-	}
-	if err := json.Unmarshal([]byte(r.Source), &fragment); err != nil {
+	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
+	data := []byte(`{"schemes":[{"name":"Personal","background":"#123456"}]}`)
+	if err := os.MkdirAll(rawParent(fragment), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if len(fragment.Profiles) != 0 || len(fragment.Schemes) != 1 || fragment.Schemes[0]["background"] != "#1e1e1e" || fragment.Schemes[0]["name"] != "Selfishell Dark+" {
-		t.Fatal("unexpected scheme fragment", r.Source)
+	if err := testutil.WriteFile(fragment, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"install", "--windows-terminal", "--skip-packages", "--yes"}, {"uninstall", "--yes"}} {
+		blockOK(t, root, args...)
+		if string(blockRead(t, fragment)) != string(data) || !strings.Contains(string(blockRead(t, settings)), personal) {
+			t.Fatal("changed a user-owned scheme or fragment")
+		}
 	}
 }
 

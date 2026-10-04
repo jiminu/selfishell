@@ -292,7 +292,7 @@ func (m *managed) finishRestore(r Resource, s State) error {
 			if err = makeRawDir(rawParent(s.Target)); err != nil {
 				return err
 			}
-			if err = m.moveBackup(r, s.Backup, s.Target); err != nil {
+			if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
 				return err
 			}
 		}
