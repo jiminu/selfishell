@@ -196,7 +196,9 @@ lifecycle, package, dependency, or release change.
 - Maintained test setup, process control, assertions, and cleanup belong in Go;
   native Zsh/Lua runtime probes and small external-process fixtures may remain.
 - Tests must use a temporary `HOME` and never install against or modify the
-  developer's real home directory.
+  developer's real home directory. Clear inherited `WSL_DISTRO_NAME` in Linux
+  home fixtures; Windows integration fixtures must explicitly provide a fake
+  Windows environment or a private native scratch directory.
 - Integration tests call `t.Parallel()` unless they need `t.Setenv`. They write
   files only through `testutil.WriteFile` or `testutil.AppendFile`: a concurrent
   fork would inherit a plain write descriptor and make exec fail with ETXTBSY.

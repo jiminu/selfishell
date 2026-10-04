@@ -80,8 +80,14 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 	if update {
 		return choice, nil
 	}
-	p := Process{Out: c.Out, Err: c.Err}
 	distro := os.Getenv("WSL_DISTRO_NAME")
+	if distro == "" {
+		if enable {
+			return nil, fmt.Errorf("Windows Terminal setup requires a WSL distribution and working Windows interoperability")
+		}
+		return choice, nil
+	}
+	p := Process{Out: c.Out, Err: c.Err}
 	probe, err := p.windowsScript(c.invocationContext(), map[string]string{"operation": "probe"})
 	var detected struct {
 		AppData           string `json:"appData"`

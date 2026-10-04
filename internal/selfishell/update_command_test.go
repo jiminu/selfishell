@@ -17,6 +17,8 @@ import (
 func isolatedUpdateHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
+	// A temporary Linux HOME must never inherit the host Windows profile.
+	t.Setenv("WSL_DISTRO_NAME", "")
 	for name, value := range map[string]string{
 		"HOME":            home,
 		"XDG_CONFIG_HOME": home + "/.config",

@@ -712,3 +712,39 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 		t.Fatal("loaded-font upgrade changed old payload")
 	}
 }
+
+func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
+	outer := t.TempDir()
+	t.Setenv("WSL_DISTRO_NAME", "Inherited-Real-Distro")
+	home := isolatedUpdateHome(t)
+	tools := outer + "/tools"
+	if err := os.Mkdir(tools, 0700); err != nil {
+		t.Fatal(err)
+	}
+	probe := "#!/bin/sh\nprintf touched > " + outer + "/host-touched\nprintf '%s\\n' '{\"appData\":\"C:/host\",\"terminalInstalled\":true}'\n"
+	if err := testutil.WriteFile(tools+"/powershell.exe", []byte(probe), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(tools+"/wslpath", []byte("#!/bin/sh\nprintf '%s\\n' '"+outer+"/host-fragments'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", tools)
+	t.Setenv("SHELL", "/bin/zsh")
+	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	for name, data := range map[string]string{"os-release": "ID=ubuntu\n", "proc-version": "Microsoft WSL2\n"} {
+		if err := testutil.WriteFile(home+"/"+name, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
+	t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", home+"/proc-version")
+	code, _, stderr := commandResult(testRelease(t), "install", "--skip-packages", "--yes")
+	if code != 0 {
+		t.Fatal("isolated setup failed", stderr)
+	}
+	for _, path := range []string{outer + "/host-touched", outer + "/host-fragments"} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("isolated HOME reached inherited Windows environment: %s", path)
+		}
+	}
+}

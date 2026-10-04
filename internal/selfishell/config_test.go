@@ -283,6 +283,8 @@ func TestPurgeRefusesForeignCLILinkBeforeMutation(t *testing.T) {
 
 func isolateHome(t *testing.T, home string) {
 	t.Helper()
+	// WSL integration fixtures opt in explicitly with a fake Windows environment.
+	t.Setenv("WSL_DISTRO_NAME", "")
 	t.Setenv("HOME", home)
 	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
 		t.Setenv(name, "")
