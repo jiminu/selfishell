@@ -16,24 +16,14 @@ const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrai
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
 func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
+	selected, err := selectPackages(c.Root, paths, packages, platform, o.windowsTerminal)
+	if err != nil {
+		return err
+	}
 	groups := map[string][]string{}
-	for _, p := range packages {
-		if packageMatches(p, platform) {
-			if p.Platform == "ubuntu-wsl" {
-				choice, e := o.windowsTerminal, error(nil)
-				if choice == nil {
-					choice, e = readWindowsTerminalChoice(paths)
-				}
-				if e != nil {
-					return e
-				}
-				if choice == nil || !choice.Enabled {
-					continue
-				}
-			}
-			key := p.Requirement + ":" + p.Manager
-			groups[key] = append(groups[key], p.Name)
-		}
+	for _, p := range selected {
+		key := p.Requirement + ":" + p.Manager
+		groups[key] = append(groups[key], p.Name)
 	}
 	manifest := envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")
 	for _, pair := range []struct{ requirement, manager string }{

@@ -94,7 +94,7 @@ func TestConfigurationProgressCancelsBlockedTrust(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 	c := CLI{Root: root, Out: &out, Err: &stderr, Context: ctx, progress: ui}
-	p, err := c.prepareConfig("macos", false, true, true, false)
+	p, err := c.prepareConfig("macos", false, true, true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

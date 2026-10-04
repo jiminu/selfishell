@@ -98,16 +98,10 @@ func (c CLI) install(args []string) (result int) {
 			c.retryHint("selfishell install", skip)
 		}
 	}()
-	prepared, err := c.prepareConfig(platform, dry, yes, false, ghostty)
+	prepared, err := c.prepareConfig(platform, dry, yes, false, ghostty, windowsTerminal)
 	if err != nil {
 		c.error(err.Error())
 		return 1
-	}
-	if platform == "ubuntu-wsl" {
-		if err := c.addWindowsTerminal(&prepared, dry, yes, false, windowsTerminal); err != nil {
-			c.error(err.Error())
-			return 1
-		}
 	}
 	if err := c.saveWindowsTerminalChoice(prepared); err != nil {
 		c.error(err.Error())
@@ -205,7 +199,7 @@ type preparedConfig struct {
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
-func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty bool) (preparedConfig, error) {
+func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, enableWindowsTerminal bool) (preparedConfig, error) {
 	paths, err := UserPaths()
 	if err != nil {
 		return preparedConfig{}, err
@@ -258,7 +252,13 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty bool
 			}
 		}
 	}
-	return preparedConfig{paths: paths, resources: resources, m: m, miseGlobal: miseGlobal, ghostty: ghostty}, nil
+	prepared := preparedConfig{paths: paths, resources: resources, m: m, miseGlobal: miseGlobal, ghostty: ghostty}
+	if platform == "ubuntu-wsl" {
+		if err := c.addWindowsTerminal(&prepared, dry, yes, update, enableWindowsTerminal); err != nil {
+			return preparedConfig{}, err
+		}
+	}
+	return prepared, nil
 }
 
 // applyConfig also serves the later tools-only update without install-only finalization.
