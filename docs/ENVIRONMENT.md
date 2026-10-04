@@ -2,7 +2,7 @@
 
 Selfishell installs one development environment. `packages.conf` declares
 its packages: Zsh, Git, Vim, Starship, Zinit, Neovim, CLI tools, language
-runtimes, compiler tooling, and an optional macOS terminal font.
+runtimes, compiler tooling, and optional terminal fonts on macOS and WSL.
 
 Selfishell installs a pinned mise binary and activates it for interactive Zsh.
 Its defaults live under `${XDG_CONFIG_HOME:-$HOME/.config}/selfishell/mise/`,
@@ -50,9 +50,11 @@ Package requirements have two failure policies:
 - `optional` packages are recommended and attempted automatically, but an
   unavailable package or installation failure does not stop the rest of setup.
 
-Eza and Bat are optional. Only Ghostty has a separate installation choice:
+Eza and Bat are optional. Ghostty has a separate saved installation choice:
 on macOS, the first `selfishell install` asks whether to install it and manage
-its configuration. Ghostty is the recommended terminal, so pressing Enter
+its configuration. If Ghostty is already present on PATH or in the system or
+user Applications directory, the prompt offers configuration only and the app
+is preserved. Ghostty is the recommended terminal, so pressing Enter
 accepts; `--yes` also accepts, and a non-interactive run without `--yes`
 declines. The answer is saved in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/ghostty` and reused by later
@@ -60,6 +62,14 @@ declines. The answer is saved in
 declining it, run `selfishell install --ghostty`. To turn it off,
 `selfishell uninstall` clears the saved choice, and the next
 `selfishell install` asks again. Uninstall leaves the Ghostty app installed.
+
+On WSL, the optional Windows Terminal choice is saved separately in
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/windows-terminal.json`.
+It also records the Windows local application-data path and WSL distribution.
+Tools updates reuse it without asking again; `selfishell install --windows-terminal`
+enables a previously declined choice. Uninstall clears the choice and removes
+an intact managed profile, while preserving fonts. See
+[Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
 
 Colors do not depend on Ghostty. The prompt, FZF, completion previews, and
 command-line highlighting use the terminal's own palette, and Neovim switches

@@ -15,19 +15,21 @@ import (
 // can report them and skip cleanup while still completing optional groups.
 // Use a fresh value for a new synchronization, including retries and rollback.
 type PackageOperation struct {
-	Process                           Process
-	SkippedOptional                   []string
-	installedCasks                    []string // casks this operation installed
-	UnchangedCount                    int
-	dependencyManifest                string
-	dependencies                      []Dependency
-	dependencyFault                   func(string) error // focused filesystem-failure test seam
-	aptUpdated                        bool
-	brewFormulae, brewCasks           map[string]bool
-	brewFormulaeReady, brewCasksReady bool
-	miseNvim, miseNvimKey             string     // last successful "mise which nvim" and its mise/root
-	uid                               func() int // package-private test seam; nil uses os.Geteuid.
-	brewLocations                     []string   // package-private test seam; nil uses standard macOS locations.
+	windowsTerminal                           *windowsTerminalChoice
+	Process                                   Process
+	SkippedOptional                           []string
+	windowsFontsChecked, windowsFontsExternal bool
+	installedCasks                            []string // casks this operation installed
+	UnchangedCount                            int
+	dependencyManifest                        string
+	dependencies                              []Dependency
+	dependencyFault                           func(string) error // focused filesystem-failure test seam
+	aptUpdated                                bool
+	brewFormulae, brewCasks                   map[string]bool
+	brewFormulaeReady, brewCasksReady         bool
+	miseNvim, miseNvimKey                     string     // last successful "mise which nvim" and its mise/root
+	uid                                       func() int // package-private test seam; nil uses os.Geteuid.
+	brewLocations                             []string   // package-private test seam; nil uses standard macOS locations.
 }
 
 func (o *PackageOperation) warn(message string) {

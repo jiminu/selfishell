@@ -11,11 +11,12 @@ import (
 )
 
 const installHelp = `Usage:
-  selfishell install [--skip-packages] [--ghostty] [--dry-run] [--yes]
+  selfishell install [--skip-packages] [--ghostty|--windows-terminal] [--dry-run] [--yes]
 
 Options:
   --skip-packages Skip package and tool installation and apply managed configuration only
   --ghostty  On macOS, install and manage Ghostty even if it was declined before
+  --windows-terminal On WSL, add the Windows Terminal profile even if previously declined
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -32,13 +33,15 @@ Options:
 `
 
 func (c CLI) install(args []string) (result int) {
-	skip, dry, yes, ghostty := false, false, false, false
+	skip, dry, yes, ghostty, windowsTerminal := false, false, false, false, false
 	for _, arg := range args {
 		switch arg {
 		case "--skip-packages":
 			skip = true
 		case "--ghostty":
 			ghostty = true
+		case "--windows-terminal":
+			windowsTerminal = true
 		case "--dry-run":
 			dry = true
 		case "--yes":
@@ -66,6 +69,10 @@ func (c CLI) install(args []string) (result int) {
 	}
 	if ghostty && platform != "macos" {
 		c.error("--ghostty is available only on macOS.")
+		return 2
+	}
+	if windowsTerminal && platform != "ubuntu-wsl" {
+		c.error("--windows-terminal is available only on Ubuntu on WSL.")
 		return 2
 	}
 	if !skip {
@@ -96,6 +103,16 @@ func (c CLI) install(args []string) (result int) {
 		c.error(err.Error())
 		return 1
 	}
+	if platform == "ubuntu-wsl" {
+		if err := c.addWindowsTerminal(&prepared, dry, yes, false, windowsTerminal); err != nil {
+			c.error(err.Error())
+			return 1
+		}
+	}
+	if err := c.saveWindowsTerminalChoice(prepared); err != nil {
+		c.error(err.Error())
+		return 1
+	}
 	if !dry {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths)
 		prepared.m.c.progress = c.progress
@@ -103,7 +120,7 @@ func (c CLI) install(args []string) (result int) {
 	}
 	var operation *PackageOperation
 	if !skip {
-		operation = &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
+		operation = &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
 		err = func() error {
 			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -179,11 +196,12 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 }
 
 type preparedConfig struct {
-	paths      Paths
-	resources  []Resource
-	m          managed
-	miseGlobal string
-	ghostty    bool
+	paths           Paths
+	resources       []Resource
+	m               managed
+	miseGlobal      string
+	ghostty         bool
+	windowsTerminal *windowsTerminalChoice
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
@@ -201,7 +219,11 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty bool
 		} else if !update {
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
-				fmt.Fprint(c.Out, "Install Ghostty terminal and managed configuration (recommended)? [Y/n] ")
+				question := "Install Ghostty terminal and managed configuration (recommended)? [Y/n] "
+				if ghosttyInstalled(Process{}) {
+					question = "Use Selfishell configuration for your existing Ghostty terminal (recommended)? [Y/n] "
+				}
+				fmt.Fprint(c.Out, question)
 				answer, _ := c.readAnswer()
 				ghostty = !negative(answer)
 			}

@@ -16,10 +16,21 @@ const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrai
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
 func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
-	selected := packagePlatform(platform)
 	groups := map[string][]string{}
 	for _, p := range packages {
-		if p.Platform == "all" || p.Platform == selected {
+		if packageMatches(p, platform) {
+			if p.Platform == "ubuntu-wsl" {
+				choice, e := o.windowsTerminal, error(nil)
+				if choice == nil {
+					choice, e = readWindowsTerminalChoice(paths)
+				}
+				if e != nil {
+					return e
+				}
+				if choice == nil || !choice.Enabled {
+					continue
+				}
+			}
 			key := p.Requirement + ":" + p.Manager
 			groups[key] = append(groups[key], p.Name)
 		}
@@ -65,6 +76,10 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 		}
 	}
 	if platform == "macos" && ghostty {
+		if ghosttyInstalled(o.Process) {
+			o.report(reportInfo, "Ghostty is already installed; preserving the app.")
+			return nil
+		}
 		return o.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
 	}
 	switch {
@@ -72,6 +87,14 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 		c.report("Notes", reportInfo, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
 	case hasConfiguredMarker(paths): // Linux hints only before the first setup completes.
 	case platform == "ubuntu-wsl":
+		choice, err := readWindowsTerminalChoice(paths)
+		if err != nil {
+			return err
+		}
+		if choice != nil && choice.Enabled {
+			c.report("Notes", reportInfo, "Restart Windows Terminal and choose Selfishell – %s.", choice.Distro)
+			return nil
+		}
 		c.report("Notes", reportInfo, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
 	case platform == "ubuntu" && localDesktop():
 		c.report("Notes", reportInfo, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
@@ -86,10 +109,9 @@ func localDesktop() bool {
 
 // platformMiseTools lists the mise tools packages.conf declares for platform.
 func platformMiseTools(packages []Package, platform string) []string {
-	platform = packagePlatform(platform)
 	var tools []string
 	for _, p := range packages {
-		if p.Manager == "mise" && (p.Platform == "all" || p.Platform == platform) {
+		if p.Manager == "mise" && packageMatches(p, platform) {
 			tools = append(tools, p.Name)
 		}
 	}

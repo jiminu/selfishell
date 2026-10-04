@@ -85,3 +85,22 @@ archive executes in each job.
 Linux/ARM64, macOS/AMD64, WSL 2, and OS releases other than those runner
 images and the container are not executed in CI. Platform selectors in tests
 simulate them; they are not evidence of runtime execution on another OS or CPU.
+
+### Native WSL terminal checks
+
+On WSL 2 with PowerShell interoperability, run these focused checks:
+
+```sh
+SELFISHELL_TEST_WSL_INTEROP=1 go test ./internal/selfishell -run '^TestWindowsInteropReadOnly$' -v
+SELFISHELL_TEST_WINDOWS_TEMP=/mnt/c/Windows/Temp go test ./internal/selfishell -run '^TestWindowsFragmentNativeFilesystem$' -v
+```
+
+Use the actual mapped Windows temporary directory if the mount root differs.
+The filesystem check creates and removes its own private directory and tests
+fragment installation, backup, and restore. Neither check changes personal
+Windows Terminal settings, installs fonts, or writes registry entries. Font
+registration still needs verification in a disposable Windows user account:
+accept the initial WSL setup, check all four styles in Windows Terminal after
+restarting it, repeat setup, and confirm uninstall removes the profile while
+leaving fonts available. Also verify an existing font family is preserved and
+`--skip-packages` never registers fonts.

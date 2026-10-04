@@ -62,6 +62,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	os.Remove(paths.State + "/configured")
 	os.Remove(paths.State + "/ghostty")
+	os.Remove(paths.State + "/windows-terminal.json")
 	for _, dir := range managedDirectories(resources, paths) {
 		syscall.Rmdir(dir)
 	}
@@ -284,7 +285,7 @@ func (m *managed) finishRestore(r Resource, s State) error {
 			if err = makeRawDir(rawParent(s.Target)); err != nil {
 				return err
 			}
-			if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
+			if err = m.moveBackup(r, s.Backup, s.Target); err != nil {
 				return err
 			}
 		}

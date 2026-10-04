@@ -48,7 +48,7 @@ func ReadPackages(path string) ([]Package, error) {
 			return fmt.Errorf("Unknown package manifest record: %s", f[0])
 		}
 		p := Package{f[1], f[2], f[3], f[4]}
-		if p.Platform != "macos" && p.Platform != "ubuntu" && p.Platform != "all" {
+		if p.Platform != "macos" && p.Platform != "ubuntu" && p.Platform != "ubuntu-wsl" && p.Platform != "all" {
 			return fmt.Errorf("Invalid package platform: %s", p.Platform)
 		}
 		if p.Requirement != "required" && p.Requirement != "optional" {

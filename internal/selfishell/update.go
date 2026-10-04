@@ -293,12 +293,18 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.error(err.Error())
 		return 1
 	}
+	if platform == "ubuntu-wsl" {
+		if err := c.addWindowsTerminal(&prepared, o.dry, o.yes, true, false); err != nil {
+			c.error(err.Error())
+			return 1
+		}
+	}
 	if !o.dry {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 	}
-	operation := &PackageOperation{Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
+	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
 	if !o.skip {
 		phaseCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, prepared.ghostty, o.dry)

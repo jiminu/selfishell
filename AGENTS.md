@@ -76,6 +76,9 @@ integration uses only:
   entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
   `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
+- when chosen on WSL, a separate checksummed Windows Terminal JSON fragment
+  under `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell` (never
+  change `settings.json` or the default profile);
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
@@ -127,7 +130,12 @@ Preserve these lifecycle invariants:
 ## Packages and Dependencies
 
 Selfishell provides one development environment, without selectable profiles.
-Ghostty is a separate saved macOS installation choice. The `configured` marker
+Ghostty is a separate saved macOS installation choice; an existing app on PATH
+or in system/user Applications is preserved. Windows Terminal integration is a
+separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
+records with `font` download markers, installed and registered per Windows user.
+Existing font families are preserved; installer-owned fonts follow approved pins
+and remain installed after configuration uninstall. The `configured` marker
 in the state directory records completed setup, not a package selection.
 Behavior below is described for users in `docs/UPDATES.md`.
 

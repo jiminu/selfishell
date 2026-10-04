@@ -5,6 +5,20 @@ import (
 	"strings"
 )
 
+// The app can be installed directly, outside Homebrew's cask inventory.
+func ghosttyInstalled(p Process) bool {
+	if _, err := p.lookPath("ghostty"); err == nil {
+		return true
+	}
+	for _, base := range []string{"/Applications", envValue(p.environment(), "HOME") + "/Applications"} {
+		info, err := os.Stat(base + "/Ghostty.app/Contents/MacOS/ghostty")
+		if err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Ghostty applies config-file includes after the including file, so a key or
 // same-trigger keybind outside the block loses to the managed defaults.
 // Repeatable font keys combine with the defaults instead and are not reported.

@@ -77,7 +77,7 @@ func (m *managed) installResource(r Resource, preflight bool) error {
 	return fmt.Errorf("invalid resource kind: %s", r.Kind)
 }
 func (m *managed) installFile(r Resource, preflight bool) error {
-	source, err := os.ReadFile(r.Source)
+	source, err := resourceFileContent(r)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 			if m.beforeBackupMove != nil {
 				m.beforeBackupMove(r.Target, backup)
 			}
-			if err = moveBackupNoReplace(r.Target, backup); err != nil {
+			if err = m.moveBackup(r, r.Target, backup); err != nil {
 				return err
 			}
 		}

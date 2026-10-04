@@ -63,7 +63,8 @@ normal terminal output so password prompts and installer questions stay visible.
 Synchronization installs missing Apt or Homebrew packages from `packages.conf`,
 applies approved direct-tool and Git dependency versions from `dependencies.conf`,
 synchronizes mise tools and Neovim plugins, and reapplies managed configuration.
-`optional` packages in `packages.conf`, and Ghostty when chosen, are attempted
+`optional` packages in `packages.conf`, including Windows fonts when Windows
+Terminal setup was chosen on WSL, and Ghostty when chosen, are attempted
 automatically; a failed optional package is reported but does not fail the
 whole setup. Required package failures do.
 Tree-sitter parsers install on first opening their filetype. Existing Apt and

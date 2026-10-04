@@ -18,6 +18,7 @@ type ToolResult struct{ Installed, Source, Approved string }
 
 // ToolInventory caches external package-manager queries for one CLI invocation.
 type ToolInventory struct {
+	windowsFonts                                     *windowsFontStatus
 	root                                             string
 	paths                                            Paths
 	warnings                                         io.Writer
@@ -284,14 +285,32 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		target = envDefault("XDG_DATA_HOME", home+"/.local/share") + "/" + strings.TrimPrefix(dep.Target, ".local/share/")
 	}
+	if dep.Marker == "font" {
+		var err error
+		target, err = dependencyTarget(*dep, i.paths)
+		if err != nil {
+			return result, err
+		}
+	}
 	state, err := os.ReadFile(i.paths.State + "/dependencies/" + name)
 	recorded := strings.TrimRight(strings.ReplaceAll(string(state), "\x00", ""), "\n")
 	if err == nil && recorded != "" {
 		result.Source = "selfishell"
 		// After a CLI-only update or rollback the pin describes another version,
 		// which the tools phase replaces; it cannot judge the recorded one.
-		if i.validDirect(*dep, target, true, recorded == dep.Version) {
+		valid := i.validDirect(*dep, target, true, recorded == dep.Version)
+		if valid && dep.Marker == "font" {
+			choice, e := readWindowsTerminalChoice(i.paths)
+			valid = e == nil && choice != nil && strings.EqualFold(i.windowsFontInventory().Registrations["Selfishell "+dep.Name+" (TrueType)"], choice.AppData+`\Microsoft\Windows\Fonts\Selfishell\`+filepath.Base(dep.Target))
+		}
+		if valid {
 			result.Installed = recorded
+		}
+		return result, nil
+	}
+	if dep.Marker == "font" {
+		if i.windowsFontInventory().FontInstalled {
+			result.Installed, result.Source = "detected", "external"
 		}
 		return result, nil
 	}
@@ -389,4 +408,15 @@ func (i *ToolInventory) loadMise() {
 			}
 		}
 	}
+}
+
+func (i *ToolInventory) windowsFontInventory() *windowsFontStatus {
+	if i.windowsFonts == nil {
+		i.windowsFonts = &windowsFontStatus{}
+		data, err := (Process{}).windowsScript(context.Background(), map[string]string{"operation": "font-status"})
+		if err == nil {
+			_ = json.Unmarshal(data, i.windowsFonts)
+		}
+	}
+	return i.windowsFonts
 }
