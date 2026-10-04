@@ -271,7 +271,9 @@ func (m *managed) removeWindowsProfile(preflight bool) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if s.Status == "pending" {
+	// A removed target has no appearance values left to recover. Keep the
+	// journal until the actual uninstall, just as for a missing active target.
+	if s.Status == "pending" && profile != nil {
 		return errInterruptedInstall
 	}
 	if preflight {

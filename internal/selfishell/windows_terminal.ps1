@@ -57,6 +57,14 @@ if ($request.operation -eq 'font-register') {
         $name = 'Selfishell ' + $request.name + ' (TrueType)'
         $existing = $key.GetValue($name)
         if ($null -ne $existing -and $existing -ne $font.FullName -and ([string]::IsNullOrEmpty($request.previousPath) -or $existing -ne $request.previousPath) -and ([string]::IsNullOrEmpty($request.alternatePreviousPath) -or $existing -ne $request.alternatePreviousPath)) { throw 'Existing Windows font registration is user data' }
+        # Repeated setup does not increase the global font resource reference count.
+        if ($existing -eq $font.FullName) {
+            Add-Type -AssemblyName System.Drawing
+            $fonts = [Drawing.Text.InstalledFontCollection]::new()
+            try {
+                if (($fonts.Families.Name -contains 'JetBrainsMonoNL Nerd Font Mono') -or ($fonts.Families.Name -contains 'JetBrainsMonoNL NFM')) { '{}'; exit 0 }
+            } finally { $fonts.Dispose() }
+        }
         Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -69,14 +77,6 @@ public static class SelfishellFont {
     public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wparam, IntPtr lparam, uint flags, uint timeout, out UIntPtr result);
 }
 '@
-        # Repeated setup does not increase the global font resource reference count.
-        if ($existing -eq $font.FullName) {
-            Add-Type -AssemblyName System.Drawing
-            $fonts = [Drawing.Text.InstalledFontCollection]::new()
-            try {
-                if (($fonts.Families.Name -contains 'JetBrainsMonoNL Nerd Font Mono') -or ($fonts.Families.Name -contains 'JetBrainsMonoNL NFM')) { '{}'; exit 0 }
-            } finally { $fonts.Dispose() }
-        }
         if ([SelfishellFont]::AddFontResourceEx($font.FullName, 0, [IntPtr]::Zero) -eq 0) { throw 'Could not load Windows font' }
         $key.SetValue($name, $font.FullName, [Microsoft.Win32.RegistryValueKind]::String)
         if ($null -ne $existing -and $existing -ne $font.FullName) {
