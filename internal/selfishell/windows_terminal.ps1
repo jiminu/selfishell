@@ -13,6 +13,26 @@ if ($request.operation -eq 'probe' -or $request.operation -eq 'font-status') {
     $fonts = [Drawing.Text.InstalledFontCollection]::new()
     try {
         $appData = [Environment]::GetFolderPath('LocalApplicationData')
+        $settingsPaths = @()
+        $wslProfileGuids = @()
+        if ($request.operation -eq 'probe') {
+            $settingsPaths = @(
+                "$appData\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+                "$appData\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+                "$appData\Microsoft\Windows Terminal\settings.json"
+            ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+            $fragmentDir = "$appData\Microsoft\Windows Terminal\Fragments\Microsoft.WSL"
+            if (-not [string]::IsNullOrEmpty($request.distro) -and (Test-Path -LiteralPath $fragmentDir -PathType Container)) {
+                foreach ($fragment in Get-ChildItem -LiteralPath $fragmentDir -Filter '*.json' -File) {
+                    try {
+                        $profiles = (Get-Content -LiteralPath $fragment.FullName -Raw -Encoding UTF8 | ConvertFrom-Json).profiles
+                        foreach ($profile in $profiles) {
+                            if ($profile.name -ceq $request.distro -and $profile.guid) { $wslProfileGuids += $profile.guid }
+                        }
+                    } catch { } # Unreadable fragments cannot identify a safe target.
+                }
+            }
+        }
         $registrations = @{}
         if ($request.operation -eq 'font-status') {
             $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows NT\CurrentVersion\Fonts')
@@ -29,6 +49,8 @@ if ($request.operation -eq 'probe' -or $request.operation -eq 'font-status') {
             appData = $appData
             terminalInstalled = ((Test-Path -LiteralPath "$appData\Microsoft\WindowsApps\wt.exe") -or (Test-Path -LiteralPath "$appData\Microsoft\Windows Terminal\settings.json"))
             fontInstalled = (($fonts.Families.Name -contains 'JetBrainsMonoNL Nerd Font Mono') -or ($fonts.Families.Name -contains 'JetBrainsMonoNL NFM'))
+            settingsPaths = @($settingsPaths)
+            wslProfileGuids = @($wslProfileGuids)
         } | ConvertTo-Json -Compress
     } finally { $fonts.Dispose() }
     exit 0

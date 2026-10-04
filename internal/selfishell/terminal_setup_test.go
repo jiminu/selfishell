@@ -56,13 +56,26 @@ func windowsTerminalFixture(t *testing.T) (string, string, Paths, string) {
 		t.Fatal(err)
 	}
 	windowsHome := home + "/windows-localappdata"
+	t.Setenv("WT_PROFILE_ID", "")
+	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
+	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	probe := `#!/bin/sh
-printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalled":true,"fontInstalled":false}'
+printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalled":true,"fontInstalled":false,"settingsPaths":["C:\\Users\\Fixture\\AppData\\Local\\Microsoft\\Windows Terminal\\settings.json"],"wslProfileGuids":[]}'
 `
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := testutil.WriteFile(home+"/tools/wslpath", []byte("#!/bin/sh\nprintf '%s\\n' \"$HOME/windows-localappdata\"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(home+"/tools/wslpath", []byte(`#!/bin/sh
+case "$*" in
+ *settings.json*) printf '%s\n' "$HOME/windows-localappdata/Microsoft/Windows Terminal/settings.json" ;;
+ *) printf '%s\n' "$HOME/windows-localappdata" ;;
+esac
+`), 0700); err != nil {
 		t.Fatal(err)
 	}
 	return root, home, paths, windowsHome
@@ -75,7 +88,7 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 		t.Fatalf("choice: %d %s %s", code, out, stderr)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if _, err := os.Stat(windowsHome); !os.IsNotExist(err) {
+	if _, err := os.Stat(windowsHome + "/Microsoft/Windows Terminal/Fragments"); !os.IsNotExist(err) {
 		t.Fatalf("declined choice was not retained: %v", err)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
@@ -87,17 +100,12 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 		t.Fatalf("wrong fragment path: %s", state.Target)
 	}
 	before := blockRead(t, state.Target)
-	var fragment struct {
-		Profiles []struct {
-			Name, Commandline string
-			Font              struct{ Face string }
-		}
-	}
+	var fragment map[string]json.RawMessage
 	if err := json.Unmarshal(before, &fragment); err != nil {
 		t.Fatal(err)
 	}
-	if len(fragment.Profiles) != 1 || fragment.Profiles[0].Name != "Selfishell – Ubuntu-24.04" || fragment.Profiles[0].Font.Face != "JetBrainsMonoNL Nerd Font Mono" || !strings.Contains(fragment.Profiles[0].Commandline, "Ubuntu-24.04") {
-		t.Fatalf("wrong fragment: %s", before)
+	if len(fragment["profiles"]) != 0 || len(fragment["schemes"]) == 0 {
+		t.Fatalf("unexpected fragment: %s", before)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
@@ -136,7 +144,7 @@ func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
 	if !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("missing preview: %s", out)
 	}
-	for _, path := range []string{paths.Config, paths.State, windowsHome} {
+	for _, path := range []string{paths.Config, paths.State, windowsHome + "/Microsoft/Windows Terminal/Fragments"} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("dry run created %s: %v", path, err)
 		}
@@ -349,7 +357,7 @@ func TestWindowsFragmentNativeFilesystem(t *testing.T) {
 	home := t.TempDir()
 	paths := Paths{State: home + "/state", Resources: home + "/state/resources"}
 	m := managed{paths: paths, c: CLI{Out: io.Discard, Err: io.Discard}, yes: true, actions: map[string]string{}}
-	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", Home: home, AppDataPath: scratch, AppData: "C:\\fixture"}
+	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppDataPath: scratch, AppData: "C:\\fixture"}
 	r, err := w.resource()
 	if err != nil {
 		t.Fatal(err)
@@ -445,31 +453,22 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 
 }
 
-func TestWindowsTerminalAccountAndDarkPlus(t *testing.T) {
+func TestWindowsTerminalSchemeDoesNotCreateProfiles(t *testing.T) {
 	t.Parallel()
-	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", Home: "/home/other", AppData: "C:/fixture", AppDataPath: "/windows"}
-	data, _ := json.Marshal(w)
-	var fields map[string]any
-	_ = json.Unmarshal(data, &fields)
-	fields["user"] = "other-user"
-	data, _ = json.Marshal(fields)
-	_ = json.Unmarshal(data, &w)
+	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppData: "C:/fixture", AppDataPath: "/windows", SettingsPath: "/windows/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
 	r, err := w.resource()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var fragment struct {
-		Profiles []struct{ Commandline, ColorScheme string }
+		Profiles []json.RawMessage
 		Schemes  []map[string]string
 	}
 	if err := json.Unmarshal([]byte(r.Source), &fragment); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fragment.Profiles[0].Commandline, `--user "other-user"`) {
-		t.Fatal("profile launches default Linux user", fragment.Profiles[0].Commandline)
-	}
-	if fragment.Profiles[0].ColorScheme != "Selfishell Dark+" || len(fragment.Schemes) != 1 || fragment.Schemes[0]["background"] != "#1e1e1e" || fragment.Schemes[0]["name"] != "Selfishell Dark+" {
-		t.Fatal("missing Dark+ scheme", r.Source)
+	if len(fragment.Profiles) != 0 || len(fragment.Schemes) != 1 || fragment.Schemes[0]["background"] != "#1e1e1e" || fragment.Schemes[0]["name"] != "Selfishell Dark+" {
+		t.Fatal("unexpected scheme fragment", r.Source)
 	}
 }
 
@@ -546,27 +545,16 @@ print('{}')
 	}
 }
 
-func TestWindowsTerminalChoiceWithoutUserMigrates(t *testing.T) {
+func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
 	root, home, paths, _ := windowsTerminalFixture(t)
 	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-	data := blockRead(t, paths.State+"/windows-terminal.json")
-	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil {
-		t.Fatal(err)
-	}
-	originalUser := fields["user"]
-	delete(fields, "user")
-	data, _ = json.Marshal(fields)
-	if err := testutil.WriteFile(paths.State+"/windows-terminal.json", data, 0600); err != nil {
-		t.Fatal(err)
-	}
+	before := blockRead(t, paths.State+"/windows-terminal.json")
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	choice, err := readWindowsTerminalChoice(paths)
-	if err != nil || choice.User != originalUser {
-		t.Fatal("old choice failed to migrate", choice, err)
+	if string(blockRead(t, paths.State+"/windows-terminal.json")) != string(before) {
+		t.Fatal("saved choice changed")
 	}
 }
 
@@ -588,7 +576,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err := os.MkdirAll(paths.State+"/dependencies", 0700); err != nil {
 		t.Fatal(err)
 	}
-	choice := windowsTerminalChoice{Version: 1, Enabled: true, User: "fixture", Distro: "Ubuntu", Home: home, AppData: "C:/fixture", AppDataPath: scratch}
+	choice := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: scratch + "/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
 	data, _ := json.Marshal(choice)
 	if err := testutil.WriteFile(paths.State+"/windows-terminal.json", data, 0600); err != nil {
 		t.Fatal(err)

@@ -36,6 +36,10 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	m := managed{c: c, paths: paths, dry: dry}
 	failed := false
+	if err := m.removeWindowsProfile(true); err != nil {
+		c.error(err.Error())
+		failed = true
+	}
 	for _, record := range records {
 		if e := m.preflightUninstall(record, restore); e != nil {
 			c.error(e.Error())
@@ -47,6 +51,9 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	if failed {
 		return fmt.Errorf("Uninstall cancelled because managed resources were changed.")
+	}
+	if err := m.removeWindowsProfile(false); err != nil {
+		return fmt.Errorf("Uninstall was incomplete; preserved remaining state for a retry: %w", err)
 	}
 	for i := len(records) - 1; i >= 0; i-- {
 		if err = m.removeResource(records[i], restore); err != nil {

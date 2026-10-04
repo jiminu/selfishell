@@ -273,6 +273,16 @@ func (c CLI) status(args []string) int {
 			result = 1
 		}
 	}
+	if tracked, profileIntact, profileRecordIssue := c.statusWindowsProfile(paths, verbose); tracked {
+		count++
+		if profileIntact {
+			intact++
+		} else {
+			result = 1
+			recordIssues = recordIssues || profileRecordIssue
+			changedPaths = changedPaths || !profileRecordIssue
+		}
+	}
 	if count == 0 {
 		fmt.Fprintln(c.Out, "Selfishell configuration is not installed.")
 		if !installHinted {

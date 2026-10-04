@@ -16,7 +16,7 @@ const installHelp = `Usage:
 Options:
   --skip-packages Skip package and tool installation and apply managed configuration only
   --ghostty  On macOS, install and manage Ghostty even if it was declined before
-  --windows-terminal On WSL, add the Windows Terminal profile even if previously declined
+  --windows-terminal On WSL, configure the existing Windows Terminal profile even if previously declined
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help
@@ -303,6 +303,9 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 		if err := m.installResource(r, false); err != nil {
 			return err
 		}
+	}
+	if err := m.installWindowsProfile(p.windowsTerminal, false); err != nil {
+		return err
 	}
 	if !m.dry {
 		c.trustMise(paths)

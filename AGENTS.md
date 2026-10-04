@@ -76,9 +76,14 @@ integration uses only:
   entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
   `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
-- when chosen on WSL, a separate checksummed Windows Terminal JSON fragment
-  under `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell` (never
-  change `settings.json` or the default profile);
+- when chosen on WSL, only the current distribution profile's `font.face` and
+  `colorScheme` in Windows Terminal `settings.json`, backed up and journaled
+  separately, plus a checksummed color-scheme fragment under
+  `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell`. Never create
+  a profile or change its name, launch command, or the default profile. Identify
+  existing profiles by distro identity, preserving renamed display names; skip
+  missing or ambiguous targets. Preserve unrelated JSON, comments, and user edits.
+  Uninstall restores only the two values that still match the applied values;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
@@ -136,8 +141,8 @@ separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
 records with `font` download markers, installed and registered per Windows user.
 Existing font families are preserved; fonts use versioned paths so Windows-loaded
 files are never replaced during pin updates. Change only an ownership-checked
-Selfishell font registration. Profiles launch the installing Linux user and use
-Dark+, matching Ghostty. Installer-owned fonts follow approved pins
+Selfishell font registration. Existing distro profiles use Dark+, matching
+Ghostty; their launch commands remain user-owned. Installer-owned fonts follow approved pins
 and remain installed after configuration uninstall. The `configured` marker
 in the state directory records completed setup, not a package selection.
 Behavior below is described for users in `docs/UPDATES.md`.

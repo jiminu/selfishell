@@ -7,13 +7,12 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,13 +24,13 @@ var windowsTerminalScript string
 
 // A separate versioned choice, not the fixed-line resource-state format.
 type windowsTerminalChoice struct {
-	Version     int    `json:"version"`
-	User        string `json:"user,omitempty"`
-	Enabled     bool   `json:"enabled"`
-	Distro      string `json:"distro,omitempty"`
-	Home        string `json:"home,omitempty"`
-	AppData     string `json:"appData,omitempty"`
-	AppDataPath string `json:"appDataPath,omitempty"`
+	Version      int    `json:"version"`
+	Enabled      bool   `json:"enabled"`
+	Distro       string `json:"distro,omitempty"`
+	AppData      string `json:"appData,omitempty"`
+	AppDataPath  string `json:"appDataPath,omitempty"`
+	SettingsPath string `json:"settingsPath,omitempty"`
+	ProfileGUID  string `json:"profileGuid,omitempty"`
 }
 
 func readWindowsTerminalChoice(paths Paths) (*windowsTerminalChoice, error) {
@@ -50,19 +49,12 @@ func readWindowsTerminalChoice(paths Paths) (*windowsTerminalChoice, error) {
 		return nil, fmt.Errorf("unsupported Windows Terminal choice version: %d", choice.Version)
 	}
 	if choice.Enabled {
-		if choice.User == "" {
-			account, err := user.LookupId(strconv.Itoa(os.Getuid()))
-			if err != nil {
-				return nil, err
-			}
-			choice.User = account.Username
-		}
-		for _, value := range []string{choice.User, choice.Distro, choice.Home, choice.AppData, choice.AppDataPath} {
+		for _, value := range []string{choice.Distro, choice.AppData, choice.AppDataPath, choice.SettingsPath, choice.ProfileGUID} {
 			if value == "" || strings.ContainsAny(value, "\x00\r\n") {
 				return nil, fmt.Errorf("invalid Windows Terminal choice")
 			}
 		}
-		if !filepath.IsAbs(choice.Home) || !filepath.IsAbs(choice.AppDataPath) {
+		if !filepath.IsAbs(choice.SettingsPath) || !filepath.IsAbs(choice.AppDataPath) || !validTerminalGUID(choice.ProfileGUID) {
 			return nil, fmt.Errorf("invalid Windows Terminal paths")
 		}
 	}
@@ -88,10 +80,12 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 		return choice, nil
 	}
 	p := Process{Out: c.Out, Err: c.Err}
-	probe, err := p.windowsScript(c.invocationContext(), map[string]string{"operation": "probe"})
+	probe, err := p.windowsScript(c.invocationContext(), map[string]string{"operation": "probe", "distro": distro})
 	var detected struct {
-		AppData           string `json:"appData"`
-		TerminalInstalled bool   `json:"terminalInstalled"`
+		AppData           string   `json:"appData"`
+		TerminalInstalled bool     `json:"terminalInstalled"`
+		SettingsPaths     []string `json:"settingsPaths"`
+		WSLProfileGuids   []string `json:"wslProfileGuids"`
 	}
 	if err == nil {
 		err = json.Unmarshal(probe, &detected)
@@ -102,9 +96,14 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 		}
 		return choice, nil
 	}
+	settings, guid, name, err := c.findWindowsProfile(p, distro, detected.SettingsPaths, detected.WSLProfileGuids)
+	if err != nil {
+		c.report("Notes", reportWarning, "Skipping Windows Terminal setup: %s", err)
+		return choice, nil
+	}
 	selected := yes || dry || enable
 	if !selected && c.interactive() {
-		fmt.Fprint(c.Out, "Add a Selfishell Windows Terminal profile and install its font if missing (recommended)? [Y/n] ")
+		fmt.Fprintf(c.Out, "Apply the Selfishell font and Dark+ to the existing Windows Terminal profile %q and install the font if missing (recommended)? [Y/n] ", name)
 		answer, _ := c.readAnswer()
 		selected = !negative(answer)
 	}
@@ -116,12 +115,8 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 	if err != nil {
 		return nil, err
 	}
-	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
-	if err != nil {
-		return nil, err
-	}
-	choice.User = account.Username
-	choice.Distro, choice.Home, choice.AppData, choice.AppDataPath = distro, os.Getenv("HOME"), detected.AppData, path
+	choice.Distro, choice.AppData, choice.AppDataPath = distro, detected.AppData, path
+	choice.SettingsPath, choice.ProfileGUID = settings, guid
 	return choice, nil
 }
 
@@ -133,6 +128,9 @@ func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool
 	p.windowsTerminal = choice
 	if choice == nil || !choice.Enabled {
 		return nil
+	}
+	if err := p.m.installWindowsProfile(choice, true); err != nil {
+		return err
 	}
 	r, err := choice.resource()
 	if err != nil {
@@ -204,44 +202,106 @@ func (p Process) windowsPath(ctx context.Context, direction, path string) (strin
 	return result, nil
 }
 
-// quoteWindowsArgument follows CommandLineToArgvW's backslash/quote rules.
-func quoteWindowsArgument(value string) string {
-	var out strings.Builder
-	out.WriteByte('"')
-	backslashes := 0
-	for _, ch := range value {
-		if ch == '\\' {
-			backslashes++
-			continue
-		}
-		if ch == '"' {
-			out.WriteString(strings.Repeat("\\", backslashes*2+1))
-		} else {
-			out.WriteString(strings.Repeat("\\", backslashes))
-		}
-		backslashes = 0
-		out.WriteRune(ch)
-	}
-	out.WriteString(strings.Repeat("\\", backslashes*2))
-	out.WriteByte('"')
-	return out.String()
+func (w windowsTerminalChoice) resource() (Resource, error) {
+	guid := strings.ToLower(strings.Trim(w.ProfileGUID, "{}"))
+	data, err := json.MarshalIndent(map[string]any{"schemes": []any{windowsTerminalDarkPlus}}, "", "  ")
+	return Resource{Kind: "file", Name: "windows-terminal", Target: w.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Selfishell/" + guid + ".json", Source: string(append(data, '\n'))}, err
 }
 
-func (w windowsTerminalChoice) resource() (Resource, error) {
-	// Stable app-specific UUID v5; reinstalling cannot duplicate the profile.
-	namespace := []byte{0x91, 0x54, 0x83, 0x49, 0x43, 0xaa, 0x4f, 0xe9, 0xb6, 0x63, 0xee, 0x70, 0xa9, 0x8e, 0x32, 0x40}
-	sum := sha1.Sum(append(namespace, []byte(w.Distro+"\x00"+w.Home)...))
+func terminalGUID(value string) string {
+	id := strings.ToLower(strings.Trim(value, "{}"))
+	if len(id) != 36 || id[8] != '-' || id[13] != '-' || id[18] != '-' || id[23] != '-' {
+		return ""
+	}
+	if _, err := hex.DecodeString(strings.ReplaceAll(id, "-", "")); err != nil {
+		return ""
+	}
+	return "{" + id + "}"
+}
+
+func validTerminalGUID(value string) bool { return terminalGUID(value) != "" }
+
+// Windows Terminal's legacy WSL generator uses UUID v5 of the original distro
+// name in UTF-16LE. Display-name changes do not change this identifier.
+func legacyWSLProfileGUID(distro string) string {
+	namespace := []byte{0x2b, 0xde, 0x4a, 0x90, 0xd0, 0x5f, 0x40, 0x1c, 0x94, 0x92, 0xe4, 0x08, 0x84, 0xea, 0xd1, 0xd8}
+	for _, word := range utf16.Encode([]rune(distro)) {
+		namespace = binary.LittleEndian.AppendUint16(namespace, word)
+	}
+	sum := sha1.Sum(namespace)
 	id := sum[:16]
 	id[6], id[8] = (id[6]&0x0f)|0x50, (id[8]&0x3f)|0x80
-	guid := fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
-	profile := map[string]any{
-		"guid": "{" + guid + "}", "name": "Selfishell – " + w.Distro,
-		"commandline": "wsl.exe --distribution " + quoteWindowsArgument(w.Distro) + " --user " + quoteWindowsArgument(w.User) + " --cd " + quoteWindowsArgument(w.Home) + " --exec zsh --login",
-		"font":        map[string]string{"face": terminalFont},
-		"colorScheme": "Selfishell Dark+",
+	return fmt.Sprintf("{%x-%x-%x-%x-%x}", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
+}
+
+func (j *terminalJSON) profile(guid string) (*terminalJSONNode, error) {
+	profiles := j.root.property("profiles")
+	if profiles != nil && profiles.object {
+		profiles = profiles.property("list")
 	}
-	data, err := json.MarshalIndent(map[string]any{"profiles": []any{profile}, "schemes": []any{windowsTerminalDarkPlus}}, "", "  ")
-	return Resource{Kind: "file", Name: "windows-terminal", Target: w.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Selfishell/" + guid + ".json", Source: string(append(data, '\n'))}, err
+	var found *terminalJSONNode
+	if profiles != nil {
+		for _, profile := range profiles.items {
+			if terminalGUID(j.text(profile.property("guid"))) == guid {
+				if found != nil {
+					return nil, fmt.Errorf("duplicate Windows Terminal profile GUID: %s", guid)
+				}
+				found = profile
+			}
+		}
+	}
+	return found, nil
+}
+
+func (c CLI) findWindowsProfile(p Process, distro string, windowsPaths, modernGUIDs []string) (string, string, string, error) {
+	expected := map[string]string{legacyWSLProfileGUID(distro): "Windows.Terminal.Wsl"}
+	for _, guid := range modernGUIDs {
+		if id := terminalGUID(guid); id != "" {
+			expected[id] = "Microsoft.WSL"
+		}
+	}
+	type candidate struct{ path, guid, name string }
+	var matches, current []candidate
+	seen := map[string]bool{}
+	for _, windowsPath := range windowsPaths {
+		path, err := p.windowsPath(c.invocationContext(), "-u", windowsPath)
+		if err != nil {
+			return "", "", "", err
+		}
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		data, err := readStateFile(path)
+		if err != nil {
+			return "", "", "", err
+		}
+		j, err := parseTerminalJSON(data)
+		if err != nil {
+			return "", "", "", err
+		}
+		for guid, source := range expected {
+			profile, err := j.profile(guid)
+			if err != nil {
+				return "", "", "", err
+			}
+			if profile == nil || j.text(profile.property("source")) != source || string(j.value(profile.property("hidden"))) == "true" {
+				continue
+			}
+			match := candidate{path, guid, j.text(profile.property("name"))}
+			matches = append(matches, match)
+			if guid == terminalGUID(os.Getenv("WT_PROFILE_ID")) {
+				current = append(current, match)
+			}
+		}
+	}
+	if len(current) == 1 {
+		matches = current
+	}
+	if len(matches) != 1 {
+		return "", "", "", fmt.Errorf("could not uniquely identify an existing profile for WSL distribution %q; found %d candidates", distro, len(matches))
+	}
+	return matches[0].path, matches[0].guid, matches[0].name, nil
 }
 
 func resourceFileContent(r Resource) ([]byte, error) {
