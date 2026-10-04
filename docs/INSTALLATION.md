@@ -6,12 +6,13 @@ The public bootstrap installs the CLI in the current user's home directory and
 does not require root access.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
-selfishell install
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash -s -- --setup
 ```
 
-`selfishell install` sets up the complete development environment. It asks for
-confirmation; non-interactive runs need `--yes`.
+`--setup` runs `selfishell install` to set up the complete development environment.
+It reads confirmation and terminal choices from your terminal, including when the
+bootstrap script is piped to Bash. Saved choices are reused on later installs.
+Without an interactive terminal, use `--setup --yes`.
 
 Installation shows the current phase and finishes with a grouped change summary.
 See [progress output](UPDATES.md#tools-and-configuration) for details,
@@ -74,7 +75,7 @@ Pass options to the bootstrap after `bash -s --`:
 | `--version VERSION` | Install an exact release; never falls back to the latest one. |
 | `--prefix PATH` | Absolute installation prefix; default `~/.local`. |
 | `--setup` | Run `selfishell install` after installing the CLI. |
-| `--yes` | With `--setup`, pass `--yes` to `selfishell install`. |
+| `--yes` | With `--setup`, accept default or saved choices without asking. |
 | `--skip-packages` | With `--setup`, pass `--skip-packages` to `selfishell install`. |
 
 The bootstrap installs only the CLI unless `--setup` is supplied; without it,
@@ -93,14 +94,29 @@ sessions, add the following line to your shell startup file:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Install CLI and environment together
+### Install only the CLI
 
-Install the CLI and development environment non-interactively:
+To install the CLI now and configure the environment later:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
+```
+
+When ready, run `selfishell install` from an interactive terminal.
+
+### Install without setup questions
+
+For CI or installation with the recommended choices:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
   bash -s -- --setup --yes
 ```
+
+On the first installation, `--yes` accepts Ghostty installation/configuration on
+macOS and Windows Terminal integration on WSL when a target profile is available.
+Previously saved choices, including refusals, are reused. System operations may
+still require a password; `--yes` skips Selfishell questions, not authentication.
 
 When the login shell is not already Zsh, the managed install step offers to
 change it to the Zsh listed in `/etc/shells`; `--yes` accepts the offer.
