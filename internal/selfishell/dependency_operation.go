@@ -44,7 +44,11 @@ func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manif
 	if dep == nil {
 		return o.optionalFailure(requirement, fmt.Sprintf("No approved dependency entry for %s (%s/%s).", name, depPlatform, arch), []string{name})
 	}
-	if err := o.installDependency(ctx, paths, *dep); err != nil {
+	install := o.installDependency
+	if dep.Marker == "font" {
+		install = o.installWindowsFont
+	}
+	if err := install(ctx, paths, *dep); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -76,6 +80,19 @@ func (o *PackageOperation) loadDependencies(manifest string) error {
 func dependencyTarget(dep Dependency, paths Paths) (string, error) {
 	if !filepath.IsLocal(dep.Target) || dep.Target == "." || strings.HasPrefix(dep.Target, "-") {
 		return "", fmt.Errorf("invalid dependency target: %s", dep.Target)
+	}
+	if dep.Marker == "font" {
+		choice, err := readWindowsTerminalChoice(paths)
+		if err != nil {
+			return "", err
+		}
+		if choice == nil || !choice.Enabled {
+			return "", fmt.Errorf("Windows Terminal font setup is not enabled")
+		}
+		if dep.Version == "." || dep.Version == ".." || filepath.Base(dep.Version) != dep.Version || strings.ContainsAny(dep.Version, "\\\r\n\x00") {
+			return "", fmt.Errorf("invalid font version: %s", dep.Version)
+		}
+		return choice.AppDataPath + "/Microsoft/Windows/Fonts/Selfishell/" + dep.Version + "/" + filepath.Base(dep.Target), nil
 	}
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		return strings.TrimSuffix(paths.Data, "/selfishell") + "/" + strings.TrimPrefix(dep.Target, ".local/share/"), nil
@@ -292,11 +309,15 @@ func (o *PackageOperation) stageDownload(ctx context.Context, dep Dependency, st
 	if hex.EncodeToString(h.Sum(nil)) != dep.Checksum {
 		return fmt.Errorf("Checksum mismatch for %s %s.", dep.Name, dep.Version)
 	}
-	if dep.Marker == "raw" {
+	if dep.Marker == "raw" || dep.Marker == "font" {
 		if err := os.Rename(archive, stage); err != nil {
 			return err
 		}
-		return os.Chmod(stage, 0755)
+		mode := os.FileMode(0755)
+		if dep.Marker == "font" {
+			mode = 0644
+		}
+		return os.Chmod(stage, mode)
 	}
 	if !filepath.IsLocal(dep.Marker) {
 		return fmt.Errorf("unsafe archive marker: %s", dep.Marker)
@@ -385,10 +406,10 @@ func (o *PackageOperation) stageGit(ctx context.Context, dep Dependency, stage s
 // directDownloadIntact is shared by install and diagnostics: a recorded raw
 // download must still match its approved SHA-256, not merely be executable.
 func directDownloadIntact(dep Dependency, target string, info os.FileInfo, managed bool) bool {
-	if !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+	if !info.Mode().IsRegular() || (dep.Marker != "font" && info.Mode()&0111 == 0) {
 		return false
 	}
-	if !managed || dep.Marker != "raw" {
+	if !managed || (dep.Marker != "font" && dep.Marker != "raw") {
 		return true
 	}
 	file, err := os.Open(target)

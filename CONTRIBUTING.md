@@ -85,3 +85,30 @@ archive executes in each job.
 Linux/ARM64, macOS/AMD64, WSL 2, and OS releases other than those runner
 images and the container are not executed in CI. Platform selectors in tests
 simulate them; they are not evidence of runtime execution on another OS or CPU.
+
+### Native WSL terminal checks
+
+On WSL 2 with PowerShell interoperability, run these focused checks:
+
+```sh
+SELFISHELL_TEST_WSL_INTEROP=1 go test ./internal/selfishell -run '^TestWindowsInteropReadOnly$' -v
+SELFISHELL_TEST_WINDOWS_TEMP=/mnt/c/Windows/Temp go test ./internal/selfishell -run '^TestWindowsProfileNativeLifecycle$' -v
+SELFISHELL_TEST_WSL_FONTS=1 SELFISHELL_TEST_WINDOWS_TEMP=/mnt/c/Windows/Temp go test ./internal/selfishell -run '^TestWindowsFontLoadedNativeUpgrade$' -v
+```
+
+Use the actual mapped Windows temporary directory if the mount root differs.
+The filesystem check creates and removes its own private directory and tests
+existing-profile font/theme edits and restoration against scratch settings files.
+The font check downloads the approved regular TTF, loads it privately in a
+short-lived Windows process, and verifies a new version can activate while the
+old file is held open with Windows sharing restrictions, then reapplies the old
+pin without downloading or replacing its locked file. Persistent registration
+is stubbed. None of these checks
+changes personal Windows Terminal settings or writes real font registry entries. Font
+registration still needs verification in a disposable Windows user account:
+accept the initial WSL setup, check all four styles in Windows Terminal after
+restarting it and after Windows logout/login, repeat setup, upgrade the font pin
+while Windows has loaded the old font, reapply the previous pin,
+and confirm uninstall restores unchanged font/theme values in the existing
+profile, preserves later user edits, and leaves fonts available. Also verify an
+existing font family is preserved and `--skip-packages` never registers fonts.

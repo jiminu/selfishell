@@ -76,6 +76,14 @@ integration uses only:
   entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
   `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
+- when chosen on WSL, only the current distribution profile's `font.face` and
+  `colorScheme` in Windows Terminal `settings.json`, backed up and journaled
+  separately. Use the built-in `Dark+` color scheme without installing a custom
+  scheme or fragment. Never create a profile or change its name, launch command,
+  or the default profile. Identify
+  existing profiles by distro identity, preserving renamed display names; skip
+  missing or ambiguous targets. Preserve unrelated JSON, comments, and user edits.
+  Uninstall restores only the two values that still match the applied values;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
@@ -127,7 +135,17 @@ Preserve these lifecycle invariants:
 ## Packages and Dependencies
 
 Selfishell provides one development environment, without selectable profiles.
-Ghostty is a separate saved macOS installation choice. The `configured` marker
+Ghostty is a separate saved macOS installation choice; an existing app on PATH
+or in system/user Applications is preserved. Windows Terminal integration is a
+separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
+records with `font` download markers, installed and registered per Windows user.
+Existing font families are preserved; fonts use versioned paths so Windows-loaded
+files are never replaced during pin updates. Retain each outgoing version's
+ownership evidence and reuse a retained file only when its recorded path and
+checksum match the approved pin and file contents. Change only an ownership-checked
+Selfishell font registration. Existing distro profiles use the built-in Dark+;
+their launch commands remain user-owned. Installer-owned fonts follow approved pins
+and remain installed after configuration uninstall. The `configured` marker
 in the state directory records completed setup, not a package selection.
 Behavior below is described for users in `docs/UPDATES.md`.
 
@@ -185,7 +203,9 @@ lifecycle, package, dependency, or release change.
 - Maintained test setup, process control, assertions, and cleanup belong in Go;
   native Zsh/Lua runtime probes and small external-process fixtures may remain.
 - Tests must use a temporary `HOME` and never install against or modify the
-  developer's real home directory.
+  developer's real home directory. Clear inherited `WSL_DISTRO_NAME` in Linux
+  home fixtures; Windows integration fixtures must explicitly provide a fake
+  Windows environment or a private native scratch directory.
 - Integration tests call `t.Parallel()` unless they need `t.Setenv`. They write
   files only through `testutil.WriteFile` or `testutil.AppendFile`: a concurrent
   fork would inherit a plain write descriptor and make exec fail with ETXTBSY.

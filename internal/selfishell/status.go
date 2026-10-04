@@ -42,14 +42,30 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	}
 	selected := make([]Package, 0, len(all))
 	seen := map[string]bool{}
-	platform = packagePlatform(platform)
 	for _, p := range all {
-		if (p.Platform == "all" || p.Platform == platform) && !seen[p.Name] {
+		if p.Platform == "ubuntu-wsl" {
+			paths, e := UserPaths()
+			if e != nil {
+				return nil, e
+			}
+			choice, e := readWindowsTerminalChoice(paths)
+			if e != nil {
+				return nil, e
+			}
+			if choice == nil || !choice.Enabled {
+				continue
+			}
+		}
+		if packageMatches(p, platform) && !seen[p.Name] {
 			selected = append(selected, p)
 			seen[p.Name] = true
 		}
 	}
 	return selected, nil
+}
+
+func packageMatches(p Package, platform string) bool {
+	return p.Platform == "all" || p.Platform == platform || p.Platform == packagePlatform(platform)
 }
 
 // packagePlatform maps a detected platform to its packages.conf platform.
@@ -255,6 +271,16 @@ func (c CLI) status(args []string) int {
 			changedPaths = true
 			c.sayDiagnostic("33", "CHANGED", suffix)
 			result = 1
+		}
+	}
+	if tracked, profileIntact, profileRecordIssue := c.statusWindowsProfile(paths, verbose); tracked {
+		count++
+		if profileIntact {
+			intact++
+		} else {
+			result = 1
+			recordIssues = recordIssues || profileRecordIssue
+			changedPaths = changedPaths || !profileRecordIssue
 		}
 	}
 	if count == 0 {

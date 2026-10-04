@@ -32,6 +32,7 @@ connects them to these locations; paths under `~/.config` follow
 | `~/.config/starship.toml` | Link to `~/.config/selfishell/starship.toml` | Moved to a backup |
 | `~/.config/mise/conf.d/selfishell.toml` | Link to `~/.config/selfishell/mise/selfishell.toml` | Moved to a backup |
 | `~/.config/mise/config.toml` | Created empty if absent | Never changed |
+| Windows Terminal `settings.json` (WSL, if chosen) | Existing distro profile: `font.face` and `colorScheme` only | Original values and full file backed up |
 | Files under `~/.config/selfishell` | Managed copies, checksummed | Moved to a backup |
 
 A backup sits beside its original path as `<path>.backup.<timestamp>`, with a
@@ -59,7 +60,9 @@ Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
 
 CI executes Selfishell on macOS ARM64 and Ubuntu 24.04 AMD64. The Linux ARM64
 and macOS AMD64 archives are built but not executed, and WSL 2 is covered only
-by isolated tests; see [verification coverage](../CONTRIBUTING.md#verification-coverage)
+by isolated tests. Opt-in native checks cover read-only PowerShell/path
+interoperability and profile edits/restoration on a private Windows temporary
+directory; they do not install fonts or write font registry entries. See [verification coverage](../CONTRIBUTING.md#verification-coverage)
 for the exact CI jobs.
 
 ## Bootstrap options
@@ -200,11 +203,68 @@ overrides applied.
 
 See [Environment](ENVIRONMENT.md) for how the Ghostty choice is saved.
 
+## Windows Terminal on WSL
+
+When Windows Terminal is installed and WSL Windows interoperability is enabled,
+the first installation asks whether to apply Selfishell's font and Dark+ to the
+existing profile for the current WSL distribution, and install the font if missing.
+Enter and `--yes` accept. The saved answer is reused on later installations and
+tools updates. To enable it after declining:
+
+```sh
+selfishell install --windows-terminal
+```
+
+Selfishell identifies the distribution from `WSL_DISTRO_NAME`, then matches its
+Windows Terminal profile by GUID. Both legacy `Windows.Terminal.Wsl` profiles
+and modern `Microsoft.WSL` fragment profiles are supported, including renamed
+display names. If several visible candidates exist, the current `WT_PROFILE_ID`
+can identify the target; otherwise setup reports the ambiguity and skips this
+integration. Missing profiles are never created. Stable, Preview, and unpackaged
+settings locations are checked; multiple indistinguishable candidates are skipped.
+
+Only `font.face` and `colorScheme` in the selected profile's `settings.json` are
+changed. The font is JetBrainsMonoNL Nerd Font Mono, and the color scheme is
+Windows Terminal's built-in `Dark+`. No custom scheme or fragment is installed.
+Profile names, launch commands, other profiles, the default profile,
+and other settings and comments are preserved. Existing settings use JSON with
+comments and trailing commas; Selfishell edits the selected values in place.
+Restart Windows Terminal after setup.
+
+If the font family is already available to Windows, Selfishell preserves it.
+Otherwise it installs four pinned, SHA-256-verified Nerd Fonts 3.4.0 TTF files
+(regular, bold, italic, bold italic) under Windows
+`%LOCALAPPDATA%/Microsoft/Windows/Fonts/Selfishell/<version>` and registers them for the
+current Windows user. Font installation is optional; failures warn and leave
+shell setup usable. `--skip-packages` applies the font and theme without downloading or
+registering fonts; install the font yourself or rerun without that flag.
+
+Without Windows Terminal or Windows interoperability, normal WSL installation
+continues without this integration. An explicit `--windows-terminal` instead
+reports the missing prerequisite. A missing or ambiguous profile instead skips
+the integration with an explanation. Automatic font installation and the settings
+apply to Windows Terminal; VS Code's terminal font remains a separate setting.
+
+The first application backs up the complete original settings file and records
+the two original values in a separate atomic JSON journal. Reinstall and tools
+updates retain that original backup; edits to other settings are accepted. A
+changed font or theme requires the normal overwrite-or-skip decision; `--yes`
+and non-interactive updates preserve those changes and report a conflict.
+`status` diagnoses the two managed values. Uninstall always restores each value
+that still matches Selfishell's applied value, preserving later user changes to
+either value and all unrelated settings. It clears the saved choice and journal;
+original backups remain in the state directory's `backups` folder. Fonts remain installed,
+like other packages. Font updates use a new version directory and change only
+an ownership-checked Selfishell registration; older payloads are retained so
+loaded fonts never need to be replaced. Restart Windows Terminal after a font
+update; other Windows sessions may need sign-out to release their old font cache.
+The integration does not provide native Windows shell support.
+
 ## Other terminals
 
-Selfishell configures only Ghostty. The shell and Neovim also work in other
-terminals, such as iTerm2, Terminal.app, or Windows Terminal, once the terminal
-provides what Ghostty's managed configuration sets up:
+Selfishell can configure Ghostty on macOS and Windows Terminal from WSL.
+The shell and Neovim also work in other terminals, such as iTerm2 and
+Terminal.app, once the terminal provides the following:
 
 - Font: Neovim's pickers and Markdown preview use Nerd Font icons. Select
   JetBrainsMonoNL Nerd Font Mono, which Selfishell installs on macOS, as the
@@ -273,9 +333,10 @@ or Neovim plugin checkouts.
 
 ## Platform notes
 
-- On WSL, install JetBrainsMonoNL Nerd Font Mono on Windows and select it in
-  Windows Terminal or VS Code so icons in Neovim's pickers and Markdown preview
-  render correctly. The first setup prints this reminder.
+- On WSL, the optional [Windows Terminal setup](#windows-terminal-on-wsl) selects
+  the font for the existing distribution profile. If declined, the first setup reminds you to
+  install JetBrainsMonoNL Nerd Font Mono on Windows and select it yourself.
+  Set VS Code's terminal font separately.
 - On macOS, restart Ghostty after installation to apply its configuration.
 - Optional packages that are unavailable or fail to install are reported
   without stopping required setup; missing required packages stop installation.
