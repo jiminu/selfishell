@@ -288,29 +288,70 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 }
 
 func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
-	root, home := testRelease(t), t.TempDir()
-	isolateHome(t, home)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
-	paths, _ := UserPaths()
-	if err := os.MkdirAll(paths.State, 0700); err != nil {
-		t.Fatal(err)
-	}
-	for _, choice := range []struct {
-		value string
-		want  bool
-	}{{"0\n", false}, {"1\n", true}} {
-		if err := os.WriteFile(paths.State+"/ghostty", []byte(choice.value), 0600); err != nil {
-			t.Fatal(err)
-		}
-		var out, stderr bytes.Buffer
-		code := (CLI{Root: root, Out: &out, Err: &stderr}).Run([]string{"install", "--dry-run", "--yes"})
-		if code != 0 {
-			t.Fatalf("choice %q: %d %s", choice.value, code, stderr.String())
-		}
-		if got := strings.Contains(out.String(), "Would install optional Homebrew cask: ghostty"); got != choice.want {
-			t.Fatalf("choice %q cask plan %t: %s", choice.value, got, out.String())
-		}
+	for _, tc := range []struct {
+		name, command, platform, choice string
+		explicit, want                  bool
+	}{
+		{"install-declined", "install", "macos", "0\n", false, false},
+		{"install-enabled", "install", "macos", "1\n", false, true},
+		{"install-missing", "install", "macos", "", false, true},
+		{"install-exact-content", "install", "macos", "1", false, false},
+		{"update-declined", "update", "macos", "0\n", false, false},
+		{"update-enabled", "update", "macos", "1\n", false, true},
+		{"update-missing", "update", "macos", "", false, false},
+		{"explicit-declined", "install", "macos", "0\n", true, true},
+		{"explicit-directory", "install", "macos", "directory", true, true},
+		{"explicit-symlink", "install", "macos", "symlink", true, true},
+		{"ubuntu-directory", "install", "ubuntu", "directory", false, false},
+		{"ubuntu-symlink", "install", "ubuntu", "symlink", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, home, paths := blockHome(t, tc.platform)
+			blockWrite(t, paths.State+"/configured", []byte("1\n"))
+			choice := paths.State + "/ghostty"
+			var err error
+			switch tc.choice {
+			case "":
+			case "directory":
+				err = os.Mkdir(choice, 0700)
+			case "symlink":
+				blockWrite(t, home+"/external-choice", []byte("0\n"))
+				err = os.Symlink(home+"/external-choice", choice)
+			default:
+				blockWrite(t, choice, []byte(tc.choice))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, _ := os.Lstat(choice)
+			args := []string{tc.command, "--dry-run"}
+			if tc.command == "update" {
+				args = append(args, "--tools-only")
+			}
+			if tc.explicit {
+				args = append(args, "--ghostty")
+			}
+			code, out, stderr := blockRun(t, root, "", args...)
+			if code != 0 {
+				t.Fatalf("choice %q: %d %s", tc.choice, code, stderr)
+			}
+			if got := strings.Contains(out, "Would install optional Homebrew cask: ghostty"); got != tc.want {
+				t.Fatalf("choice %q cask plan %t: %s", tc.choice, got, out)
+			}
+			if strings.Contains(out, "[Y/n]") {
+				t.Fatalf("unexpected choice prompt: %s", out)
+			}
+			if after, err := os.Lstat(choice); before == nil {
+				if !os.IsNotExist(err) {
+					t.Fatal("preview saved a new choice", err)
+				}
+			} else if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
+				t.Fatal("preview replaced the choice", err)
+			}
+			if tc.choice == "0\n" || tc.choice == "1\n" || tc.choice == "1" {
+				blockEqual(t, choice, []byte(tc.choice))
+			}
+		})
 	}
 }
 
