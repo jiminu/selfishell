@@ -328,6 +328,58 @@ func TestWindowsProfileInterruptedWriteRecovery(t *testing.T) {
 	}
 }
 
+func TestWindowsProfileBeforeBackupRecoveryPreservesUnrelatedEdits(t *testing.T) {
+	root, _, paths, settings := existingWindowsProfileFixture(t)
+	c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
+	choice, err := c.prepareWindowsTerminal(paths, false, true, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := managed{c: c, paths: paths, yes: true, actions: map[string]string{}}
+	m.atomicWrite = func(path string, data []byte, mode os.FileMode) error {
+		if err := writeAtomic(path, data, mode); err != nil {
+			return err
+		}
+		if path == windowsProfileStatePath(paths) {
+			return fmt.Errorf("interrupted before backup")
+		}
+		return nil
+	}
+	if err := m.installWindowsProfile(choice, false); err == nil {
+		t.Fatal("interruption was ignored")
+	}
+	pending, err := readWindowsProfileState(paths)
+	if err != nil || pending == nil || pending.Status != "pending" {
+		t.Fatal("missing recovery journal", pending, err)
+	}
+	changed := strings.Replace(terminalSettingsFixture, `"size": 15`, `"size": 20`, 1)
+	if err := testutil.WriteFile(settings, []byte(changed), 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.atomicWrite = nil
+	m.dry = true
+	if err := m.installWindowsProfile(choice, false); err != nil {
+		t.Fatal("recovery preview failed", err)
+	}
+	if _, err := os.Stat(pending.Backup); !os.IsNotExist(err) {
+		t.Fatal("preview created a backup", err)
+	}
+	blockEqual(t, settings, []byte(changed))
+	m.dry = false
+	if err := m.installWindowsProfile(choice, false); err != nil {
+		t.Fatal("unrelated edit prevented recovery", err)
+	}
+	active, err := readWindowsProfileState(paths)
+	if err != nil || active == nil || active.Status != "active" || active.Backup != pending.Backup {
+		t.Fatal("recovery replaced the original backup path", active, err)
+	}
+	blockEqual(t, active.Backup, []byte(changed))
+	if err := m.removeWindowsProfile(false); err != nil {
+		t.Fatal("recovered configuration could not be removed", err)
+	}
+	blockEqual(t, settings, []byte(changed))
+}
+
 func TestWindowsProfilePendingTargetRemoved(t *testing.T) {
 	for _, target := range []string{"missing-settings", "missing-profile", "malformed", "symlink", "directory"} {
 		t.Run(target, func(t *testing.T) {

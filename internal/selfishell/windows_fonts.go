@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -73,11 +74,12 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	journal := paths.State + "/pending-fonts/" + dep.Name
 	state := paths.State + "/dependencies/" + dep.Name
 	type pendingFont struct {
-		Target                string `json:"target"`
-		Version               string `json:"version"`
-		Checksum              string `json:"checksum"`
-		PreviousPath          string `json:"previousPath,omitempty"`
-		AlternatePreviousPath string `json:"alternatePreviousPath,omitempty"`
+		Target                string   `json:"target"`
+		Version               string   `json:"version"`
+		Checksum              string   `json:"checksum"`
+		PreviousPath          string   `json:"previousPath,omitempty"`
+		AlternatePreviousPath string   `json:"alternatePreviousPath,omitempty"`
+		PreviousPaths         []string `json:"previousPaths,omitempty"`
 	}
 	var pending pendingFont
 	data, err := readStateFile(journal)
@@ -116,6 +118,17 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	oldVersion := strings.TrimSpace(string(data))
 	reuse := false
 	next := pendingFont{Target: target, Version: dep.Version, Checksum: dep.Checksum}
+	if hasPending {
+		// Registration may still point to any earlier interrupted pin. Keep
+		// every ownership-approved candidate until registration succeeds,
+		// including candidates from journals predating the list field.
+		next.PreviousPaths = append([]string(nil), pending.PreviousPaths...)
+		for _, path := range []string{pending.PreviousPath, pending.AlternatePreviousPath} {
+			if path != "" && !slices.Contains(next.PreviousPaths, path) {
+				next.PreviousPaths = append(next.PreviousPaths, path)
+			}
+		}
+	}
 	if hasPending && pending.Version == dep.Version {
 		next.PreviousPath, next.AlternatePreviousPath = pending.PreviousPath, pending.AlternatePreviousPath
 	}
@@ -186,7 +199,28 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if err != nil {
 		return err
 	}
-	_, err = o.Process.windowsScript(ctx, map[string]string{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPath": next.PreviousPath, "alternatePreviousPath": next.AlternatePreviousPath})
+	var registeredPreviousPaths []string
+	if len(next.PreviousPaths) != 0 {
+		// Keep the full history in the journal, but do not put a growing list
+		// on Windows' bounded command line. Only its current registry value
+		// can be needed by the registration ownership guard.
+		data, err := o.Process.windowsScript(ctx, map[string]string{"operation": "font-status"})
+		if err != nil {
+			return err
+		}
+		var status windowsFontStatus
+		if err := json.Unmarshal(data, &status); err != nil {
+			return err
+		}
+		registered := status.Registrations["Selfishell "+dep.Name+" (TrueType)"]
+		for _, candidate := range next.PreviousPaths {
+			if registered != "" && strings.EqualFold(candidate, registered) {
+				registeredPreviousPaths = []string{candidate}
+				break
+			}
+		}
+	}
+	_, err = o.Process.windowsScript(ctx, map[string]any{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPath": next.PreviousPath, "alternatePreviousPath": next.AlternatePreviousPath, "previousPaths": registeredPreviousPaths})
 	if err != nil {
 		return err
 	}

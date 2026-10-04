@@ -214,12 +214,14 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	}
 	ghostty := false
 	if platform == "macos" {
+		data, e := readStateFile(paths.State + "/ghostty")
+		if e != nil && !errors.Is(e, os.ErrNotExist) {
+			return preparedConfig{}, fmt.Errorf("could not read Ghostty choice %s: %w", paths.State+"/ghostty", e)
+		}
 		if enableGhostty {
 			ghostty = true
-		} else if data, e := readStateFile(paths.State + "/ghostty"); e == nil {
+		} else if e == nil {
 			ghostty = string(data) == "1\n"
-		} else if !errors.Is(e, os.ErrNotExist) {
-			return preparedConfig{}, fmt.Errorf("could not read Ghostty choice %s: %w", paths.State+"/ghostty", e)
 		} else if !update {
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {

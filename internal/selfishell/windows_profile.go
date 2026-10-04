@@ -210,10 +210,26 @@ func (m *managed) installWindowsProfile(choice *windowsTerminalChoice, preflight
 		m.say(reportPreview, "Would apply the font and Dark+ to existing Windows Terminal profile: %s", j.text(profile.property("name")))
 		return nil
 	}
-	if s == nil {
-		backup, err := m.backup(m.paths.State + "/backups/windows-terminal-settings")
+	initial := s == nil
+	if s != nil && s.Status == "pending" && bytes.Equal(face, s.OriginalFace) && bytes.Equal(scheme, s.OriginalScheme) && bytes.Equal(s.BeforeFace, s.OriginalFace) && bytes.Equal(s.BeforeScheme, s.OriginalScheme) {
+		// Before the first backup/settings write, unrelated user edits may
+		// become part of the initial snapshot. Never replace an existing backup
+		// or recapture original values after Selfishell changed the appearance.
+		_, present, err := exists(s.Backup)
 		if err != nil {
 			return err
+		}
+		initial = !present
+	}
+	if initial {
+		var backup string
+		if s != nil {
+			backup = s.Backup
+		} else {
+			backup, err = m.backup(m.paths.State + "/backups/windows-terminal-settings")
+			if err != nil {
+				return err
+			}
 		}
 		sum, err := checksumBytes(j.data)
 		if err != nil {
