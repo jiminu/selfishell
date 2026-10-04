@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -146,24 +147,52 @@ func (f *bootstrapFixture) runPiped(t *testing.T, answers []byte, args ...string
 	cmd.Dir = f.home
 	cmd.Env = withEnv(baseEnv(f.home, t.TempDir()), f.env...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	var master, slave *os.File
 	if answers != nil {
-		master, slave, err := pty.Open()
+		var err error
+		master, slave, err = pty.Open()
 		mustFS(t, err)
-		defer master.Close()
-		defer slave.Close()
+		// Drain echoed input just like a real terminal. On macOS an exiting
+		// session leader can otherwise block while draining terminal output.
+		readDone := make(chan struct{})
+		go func() { _, _ = io.Copy(io.Discard, master); close(readDone) }()
+		defer func() {
+			_ = slave.Close()
+			_ = master.Close()
+			select {
+			case <-readDone:
+			case <-time.After(time.Second):
+				t.Error("bootstrap PTY reader did not exit after close")
+			}
+		}()
 		cmd.Stdin = slave
 		cmd.SysProcAttr.Setctty = true
 		cmd.SysProcAttr.Ctty = 0
-		_, err = master.Write(answers)
-		mustFS(t, err)
 	}
 	cmd.WaitDelay = 500 * time.Millisecond
 	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if master != nil {
+			// Killing the process alone may leave terminal shutdown blocked.
+			_ = master.Close()
+		}
+		return err
 	}
 	var out, errout bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errout
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if slave != nil {
+			_ = slave.Close()
+			_, writeErr := master.Write(answers)
+			if writeErr != nil {
+				_ = cmd.Cancel()
+				_ = cmd.Wait()
+				t.Fatal(writeErr)
+			}
+		}
+		err = cmd.Wait()
+	}
 	if cmd.Process != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
