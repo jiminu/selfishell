@@ -265,8 +265,8 @@ func TestWindowsProfileStatusDetectsChangedAppearance(t *testing.T) {
 }
 
 func TestWindowsProfileInterruptedWriteRecovery(t *testing.T) {
-	for _, afterWrite := range []bool{false, true} {
-		t.Run(fmt.Sprint(afterWrite), func(t *testing.T) {
+	for _, stage := range []string{"before-backup", "before-settings", "after-settings"} {
+		t.Run(stage, func(t *testing.T) {
 			root, _, paths, settings := existingWindowsProfileFixture(t)
 			c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
 			choice, err := c.prepareWindowsTerminal(paths, false, true, false, true)
@@ -276,9 +276,15 @@ func TestWindowsProfileInterruptedWriteRecovery(t *testing.T) {
 			m := managed{c: c, paths: paths, yes: true, actions: map[string]string{}}
 			m.atomicWrite = func(path string, data []byte, mode os.FileMode) error {
 				if path != settings {
-					return writeAtomic(path, data, mode)
+					if err := writeAtomic(path, data, mode); err != nil {
+						return err
+					}
+					if stage == "before-backup" && path == windowsProfileStatePath(paths) {
+						return fmt.Errorf("interrupted after pending journal")
+					}
+					return nil
 				}
-				if afterWrite {
+				if stage == "after-settings" {
 					if err := writeAtomic(path, data, mode); err != nil {
 						return err
 					}
@@ -292,18 +298,108 @@ func TestWindowsProfileInterruptedWriteRecovery(t *testing.T) {
 			if err != nil || s == nil || s.Status != "pending" {
 				t.Fatal("missing pending journal", s, err)
 			}
-			if string(blockRead(t, s.Backup)) != terminalSettingsFixture {
+			if stage == "before-backup" {
+				if _, err := os.Stat(s.Backup); !os.IsNotExist(err) {
+					t.Fatal("backup created before interruption", err)
+				}
+				if string(blockRead(t, settings)) != terminalSettingsFixture {
+					t.Fatal("settings changed before backup")
+				}
+			} else if string(blockRead(t, s.Backup)) != terminalSettingsFixture {
 				t.Fatal("missing original backup")
+			}
+			if err := m.removeWindowsProfile(true); err == nil {
+				t.Fatal("uninstall accepted pending changes to an existing profile")
 			}
 			m.atomicWrite = nil
 			if err := m.installWindowsProfile(choice, false); err != nil {
 				t.Fatal("interruption could not recover", err)
+			}
+			if string(blockRead(t, s.Backup)) != terminalSettingsFixture {
+				t.Fatal("recovery lost original backup")
 			}
 			if err := m.removeWindowsProfile(false); err != nil {
 				t.Fatal(err)
 			}
 			if string(blockRead(t, settings)) != terminalSettingsFixture {
 				t.Fatal("recovery lost original values")
+			}
+		})
+	}
+}
+
+func TestWindowsProfilePendingTargetRemoved(t *testing.T) {
+	for _, target := range []string{"missing-settings", "missing-profile", "malformed", "symlink", "directory"} {
+		t.Run(target, func(t *testing.T) {
+			root, _, paths, settings := existingWindowsProfileFixture(t)
+			c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
+			choice, err := c.prepareWindowsTerminal(paths, false, true, false, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := managed{c: c, paths: paths, yes: true, actions: map[string]string{}}
+			m.atomicWrite = func(path string, data []byte, mode os.FileMode) error {
+				if path == settings {
+					return fmt.Errorf("interrupted settings write")
+				}
+				return writeAtomic(path, data, mode)
+			}
+			if err := m.installWindowsProfile(choice, false); err == nil {
+				t.Fatal("ignored interruption")
+			}
+			s, err := readWindowsProfileState(paths)
+			if err != nil || s == nil || s.Status != "pending" {
+				t.Fatal("missing pending journal", s, err)
+			}
+			journal := blockRead(t, windowsProfileStatePath(paths))
+			if err := os.Remove(settings); err != nil {
+				t.Fatal(err)
+			}
+			remaining := `{"profiles":{"list":[{"guid":"{00000000-0000-0000-0000-000000000001}","name":"PowerShell","font":{"face":"Consolas"}}]}}`
+			switch target {
+			case "missing-profile":
+				err = testutil.WriteFile(settings, []byte(remaining), 0600)
+			case "malformed":
+				err = testutil.WriteFile(settings, []byte(`{"profiles":/*`), 0600)
+			case "symlink":
+				err = os.Symlink(settings+".absent", settings)
+			case "directory":
+				err = os.Mkdir(settings, 0700)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.atomicWrite = nil
+			if target == "malformed" || target == "symlink" || target == "directory" {
+				if err := m.installWindowsProfile(choice, false); err == nil {
+					t.Fatal("retry accepted unsafe settings")
+				}
+				code, _, _ := blockRun(t, root, "", "uninstall", "--yes")
+				if code == 0 || !bytes.Equal(blockRead(t, windowsProfileStatePath(paths)), journal) {
+					t.Fatal("uninstall discarded state for unsafe settings")
+				}
+				return
+			}
+			// Follow the recovery advice through the public CLI, then check that
+			// a dry run leaves the journal for the real uninstall to remove.
+			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, root, "uninstall", "--dry-run", "--yes")
+			if !bytes.Equal(blockRead(t, windowsProfileStatePath(paths)), journal) {
+				t.Fatal("preview changed pending journal")
+			}
+			blockOK(t, root, "uninstall", "--yes")
+			if _, err := os.Stat(windowsProfileStatePath(paths)); !os.IsNotExist(err) {
+				t.Fatal("uninstall left pending journal", err)
+			}
+			if string(blockRead(t, s.Backup)) != terminalSettingsFixture {
+				t.Fatal("uninstall changed original backup")
+			}
+			if target == "missing-settings" {
+				if _, err := os.Stat(settings); !os.IsNotExist(err) {
+					t.Fatal("recreated removed settings", err)
+				}
+			} else if string(blockRead(t, settings)) != remaining {
+				t.Fatal("changed remaining profile")
 			}
 		})
 	}
@@ -509,5 +605,48 @@ func TestWindowsProfileDiscoveryReadOnly(t *testing.T) {
 	}
 	if !validTerminalGUID(guid) {
 		t.Fatal("invalid native profile identity")
+	}
+}
+
+func TestWindowsProfileSettingsChangedAfterJournal(t *testing.T) {
+	root, _, paths, settings := existingWindowsProfileFixture(t)
+	c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
+	choice, err := c.prepareWindowsTerminal(paths, false, true, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := managed{c: c, paths: paths, yes: true, actions: map[string]string{}}
+	changed := strings.Replace(terminalSettingsFixture, `"size": 15`, `"size": 20`, 1)
+	m.atomicWrite = func(path string, data []byte, mode os.FileMode) error {
+		if err := writeAtomic(path, data, mode); err != nil {
+			return err
+		}
+		if path == windowsProfileStatePath(paths) {
+			if err := testutil.WriteFile(settings, []byte(changed), 0600); err != nil {
+				return err
+			}
+			m.atomicWrite = nil // Exercise the actual writeRaw publish callback below.
+		}
+		return nil
+	}
+	err = m.installWindowsProfile(choice, false)
+	if err == nil || !strings.Contains(err.Error(), "changed during setup") {
+		t.Fatal("expected concurrent modification guard", err)
+	}
+	if string(blockRead(t, settings)) != changed {
+		t.Fatal("overwrote concurrent user edit")
+	}
+	state, err := readWindowsProfileState(paths)
+	if err != nil || state == nil || state.Status != "pending" {
+		t.Fatal("missing recoverable journal", err)
+	}
+	if err := m.installWindowsProfile(choice, false); err != nil {
+		t.Fatal("retry", err)
+	}
+	if err := m.removeWindowsProfile(false); err != nil {
+		t.Fatal("uninstall", err)
+	}
+	if string(blockRead(t, settings)) != changed {
+		t.Fatal("retry lost concurrent user edit")
 	}
 }
