@@ -134,7 +134,10 @@ Ghostty is a separate saved macOS installation choice; an existing app on PATH
 or in system/user Applications is preserved. Windows Terminal integration is a
 separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
 records with `font` download markers, installed and registered per Windows user.
-Existing font families are preserved; installer-owned fonts follow approved pins
+Existing font families are preserved; fonts use versioned paths so Windows-loaded
+files are never replaced during pin updates. Change only an ownership-checked
+Selfishell font registration. Profiles launch the installing Linux user and use
+Dark+, matching Ghostty. Installer-owned fonts follow approved pins
 and remain installed after configuration uninstall. The `configured` marker
 in the state directory records completed setup, not a package selection.
 Behavior below is described for users in `docs/UPDATES.md`.

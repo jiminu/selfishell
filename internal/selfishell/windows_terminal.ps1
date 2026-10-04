@@ -41,19 +41,32 @@ if ($request.operation -eq 'font-register') {
     try {
         $name = 'Selfishell ' + $request.name + ' (TrueType)'
         $existing = $key.GetValue($name)
-        if ($null -ne $existing -and $existing -ne $font.FullName) { throw 'Existing Windows font registration is user data' }
+        if ($null -ne $existing -and $existing -ne $font.FullName -and ([string]::IsNullOrEmpty($request.previousPath) -or $existing -ne $request.previousPath) -and ([string]::IsNullOrEmpty($request.alternatePreviousPath) -or $existing -ne $request.alternatePreviousPath)) { throw 'Existing Windows font registration is user data' }
         Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class SelfishellFont {
     [DllImport("gdi32.dll", CharSet=CharSet.Unicode)]
     public static extern int AddFontResourceEx(string path, uint flags, IntPtr reserved);
+    [DllImport("gdi32.dll", CharSet=CharSet.Unicode)]
+    public static extern bool RemoveFontResourceEx(string path, uint flags, IntPtr reserved);
     [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
     public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr wparam, IntPtr lparam, uint flags, uint timeout, out UIntPtr result);
 }
 '@
+        # Repeated setup does not increase the global font resource reference count.
+        if ($existing -eq $font.FullName) {
+            Add-Type -AssemblyName System.Drawing
+            $fonts = [Drawing.Text.InstalledFontCollection]::new()
+            try {
+                if (($fonts.Families.Name -contains 'JetBrainsMonoNL Nerd Font Mono') -or ($fonts.Families.Name -contains 'JetBrainsMonoNL NFM')) { '{}'; exit 0 }
+            } finally { $fonts.Dispose() }
+        }
         if ([SelfishellFont]::AddFontResourceEx($font.FullName, 0, [IntPtr]::Zero) -eq 0) { throw 'Could not load Windows font' }
         $key.SetValue($name, $font.FullName, [Microsoft.Win32.RegistryValueKind]::String)
+        if ($null -ne $existing -and $existing -ne $font.FullName) {
+            [void][SelfishellFont]::RemoveFontResourceEx($existing, 0, [IntPtr]::Zero)
+        }
         $result = [UIntPtr]::Zero
         [void][SelfishellFont]::SendMessageTimeout([IntPtr]0xffff, 0x001d, [UIntPtr]::Zero, [IntPtr]::Zero, 2, 1000, [ref]$result)
         '{}'

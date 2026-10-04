@@ -1,16 +1,22 @@
 package selfishell
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf16"
 
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -162,7 +168,7 @@ func TestWindowsFontPinnedInstallRecoveryAndExternalPreservation(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/Regular.ttf"
+	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
 	op := &PackageOperation{Process: Process{Out: new(strings.Builder), Err: new(strings.Builder)}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
@@ -284,7 +290,7 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Checksum mismatch") {
 		t.Fatal("bad checksum accepted", err)
 	}
-	if _, err := os.Stat(windowsHome + "/Microsoft/Windows/Fonts/Selfishell/Regular.ttf"); !os.IsNotExist(err) {
+	if _, err := os.Stat(windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"); !os.IsNotExist(err) {
 		t.Fatal("bad font activated", err)
 	}
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
@@ -389,7 +395,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("SELFISHELL_DEPENDENCIES_FILE", manifest)
-	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/Regular.ttf"
+	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
 	if err := os.MkdirAll(rawParent(target), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +416,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err != nil || result.Installed != "missing" {
 		t.Fatal("unregistered file reported installed", result, err)
 	}
-	response, _ := json.Marshal(map[string]any{"fontInstalled": true, "registrations": map[string]string{"Selfishell jetbrainsmono-regular (TrueType)": `C:\Users\Fixture\AppData\Local\Microsoft\Windows\Fonts\Selfishell\Regular.ttf`}})
+	response, _ := json.Marshal(map[string]any{"fontInstalled": true, "registrations": map[string]string{"Selfishell jetbrainsmono-regular (TrueType)": `C:\Users\Fixture\AppData\Local\Microsoft\Windows\Fonts\Selfishell\3.4.0\Regular.ttf`}})
 	script := "#!/bin/sh\nprintf '%s\\n' '" + string(response) + "'\n"
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
 		t.Fatal(err)
@@ -422,5 +428,287 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	result, err = inventory.Detect("direct", "jetbrainsmono-regular", "linux", "amd64")
 	if err != nil || result.Installed != "3.4.0" {
 		t.Fatal("registered font missing", result, err)
+	}
+	// CLI-only pin changes must still report the recorded installed version.
+	nextRecord := fmt.Sprintf("download jetbrainsmono-regular 3.4.1 linux all file://unused %064d .local/share/selfishell/fonts/Regular.ttf font\n", 0)
+	if err := testutil.WriteFile(manifest, []byte(nextRecord), 0600); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = NewToolInventory(root, paths, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = inventory.Detect("direct", "jetbrainsmono-regular", "linux", "amd64")
+	if err != nil || result.Installed != "3.4.0" || result.Approved != "3.4.1" {
+		t.Fatal("CLI-only update forgot recorded font", result, err)
+	}
+
+}
+
+func TestWindowsTerminalAccountAndDarkPlus(t *testing.T) {
+	t.Parallel()
+	w := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", Home: "/home/other", AppData: "C:/fixture", AppDataPath: "/windows"}
+	data, _ := json.Marshal(w)
+	var fields map[string]any
+	_ = json.Unmarshal(data, &fields)
+	fields["user"] = "other-user"
+	data, _ = json.Marshal(fields)
+	_ = json.Unmarshal(data, &w)
+	r, err := w.resource()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fragment struct {
+		Profiles []struct{ Commandline, ColorScheme string }
+		Schemes  []map[string]string
+	}
+	if err := json.Unmarshal([]byte(r.Source), &fragment); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fragment.Profiles[0].Commandline, `--user "other-user"`) {
+		t.Fatal("profile launches default Linux user", fragment.Profiles[0].Commandline)
+	}
+	if fragment.Profiles[0].ColorScheme != "Selfishell Dark+" || len(fragment.Schemes) != 1 || fragment.Schemes[0]["background"] != "#1e1e1e" || fragment.Schemes[0]["name"] != "Selfishell Dark+" {
+		t.Fatal("missing Dark+ scheme", r.Source)
+	}
+}
+
+func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
+	root, home, paths, windowsHome := windowsTerminalFixture(t)
+	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	source, manifest := home+"/font-source", home+"/manifest"
+	payload := []byte("old-font")
+	if err := testutil.WriteFile(source, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest := func(version string, payload []byte) {
+		t.Helper()
+		record := fmt.Sprintf("download jetbrainsmono-regular %s linux all file://%s %x .local/share/selfishell/fonts/Regular.ttf font\n", version, source, sha256.Sum256(payload))
+		if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeManifest("3.4.0", payload)
+	op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
+		t.Fatal(err)
+	}
+	deps, _ := ReadDependencies(manifest)
+	oldTarget, err := dependencyTarget(deps[0], paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Capture the registration request, including its ownership-approved prior path.
+	script := `#!/usr/bin/python3
+import sys,base64,json,re,os
+script=base64.b64decode(sys.argv[-1]).decode('utf-16le')
+data=re.search("FromBase64String\('([^']+)'",script).group(1)
+request=json.loads(base64.b64decode(data))
+if request['operation']=='font-register':
+ with open(os.environ['HOME']+'/registration-request','w') as f: json.dump(request,f)
+print('{}')
+`
+	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(home+"/tools/wslpath", []byte("#!/bin/sh\nprintf '%s\n' \"$2\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	payload = []byte("new-font")
+	if err := testutil.WriteFile(source, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest("3.4.1", payload)
+	op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
+		t.Fatal(err)
+	}
+	deps, _ = ReadDependencies(manifest)
+	newTarget, err := dependencyTarget(deps[0], paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldTarget == newTarget {
+		t.Fatal("upgrade replaced a potentially loaded font", oldTarget)
+	}
+	if string(blockRead(t, oldTarget)) != "old-font" || string(blockRead(t, newTarget)) != "new-font" {
+		t.Fatal("versioned font payloads not retained")
+	}
+	var request map[string]string
+	if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request["previousPath"] != oldTarget || request["path"] != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
+		t.Fatal("registration cannot verify prior ownership", request)
+	}
+}
+
+func TestWindowsTerminalChoiceWithoutUserMigrates(t *testing.T) {
+	root, home, paths, _ := windowsTerminalFixture(t)
+	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	data := blockRead(t, paths.State+"/windows-terminal.json")
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	originalUser := fields["user"]
+	delete(fields, "user")
+	data, _ = json.Marshal(fields)
+	if err := testutil.WriteFile(paths.State+"/windows-terminal.json", data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
+		t.Fatal(err)
+	}
+	blockOK(t, root, "install", "--skip-packages", "--yes")
+	choice, err := readWindowsTerminalChoice(paths)
+	if err != nil || choice.User != originalUser {
+		t.Fatal("old choice failed to migrate", choice, err)
+	}
+}
+
+// Load a font privately in a short-lived Windows process, then sync a new pin.
+// No font is exposed to other applications and no real registry entry is written.
+func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
+	base := os.Getenv("SELFISHELL_TEST_WINDOWS_TEMP")
+	if base == "" || os.Getenv("SELFISHELL_TEST_WSL_FONTS") != "1" {
+		t.Skip("requires opt-in native Windows private-font probe")
+	}
+	t.Parallel()
+	home := t.TempDir()
+	scratch, err := os.MkdirTemp(base, "selfishell-font-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(scratch) })
+	paths := Paths{State: home + "/state", Data: home + "/data/selfishell"}
+	if err := os.MkdirAll(paths.State+"/dependencies", 0700); err != nil {
+		t.Fatal(err)
+	}
+	choice := windowsTerminalChoice{Version: 1, Enabled: true, User: "fixture", Distro: "Ubuntu", Home: home, AppData: "C:/fixture", AppDataPath: scratch}
+	data, _ := json.Marshal(choice)
+	if err := testutil.WriteFile(paths.State+"/windows-terminal.json", data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	deps, err := ReadDependencies("../../dependencies.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dep Dependency
+	for _, d := range deps {
+		if d.Name == "jetbrainsmono-regular" {
+			dep = d
+			break
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, "GET", dep.Source, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || fmt.Sprintf("%x", sha256.Sum256(payload)) != dep.Checksum {
+		t.Fatal("font download verification", err, response.StatusCode)
+	}
+	oldTarget, err := dependencyTarget(dep, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(rawParent(oldTarget), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(oldTarget, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(paths.State+"/dependencies/"+dep.Name, []byte(dep.Version+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	windowsPath, err := (Process{}).windowsPath(ctx, "-w", oldTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedPath := base64.StdEncoding.EncodeToString([]byte(windowsPath))
+	script := `$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$path=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('` + encodedPath + `'))
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class NativePrivateFont {
+[DllImport("gdi32.dll",CharSet=CharSet.Unicode)] public static extern int AddFontResourceEx(string path,uint flags,IntPtr reserved);
+[DllImport("gdi32.dll",CharSet=CharSet.Unicode)] public static extern bool RemoveFontResourceEx(string path,uint flags,IntPtr reserved);
+}
+'@
+if ([NativePrivateFont]::AddFontResourceEx($path,16,[IntPtr]::Zero) -eq 0) { throw 'Private font load failed' }
+# Private GDI resources do not always hold an exclusive file lock. Also keep
+# a reader open to exercise the sharing restriction of active Windows clients.
+$handle=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+try { [Console]::WriteLine('loaded'); [void][Console]::ReadLine() }
+finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($path,16,[IntPtr]::Zero) }
+`
+	words := utf16.Encode([]rune(script))
+	raw := make([]byte, len(words)*2)
+	for i, word := range words {
+		binary.LittleEndian.PutUint16(raw[i*2:], word)
+	}
+	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", base64.StdEncoding.EncodeToString(raw))
+	cmd.Env = withEnvironment(Process{}, map[string]string{"HOME": home}).Env
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stdin.Close(); cmd.Wait() })
+	if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || strings.TrimSpace(line) != "loaded" {
+		t.Fatal("private font load", line, err)
+	}
+	if err := os.Rename(oldTarget, oldTarget+".moved"); err == nil {
+		t.Fatal("Windows did not protect the loaded font")
+	}
+	source := home + "/font-source"
+	if err := testutil.WriteFile(source, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	dep.Version = "native-upgrade"
+	dep.Source = "file://" + source
+	manifest := home + "/manifest"
+	record := strings.Join([]string{dep.Kind, dep.Name, dep.Version, dep.Platform, dep.Arch, dep.Source, dep.Checksum, dep.Target, dep.Marker}, " ") + "\n"
+	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
+		t.Fatal(err)
+	}
+	tools := home + "/tools"
+	if err := os.Mkdir(tools, 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Stub only persistent registration; path conversion and font file activation are native.
+	if err := testutil.WriteFile(tools+"/powershell.exe", []byte("#!/bin/sh\nprintf '{}\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard, Env: withEnvironment(Process{}, map[string]string{"HOME": home, "PATH": tools + ":" + os.Getenv("PATH")}).Env}}
+	if err := op.InstallDirect(ctx, paths, manifest, "required", dep.Name, "ubuntu-wsl", "amd64", false); err != nil {
+		t.Fatal(err)
+	}
+	newTarget, err := dependencyTarget(dep, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newTarget == oldTarget || string(blockRead(t, oldTarget)) != string(payload) || string(blockRead(t, newTarget)) != string(payload) {
+		t.Fatal("loaded-font upgrade changed old payload")
 	}
 }

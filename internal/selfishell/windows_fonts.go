@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 type windowsFontStatus struct {
@@ -17,6 +19,9 @@ type windowsFontStatus struct {
 // Windows fonts are optional direct packages. Like other packages, installed
 // fonts remain available to other applications after configuration uninstall.
 func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, dep Dependency) error {
+	if dep.Name == "." || filepath.Base(dep.Name) != dep.Name {
+		return fmt.Errorf("invalid font dependency name: %s", dep.Name)
+	}
 	if !o.windowsFontsChecked {
 		owned := false
 		for _, d := range o.dependencies {
@@ -59,20 +64,35 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+
 	journal := paths.State + "/pending-fonts/" + dep.Name
-	type pendingFont struct{ Target, Version, Checksum string }
+	state := paths.State + "/dependencies/" + dep.Name
+	type pendingFont struct {
+		Target                string `json:"target"`
+		Version               string `json:"version"`
+		Checksum              string `json:"checksum"`
+		PreviousPath          string `json:"previousPath,omitempty"`
+		AlternatePreviousPath string `json:"alternatePreviousPath,omitempty"`
+	}
+	var pending pendingFont
 	data, err := readStateFile(journal)
-	if err == nil {
-		var pending pendingFont
-		if json.Unmarshal(data, &pending) != nil || pending.Target != target || pending.Version == "" || len(pending.Checksum) != 64 {
+	hasPending := err == nil
+	if hasPending {
+		if json.Unmarshal(data, &pending) != nil || pending.Version == "" || len(pending.Checksum) != 64 {
 			return fmt.Errorf("invalid pending Windows font state: %s", journal)
 		}
-		if _, err := readStateFile(paths.State + "/dependencies/" + dep.Name); errors.Is(err, os.ErrNotExist) {
-			if contents, err := os.ReadFile(target); err == nil {
-				if fmt.Sprintf("%x", sha256.Sum256(contents)) != pending.Checksum {
-					return fmt.Errorf("interrupted Windows font was modified: %s", target)
+		previous := dep
+		previous.Version = pending.Version
+		expected, err := dependencyTarget(previous, paths)
+		if err != nil || expected != pending.Target {
+			return fmt.Errorf("invalid pending Windows font target: %s", journal)
+		}
+		if _, err := readStateFile(state); errors.Is(err, os.ErrNotExist) {
+			if contents, err := os.ReadFile(pending.Target); err == nil {
+				if info, err := os.Lstat(pending.Target); err != nil || !info.Mode().IsRegular() || fmt.Sprintf("%x", sha256.Sum256(contents)) != pending.Checksum {
+					return fmt.Errorf("interrupted Windows font was modified: %s", pending.Target)
 				}
-				if err := writeAtomic(paths.State+"/dependencies/"+dep.Name, []byte(pending.Version+"\n"), 0600); err != nil {
+				if err := writeAtomic(state, []byte(pending.Version+"\n"), 0600); err != nil {
 					return err
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -84,7 +104,37 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	data, err = json.Marshal(pendingFont{target, dep.Version, dep.Checksum})
+	data, err = readStateFile(state)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	oldVersion := strings.TrimSpace(string(data))
+	next := pendingFont{Target: target, Version: dep.Version, Checksum: dep.Checksum}
+	if hasPending && pending.Version == dep.Version {
+		next.PreviousPath, next.AlternatePreviousPath = pending.PreviousPath, pending.AlternatePreviousPath
+	}
+	if oldVersion != "" && oldVersion != dep.Version {
+		previous := dep
+		previous.Version = oldVersion
+		oldTarget, err := dependencyTarget(previous, paths)
+		if err != nil {
+			return err
+		}
+		next.PreviousPath, err = o.Process.windowsPath(ctx, "-w", oldTarget)
+		if err != nil {
+			return err
+		}
+		if hasPending {
+			next.AlternatePreviousPath = pending.PreviousPath
+		}
+		// A version marker owns only that version's path. A new occupied path is user data.
+		if exists, err := present(target); err != nil {
+			return err
+		} else if exists && (!hasPending || pending.Target != target) {
+			return fmt.Errorf("unrecorded Windows font path is occupied; preserving: %s", target)
+		}
+	}
+	data, err = json.Marshal(next)
 	if err != nil {
 		return err
 	}
@@ -98,7 +148,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if err != nil {
 		return err
 	}
-	_, err = o.Process.windowsScript(ctx, map[string]string{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name})
+	_, err = o.Process.windowsScript(ctx, map[string]string{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPath": next.PreviousPath, "alternatePreviousPath": next.AlternatePreviousPath})
 	if err != nil {
 		return err
 	}

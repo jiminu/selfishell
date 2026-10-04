@@ -298,10 +298,19 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 		result.Source = "selfishell"
 		// After a CLI-only update or rollback the pin describes another version,
 		// which the tools phase replaces; it cannot judge the recorded one.
+		if dep.Marker == "font" {
+			previous := *dep
+			previous.Version = recorded
+			var err error
+			target, err = dependencyTarget(previous, i.paths)
+			if err != nil {
+				return result, err
+			}
+		}
 		valid := i.validDirect(*dep, target, true, recorded == dep.Version)
 		if valid && dep.Marker == "font" {
 			choice, e := readWindowsTerminalChoice(i.paths)
-			valid = e == nil && choice != nil && strings.EqualFold(i.windowsFontInventory().Registrations["Selfishell "+dep.Name+" (TrueType)"], choice.AppData+`\Microsoft\Windows\Fonts\Selfishell\`+filepath.Base(dep.Target))
+			valid = e == nil && choice != nil && strings.EqualFold(i.windowsFontInventory().Registrations["Selfishell "+dep.Name+" (TrueType)"], choice.AppData+`\Microsoft\Windows\Fonts\Selfishell\`+recorded+`\`+filepath.Base(dep.Target))
 		}
 		if valid {
 			result.Installed = recorded

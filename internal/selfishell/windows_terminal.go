@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +26,7 @@ var windowsTerminalScript string
 // A separate versioned choice, not the fixed-line resource-state format.
 type windowsTerminalChoice struct {
 	Version     int    `json:"version"`
+	User        string `json:"user,omitempty"`
 	Enabled     bool   `json:"enabled"`
 	Distro      string `json:"distro,omitempty"`
 	Home        string `json:"home,omitempty"`
@@ -47,7 +50,14 @@ func readWindowsTerminalChoice(paths Paths) (*windowsTerminalChoice, error) {
 		return nil, fmt.Errorf("unsupported Windows Terminal choice version: %d", choice.Version)
 	}
 	if choice.Enabled {
-		for _, value := range []string{choice.Distro, choice.Home, choice.AppData, choice.AppDataPath} {
+		if choice.User == "" {
+			account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+			if err != nil {
+				return nil, err
+			}
+			choice.User = account.Username
+		}
+		for _, value := range []string{choice.User, choice.Distro, choice.Home, choice.AppData, choice.AppDataPath} {
 			if value == "" || strings.ContainsAny(value, "\x00\r\n") {
 				return nil, fmt.Errorf("invalid Windows Terminal choice")
 			}
@@ -100,6 +110,11 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 	if err != nil {
 		return nil, err
 	}
+	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	if err != nil {
+		return nil, err
+	}
+	choice.User = account.Username
 	choice.Distro, choice.Home, choice.AppData, choice.AppDataPath = distro, os.Getenv("HOME"), detected.AppData, path
 	return choice, nil
 }
@@ -215,10 +230,11 @@ func (w windowsTerminalChoice) resource() (Resource, error) {
 	guid := fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
 	profile := map[string]any{
 		"guid": "{" + guid + "}", "name": "Selfishell – " + w.Distro,
-		"commandline": "wsl.exe --distribution " + quoteWindowsArgument(w.Distro) + " --cd " + quoteWindowsArgument(w.Home) + " --exec zsh --login",
+		"commandline": "wsl.exe --distribution " + quoteWindowsArgument(w.Distro) + " --user " + quoteWindowsArgument(w.User) + " --cd " + quoteWindowsArgument(w.Home) + " --exec zsh --login",
 		"font":        map[string]string{"face": terminalFont},
+		"colorScheme": "Selfishell Dark+",
 	}
-	data, err := json.MarshalIndent(map[string]any{"profiles": []any{profile}}, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"profiles": []any{profile}, "schemes": []any{windowsTerminalDarkPlus}}, "", "  ")
 	return Resource{Kind: "file", Name: "windows-terminal", Target: w.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Selfishell/" + guid + ".json", Source: string(append(data, '\n'))}, err
 }
 
@@ -248,4 +264,15 @@ func (m *managed) moveBackup(r Resource, source, destination string) error {
 	}
 	_, err = p.windowsScript(ctx, map[string]string{"operation": "file-move", "source": from, "destination": to})
 	return err
+}
+
+// Dark+ from the same upstream palette Ghostty ships:
+// https://github.com/mbadolato/iTerm2-Color-Schemes/blob/master/ghostty/Dark%2B
+var windowsTerminalDarkPlus = map[string]string{
+	"name": "Selfishell Dark+", "background": "#1e1e1e", "foreground": "#cccccc",
+	"cursorColor": "#ffffff", "selectionBackground": "#3a3d41",
+	"black": "#000000", "red": "#cd3131", "green": "#0dbc79", "yellow": "#e5e510",
+	"blue": "#2472c8", "purple": "#bc3fbc", "cyan": "#11a8cd", "white": "#e5e5e5",
+	"brightBlack": "#666666", "brightRed": "#f14c4c", "brightGreen": "#23d18b", "brightYellow": "#f5f543",
+	"brightBlue": "#3b8eea", "brightPurple": "#d670d6", "brightCyan": "#29b8db", "brightWhite": "#e5e5e5",
 }

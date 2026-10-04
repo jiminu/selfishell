@@ -216,8 +216,10 @@ selfishell install --windows-terminal
 
 Selfishell adds `Selfishell – <WSL distribution>` as a separate JSON fragment
 under Windows `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell`.
-The profile starts login Zsh in your Linux home and selects JetBrainsMonoNL
-Nerd Font Mono. Its ID is stable for that distribution and Linux home. Existing
+The profile starts login Zsh as the installing Linux user in that user's home,
+selects JetBrainsMonoNL Nerd Font Mono, and uses the `Selfishell Dark+` color
+scheme from the same Dark+ palette as Ghostty. Its ID is stable for that
+distribution and Linux home. Existing
 profiles, the default profile, and `settings.json` are preserved. Restart Windows
 Terminal and select the new profile; Windows Terminal settings can override its
 font or other properties. See Microsoft's [JSON fragment documentation](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions).
@@ -225,7 +227,7 @@ font or other properties. See Microsoft's [JSON fragment documentation](https://
 If the font family is already available to Windows, Selfishell preserves it.
 Otherwise it installs four pinned, SHA-256-verified Nerd Fonts 3.4.0 TTF files
 (regular, bold, italic, bold italic) under Windows
-`%LOCALAPPDATA%/Microsoft/Windows/Fonts/Selfishell` and registers them for the
+`%LOCALAPPDATA%/Microsoft/Windows/Fonts/Selfishell/<version>` and registers them for the
 current Windows user. Font installation is optional; failures warn and leave
 shell setup usable. `--skip-packages` creates the profile without downloading or
 registering fonts; install the font yourself or rerun without that flag.
@@ -238,8 +240,11 @@ apply to Windows Terminal; VS Code's terminal font remains a separate setting.
 The fragment follows normal managed-file protection during updates and
 uninstallation, including backups and `uninstall --restore`. Uninstall removes
 an intact managed fragment and clears its saved choice; fonts remain installed,
-like other packages. The integration does not provide native Windows shell
-support.
+like other packages. Font updates use a new version directory and change only
+an ownership-checked Selfishell registration; older payloads are retained so
+loaded fonts never need to be replaced. Restart Windows Terminal after a font
+update; other Windows sessions may need sign-out to release their old font cache.
+The integration does not provide native Windows shell support.
 
 ## Other terminals
 

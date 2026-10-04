@@ -65,7 +65,8 @@ declining it, run `selfishell install --ghostty`. To turn it off,
 
 On WSL, the optional Windows Terminal choice is saved separately in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/windows-terminal.json`.
-It also records the Windows local application-data path and WSL distribution.
+It also records the Windows local application-data path, WSL distribution, and
+installing Linux username. Its profile uses Dark+, matching Ghostty.
 Tools updates reuse it without asking again; `selfishell install --windows-terminal`
 enables a previously declined choice. Uninstall clears the choice and removes
 an intact managed profile, while preserving fonts. See

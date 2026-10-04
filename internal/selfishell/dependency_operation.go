@@ -89,7 +89,10 @@ func dependencyTarget(dep Dependency, paths Paths) (string, error) {
 		if choice == nil || !choice.Enabled {
 			return "", fmt.Errorf("Windows Terminal font setup is not enabled")
 		}
-		return choice.AppDataPath + "/Microsoft/Windows/Fonts/Selfishell/" + filepath.Base(dep.Target), nil
+		if dep.Version == "." || dep.Version == ".." || filepath.Base(dep.Version) != dep.Version || strings.ContainsAny(dep.Version, "\\\r\n\x00") {
+			return "", fmt.Errorf("invalid font version: %s", dep.Version)
+		}
+		return choice.AppDataPath + "/Microsoft/Windows/Fonts/Selfishell/" + dep.Version + "/" + filepath.Base(dep.Target), nil
 	}
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		return strings.TrimSuffix(paths.Data, "/selfishell") + "/" + strings.TrimPrefix(dep.Target, ".local/share/"), nil
@@ -406,7 +409,7 @@ func directDownloadIntact(dep Dependency, target string, info os.FileInfo, manag
 	if !info.Mode().IsRegular() || (dep.Marker != "font" && info.Mode()&0111 == 0) {
 		return false
 	}
-	if dep.Marker != "font" && (!managed || dep.Marker != "raw") {
+	if !managed || (dep.Marker != "font" && dep.Marker != "raw") {
 		return true
 	}
 	file, err := os.Open(target)
