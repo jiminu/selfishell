@@ -11,22 +11,23 @@ for environments actually exercised in CI.
 
 ## Quick Start
 
-Install the CLI:
+Install the CLI and development environment:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh | bash -s -- --setup
 ```
 
-Then install the development environment and verify it:
+Answer the installation questions, including Ghostty on macOS or Windows Terminal
+integration on WSL. Then start Zsh and verify the environment:
 
 ```bash
-selfishell install
 exec zsh
 selfishell status
 ```
 
-The bootstrap installs only the CLI. If it reports that `~/.local/bin` is not in
-`PATH`, run the `export PATH=…` command it prints before continuing. See the
+Without `--setup`, the bootstrap installs only the CLI. If it reports that
+`~/.local/bin` is not in `PATH`, run the `export PATH=…` command it prints before
+continuing. See the
 [installation guide](docs/INSTALLATION.md) for exact-version and
 non-interactive installation, configuration-only setup, uninstallation,
 Ghostty, other terminals, and platform notes.

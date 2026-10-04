@@ -55,7 +55,7 @@ Options:
   --version VERSION  Install an exact Selfishell release
   --prefix PATH      Installation prefix (default: $HOME/.local)
   --setup            Run 'selfishell install' after installing the CLI
-  --yes              Skip setup confirmation when used with --setup
+  --yes              With --setup, accept default or saved choices without questions
   --skip-packages    Pass configuration-only mode to setup
   --help             Show this help
 EOF
@@ -535,7 +535,16 @@ main() {
     setup_args=(install)
     [[ "$skip_packages" == "1" ]] && setup_args+=(--skip-packages)
     [[ "$assume_yes" == "1" ]] && setup_args+=(--yes)
-    "$bin_dir/selfishell" "${setup_args[@]}"
+    if [[ "$assume_yes" == "1" || -t 0 ]]; then
+      "$bin_dir/selfishell" "${setup_args[@]}"
+    elif { : </dev/tty; } 2>/dev/null; then
+      # A piped bootstrap reads the script on stdin; setup reads answers from
+      # the controlling terminal instead. Keep --yes usable without a terminal.
+      "$bin_dir/selfishell" "${setup_args[@]}" </dev/tty
+    else
+      bootstrap_error "--setup requires an interactive terminal; use --setup --yes for non-interactive installation."
+      return 2
+    fi
   fi
 }
 

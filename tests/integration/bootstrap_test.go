@@ -3,19 +3,23 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/pty"
 	"github.com/jiminu/selfishell/internal/releasebuild"
 	"github.com/jiminu/selfishell/internal/selfishell"
 	"github.com/jiminu/selfishell/internal/testutil"
@@ -127,6 +131,51 @@ func (f *bootstrapFixture) cliRun(t *testing.T, args ...string) capture {
 	t.Helper()
 	got, err := runCommand(f.home, append([]string{f.cli}, args...), nil, f.env, 30*time.Second)
 	mustFS(t, err)
+	return got
+}
+
+// runPiped keeps the script on stdin while answers arrive through a private
+// controlling terminal. A nil answer slice runs without any terminal, even
+// when the developer launches the tests from an interactive shell.
+func (f *bootstrapFixture) runPiped(t *testing.T, answers []byte, args ...string) capture {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+	argv := []string{"-c", `cat "$1" | bash -s -- "${@:2}"`, "bash", filepath.Join(repoRoot(), "install.sh"), "--prefix", f.prefix}
+	cmd := exec.CommandContext(ctx, "/bin/bash", append(argv, args...)...)
+	cmd.Dir = f.home
+	cmd.Env = withEnv(baseEnv(f.home, t.TempDir()), f.env...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if answers != nil {
+		master, slave, err := pty.Open()
+		mustFS(t, err)
+		defer master.Close()
+		defer slave.Close()
+		cmd.Stdin = slave
+		cmd.SysProcAttr.Setctty = true
+		cmd.SysProcAttr.Ctty = 0
+		_, err = master.Write(answers)
+		mustFS(t, err)
+	}
+	cmd.WaitDelay = 500 * time.Millisecond
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	var out, errout bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errout
+	err := cmd.Run()
+	if cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	mustFS(t, ctx.Err())
+	got := capture{Stdout: out.Bytes(), Stderr: errout.Bytes()}
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			t.Fatal(err)
+		}
+		got.Status = exit.ExitCode()
+	}
 	return got
 }
 func requireOK(t *testing.T, got capture) {
@@ -638,6 +687,69 @@ func TestExactReleaseSmoke(t *testing.T) {
 	smokePrebuiltArchive(t, dir, version)
 }
 func validSmokeVersion(v string) bool { return selfishell.ValidReleaseVersion(v) }
+
+func TestNativeBootstrapPipedSetup(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, system, answers, ghostty string
+		status                         int
+	}{
+		{name: "accept setup", system: "Linux", answers: "y\n"},
+		{name: "decline setup", system: "Linux", answers: "n\n", status: 1},
+		{name: "accept Ghostty", system: "Darwin", answers: "y\ny\n", ghostty: "1\n"},
+		{name: "decline Ghostty", system: "Darwin", answers: "y\nn\n", ghostty: "0\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newBootstrapFixture(t, nativeArchiveVersion)
+			f.env = append(f.env, "SELFISHELL_TEST_SYSTEM_NAME="+tc.system)
+			got := f.runPiped(t, []byte(tc.answers), "--version", nativeArchiveVersion, "--setup", "--skip-packages")
+			requireExit(t, got, tc.status)
+			requireContains(t, got.Stdout, "Install Selfishell configuration?")
+			configured := filepath.Join(f.home, ".local/state/selfishell/configured")
+			if tc.status != 0 {
+				requireAbsent(t, configured)
+				requireAbsent(t, filepath.Join(f.home, ".zshrc"))
+				return
+			}
+			requireContains(t, readBytes(t, configured), "1\n")
+			requireContains(t, readBytes(t, filepath.Join(f.home, ".zshrc")), "# >>> Selfishell initialize >>>")
+			if tc.ghostty != "" {
+				requireContains(t, got.Stdout, "Install Ghostty terminal and managed configuration")
+				choice := filepath.Join(f.home, ".local/state/selfishell/ghostty")
+				if got := string(readBytes(t, choice)); got != tc.ghostty {
+					t.Fatalf("Ghostty choice %q want %q", got, tc.ghostty)
+				}
+				// Reinstallation must reuse the choice without another question.
+				reinstalled := f.runPiped(t, []byte("y\n"), "--version", nativeArchiveVersion, "--setup", "--skip-packages")
+				requireOK(t, reinstalled)
+				if bytes.Contains(reinstalled.Stdout, []byte("Install Ghostty terminal")) {
+					t.Fatal("reinstallation asked for the saved Ghostty choice")
+				}
+				if got := string(readBytes(t, choice)); got != tc.ghostty {
+					t.Fatalf("reinstallation changed Ghostty choice to %q", got)
+				}
+			}
+		})
+	}
+	t.Run("no terminal requires yes", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		got := f.runPiped(t, nil, "--version", nativeArchiveVersion, "--setup", "--skip-packages")
+		requireExit(t, got, 2)
+		requireContains(t, got.Stderr, "interactive terminal")
+		requireContains(t, got.Stderr, "--yes")
+		requireAbsent(t, filepath.Join(f.home, ".zshrc"))
+		requireAbsent(t, filepath.Join(f.home, ".local/state/selfishell"))
+	})
+	t.Run("yes needs no terminal", func(t *testing.T) {
+		f := newBootstrapFixture(t, nativeArchiveVersion)
+		got := f.runPiped(t, nil, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes")
+		requireOK(t, got)
+		if bytes.Contains(got.Stdout, []byte("Install Selfishell configuration?")) {
+			t.Fatal("--yes asked for confirmation")
+		}
+		requireContains(t, readBytes(t, filepath.Join(f.home, ".local/state/selfishell/configured")), "1\n")
+	})
+}
 
 func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 	t.Parallel()
