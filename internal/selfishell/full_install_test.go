@@ -300,8 +300,8 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 		{"update-enabled", "update", "macos", "1\n", false, true},
 		{"update-missing", "update", "macos", "", false, false},
 		{"explicit-declined", "install", "macos", "0\n", true, true},
-		{"explicit-directory", "install", "macos", "directory", true, true},
-		{"explicit-symlink", "install", "macos", "symlink", true, true},
+		{"explicit-directory", "install", "macos", "directory", true, false},
+		{"explicit-symlink", "install", "macos", "symlink", true, false},
 		{"ubuntu-directory", "install", "ubuntu", "directory", false, false},
 		{"ubuntu-symlink", "install", "ubuntu", "symlink", false, false},
 	} {
@@ -332,7 +332,11 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 				args = append(args, "--ghostty")
 			}
 			code, out, stderr := blockRun(t, root, "", args...)
-			if code != 0 {
+			if tc.platform == "macos" && (tc.choice == "directory" || tc.choice == "symlink") {
+				if code != 1 || !strings.Contains(stderr, "not a regular file") {
+					t.Fatalf("unsafe choice %q was not rejected: %d %s", tc.choice, code, stderr)
+				}
+			} else if code != 0 {
 				t.Fatalf("choice %q: %d %s", tc.choice, code, stderr)
 			}
 			if got := strings.Contains(out, "Would install optional Homebrew cask: ghostty"); got != tc.want {

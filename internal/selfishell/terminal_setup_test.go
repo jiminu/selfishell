@@ -57,7 +57,7 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"install", "update"} {
+	for _, command := range []string{"install", "install --ghostty", "install --skip-packages --ghostty", "update"} {
 		for _, kind := range []string{"directory", "symlink", "dangling", "fifo"} {
 			t.Run(command+"/"+kind, func(t *testing.T) {
 				root, paths := compactDiagnosticFixture(t, "macos", false)
@@ -543,11 +543,14 @@ print('{}')
 			if string(blockRead(t, oldTarget)) != "old-font" || string(blockRead(t, newTarget)) != "new-font" {
 				t.Fatal("versioned font payloads not retained")
 			}
-			var request map[string]string
+			var request struct {
+				Path         string `json:"path"`
+				PreviousPath string `json:"previousPath"`
+			}
 			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
 				t.Fatal(err)
 			}
-			if request["previousPath"] != oldTarget || request["path"] != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
+			if request.PreviousPath != oldTarget || request.Path != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
 				t.Fatal("registration cannot verify prior ownership", request)
 			}
 			// Returning to a retained pin must neither download nor replace its file.
@@ -612,7 +615,7 @@ print('{}')
 			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
 				t.Fatal(err)
 			}
-			if request["previousPath"] != newTarget || request["path"] != oldTarget {
+			if request.PreviousPath != newTarget || request.Path != oldTarget {
 				t.Fatal("rollback registration cannot verify prior ownership", request)
 			}
 			if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); !os.IsNotExist(err) {
