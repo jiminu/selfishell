@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf16"
@@ -44,6 +46,86 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 	}
 	if _, err := os.Stat(f.home + "/brew-attempted"); !os.IsNotExist(err) {
 		t.Fatalf("tried installing an existing Ghostty: %v", err)
+	}
+}
+
+func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
+	if root := os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT"); root != "" {
+		os.Exit((CLI{Root: root, Out: os.Stdout, Err: os.Stderr}).Run(strings.Fields(os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS"))))
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{"install", "update"} {
+		for _, kind := range []string{"directory", "symlink", "dangling", "fifo"} {
+			t.Run(command+"/"+kind, func(t *testing.T) {
+				root, paths := compactDiagnosticFixture(t, "macos", false)
+				home := os.Getenv("HOME")
+				choice := paths.State + "/ghostty"
+				if err := os.Remove(choice); err != nil {
+					t.Fatal(err)
+				}
+				target := home + "/external-choice"
+				if err := testutil.WriteFile(target, []byte("0\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				switch kind {
+				case "directory":
+					err = os.Mkdir(choice, 0700)
+				case "symlink":
+					err = os.Symlink(target, choice)
+				case "dangling":
+					err = os.Symlink(home+"/absent-choice", choice)
+				case "fifo":
+					err = syscall.Mkfifo(choice, 0600)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				before, err := os.Lstat(choice)
+				if err != nil {
+					t.Fatal(err)
+				}
+				original := map[string][]byte{}
+				for _, path := range []string{target, home + "/.zshrc", paths.Config + "/zsh/common.zsh", paths.Resources + "/zsh-common.state", paths.State + "/configured"} {
+					original[path] = blockRead(t, path)
+				}
+				if err := testutil.WriteFile(root+"/packages.conf", []byte("package macos required formula fixture-package\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				for _, name := range []string{"brew", "mise", "curl", "xcode-select"} {
+					if err := testutil.WriteFile(home+"/tools/"+name, []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+				args := command + " --yes"
+				if command == "update" {
+					args += " --tools-only"
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, executable, "-test.run=^TestGhosttyChoicePreflightBeforePackages$")
+				cmd.Env = append(os.Environ(), "SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT="+root, "SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS="+args)
+				output, err := cmd.CombinedOutput()
+				if ctx.Err() != nil {
+					t.Fatalf("reading %s choice exceeded the deadline: %v", kind, ctx.Err())
+				}
+				var exit *exec.ExitError
+				if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(string(output), choice) || !strings.Contains(string(output), "not a regular file") {
+					t.Errorf("unsafe choice was not rejected: %v %s", err, output)
+				}
+				if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
+					t.Error("packages ran before the choice preflight", err)
+				}
+				for path, data := range original {
+					blockEqual(t, path, data)
+				}
+				if after, err := os.Lstat(choice); err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
+					t.Fatal("failed preparation replaced the choice", err)
+				}
+			})
+		}
 	}
 }
 

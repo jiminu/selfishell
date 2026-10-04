@@ -1,6 +1,7 @@
 package selfishell
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -95,7 +96,14 @@ func (c CLI) install(args []string) (result int) {
 	}
 	defer func() {
 		if result != 0 && !dry {
-			c.retryHint("selfishell install", skip)
+			command := "selfishell install"
+			if ghostty {
+				command += " --ghostty"
+			}
+			if windowsTerminal {
+				command += " --windows-terminal"
+			}
+			c.retryHint(command, skip)
 		}
 	}()
 	prepared, err := c.prepareConfig(platform, dry, yes, false, ghostty, windowsTerminal)
@@ -208,8 +216,10 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	if platform == "macos" {
 		if enableGhostty {
 			ghostty = true
-		} else if data, e := os.ReadFile(paths.State + "/ghostty"); e == nil {
+		} else if data, e := readStateFile(paths.State + "/ghostty"); e == nil {
 			ghostty = string(data) == "1\n"
+		} else if !errors.Is(e, os.ErrNotExist) {
+			return preparedConfig{}, fmt.Errorf("could not read Ghostty choice %s: %w", paths.State+"/ghostty", e)
 		} else if !update {
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {

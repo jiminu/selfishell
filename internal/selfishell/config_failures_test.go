@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func failureResource(t *testing.T, root, name string) Resource {
@@ -28,24 +30,61 @@ func failureResource(t *testing.T, root, name string) Resource {
 
 func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		args []string
-		want string
+		name         string
+		args         []string
+		want         string
+		platform     string
+		savedGhostty bool
 	}{
-		{"install", []string{"install", "--yes"}, "selfishell install"},
-		{"install-config-only", []string{"install", "--yes", "--skip-packages"}, "selfishell install --skip-packages"},
-		{"update", []string{"update", "--tools-only", "--yes"}, "selfishell update --tools-only"},
-		{"update-config-only", []string{"update", "--tools-only", "--skip-packages"}, "selfishell update --tools-only --skip-packages"},
-		{"after-cli-update", []string{"update", "--continue-after-cli-update", "--skip-packages"}, "selfishell update --tools-only --skip-packages"},
-		{"install-dry-run", []string{"install", "--skip-packages", "--dry-run"}, ""},
-		{"update-dry-run", []string{"update", "--tools-only", "--skip-packages", "--dry-run"}, ""},
+		{"install", []string{"install", "--yes"}, "selfishell install", "ubuntu", false},
+		{"install-config-only", []string{"install", "--yes", "--skip-packages"}, "selfishell install --skip-packages", "ubuntu", false},
+		{"update", []string{"update", "--tools-only", "--yes"}, "selfishell update --tools-only", "ubuntu", false},
+		{"update-config-only", []string{"update", "--tools-only", "--skip-packages"}, "selfishell update --tools-only --skip-packages", "ubuntu", false},
+		{"after-cli-update", []string{"update", "--continue-after-cli-update", "--skip-packages"}, "selfishell update --tools-only --skip-packages", "ubuntu", false},
+		{"install-dry-run", []string{"install", "--skip-packages", "--dry-run"}, "", "ubuntu", false},
+		{"update-dry-run", []string{"update", "--tools-only", "--skip-packages", "--dry-run"}, "", "ubuntu", false},
+		{"saved-ghostty", []string{"install", "--yes"}, "selfishell install", "macos", true},
+		{"ghostty", []string{"install", "--yes", "--ghostty"}, "selfishell install --ghostty", "macos", false},
+		{"ghostty-config-only", []string{"install", "--yes", "--ghostty", "--skip-packages"}, "selfishell install --ghostty --skip-packages", "macos", false},
+		{"ghostty-dry-run", []string{"install", "--ghostty", "--dry-run"}, "", "macos", false},
+		{"windows-terminal", []string{"install", "--yes", "--windows-terminal"}, "selfishell install --windows-terminal", "ubuntu-wsl", false},
+		{"windows-terminal-config-only", []string{"install", "--yes", "--windows-terminal", "--skip-packages"}, "selfishell install --windows-terminal --skip-packages", "ubuntu-wsl", false},
+		{"windows-terminal-dry-run", []string{"install", "--windows-terminal", "--dry-run"}, "", "ubuntu-wsl", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, paths := compactDiagnosticFixture(t, "ubuntu", false)
-			blockWrite(t, paths.Resources+"/vimrc.state", []byte("invalid\n"))
+			var root, choice, settings string
+			var paths Paths
+			failure := "vimrc.state"
+			if tc.platform == "ubuntu-wsl" {
+				var home, windowsHome string
+				root, home, paths, windowsHome = windowsTerminalFixture(t)
+				settings = windowsHome + "/Microsoft/Windows Terminal/settings.json"
+				choice = paths.State + "/windows-terminal.json"
+				blockWrite(t, choice, []byte("{\"version\":1,\"enabled\":false}\n"))
+				// Discovery succeeds, but preparation fails before the new choice is saved.
+				if err := testutil.WriteFile(home+"/tools/wslpath", []byte("#!/bin/sh\ncase \"$*\" in\n *settings.json*) printf '%s\\n' \"$HOME/windows-localappdata/Microsoft/Windows Terminal/settings.json\";;\n *) exit 99;;\nesac\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				failure = "could not resolve Windows path"
+			} else {
+				root, paths = compactDiagnosticFixture(t, tc.platform, tc.savedGhostty)
+				blockWrite(t, paths.Resources+"/vimrc.state", []byte("invalid\n"))
+				if tc.platform == "macos" {
+					choice = paths.State + "/ghostty"
+				}
+			}
+			original := map[string][]byte{}
+			for _, path := range []string{choice, settings} {
+				if path != "" {
+					original[path] = blockRead(t, path)
+				}
+			}
 			code, _, stderr := blockRun(t, root, "", tc.args...)
-			if code != 1 || !strings.Contains(stderr, "vimrc.state") {
+			if code != 1 || !strings.Contains(stderr, failure) {
 				t.Fatalf("expected configuration failure: %d %q", code, stderr)
+			}
+			for path, data := range original {
+				blockEqual(t, path, data)
 			}
 			if tc.want == "" {
 				if strings.Contains(stderr, "retry with:") {
