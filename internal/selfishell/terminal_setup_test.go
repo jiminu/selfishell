@@ -395,75 +395,148 @@ func TestWindowsTerminalPreservesExistingSchemes(t *testing.T) {
 }
 
 func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	source, manifest := home+"/font-source", home+"/manifest"
-	payload := []byte("old-font")
-	if err := testutil.WriteFile(source, payload, 0600); err != nil {
-		t.Fatal(err)
-	}
-	writeManifest := func(version string, payload []byte) {
-		t.Helper()
-		record := fmt.Sprintf("download jetbrainsmono-regular %s linux all file://%s %x .local/share/selfishell/fonts/Regular.ttf font\n", version, source, sha256.Sum256(payload))
-		if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeManifest("3.4.0", payload)
-	op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
-	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
-		t.Fatal(err)
-	}
-	deps, _ := ReadDependencies(manifest)
-	oldTarget, err := dependencyTarget(deps[0], paths)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Capture the registration request, including its ownership-approved prior path.
-	script := `#!/usr/bin/python3
+	for _, scenario := range []string{"reuse", "modified", "unrecorded", "registration-retry"} {
+		t.Run(scenario, func(t *testing.T) {
+			root, home, paths, windowsHome := windowsTerminalFixture(t)
+			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			source, manifest := home+"/font-source", home+"/manifest"
+			payload := []byte("old-font")
+			if err := testutil.WriteFile(source, payload, 0600); err != nil {
+				t.Fatal(err)
+			}
+			writeManifest := func(version string, payload []byte) {
+				t.Helper()
+				record := fmt.Sprintf("download jetbrainsmono-regular %s linux all file://%s %x .local/share/selfishell/fonts/Regular.ttf font\n", version, source, sha256.Sum256(payload))
+				if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeManifest("3.4.0", payload)
+			op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
+				t.Fatal(err)
+			}
+			deps, _ := ReadDependencies(manifest)
+			oldTarget, err := dependencyTarget(deps[0], paths)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Capture the registration request, including its ownership-approved prior path.
+			script := `#!/usr/bin/python3
 import sys,base64,json,re,os
 script=base64.b64decode(sys.argv[-1]).decode('utf-16le')
 data=re.search("FromBase64String\('([^']+)'",script).group(1)
 request=json.loads(base64.b64decode(data))
 if request['operation']=='font-register':
  with open(os.environ['HOME']+'/registration-request','w') as f: json.dump(request,f)
+ if os.path.exists(os.environ['HOME']+'/fail-registration'): sys.exit(1)
 print('{}')
 `
-	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(home+"/tools/wslpath", []byte("#!/bin/sh\nprintf '%s\n' \"$2\"\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	payload = []byte("new-font")
-	if err := testutil.WriteFile(source, payload, 0600); err != nil {
-		t.Fatal(err)
-	}
-	writeManifest("3.4.1", payload)
-	op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
-	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
-		t.Fatal(err)
-	}
-	deps, _ = ReadDependencies(manifest)
-	newTarget, err := dependencyTarget(deps[0], paths)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if oldTarget == newTarget {
-		t.Fatal("upgrade replaced a potentially loaded font", oldTarget)
-	}
-	if string(blockRead(t, oldTarget)) != "old-font" || string(blockRead(t, newTarget)) != "new-font" {
-		t.Fatal("versioned font payloads not retained")
-	}
-	var request map[string]string
-	if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
-		t.Fatal(err)
-	}
-	if request["previousPath"] != oldTarget || request["path"] != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
-		t.Fatal("registration cannot verify prior ownership", request)
+			if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := testutil.WriteFile(home+"/tools/wslpath", []byte("#!/bin/sh\nprintf '%s\n' \"$2\"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			payload = []byte("new-font")
+			if err := testutil.WriteFile(source, payload, 0600); err != nil {
+				t.Fatal(err)
+			}
+			writeManifest("3.4.1", payload)
+			op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
+				t.Fatal(err)
+			}
+			deps, _ = ReadDependencies(manifest)
+			newTarget, err := dependencyTarget(deps[0], paths)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if oldTarget == newTarget {
+				t.Fatal("upgrade replaced a potentially loaded font", oldTarget)
+			}
+			if string(blockRead(t, oldTarget)) != "old-font" || string(blockRead(t, newTarget)) != "new-font" {
+				t.Fatal("versioned font payloads not retained")
+			}
+			var request map[string]string
+			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
+				t.Fatal(err)
+			}
+			if request["previousPath"] != oldTarget || request["path"] != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
+				t.Fatal("registration cannot verify prior ownership", request)
+			}
+			// Returning to a retained pin must neither download nor replace its file.
+			before, err := os.Stat(oldTarget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(source); err != nil {
+				t.Fatal(err)
+			}
+			writeManifest("3.4.0", []byte("old-font"))
+			switch scenario {
+			case "modified":
+				if err := testutil.WriteFile(oldTarget, []byte("user-edited-font"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "unrecorded":
+				if err := os.Remove(paths.State + "/retained-fonts/jetbrainsmono-regular/3.4.0.json"); err != nil {
+					t.Fatal(err)
+				}
+			case "registration-retry":
+				if err := testutil.WriteFile(home+"/fail-registration", nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if scenario == "modified" || scenario == "unrecorded" {
+				preserved := blockRead(t, oldTarget)
+				registration := blockRead(t, home+"/registration-request")
+				op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+				err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
+				if err == nil || !strings.Contains(err.Error(), "preserving") {
+					t.Fatal("unsafe retained path accepted", err)
+				}
+				if string(blockRead(t, oldTarget)) != string(preserved) || string(blockRead(t, home+"/registration-request")) != string(registration) || string(blockRead(t, paths.State+"/dependencies/jetbrainsmono-regular")) != "3.4.1\n" {
+					t.Fatal("rejected rollback changed font, registration, or current pin")
+				}
+				return
+			}
+			if scenario == "registration-retry" {
+				op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+				if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err == nil {
+					t.Fatal("registration failure ignored")
+				}
+				if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); err != nil {
+					t.Fatal("registration failure lost recovery journal", err)
+				}
+				if err := os.Remove(home + "/fail-registration"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
+				t.Fatal("return to retained pin", err)
+			}
+			after, err := os.Stat(oldTarget)
+			if err != nil || !os.SameFile(before, after) {
+				t.Fatal("retained font was replaced", err)
+			}
+			if string(blockRead(t, paths.State+"/dependencies/jetbrainsmono-regular")) != "3.4.0\n" {
+				t.Fatal("restored pin not recorded")
+			}
+			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
+				t.Fatal(err)
+			}
+			if request["previousPath"] != newTarget || request["path"] != oldTarget {
+				t.Fatal("rollback registration cannot verify prior ownership", request)
+			}
+			if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); !os.IsNotExist(err) {
+				t.Fatal("completed registration retained pending journal", err)
+			}
+		})
 	}
 }
 
@@ -595,6 +668,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 	if err := testutil.WriteFile(source, payload, 0600); err != nil {
 		t.Fatal(err)
 	}
+	oldVersion := dep.Version
 	dep.Version = "native-upgrade"
 	dep.Source = "file://" + source
 	manifest := home + "/manifest"
@@ -620,6 +694,21 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 	}
 	if newTarget == oldTarget || string(blockRead(t, oldTarget)) != string(payload) || string(blockRead(t, newTarget)) != string(payload) {
 		t.Fatal("loaded-font upgrade changed old payload")
+	}
+	if err := os.Remove(source); err != nil {
+		t.Fatal(err)
+	}
+	dep.Version = oldVersion
+	record = strings.Join([]string{dep.Kind, dep.Name, dep.Version, dep.Platform, dep.Arch, dep.Source, dep.Checksum, dep.Target, dep.Marker}, " ") + "\n"
+	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
+		t.Fatal(err)
+	}
+	op = &PackageOperation{Process: op.Process}
+	if err := op.InstallDirect(ctx, paths, manifest, "required", dep.Name, "ubuntu-wsl", "amd64", false); err != nil {
+		t.Fatal("return to locked retained font", err)
+	}
+	if string(blockRead(t, paths.State+"/dependencies/"+dep.Name)) != oldVersion+"\n" || string(blockRead(t, oldTarget)) != string(payload) {
+		t.Fatal("loaded-font rollback did not restore pin")
 	}
 }
 

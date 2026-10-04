@@ -140,7 +140,9 @@ or in system/user Applications is preserved. Windows Terminal integration is a
 separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
 records with `font` download markers, installed and registered per Windows user.
 Existing font families are preserved; fonts use versioned paths so Windows-loaded
-files are never replaced during pin updates. Change only an ownership-checked
+files are never replaced during pin updates. Retain each outgoing version's
+ownership evidence and reuse a retained file only when its recorded path and
+checksum match the approved pin and file contents. Change only an ownership-checked
 Selfishell font registration. Existing distro profiles use the built-in Dark+;
 their launch commands remain user-owned. Installer-owned fonts follow approved pins
 and remain installed after configuration uninstall. The `configured` marker

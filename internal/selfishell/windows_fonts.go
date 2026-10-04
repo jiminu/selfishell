@@ -16,6 +16,11 @@ type windowsFontStatus struct {
 	Registrations map[string]string `json:"registrations"`
 }
 
+type retainedWindowsFont struct {
+	Target   string `json:"target"`
+	Checksum string `json:"checksum"`
+}
+
 // Windows fonts are optional direct packages. Like other packages, installed
 // fonts remain available to other applications after configuration uninstall.
 func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, dep Dependency) error {
@@ -109,6 +114,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		return err
 	}
 	oldVersion := strings.TrimSpace(string(data))
+	reuse := false
 	next := pendingFont{Target: target, Version: dep.Version, Checksum: dep.Checksum}
 	if hasPending && pending.Version == dep.Version {
 		next.PreviousPath, next.AlternatePreviousPath = pending.PreviousPath, pending.AlternatePreviousPath
@@ -127,11 +133,38 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		if hasPending {
 			next.AlternatePreviousPath = pending.PreviousPath
 		}
-		// A version marker owns only that version's path. A new occupied path is user data.
+		// Reuse only a recorded, intact old pin. Never replace a retained file:
+		// Windows applications may still have it loaded.
 		if exists, err := present(target); err != nil {
 			return err
-		} else if exists && (!hasPending || pending.Target != target) {
-			return fmt.Errorf("unrecorded Windows font path is occupied; preserving: %s", target)
+		} else if exists {
+			record := paths.State + "/retained-fonts/" + dep.Name + "/" + dep.Version + ".json"
+			data, err := readStateFile(record)
+			if err == nil {
+				var retained retainedWindowsFont
+				if json.Unmarshal(data, &retained) != nil || retained.Target != target || retained.Checksum != dep.Checksum || !o.validDirect(ctx, dep, target, true) {
+					return fmt.Errorf("retained Windows font was modified; preserving: %s", target)
+				}
+				reuse = true
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			} else if !hasPending || pending.Target != target {
+				return fmt.Errorf("unrecorded Windows font path is occupied; preserving: %s", target)
+			}
+		}
+		// Preserve the current marker's ownership evidence before changing it.
+		// This also handles installations made before per-version records existed.
+		if contents, err := readStateFile(oldTarget); err == nil {
+			retained := retainedWindowsFont{Target: oldTarget, Checksum: fmt.Sprintf("%x", sha256.Sum256(contents))}
+			data, err := json.Marshal(retained)
+			if err != nil {
+				return err
+			}
+			if err := writeAtomic(paths.State+"/retained-fonts/"+dep.Name+"/"+oldVersion+".json", data, 0600); err != nil {
+				return err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 	data, err = json.Marshal(next)
@@ -141,7 +174,12 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if err := writeAtomic(journal, data, 0600); err != nil {
 		return err
 	}
-	if err := o.installDependency(ctx, paths, dep); err != nil {
+	if reuse {
+		if err := writeAtomic(state, []byte(dep.Version+"\n"), 0600); err != nil {
+			return err
+		}
+		o.UnchangedCount++
+	} else if err := o.installDependency(ctx, paths, dep); err != nil {
 		return err
 	}
 	windowsPath, err := o.Process.windowsPath(ctx, "-w", target)

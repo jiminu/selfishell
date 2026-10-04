@@ -101,12 +101,14 @@ The filesystem check creates and removes its own private directory and tests
 existing-profile font/theme edits and restoration against scratch settings files.
 The font check downloads the approved regular TTF, loads it privately in a
 short-lived Windows process, and verifies a new version can activate while the
-old file is held open with Windows sharing restrictions. Persistent registration
+old file is held open with Windows sharing restrictions, then reapplies the old
+pin without downloading or replacing its locked file. Persistent registration
 is stubbed. None of these checks
 changes personal Windows Terminal settings or writes real font registry entries. Font
 registration still needs verification in a disposable Windows user account:
 accept the initial WSL setup, check all four styles in Windows Terminal after
-restarting it, repeat setup, upgrade the font pin while Windows has loaded the old font,
+restarting it and after Windows logout/login, repeat setup, upgrade the font pin
+while Windows has loaded the old font, reapply the previous pin,
 and confirm uninstall restores unchanged font/theme values in the existing
 profile, preserves later user edits, and leaves fonts available. Also verify an
 existing font family is preserved and `--skip-packages` never registers fonts.
