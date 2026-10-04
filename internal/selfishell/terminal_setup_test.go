@@ -747,3 +747,129 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
+	for _, scenario := range []string{"declined", "enabled", "absent", "in-memory"} {
+		t.Run(scenario, func(t *testing.T) {
+			root, _, paths, _ := windowsTerminalFixture(t)
+			enabled := scenario == "enabled"
+			answer := "y\nn\n"
+			if enabled {
+				answer = "y\ny\n"
+			}
+			code, _, stderr := blockRun(t, root, answer, "install", "--skip-packages")
+			if code != 0 {
+				t.Fatal(stderr)
+			}
+			if scenario == "absent" {
+				if err := os.Remove(paths.State + "/windows-terminal.json"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			root = t.TempDir() // The normal CLI fixture root is the source checkout.
+			manifest := "package ubuntu-wsl required direct wsl-helper\npackage ubuntu-wsl required apt wsl-package\npackage ubuntu-wsl optional direct fixture-font\npackage ubuntu required apt ubuntu-package\npackage macos required formula mac-package\n"
+			if err := testutil.WriteFile(root+"/packages.conf", []byte(manifest), 0600); err != nil {
+				t.Fatal(err)
+			}
+			// Font selection follows the existing marker, not a package-name prefix.
+			deps := "download fixture-font 1 linux all https://example.invalid/font abc .local/share/fonts/fixture.ttf font\ndownload wsl-helper 1 linux all https://example.invalid/helper abc .local/bin/wsl-helper binary\n"
+			if err := testutil.WriteFile(root+"/dependencies.conf", []byte(deps), 0600); err != nil {
+				t.Fatal(err)
+			}
+			packages, err := ReadPackages(root + "/packages.conf")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var out strings.Builder
+			c := CLI{Root: root, Out: &out, Err: io.Discard}
+			op := &PackageOperation{Process: Process{Out: &out, Err: io.Discard}}
+			if scenario == "in-memory" {
+				op.windowsTerminal = &windowsTerminalChoice{Enabled: true}
+			}
+			if err := c.installPackages(context.Background(), op, paths, packages, "ubuntu-wsl", "amd64", false, true); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"wsl-helper", "wsl-package", "ubuntu-package"} {
+				if !strings.Contains(out.String(), name) {
+					t.Errorf("install skipped %s: %s", name, out.String())
+				}
+			}
+			if strings.Contains(out.String(), "fixture-font") != (enabled || scenario == "in-memory") || strings.Contains(out.String(), "mac-package") {
+				t.Errorf("wrong install selection: %s", out.String())
+			}
+			selected, err := diagnosticPackages(root, "ubuntu-wsl")
+			if err != nil {
+				t.Fatal(err)
+			}
+			names := map[string]bool{}
+			for _, p := range selected {
+				names[p.Name] = true
+			}
+			for _, name := range []string{"wsl-helper", "wsl-package", "ubuntu-package"} {
+				if !names[name] {
+					t.Errorf("status skipped %s", name)
+				}
+			}
+			if names["fixture-font"] != enabled || names["mac-package"] {
+				t.Fatalf("wrong status selection: %v", names)
+			}
+		})
+	}
+}
+
+func TestPrepareConfigIncludesWindowsTerminal(t *testing.T) {
+	root, _, paths, settings := existingWindowsProfileFixture(t)
+	c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
+	original := blockRead(t, settings)
+	prepared, err := c.prepareConfig("ubuntu-wsl", true, true, false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.windowsTerminal == nil || !prepared.windowsTerminal.Enabled {
+		t.Fatal("common preparation omitted Windows Terminal")
+	}
+	if string(blockRead(t, settings)) != string(original) {
+		t.Fatal("preparation changed settings")
+	}
+	for _, path := range []string{paths.Config, paths.State} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("preparation created %s: %v", path, err)
+		}
+	}
+}
+
+func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
+	for _, command := range []string{"install", "update"} {
+		t.Run(command, func(t *testing.T) {
+			root, home, paths, settings := existingWindowsProfileFixture(t)
+			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			// A changed path must stop setup before a package-manager process runs.
+			if err := os.Remove(settings); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(home+"/absent-settings", settings); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"apt-get", "dpkg-query", "mise", "curl"} {
+				if err := testutil.WriteFile(home+"/tools/"+name, []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			journal := blockRead(t, windowsProfileStatePath(paths))
+			args := []string{command, "--yes"}
+			if command == "update" {
+				args = append(args, "--tools-only")
+			}
+			code, _, stderr := blockRun(t, root, "", args...)
+			if code == 0 || !strings.Contains(stderr, "not a regular file") {
+				t.Fatalf("unsafe settings accepted: %d %s", code, stderr)
+			}
+			if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
+				t.Fatal("packages ran before terminal preflight", err)
+			}
+			if string(blockRead(t, windowsProfileStatePath(paths))) != string(journal) {
+				t.Fatal("failed preflight changed journal")
+			}
+		})
+	}
+}

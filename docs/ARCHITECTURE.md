@@ -44,6 +44,13 @@ Release publication is a separate manual tag decision.
 
 ## Product behavior
 
+Install and tools updates share configuration preparation, including Ghostty
+selection on macOS and Windows Terminal selection and profile preflight on WSL.
+Preparation does not write configuration or saved choices and finishes before
+package operations begin. Installation and diagnostics also share package
+selection: Windows Terminal opt-in gates only WSL direct downloads marked
+`font`; other WSL packages are selected independently.
+
 Managed paths remain user-safe: pending state is written before mutation,
 regular files are checksummed, original backups persist across reinstalls,
 preflights cover all uninstall resources, and restore never overwrites an

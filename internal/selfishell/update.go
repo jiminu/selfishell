@@ -284,7 +284,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.error(err.Error())
 		return 1
 	}
-	prepared, err := c.prepareConfig(platform, o.dry, o.yes, true, false)
+	prepared, err := c.prepareConfig(platform, o.dry, o.yes, true, false, false)
 	if err != nil {
 		c.error(err.Error())
 		return 1
@@ -292,12 +292,6 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
 		return 1
-	}
-	if platform == "ubuntu-wsl" {
-		if err := c.addWindowsTerminal(&prepared, o.dry, o.yes, true, false); err != nil {
-			c.error(err.Error())
-			return 1
-		}
 	}
 	if !o.dry {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths)

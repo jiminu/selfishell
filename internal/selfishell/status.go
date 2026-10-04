@@ -40,23 +40,18 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	selected := make([]Package, 0, len(all))
+	paths, err := UserPaths()
+	if err != nil {
+		return nil, err
+	}
+	eligible, err := selectPackages(root, paths, all, platform, nil)
+	if err != nil {
+		return nil, err
+	}
+	selected := make([]Package, 0, len(eligible))
 	seen := map[string]bool{}
-	for _, p := range all {
-		if p.Platform == "ubuntu-wsl" {
-			paths, e := UserPaths()
-			if e != nil {
-				return nil, e
-			}
-			choice, e := readWindowsTerminalChoice(paths)
-			if e != nil {
-				return nil, e
-			}
-			if choice == nil || !choice.Enabled {
-				continue
-			}
-		}
-		if packageMatches(p, platform) && !seen[p.Name] {
+	for _, p := range eligible {
+		if !seen[p.Name] {
 			selected = append(selected, p)
 			seen[p.Name] = true
 		}

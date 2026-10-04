@@ -97,3 +97,49 @@ func ReadDependencies(path string) ([]Dependency, error) {
 	}
 	return dependencies, nil
 }
+
+// selectPackages applies the same platform and saved-choice rules to setup and
+// diagnostics. Only font downloads require Windows Terminal opt-in; other WSL
+// packages remain available independently of that choice.
+func selectPackages(root string, paths Paths, packages []Package, platform string, choice *windowsTerminalChoice) ([]Package, error) {
+	var dependencies []Dependency
+	selected := make([]Package, 0, len(packages))
+	for _, p := range packages {
+		if !packageMatches(p, platform) {
+			continue
+		}
+		font := false
+		if p.Platform == "ubuntu-wsl" && p.Manager == "direct" {
+			if dependencies == nil {
+				var err error
+				dependencies, err = ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", root+"/dependencies.conf"))
+				if err != nil {
+					return nil, err
+				}
+			}
+			for _, dep := range dependencies {
+				if dep.Name == p.Name && dep.Kind == "download" && dep.Marker == "font" && (dep.Platform == "all" || dep.Platform == dependencyPlatform(platform)) {
+					font = true
+					break
+				}
+			}
+		}
+		if font {
+			if choice == nil {
+				var err error
+				choice, err = readWindowsTerminalChoice(paths)
+				if err != nil {
+					return nil, err
+				}
+				if choice == nil {
+					choice = &windowsTerminalChoice{}
+				}
+			}
+			if !choice.Enabled {
+				continue
+			}
+		}
+		selected = append(selected, p)
+	}
+	return selected, nil
+}
