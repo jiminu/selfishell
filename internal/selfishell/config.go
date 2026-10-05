@@ -27,7 +27,7 @@ const uninstallHelp = `Usage:
 
 Options:
   --restore  Restore configuration files backed up during installation
-  --purge    Also remove the Selfishell CLI, releases, cache, and state
+  --purge    Also remove the Selfishell CLI, releases, cache, and configuration state
   --dry-run  Show changes without modifying files
   --yes      Skip interactive confirmation
   --help     Show this help

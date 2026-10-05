@@ -339,7 +339,10 @@ Without `--restore`, uninstall keeps the
 ### Restore configuration and purge Selfishell
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and
-state. Backups of managed files you had modified stay in
+configuration state. Ownership records for retained direct tools and Windows
+fonts, including font recovery records, remain so reinstalling Selfishell can
+continue to synchronize their approved versions. Backups of managed files you
+had modified stay in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/backups`:
 
 ```sh

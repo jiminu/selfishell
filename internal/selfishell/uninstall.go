@@ -78,7 +78,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	fmt.Fprintln(c.Out, "Selfishell configuration uninstalled.")
 	fmt.Fprintln(c.Out, "The Selfishell CLI is still installed.")
-	fmt.Fprintln(c.Out, "Run 'selfishell uninstall --purge' to also remove the CLI, releases, cache, and state.")
+	fmt.Fprintln(c.Out, "Run 'selfishell uninstall --purge' to also remove the CLI, releases, cache, and configuration state.")
 	return nil
 }
 
@@ -355,6 +355,14 @@ func purgeFiles(c CLI, paths Paths) error {
 	if err != nil {
 		return err
 	}
+	stateInfo, err := purgeStateDirectory(paths)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(paths.State)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	share := filepath.Dir(filepath.Dir(c.Root))
 	bin := filepath.Dir(filepath.Dir(share)) + "/bin"
 	ownedSfs := false
@@ -382,25 +390,37 @@ func purgeFiles(c CLI, paths Paths) error {
 		return err
 	}
 	backups := paths.State + "/backups"
-	if !keepBackups {
-		if err := os.RemoveAll(paths.State); err != nil {
-			return err
-		}
-	} else {
-		entries, err := os.ReadDir(paths.State)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			if entry.Name() != "backups" {
-				if err := os.RemoveAll(paths.State + "/" + entry.Name()); err != nil {
-					return err
-				}
+	currentState, err := purgeStateDirectory(paths)
+	if err != nil {
+		return err
+	}
+	if (stateInfo == nil) != (currentState == nil) || (stateInfo != nil && !os.SameFile(stateInfo, currentState)) {
+		return fmt.Errorf("Selfishell state directory changed during purge; preserving it: %s", paths.State)
+	}
+	keptDependencies := false
+	for _, entry := range entries {
+		switch entry.Name() {
+		case "dependencies", "retained-fonts", "pending-fonts":
+			// Packages survive purge, so their ownership and recovery records must too.
+			keptDependencies = true
+			continue
+		case "backups":
+			if keepBackups {
+				continue
 			}
 		}
+		if err := os.RemoveAll(paths.State + "/" + entry.Name()); err != nil {
+			return err
+		}
+	}
+	if stateInfo != nil {
+		syscall.Rmdir(paths.State)
 	}
 
-	fmt.Fprintln(c.Out, "Selfishell configuration, CLI, releases, cache, and state removed.")
+	fmt.Fprintln(c.Out, "Selfishell configuration, CLI, releases, and cache removed.")
+	if keptDependencies {
+		fmt.Fprintf(c.Out, "Kept ownership and recovery records for installed tools and fonts: %s\n", paths.State)
+	}
 	if keepBackups {
 		fmt.Fprintf(c.Out, "Kept backups of modified files: %s\n", backups)
 	}
@@ -447,7 +467,7 @@ func purgeDry(c CLI, paths Paths) {
 	fmt.Fprintf(c.Out, "Would remove Selfishell CLI link: %s\n", bin+"/selfishell")
 	fmt.Fprintf(c.Out, "Would remove Selfishell releases: %s\n", share)
 	fmt.Fprintf(c.Out, "Would remove Selfishell cache: %s\n", paths.Cache)
-	fmt.Fprintf(c.Out, "Would remove Selfishell state: %s\n", paths.State)
+	fmt.Fprintf(c.Out, "Would remove Selfishell configuration state, keeping ownership and recovery records for installed tools and fonts: %s\n", paths.State)
 	entries, _ := os.ReadDir(paths.State + "/backups")
 	if len(entries) > 0 {
 		fmt.Fprintf(c.Out, "Would keep backups of modified files: %s\n", paths.State+"/backups")
@@ -455,6 +475,9 @@ func purgeDry(c CLI, paths Paths) {
 }
 
 func backupInventory(paths Paths) (bool, error) {
+	if _, err := purgeStateDirectory(paths); err != nil {
+		return false, err
+	}
 	path := paths.State + "/backups"
 	info, present, err := exists(path)
 	if err != nil {
@@ -476,4 +499,15 @@ func backupInventory(paths Paths) (bool, error) {
 		}
 	}
 	return len(entries) > 0, nil
+}
+
+func purgeStateDirectory(paths Paths) (os.FileInfo, error) {
+	info, present, err := exists(paths.State)
+	if err != nil || !present {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("Selfishell state path is not a directory; preserving it: %s", paths.State)
+	}
+	return info, nil
 }

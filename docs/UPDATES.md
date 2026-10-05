@@ -83,6 +83,10 @@ release's approved checksum. A manual `mise self-update` is replaced with the
 approved version on the next tools synchronization. An external mise installation
 that Selfishell does not own remains untouched.
 
+Uninstalling with `--purge` leaves installed tools and fonts in place and retains
+their ownership records. Reinstalling Selfishell continues to synchronize these
+managed dependencies instead of treating them as external installations.
+
 `--skip-packages` skips all package and tool installation when this phase runs,
 matching `selfishell install --skip-packages`. CLI-only and already-current
 default updates skip the entire phase.

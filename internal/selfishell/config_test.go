@@ -243,6 +243,165 @@ func TestPurgePreservesForeignSfsAndBackups(t *testing.T) {
 		t.Fatal("backup lost", e)
 	}
 }
+
+func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
+	for _, backups := range []bool{false, true} {
+		name := "without backups"
+		if backups {
+			name = "with backups"
+		}
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			isolateHome(t, home)
+			paths, err := UserPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			share := paths.Data
+			release := share + "/releases/1.0"
+			writeTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
+			if err := os.Symlink("releases/1.0", share+"/current"); err != nil {
+				t.Fatal(err)
+			}
+			manifest := home + "/dependencies.conf"
+			source := home + "/source"
+			directDownload(t, manifest, source, "1.0", ".local/bin/tool", false)
+			operation := &PackageOperation{Process: Process{Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
+			if err := installTool(operation, paths, manifest); err != nil {
+				t.Fatal(err)
+			}
+			cli := home + "/.local/bin/selfishell"
+			if err := os.Symlink(share+"/current/bin/selfishell", cli); err != nil {
+				t.Fatal(err)
+			}
+			target := home + "/.local/bin/tool"
+			installed := readTestFile(t, target)
+			retained := map[string]string{
+				"dependencies/tool":                               "1.0\n",
+				"dependencies/jetbrainsmono-regular":              "3.4.1\n",
+				"retained-fonts/jetbrainsmono-regular/3.4.0.json": `{"target":"retained-font","checksum":"retained-checksum"}`,
+				"pending-fonts/jetbrainsmono-regular":             `{"target":"pending-font","version":"3.4.2","checksum":"pending-checksum"}`,
+			}
+			if backups {
+				retained["backups/edited"] = "user backup\n"
+			}
+			for path, contents := range retained {
+				writeTestFile(t, paths.State+"/"+path, contents, 0600)
+			}
+			writeTestFile(t, paths.State+"/configured", "1\n", 0600)
+			writeTestFile(t, paths.State+"/old-state", "remove this\n", 0600)
+			var out, stderr bytes.Buffer
+			c := CLI{Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
+			for _, dry := range []bool{true, false} {
+				args := []string{"uninstall", "--purge", "--yes"}
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				if code := c.Run(args); code != 0 {
+					t.Fatalf("purge (dry=%v): %d %s", dry, code, stderr.String())
+				}
+				if got := readTestFile(t, target); got != installed {
+					t.Fatalf("purge changed retained tool: %q", got)
+				}
+				for path, contents := range retained {
+					if got := readTestFile(t, paths.State+"/"+path); got != contents {
+						t.Fatalf("purge changed retained ownership or backup %s: %q", path, got)
+					}
+				}
+				if dry {
+					if _, err := os.Lstat(cli); err != nil {
+						t.Fatal("dry run removed CLI", err)
+					}
+					if got := readTestFile(t, paths.State+"/configured"); got != "1\n" {
+						t.Fatal("dry run changed setup marker")
+					}
+				}
+			}
+			for _, path := range []string{cli, share, paths.State + "/configured", paths.State + "/old-state"} {
+				assertNoPath(t, path)
+			}
+			directDownload(t, manifest, source, "2.0", ".local/bin/tool", false)
+			operation = &PackageOperation{Process: Process{Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
+			if err := installTool(operation, paths, manifest); err != nil {
+				t.Fatal(err)
+			}
+			if got := readTestFile(t, paths.State+"/dependencies/tool"); got != "2.0\n" {
+				t.Fatalf("reinstall did not synchronize retained tool: %q", got)
+			}
+			if got := readTestFile(t, target); !strings.Contains(got, "echo 2.0") {
+				t.Fatalf("reinstall left old executable: %q", got)
+			}
+			if !strings.Contains(output(operation), "Updated approved dependency: tool 2.0") {
+				t.Fatalf("reinstall lost Selfishell ownership: %s", output(operation))
+			}
+		})
+	}
+}
+
+func TestPurgePreservesReplacedStateRoot(t *testing.T) {
+	for _, kind := range []string{"symlink", "file"} {
+		t.Run(kind, func(t *testing.T) {
+			home := t.TempDir()
+			isolateHome(t, home)
+			paths, err := UserPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			release := paths.Data + "/releases/1.0"
+			writeTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
+			if err := os.Symlink("releases/1.0", paths.Data+"/current"); err != nil {
+				t.Fatal(err)
+			}
+			cli := home + "/.local/bin/selfishell"
+			if err := os.MkdirAll(filepath.Dir(cli), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(paths.Data+"/current/bin/selfishell", cli); err != nil {
+				t.Fatal(err)
+			}
+			writeTestFile(t, paths.State+"/original", "initial state\n", 0600)
+			// Check once while intact, then replace it before purge's apply recheck.
+			if _, err := backupInventory(paths); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(paths.State, paths.State+".held"); err != nil {
+				t.Fatal(err)
+			}
+			personal := home + "/personal-data"
+			writeTestFile(t, personal+"/personal.txt", "user data\n", 0600)
+			if kind == "symlink" {
+				if err := os.Symlink(personal, paths.State); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				writeTestFile(t, paths.State, "user state file\n", 0600)
+			}
+			var out, stderr bytes.Buffer
+			c := CLI{Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
+			for _, args := range [][]string{{"uninstall", "--purge", "--dry-run", "--yes"}, {"uninstall", "--purge", "--yes"}} {
+				if code := c.Run(args); code != 1 || !strings.Contains(stderr.String(), "state path is not a directory") {
+					t.Fatalf("%v: code=%d errors=%s", args, code, stderr.String())
+				}
+			}
+			if err := purgeFiles(c, paths); err == nil || !strings.Contains(err.Error(), "state path is not a directory") {
+				t.Fatalf("apply did not reject replaced state: %v", err)
+			}
+			if _, err := os.Lstat(cli); err != nil {
+				t.Fatal("removed CLI before state preflight", err)
+			}
+			if got := readTestFile(t, personal+"/personal.txt"); got != "user data\n" {
+				t.Fatal("changed symlink destination", got)
+			}
+			if got := readTestFile(t, paths.State+".held/original"); got != "initial state\n" {
+				t.Fatal("changed original state", got)
+			}
+			if kind == "file" && readTestFile(t, paths.State) != "user state file\n" {
+				t.Fatal("changed replaced state file")
+			}
+		})
+	}
+}
+
 func TestDependencyManifestOverrideIsValidatedBeforeMutation(t *testing.T) {
 	root := testRelease(t)
 	home := t.TempDir()
