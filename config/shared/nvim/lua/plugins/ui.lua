@@ -307,7 +307,6 @@ return {
             color = function()
               return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
             end,
-            icon = "",
             padding = { left = 0, right = 1 },
           },
           {
@@ -315,7 +314,7 @@ return {
             path = 0,
             symbols = {
               modified = " ●",
-              readonly = " [ro]",
+              readonly = " 󰌾",
               unnamed = "[No Name]",
               newfile = "[New]",
             },
@@ -324,10 +323,6 @@ return {
             "diagnostics",
             sources = { "nvim_diagnostic" },
             sections = { "error", "warn" },
-            symbols = {
-              error = "✘ ",
-              warn = "▲ ",
-            },
           },
         },
         lualine_x = {

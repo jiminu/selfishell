@@ -7,8 +7,7 @@ right_format = '$status$cmd_duration$jobs($username$hostname )$python$nodejs$jav
 [directory]
 format = '[$path]($style)[$read_only]($read_only_style) '
 style = 'bold blue'
-read_only = ' [ro]'
-read_only_style = 'bold red'
+read_only = ' 󰌾'
 
 truncation_length = 2
 truncation_symbol = '.../'

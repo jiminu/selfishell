@@ -286,7 +286,8 @@ Selfishell can configure Ghostty on macOS and Windows Terminal from WSL.
 The shell and Neovim also work in other terminals, such as iTerm2 and
 Terminal.app, once the terminal provides the following:
 
-- Font: Neovim's pickers and Markdown preview use Nerd Font icons. Select
+- Font: Neovim's completion, LSP symbol pickers, statusline, Markdown preview,
+  and the shell's read-only marker use Nerd Font icons. Select
   JetBrainsMonoNL Nerd Font Mono, which Selfishell installs on macOS, as the
   terminal font; it matches Ghostty's built-in font with ligatures off, and
   JetBrainsMono Nerd Font Mono keeps them. On Ubuntu Desktop, install it
