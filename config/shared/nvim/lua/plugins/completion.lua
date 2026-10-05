@@ -10,8 +10,17 @@ return {
     },
     config = function()
       local cmp = require("cmp")
+      local kind_icons = require("snacks.picker.config.defaults").defaults.icons.kinds
 
       cmp.setup({
+        formatting = {
+          format = function(_, item)
+            item.icon = vim.trim(kind_icons[item.kind] or "")
+            item.icon_hl_group = "CmpItemKind" .. item.kind
+            return item
+          end,
+        },
+
         snippet = {
           expand = function(args)
             vim.snippet.expand(args.body)
