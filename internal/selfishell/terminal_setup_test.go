@@ -38,7 +38,14 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 		t.Fatal(err)
 	}
 	f := newPackageFixture(t)
-	f.executable("ghostty", "exit 0")
+	apps := t.TempDir()
+	t.Setenv("SELFISHELL_TEST_APPLICATIONS_DIR", apps)
+	if err := os.MkdirAll(apps+"/Ghostty.app/Contents/MacOS", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(apps+"/Ghostty.app/Contents/MacOS/ghostty", []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	f.executable("brew", "echo attempted >\"$HOME/brew-attempted\"; exit 90")
 	c := CLI{Root: root, Out: &f.out, Err: &f.err}
 	if err := c.installPackages(context.Background(), f.op, paths, nil, "macos", "arm64", true, false); err != nil {

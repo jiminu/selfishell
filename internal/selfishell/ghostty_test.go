@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+// Ghostty detection must not see the developer's /Applications.
+func TestMain(m *testing.M) {
+	os.Setenv("SELFISHELL_TEST_APPLICATIONS_DIR", filepath.Join(os.TempDir(), "selfishell-test-no-applications"))
+	os.Exit(m.Run())
+}
+
 func TestGhosttyOverriddenSettings(t *testing.T) {
 	defaults := []byte(`theme = Dark+
 keybind = global:cmd+grave_accent=toggle_quick_terminal
