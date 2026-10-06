@@ -62,9 +62,11 @@ Reinstalling Selfishell does not require removing Homebrew, Apt or mise tools.
 CI executes Selfishell on macOS ARM64 and Ubuntu 24.04 AMD64. The Linux ARM64
 and macOS AMD64 archives are built but not executed, and WSL 2 is covered only
 by isolated tests. Opt-in native checks cover read-only PowerShell/path
-interoperability and profile edits/restoration on a private Windows temporary
-directory; they do not install fonts or write font registry entries. See [verification coverage](../CONTRIBUTING.md#verification-coverage)
-for the exact CI jobs.
+interoperability and writing and removing a fragment in a private Windows
+temporary directory; they do not change Windows Terminal settings, install
+fonts, or write font registry entries. See
+[verification coverage](../CONTRIBUTING.md#verification-coverage) for the exact
+CI jobs.
 
 ## Bootstrap options
 

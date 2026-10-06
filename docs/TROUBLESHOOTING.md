@@ -71,9 +71,9 @@ download up to three times within one minute after a timeout or an HTTP 408,
 ## Windows Terminal cannot find the font
 
 During the first WSL font installation, an already-open Windows Terminal may
-warn that it cannot find `JetBrainsMonoNL Nerd Font Mono` when Selfishell applies
-the profile settings. The running Terminal may not have picked up the newly
-registered font yet.
+warn that it cannot find `JetBrainsMonoNL Nerd Font Mono` once Selfishell adds
+its fragment. The running Terminal may not have picked up the newly registered
+font yet.
 
 Let installation finish, then close all Windows Terminal windows and reopen
 your configured WSL profile. If the font works after restarting, no reinstall
@@ -83,9 +83,10 @@ If the warning remains, check the installation output for optional font
 installation failures and run `selfishell status --verbose`. An installation
 with `--skip-packages` does not download or register fonts. Resolve any reported
 font installation failure and rerun `selfishell install` without that flag,
-then restart Terminal again. If Terminal keeps another font without a warning,
-`selfishell status` names any font or color scheme in your Windows Terminal
-settings that takes precedence. See [Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
+then restart Terminal again. If Terminal keeps another font or theme without a
+warning, `selfishell status` names the font or dark-mode color scheme in your
+Windows Terminal settings that takes precedence. See
+[Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
 
 ## Clipboard over SSH and on WSL
 
