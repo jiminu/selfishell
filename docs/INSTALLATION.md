@@ -245,8 +245,9 @@ that sets the selected profile's font to JetBrainsMonoNL Nerd Font Mono and its
 color scheme to Windows Terminal's built-in `Dark+`. Profile names, launch
 commands, other profiles, the default profile, and all settings are preserved.
 A font or color scheme you set in Windows Terminal, on the profile or under
-Defaults, takes precedence over the fragment. Setup and `status` name such a
-value; remove it in Windows Terminal to use Selfishell's font and theme.
+Defaults, takes precedence over the fragment; a scheme chosen only for light
+mode applies only there. Setup and `status` name such a value; remove it in
+Windows Terminal to use Selfishell's font and theme.
 Restart Windows Terminal after setup. On the first font installation, an
 already-open Terminal may briefly warn that it cannot find the font. Let setup
 finish, then close all Terminal windows and reopen your existing WSL profile.

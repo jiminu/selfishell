@@ -72,18 +72,25 @@ func windowsTerminalOverrides(j *terminalJSON, profile *terminalJSONNode) ([]str
 		if err := font.unique("face"); err != nil {
 			return nil, err
 		}
-		values := map[string]*terminalJSONNode{"font.face": font.property("face"), "colorScheme": layer.node.property("colorScheme")}
-		if font == nil {
-			values["fontFace"] = layer.node.property("fontFace")
+		check := func(key string, node *terminalJSONNode, want []byte, applied string) {
+			if value := j.value(node); value != nil && !bytes.Equal(value, want) {
+				found = append(found, fmt.Sprintf("%s %s %s takes precedence over %s", layer.name, key, value, applied))
+			}
 		}
-		for _, key := range []string{"font.face", "fontFace", "colorScheme"} {
-			want := face
-			if key == "colorScheme" {
-				want = []byte(`"Dark+"`)
+		check("font.face", font.property("face"), face, "Selfishell's font")
+		if font == nil {
+			check("fontFace", layer.node.property("fontFace"), face, "Selfishell's font")
+		}
+		// An object sets each mode separately; a missing mode keeps the fragment's Dark+.
+		scheme, dark := layer.node.property("colorScheme"), []byte(`"Dark+"`)
+		if scheme != nil && scheme.object {
+			if err := scheme.unique("dark", "light"); err != nil {
+				return nil, err
 			}
-			if value := j.value(values[key]); value != nil && !bytes.Equal(value, want) {
-				found = append(found, fmt.Sprintf("%s %s %s", layer.name, key, value))
-			}
+			check("colorScheme.dark", scheme.property("dark"), dark, "Dark+")
+			check("colorScheme.light", scheme.property("light"), dark, "Dark+ in light mode")
+		} else {
+			check("colorScheme", scheme, dark, "Dark+")
 		}
 	}
 	return found, nil
@@ -99,7 +106,7 @@ func (c CLI) noteWindowsTerminalOverrides(choice *windowsTerminalChoice, say fun
 		say(fmt.Sprintf("Could not check Windows Terminal settings for an overriding font or theme: %s", err))
 	}
 	for _, o := range overrides {
-		say(fmt.Sprintf("Windows Terminal %s takes precedence over Selfishell's; remove it there to apply the font and Dark+.", o))
+		say(fmt.Sprintf("Windows Terminal %s; remove it there to use Selfishell's.", o))
 	}
 }
 

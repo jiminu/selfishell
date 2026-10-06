@@ -93,8 +93,10 @@ func TestWindowsTerminalOverrides(t *testing.T) {
 	for _, tc := range []struct{ profile, defaults, want string }{
 		{``, ``, ``},
 		{`"font": {"face": "JetBrainsMonoNL Nerd Font Mono"}, "colorScheme": "Dark+",`, `"font": {"size": 12},`, ``},
-		{`"font": {"face": "Consolas"}, "colorScheme": {"dark": "Campbell"},`, ``, `profile font.face "Consolas"|profile colorScheme {"dark":"Campbell"}`},
-		{`"fontFace": "Consolas",`, `"colorScheme": "Campbell", "fontFace": "Lucida",`, `profile fontFace "Consolas"|Defaults fontFace "Lucida"|Defaults colorScheme "Campbell"`},
+		{`"font": {"face": "Consolas"}, "colorScheme": {"dark": "Campbell"},`, ``, `profile font.face "Consolas" takes precedence over Selfishell's font|profile colorScheme.dark "Campbell" takes precedence over Dark+`},
+		{`"fontFace": "Consolas",`, `"colorScheme": "Campbell", "fontFace": "Lucida",`, `profile fontFace "Consolas" takes precedence over Selfishell's font|Defaults fontFace "Lucida" takes precedence over Selfishell's font|Defaults colorScheme "Campbell" takes precedence over Dark+`},
+		// The Settings UI writes per-mode objects; dark mode still uses the fragment.
+		{`"colorScheme": {"light": "Ubuntu"},`, `"colorScheme": {"dark": "Dark+", "light": "Campbell"},`, `profile colorScheme.light "Ubuntu" takes precedence over Dark+ in light mode|Defaults colorScheme.light "Campbell" takes precedence over Dark+ in light mode`},
 		// A font object makes Windows Terminal ignore the legacy key.
 		{`"fontFace": "Consolas", "font": {"size": 12},`, ``, ``},
 	} {
