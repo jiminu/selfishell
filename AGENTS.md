@@ -78,13 +78,12 @@ integration uses only:
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
 - when chosen on WSL, one recorded Windows Terminal JSON fragment under
   `Fragments/Selfishell` that `updates` the current distribution profile's
-  `font.face` and `colorScheme` (built-in `Dark+`, no custom scheme). Never write
-  `settings.json`, except the one-time restore of values releases 1.6.3-1.6.5
-  applied there (only values still matching them). Never create a profile or
-  change its name, launch command, or the default profile. Identify existing
-  profiles by distro identity, preserving renamed display names; skip missing or
-  ambiguous targets. Font or color scheme values in the user's profile or
-  Defaults take precedence; report them instead of editing them;
+  `font.face` and `colorScheme` (built-in `Dark+`, no custom scheme). Never
+  write `settings.json`. Never create a profile or change its name, launch
+  command, or the default profile. Identify existing profiles by distro
+  identity, preserving renamed display names; skip missing or ambiguous targets.
+  Font or color scheme values in the user's profile or Defaults take precedence;
+  report them instead of editing them;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
