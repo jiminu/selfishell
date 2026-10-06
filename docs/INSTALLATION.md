@@ -244,7 +244,9 @@ If the saved profile disappears, for example after the distribution is
 re-imported, installs and updates find the current profile and move the fragment
 to it. A distribution cloned under another name with `wsl --export` and
 `wsl --import` leaves the original's fragment alone; run `selfishell install` in
-the clone to set it up there.
+the clone to set it up there. Clones are recognized by `WSL_DISTRO_NAME`, which
+a shell reached through SSH may lack, so run Selfishell from a WSL shell started
+on Windows.
 
 Selfishell does not edit `settings.json`. It adds a small Windows Terminal
 [JSON fragment](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)

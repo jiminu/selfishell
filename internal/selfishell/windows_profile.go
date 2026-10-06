@@ -133,6 +133,10 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	if err != nil {
 		return err
 	}
+	if choice.replacesForeign {
+		// Dry-run and preflight still see the copied record of another distribution.
+		record = nil
+	}
 	// A copied record from another distribution is dropped before saving a new
 	// choice, so a different path is this distribution's previous profile.
 	if record != nil && record.Path != path {
@@ -300,6 +304,13 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 			return true, false, true
 		}
 		return false, false, false
+	}
+	if choice != nil && choice.Enabled {
+		// An interrupted re-target saved the new profile before moving the fragment.
+		if path, _, err := windowsFragment(choice); err == nil && path != record.Path {
+			c.sayDiagnostic("33", "MISSING", path+" (Windows Terminal fragment); run 'selfishell install' to finish moving it")
+			return true, false, false
+		}
 	}
 	data, err := readStateFile(record.Path)
 	sum, _ := checksumBytes(data)

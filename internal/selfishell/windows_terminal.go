@@ -43,7 +43,36 @@ func (w *windowsTerminalChoice) foreign() bool {
 
 func windowsProfileMissing(choice *windowsTerminalChoice) bool {
 	_, profile, err := readWindowsProfile(choice.SettingsPath, choice.ProfileGUID)
-	return errors.Is(err, os.ErrNotExist) || (err == nil && profile == nil)
+	if err != nil || profile == nil {
+		return errors.Is(err, os.ErrNotExist) || err == nil
+	}
+	// Windows Terminal keeps settings stubs of profiles WSL no longer generates.
+	return terminalGUID(choice.ProfileGUID) != legacyWSLProfileGUID(choice.Distro) && !wslFragmentListsProfile(choice)
+}
+
+// Mirrors the probe offline: WSL lists its current profiles in its own fragments.
+func wslFragmentListsProfile(choice *windowsTerminalChoice) bool {
+	dir := choice.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Microsoft.WSL"
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		data, err := readStateFile(dir + "/" + entry.Name())
+		if err != nil {
+			continue
+		}
+		j, err := parseTerminalJSON(data)
+		if err != nil || j.root.property("profiles") == nil {
+			continue
+		}
+		for _, profile := range j.root.property("profiles").items {
+			if j.text(profile.property("name")) == choice.Distro && terminalGUID(j.text(profile.property("guid"))) == terminalGUID(choice.ProfileGUID) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func readWindowsTerminalChoice(paths Paths) (*windowsTerminalChoice, error) {
@@ -95,12 +124,16 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 	}
 	if choice != nil && choice.Enabled && distro != "" && windowsProfileMissing(choice) {
 		// A re-imported distribution gets a new profile; keep the opt-in and move to it.
-		if target, err := c.findWindowsTerminalTarget(p, distro); err == nil {
+		target, err := c.findWindowsTerminalTarget(p, distro)
+		if err == nil {
 			next, err := c.windowsTerminalChoiceFor(p, distro, target)
 			if next != nil {
 				next.retargeted = true
 			}
 			return next, err
+		}
+		if !errors.Is(err, errWindowsTerminalUnavailable) {
+			c.report("Notes", reportWarning, "Skipping Windows Terminal setup: %s", err)
 		}
 		return choice, nil
 	}

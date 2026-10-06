@@ -621,31 +621,80 @@ func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
 }
 
 func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
-	for _, scenario := range []string{"reimport", "clone-install", "clone-uninstall"} {
+	for _, scenario := range []string{"reimport", "stale-stub", "ambiguous", "clone-install", "clone-uninstall"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, home, paths, windowsHome := windowsTerminalFixture(t)
-			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			fragments := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/"
-			original := blockRead(t, fragments+"963ff2f7-6aed-5ce3-9d91-90d99571f53a.json")
 			settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
-			if scenario == "reimport" {
+			// Settings keep stubs; WSL's own fragments, which the probe reads, list current profiles.
+			profiles := func(stubs []string, current ...string) {
+				entries := func(guids []string) string {
+					var list []string
+					for _, guid := range guids {
+						list = append(list, `{"guid":"{`+guid+`}","name":"Ubuntu-24.04","source":"Microsoft.WSL"}`)
+					}
+					return strings.Join(list, ",")
+				}
+				wsl := windowsHome + "/Microsoft/Windows Terminal/Fragments/Microsoft.WSL/wsl.json"
+				if err := os.MkdirAll(rawParent(wsl), 0700); err != nil {
+					t.Fatal(err)
+				}
+				probe := string(blockRead(t, home+"/tools/powershell.exe"))
+				at := strings.Index(probe, `"wslProfileGuids":[`) + len(`"wslProfileGuids":[`)
+				guids := ""
+				if len(current) > 0 {
+					guids = `"{` + strings.Join(current, `}","{`) + `}"`
+				}
+				probe = probe[:at] + guids + probe[at+strings.Index(probe[at:], "]"):]
+				for path, data := range map[string]string{settings: `{"profiles":{"list":[` + entries(stubs) + `]}}`, wsl: `{"profiles":[` + entries(current) + `]}`, home + "/tools/powershell.exe": probe} {
+					if err := testutil.WriteFile(path, []byte(data), 0700); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			old, next := "963ff2f7-6aed-5ce3-9d91-90d99571f53a", "0e9c7e1c-0000-4000-8000-000000000001"
+			if scenario == "stale-stub" {
+				old = "0e9c7e1c-0000-4000-8000-000000000002"
+				profiles([]string{old}, old)
+			}
+			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			original := blockRead(t, fragments+old+".json")
+			if !strings.HasPrefix(scenario, "clone") {
 				// Re-importing gives the distribution a new profile GUID.
-				guid := "0e9c7e1c-0000-4000-8000-000000000001"
-				if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{`+guid+`}","name":"Ubuntu-24.04","source":"Microsoft.WSL"}]}}`), 0600); err != nil {
-					t.Fatal(err)
+				switch scenario {
+				case "reimport":
+					profiles([]string{next}, next)
+				case "stale-stub":
+					profiles([]string{old, next}, next)
+				case "ambiguous":
+					other := "0e9c7e1c-0000-4000-8000-000000000003"
+					profiles([]string{next, other}, next, other)
 				}
-				probe := strings.Replace(string(blockRead(t, home+"/tools/powershell.exe")), `"wslProfileGuids":[]`, `"wslProfileGuids":["{`+guid+`}"]`, 1)
-				if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(probe), 0700); err != nil {
-					t.Fatal(err)
-				}
-				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "Windows Terminal profile {963ff2f7-6aed-5ce3-9d91-90d99571f53a}; run 'selfishell install'") {
+				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "Windows Terminal profile {"+old+"}; run 'selfishell install'") {
 					t.Fatal("status missed the missing profile", out)
 				}
-				blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
-				if _, err := os.Stat(fragments + "963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"); !os.IsNotExist(err) {
+				if scenario == "reimport" {
+					// An interrupted re-target saves the new profile before moving the fragment.
+					choice := strings.Replace(string(blockRead(t, paths.State+"/windows-terminal.json")), old, next, 1)
+					if err := testutil.WriteFile(paths.State+"/windows-terminal.json", []byte(choice), 0600); err != nil {
+						t.Fatal(err)
+					}
+					if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, next+".json (Windows Terminal fragment); run 'selfishell install'") {
+						t.Fatal("status reported an unfinished move as intact", out)
+					}
+				}
+				out := blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+				if scenario == "ambiguous" {
+					if !strings.Contains(out, "Skipping Windows Terminal setup: could not uniquely identify") {
+						t.Fatal("hid why the profile could not be re-targeted", out)
+					}
+					blockEqual(t, fragments+old+".json", original)
+					return
+				}
+				if _, err := os.Stat(fragments + old + ".json"); !os.IsNotExist(err) {
 					t.Fatal("previous fragment was kept", err)
 				}
-				if !strings.Contains(string(blockRead(t, fragments+guid+".json")), guid) || !strings.Contains(string(blockRead(t, paths.State+"/windows-terminal.json")), guid) {
+				if !strings.Contains(string(blockRead(t, fragments+next+".json")), next) || !strings.Contains(string(blockRead(t, paths.State+"/windows-terminal.json")), next) {
 					t.Fatal("setup did not move to the new profile")
 				}
 				return
@@ -663,6 +712,9 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 				t.Fatal("update did not explain the skipped setup", out)
 			}
 			if scenario == "clone-install" {
+				if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--dry-run"); strings.Contains(out, "Would remove Windows Terminal fragment") {
+					t.Fatal("dry-run previewed removing the original's fragment", out)
+				}
 				blockOK(t, root, "install", "--skip-packages", "--yes")
 				if !strings.Contains(string(blockRead(t, fragments+strings.Trim(clone, "{}")+".json")), clone) {
 					t.Fatal("clone was not set up")
