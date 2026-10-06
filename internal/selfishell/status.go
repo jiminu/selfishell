@@ -162,10 +162,14 @@ func (c CLI) status(args []string) int {
 		ghostty := false
 		if platform.Name == "macos" {
 			choice, e := readStateFile(paths.State + "/ghostty")
+			// Install and update reject this choice; status keeps diagnosing.
 			if e != nil && !errors.Is(e, fs.ErrNotExist) {
-				return c.diagnosticError(e)
+				count++
+				recordIssues = true
+				c.sayDiagnostic("31", "MALFORMED", paths.State+"/ghostty")
+				result = 1
 			}
-			ghostty = string(choice) == "1\n"
+			ghostty = e == nil && string(choice) == "1\n"
 		}
 		selected, e := ResourcesForPlatform(c.Root, platform.Name, ghostty)
 		if e != nil {
