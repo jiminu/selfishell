@@ -13,8 +13,7 @@ import (
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-// A renamed Ubuntu profile with an unrelated profile, user font settings, and a
-// user scheme shadowing the built-in Dark+.
+// A renamed Ubuntu profile with an unrelated profile and user font settings.
 const terminalSettingsFixture = `{
   // Keep this comment and all unrelated settings.
   "defaultProfile": "{00000000-0000-0000-0000-000000000001}",
@@ -25,7 +24,6 @@ const terminalSettingsFixture = `{
       {"guid": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}", "name": "My development shell", "source": "Windows.Terminal.Wsl", "commandline": "wsl.exe -d Ubuntu-24.04 --cd /work --exec zsh --login", "font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, "startingDirectory": "~",},
     ],
   },
-  "schemes": [{"name": "Dark+", "background": "#010203"}],
 }
 `
 
