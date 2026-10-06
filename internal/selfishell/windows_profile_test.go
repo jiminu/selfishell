@@ -70,7 +70,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			if err != nil {
 				t.Fatal(err)
 			}
-			applied := scenario == "other-distro-renamed" || scenario == "modern" || scenario == "current"
+			applied := scenario == "other-distro-renamed" || scenario == "modern" || scenario == "current" || scenario == "duplicate-face"
 			if !applied {
 				if record != nil || !strings.Contains(out, "Skipping Windows Terminal setup") {
 					t.Fatal("unsafe or unreported profile selection", out)
@@ -83,6 +83,9 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			}
 			if record == nil || !bytes.Contains(blockRead(t, record.Path), []byte(`"updates": "`+guid+`"`)) {
 				t.Fatal("fragment does not update the distro profile", record)
+			}
+			if (scenario == "duplicate-face") != strings.Contains(out, "Could not check Windows Terminal settings") {
+				t.Fatal("duplicate appearance keys must skip only the override notice", out)
 			}
 		})
 	}
