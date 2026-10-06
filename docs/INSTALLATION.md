@@ -283,18 +283,26 @@ The integration does not provide native Windows shell support.
 ## Other terminals
 
 Selfishell can configure Ghostty on macOS and Windows Terminal from WSL.
-The shell and Neovim also work in other terminals, such as iTerm2 and
-Terminal.app, once the terminal provides the following:
+In other terminals, such as iTerm2 and Terminal.app, the shell and Neovim need
+the following:
 
-- Font: Neovim's completion, LSP symbol pickers, statusline, Markdown preview,
-  and the shell's read-only marker use Nerd Font icons. Select
-  JetBrainsMonoNL Nerd Font Mono, which Selfishell installs on macOS, as the
-  terminal font; it matches Ghostty's built-in font with ligatures off, and
-  JetBrainsMono Nerd Font Mono keeps them. On Ubuntu Desktop, install it
-  yourself; the first setup in a local desktop session reminds you. Korean
-  needs no font: terminals fall back to the system's Korean font. In iTerm2,
-  leave "Use a different font for non-ASCII text" off, since that font would
-  also replace the Nerd Font icons.
+- Nerd Font (required in every terminal): the prompt's read-only marker and
+  Neovim's completion, LSP symbol pickers, statusline, and Markdown preview use
+  Nerd Font icons, which show as boxes without one. Use JetBrainsMonoNL Nerd
+  Font Mono; it matches Ghostty's built-in font with ligatures off, and
+  JetBrainsMono Nerd Font Mono keeps them.
+  - macOS: Selfishell installs it. Ghostty needs no font setting; select it in
+    other terminals.
+  - WSL: the [Windows Terminal setup](#windows-terminal-on-wsl) installs and
+    selects it. If declined, the first setup reminds you to install it on
+    Windows and select it yourself. Set VS Code's terminal font separately.
+  - Ubuntu: install it yourself, since Ubuntu 24.04's Apt has no Nerd Font. The
+    first setup in a local desktop session reminds you.
+  - SSH: the font of the terminal you connect from is what counts.
+
+  Korean needs no font: terminals fall back to the system's Korean font. In
+  iTerm2, leave "Use a different font for non-ASCII text" off, since that font
+  would also replace the Nerd Font icons.
 - Option as Alt: FZF's Alt-C directory jump and other Alt shortcuts need the
   Option key to send Alt. In iTerm2, set Settings → Profiles → Keys → General
   → Left Option key to Esc+; in Terminal.app, enable Settings → Profiles →
@@ -357,10 +365,8 @@ or Neovim plugin checkouts.
 
 ## Platform notes
 
-- On WSL, the optional [Windows Terminal setup](#windows-terminal-on-wsl) selects
-  the font for the existing distribution profile. If declined, the first setup reminds you to
-  install JetBrainsMonoNL Nerd Font Mono on Windows and select it yourself.
-  Set VS Code's terminal font separately.
+- Every terminal needs a Nerd Font; see [Other terminals](#other-terminals)
+  for where it comes from on each platform.
 - On macOS, restart Ghostty after installation to apply its configuration.
 - Optional packages that are unavailable or fail to install are reported
   without stopping required setup; missing required packages stop installation.
