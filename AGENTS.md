@@ -82,6 +82,8 @@ integration uses only:
   write `settings.json`. Never create a profile or change its name, launch
   command, or the default profile. Identify existing profiles by distro
   identity, preserving renamed display names; skip missing or ambiguous targets.
+  Move the fragment when the saved profile disappears; never touch a fragment
+  recorded by another distribution whose state was copied into a clone.
   Font or color scheme values in the user's profile or Defaults take precedence;
   report them instead of editing them;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and

@@ -238,6 +238,11 @@ display names. If several visible candidates exist, the current `WT_PROFILE_ID`
 can identify the target; otherwise setup reports the ambiguity and skips this
 integration. Missing profiles are never created. Stable, Preview, and unpackaged
 settings locations are checked; multiple indistinguishable candidates are skipped.
+If the saved profile disappears, for example after the distribution is
+re-imported, installs and updates find the current profile and move the fragment
+to it. A distribution cloned under another name with `wsl --export` and
+`wsl --import` leaves the original's fragment alone; run `selfishell install` in
+the clone to set it up there.
 
 Selfishell does not edit `settings.json`. It adds a small Windows Terminal
 [JSON fragment](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)

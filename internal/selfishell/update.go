@@ -289,6 +289,12 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.error(err.Error())
 		return 1
 	}
+	if prepared.windowsTerminal != nil && prepared.windowsTerminal.retargeted {
+		if err := c.saveWindowsTerminalChoice(prepared); err != nil {
+			c.error(err.Error())
+			return 1
+		}
+	}
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
 		return 1
