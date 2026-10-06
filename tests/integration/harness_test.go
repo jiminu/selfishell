@@ -117,7 +117,7 @@ func repoRoot() string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "../.."))
 }
 func baseEnv(home, tmp string) []string {
-	return []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_DATA_HOME=" + filepath.Join(home, ".local/share"), "XDG_STATE_HOME=" + filepath.Join(home, ".local/state"), "XDG_CACHE_HOME=" + filepath.Join(home, ".cache"), "SHELL=/bin/zsh", "TMPDIR=" + tmp, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL=C", "TZ=UTC"}
+	return []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_DATA_HOME=" + filepath.Join(home, ".local/share"), "XDG_STATE_HOME=" + filepath.Join(home, ".local/state"), "XDG_CACHE_HOME=" + filepath.Join(home, ".cache"), "SHELL=/bin/zsh", "TMPDIR=" + tmp, "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL=C", "TZ=UTC", "SELFISHELL_TEST_APPLICATIONS_DIR=" + filepath.Join(home, "system-applications")}
 }
 func withEnv(base []string, extra ...string) []string {
 	return append(append([]string{}, base...), extra...)

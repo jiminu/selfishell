@@ -10,7 +10,7 @@ func ghosttyInstalled(p Process) bool {
 	if _, err := p.lookPath("ghostty"); err == nil {
 		return true
 	}
-	for _, base := range []string{"/Applications", envValue(p.environment(), "HOME") + "/Applications"} {
+	for _, base := range []string{envDefault("SELFISHELL_TEST_APPLICATIONS_DIR", "/Applications"), envValue(p.environment(), "HOME") + "/Applications"} {
 		info, err := os.Stat(base + "/Ghostty.app/Contents/MacOS/ghostty")
 		if err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
 			return true
