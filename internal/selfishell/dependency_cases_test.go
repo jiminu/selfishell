@@ -311,7 +311,8 @@ func TestDirectArchiveMemberAndUnsafeEntries(t *testing.T) {
 
 func gitCommand(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	// Detached auto-maintenance after a fixture commit would race path snapshots.
+	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "maintenance.auto=false"}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.invalid", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.invalid")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
