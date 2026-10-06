@@ -10,7 +10,7 @@ return {
     },
     config = function()
       local cmp = require("cmp")
-      local kind_icons = require("snacks.picker.config.defaults").defaults.icons.kinds
+      local kind_icons = Snacks.picker.config.get().icons.kinds
 
       cmp.setup({
         formatting = {

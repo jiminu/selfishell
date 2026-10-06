@@ -123,7 +123,9 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	}
 	if _, err := op.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+`
 local ok, message = pcall(function()
-  require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim" } })
+  require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim", "nvim-cmp" } })
+  local item = require("cmp").get_config().formatting.format({}, { kind = "Function" })
+  assert(item.icon and item.icon ~= "", "Missing completion kind icon from the snacks picker config")
   local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
   for _, specifier in ipairs(require("config.languages").lsp) do
     local server, version = require("mason-core.package").Parse(specifier)
