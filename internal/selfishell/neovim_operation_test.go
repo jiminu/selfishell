@@ -79,6 +79,7 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 		t.Fatalf("ignored cleanup entries triggered sync: %s", data)
 	}
 	gitCommand(t, home, "clone", "-q", home+"/lazy-source", home+"/data/nvim/lazy/removed-plugin")
+	writeTestFile(t, home+"/data/nvim/lazy/removed-plugin/doc/tags", "generated\n", 0600)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}

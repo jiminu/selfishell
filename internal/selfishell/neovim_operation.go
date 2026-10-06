@@ -419,8 +419,9 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			return err
 		}
 		// Cleanup removes the whole checkout, including ignored and untracked
-		// files that ordinary pin updates deliberately leave untouched.
-		changes, err := probe.commandOutput(ctx, "git", "-C", path, "status", "--porcelain", "--untracked-files=all", "--ignored", "--")
+		// files that ordinary pin updates deliberately leave untouched. Lazy's
+		// helptags generates doc/tags in nearly every checkout.
+		changes, err := probe.commandOutput(ctx, "git", "-C", path, "status", "--porcelain", "--untracked-files=all", "--ignored", "--", ":(exclude)doc/tags")
 		if err != nil {
 			return fmt.Errorf("Could not inspect Neovim plugin checkout: %s: %w", path, err)
 		}
