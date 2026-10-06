@@ -85,7 +85,8 @@ that Selfishell does not own remains untouched.
 
 Uninstalling with `--purge` leaves installed tools and fonts in place and retains
 their ownership records. Reinstalling Selfishell continues to synchronize these
-managed dependencies instead of treating them as external installations.
+managed dependencies instead of treating them as external installations; see
+[purge](INSTALLATION.md#restore-configuration-and-purge-selfishell) to forget them.
 
 `--skip-packages` skips all package and tool installation when this phase runs,
 matching `selfishell install --skip-packages`. CLI-only and already-current
