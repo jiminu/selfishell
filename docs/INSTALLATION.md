@@ -347,15 +347,21 @@ Without `--restore`, uninstall keeps the
 ### Restore configuration and purge Selfishell
 
 Add `--purge` to also remove the installed CLI, retained releases, cache, and
-configuration state. Ownership records for retained direct tools and Windows
-fonts, including font recovery records, remain so reinstalling Selfishell can
-continue to synchronize their approved versions. Backups of managed files you
-had modified stay in
+configuration state. Backups of managed files you had modified stay in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/backups`:
 
 ```sh
 selfishell uninstall --restore --purge
 ```
+
+Directly downloaded tools such as mise, and Windows fonts on WSL, stay
+installed, so purge also keeps their ownership records in the `dependencies`,
+`retained-fonts`, and `pending-fonts` directories under
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell`. A later installation keeps
+managing them: a tool at a recorded path, even one you reinstalled yourself, is
+replaced with the approved version. To have Selfishell treat them as external
+instead, delete those three directories after purging. A usable tool or font is
+then preserved, and Selfishell no longer changes its Windows font registration.
 
 Personal content in `~/.zshrc`, `~/.zprofile`, and `~/.vimrc`, and in
 `~/.zshenv` on Ubuntu/WSL, is preserved; uninstall removes only the intact
