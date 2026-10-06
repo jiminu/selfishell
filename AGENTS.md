@@ -82,7 +82,8 @@ integration uses only:
   scheme or fragment. Never create a profile or change its name, launch command,
   or the default profile. Identify existing profiles by distro identity,
   preserving renamed display names; skip missing or ambiguous targets. Preserve
-  unrelated JSON, comments, and user edits. Uninstall restores only the two values that still match the applied values;
+  unrelated JSON, comments, and user edits. Uninstall restores only the two
+  values that still match the applied values;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
