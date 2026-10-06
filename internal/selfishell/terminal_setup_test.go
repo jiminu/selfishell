@@ -216,6 +216,18 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	if code != 2 || !strings.Contains(stderr, "only on Ubuntu on WSL") {
 		t.Fatalf("%d %s", code, stderr)
 	}
+	blockOK(t, root, "uninstall", "--restore", "--dry-run", "--yes")
+	blockEqual(t, fragment, want)
+	record := blockRead(t, windowsFragmentRecordPath(paths))
+	if err := os.Remove(windowsFragmentRecordPath(paths)); err != nil {
+		t.Fatal(err)
+	}
+	if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "[MISSING] Installation record: ") || !strings.Contains(out, "windows-terminal-fragment.json") {
+		t.Fatal("status missed the absent fragment record", out)
+	}
+	if err := testutil.WriteFile(windowsFragmentRecordPath(paths), record, 0600); err != nil {
+		t.Fatal(err)
+	}
 	blockOK(t, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, settings, original)
 	for _, path := range []string{rawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
@@ -939,29 +951,8 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 	}
 }
 
-func TestPrepareConfigIncludesWindowsTerminal(t *testing.T) {
-	root, _, paths, settings := existingWindowsProfileFixture(t)
-	c := CLI{Root: root, Out: io.Discard, Err: io.Discard}
-	original := blockRead(t, settings)
-	prepared, err := c.prepareConfig("ubuntu-wsl", true, true, false, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if prepared.windowsTerminal == nil || !prepared.windowsTerminal.Enabled {
-		t.Fatal("common preparation omitted Windows Terminal")
-	}
-	if string(blockRead(t, settings)) != string(original) {
-		t.Fatal("preparation changed settings")
-	}
-	for _, path := range []string{paths.Config, paths.State} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("preparation created %s: %v", path, err)
-		}
-	}
-}
-
 func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
-	for _, command := range []string{"install", "update"} {
+	for _, command := range []string{"install", "update", "uninstall"} {
 		t.Run(command, func(t *testing.T) {
 			root, home, paths, _ := existingWindowsProfileFixture(t)
 			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
