@@ -608,6 +608,63 @@ func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
 	}
 }
 
+func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
+	for _, scenario := range []string{"reimport", "clone-install", "clone-uninstall"} {
+		t.Run(scenario, func(t *testing.T) {
+			root, home, paths, windowsHome := windowsTerminalFixture(t)
+			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			fragments := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/"
+			original := blockRead(t, fragments+"963ff2f7-6aed-5ce3-9d91-90d99571f53a.json")
+			settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
+			if scenario == "reimport" {
+				// Re-importing gives the distribution a new profile GUID.
+				guid := "0e9c7e1c-0000-4000-8000-000000000001"
+				if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{`+guid+`}","name":"Ubuntu-24.04","source":"Microsoft.WSL"}]}}`), 0600); err != nil {
+					t.Fatal(err)
+				}
+				probe := strings.Replace(string(blockRead(t, home+"/tools/powershell.exe")), `"wslProfileGuids":[]`, `"wslProfileGuids":["{`+guid+`}"]`, 1)
+				if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(probe), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "Windows Terminal profile {963ff2f7-6aed-5ce3-9d91-90d99571f53a}; run 'selfishell install'") {
+					t.Fatal("status missed the missing profile", out)
+				}
+				blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+				if _, err := os.Stat(fragments + "963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"); !os.IsNotExist(err) {
+					t.Fatal("previous fragment was kept", err)
+				}
+				if !strings.Contains(string(blockRead(t, fragments+guid+".json")), guid) || !strings.Contains(string(blockRead(t, paths.State+"/windows-terminal.json")), guid) {
+					t.Fatal("setup did not move to the new profile")
+				}
+				return
+			}
+			// A clone carries the original's state; its fragment stays the original's.
+			t.Setenv("WSL_DISTRO_NAME", "Ubuntu-dev")
+			clone := legacyWSLProfileGUID("Ubuntu-dev")
+			if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"},{"guid":"`+clone+`","name":"Ubuntu-dev","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
+				t.Fatal("status missed the copied setup", out)
+			}
+			if out := blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
+				t.Fatal("update did not explain the skipped setup", out)
+			}
+			if scenario == "clone-install" {
+				blockOK(t, root, "install", "--skip-packages", "--yes")
+				if !strings.Contains(string(blockRead(t, fragments+strings.Trim(clone, "{}")+".json")), clone) {
+					t.Fatal("clone was not set up")
+				}
+			}
+			blockOK(t, root, "uninstall", "--yes")
+			blockEqual(t, fragments+"963ff2f7-6aed-5ce3-9d91-90d99571f53a.json", original)
+			if _, err := os.Stat(windowsFragmentRecordPath(paths)); !os.IsNotExist(err) {
+				t.Fatal("copied record was kept", err)
+			}
+		})
+	}
+}
+
 // Load a font privately in a short-lived Windows process, then sync a new pin.
 // No font is exposed to other applications and no real registry entry is written.
 func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {

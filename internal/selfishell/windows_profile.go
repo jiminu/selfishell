@@ -133,8 +133,13 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	if err != nil {
 		return err
 	}
+	// A copied record from another distribution is dropped before saving a new
+	// choice, so a different path is this distribution's previous profile.
 	if record != nil && record.Path != path {
-		return fmt.Errorf("Windows Terminal fragment record does not match this setup; run 'selfishell uninstall' before retrying: %s", record.Path)
+		if err := m.removeWindowsFragment(record, preflight); err != nil {
+			return err
+		}
+		record = nil
 	}
 	info, present, err := exists(path)
 	if err != nil {
@@ -222,6 +227,19 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 	if err != nil || record == nil {
 		return err
 	}
+	if choice, err := readWindowsTerminalChoice(m.paths); err == nil && choice.foreign() {
+		if preflight || m.dry {
+			return nil
+		}
+		return os.Remove(windowsFragmentRecordPath(m.paths))
+	}
+	if err := m.removeWindowsFragment(record, preflight); err != nil || preflight || m.dry {
+		return err
+	}
+	return os.Remove(windowsFragmentRecordPath(m.paths))
+}
+
+func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight bool) error {
 	info, present, err := exists(record.Path)
 	if err != nil {
 		return err
@@ -258,7 +276,7 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 	} else if present {
 		m.say(reportWarning, "Preserving modified Windows Terminal fragment: %s", record.Path)
 	}
-	return os.Remove(windowsFragmentRecordPath(m.paths))
+	return nil
 }
 
 func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, recordIssue bool) {
@@ -271,6 +289,10 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 	if err != nil {
 		c.sayDiagnostic("31", "MALFORMED", paths.State+"/windows-terminal.json")
 		return true, false, true
+	}
+	if choice.foreign() {
+		c.sayDiagnostic("36", "INFO", fmt.Sprintf("Windows Terminal setup was copied from WSL distribution %q; run 'selfishell install' here to set it up", choice.Distro))
+		return false, false, false
 	}
 	if record == nil {
 		if choice != nil && choice.Enabled {
@@ -285,6 +307,10 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 	label := record.Path + " (Windows Terminal fragment)"
 	if !intact {
 		c.sayDiagnostic("33", "CHANGED", label)
+		return true, false, false
+	}
+	if choice != nil && choice.Enabled && windowsProfileMissing(choice) {
+		c.sayDiagnostic("33", "MISSING", fmt.Sprintf("Windows Terminal profile %s; run 'selfishell install' to select the current profile", choice.ProfileGUID))
 		return true, false, false
 	}
 	if verbose {

@@ -142,16 +142,6 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	if err := testutil.WriteFile(fragment, foreign, 0600); err != nil {
 		t.Fatal(err)
 	}
-	// A record for another fragment path keeps that fragment owned.
-	if err := testutil.WriteFile(windowsFragmentRecordPath(paths), []byte(`{"version":1,"path":"/elsewhere.json","checksum":"1:1"}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes", "--windows-terminal"); code == 0 || !strings.Contains(stderr, "does not match") {
-		t.Fatal("replaced another recorded fragment", code, stderr)
-	}
-	if err := os.Remove(windowsFragmentRecordPath(paths)); err != nil {
-		t.Fatal(err)
-	}
 	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	backups, err := filepath.Glob(paths.State + "/backups/windows-terminal-fragment.backup.*")
 	if err != nil || len(backups) != 1 {
