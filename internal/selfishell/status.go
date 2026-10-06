@@ -44,7 +44,12 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
-	eligible, err := selectPackages(root, paths, all, platform, nil)
+	// statusWindowsTerminal reports a malformed choice; diagnose without its fonts.
+	choice, err := readWindowsTerminalChoice(paths)
+	if err != nil {
+		choice = &windowsTerminalChoice{}
+	}
+	eligible, err := selectPackages(root, paths, all, platform, choice)
 	if err != nil {
 		return nil, err
 	}
