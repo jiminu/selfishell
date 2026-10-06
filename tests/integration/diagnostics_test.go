@@ -381,14 +381,14 @@ func TestStatusGhosttyChoice(t *testing.T) {
 		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	}
 	for _, tc := range []struct {
-		platform, choice string
-		tracked, wantErr bool
-		wantCode         int
+		platform, choice   string
+		tracked, malformed bool
+		wantCode           int
 	}{
 		{platform: "macos", choice: "enabled", wantCode: 1},
 		{platform: "macos", choice: "disabled"},
 		{platform: "macos", choice: "missing"},
-		{platform: "macos", choice: "fifo", wantErr: true, wantCode: 1},
+		{platform: "macos", choice: "fifo", malformed: true, wantCode: 1},
 		{platform: "ubuntu", choice: "fifo"},
 		{platform: "ubuntu", choice: "fifo", tracked: true, wantCode: 1},
 	} {
@@ -427,22 +427,22 @@ func TestStatusGhosttyChoice(t *testing.T) {
 				t.Fatalf("status did not finish: %v", e)
 			}
 			requireStatus(t, "status", got, tc.wantCode)
-			if tc.wantErr {
-				requireContains(t, got.Stderr, "selfishell:")
-				requireContains(t, got.Stderr, "~/.local/state/selfishell/ghostty")
-			} else {
-				if len(got.Stderr) != 0 {
-					t.Fatalf("unexpected diagnostic error: %s", got.Stderr)
+			if len(got.Stderr) != 0 {
+				t.Fatalf("unexpected diagnostic error: %s", got.Stderr)
+			}
+			for _, name := range []string{"ghostty-config", "user-ghostty"} {
+				missing := "[MISSING] Installation record: ~/.local/state/selfishell/resources/" + name + ".state"
+				if bytes.Contains(got.Stdout, []byte(missing)) != (tc.choice == "enabled") {
+					t.Fatalf("incorrect Ghostty selection: %s", got.Stdout)
 				}
-				for _, name := range []string{"ghostty-config", "user-ghostty"} {
-					missing := "[MISSING] Installation record: ~/.local/state/selfishell/resources/" + name + ".state"
-					if bytes.Contains(got.Stdout, []byte(missing)) != (tc.choice == "enabled") {
-						t.Fatalf("incorrect Ghostty selection: %s", got.Stdout)
-					}
-				}
-				if tc.tracked {
-					requireContains(t, got.Stdout, "[MALFORMED] ~/.local/state/selfishell/resources/user-ghostty.state")
-				}
+			}
+			if tc.tracked {
+				requireContains(t, got.Stdout, "[MALFORMED] ~/.local/state/selfishell/resources/user-ghostty.state")
+			}
+			// An unreadable choice is reported without stopping the diagnosis.
+			if tc.malformed {
+				requireContains(t, got.Stdout, "[MALFORMED] ~/.local/state/selfishell/ghostty")
+				requireContains(t, got.Stdout, "Configuration:")
 			}
 			if !bytes.Equal(before, mustSnapshot(t, home)) {
 				t.Fatal("status mutated HOME")
