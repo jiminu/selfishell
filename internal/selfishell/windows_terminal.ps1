@@ -56,7 +56,7 @@ if ($request.operation -eq 'font-register') {
     try {
         $name = 'Selfishell ' + $request.name + ' (TrueType)'
         $existing = $key.GetValue($name)
-        if ($null -ne $existing -and $existing -ne $font.FullName -and ([string]::IsNullOrEmpty($request.previousPath) -or $existing -ne $request.previousPath) -and ([string]::IsNullOrEmpty($request.alternatePreviousPath) -or $existing -ne $request.alternatePreviousPath) -and ($request.previousPaths -notcontains $existing)) { throw 'Existing Windows font registration is user data' }
+        if ($null -ne $existing -and $existing -ne $font.FullName -and ($request.previousPaths -notcontains $existing)) { throw 'Existing Windows font registration is user data' }
         # Repeated setup does not increase the global font resource reference count.
         if ($existing -eq $font.FullName) {
             Add-Type -AssemblyName System.Drawing

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -526,13 +527,13 @@ print('{}')
 				t.Fatal("versioned font payloads not retained")
 			}
 			var request struct {
-				Path         string `json:"path"`
-				PreviousPath string `json:"previousPath"`
+				Path          string   `json:"path"`
+				PreviousPaths []string `json:"previousPaths"`
 			}
 			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
 				t.Fatal(err)
 			}
-			if request.PreviousPath != oldTarget || request.Path != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
+			if !slices.Equal(request.PreviousPaths, []string{oldTarget}) || request.Path != newTarget || !strings.HasPrefix(newTarget, windowsHome) {
 				t.Fatal("registration cannot verify prior ownership", request)
 			}
 			// Returning to a retained pin must neither download nor replace its file.
@@ -597,7 +598,7 @@ print('{}')
 			if err := json.Unmarshal(blockRead(t, home+"/registration-request"), &request); err != nil {
 				t.Fatal(err)
 			}
-			if request.PreviousPath != newTarget || request.Path != oldTarget {
+			if !slices.Equal(request.PreviousPaths, []string{newTarget}) || request.Path != oldTarget {
 				t.Fatal("rollback registration cannot verify prior ownership", request)
 			}
 			if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); !os.IsNotExist(err) {
