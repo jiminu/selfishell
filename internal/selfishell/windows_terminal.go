@@ -235,10 +235,8 @@ func (j *terminalJSON) profile(guid string) (*terminalJSONNode, error) {
 			}
 		}
 	}
-	if err := found.unique("source", "hidden", "font", "colorScheme"); err != nil {
-		return nil, err
-	}
-	if err := found.property("font").unique("face"); err != nil {
+	// Font and scheme keys only feed the override notice, which checks its own.
+	if err := found.unique("source", "hidden"); err != nil {
 		return nil, err
 	}
 	return found, nil
