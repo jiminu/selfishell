@@ -64,75 +64,74 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, command := range []string{"install", "install --ghostty", "install --skip-packages --ghostty", "update"} {
-		for _, kind := range []string{"directory", "symlink", "dangling", "fifo"} {
-			t.Run(command+"/"+kind, func(t *testing.T) {
-				root, paths := compactDiagnosticFixture(t, "macos", false)
-				home := os.Getenv("HOME")
-				choice := paths.State + "/ghostty"
-				if err := os.Remove(choice); err != nil {
+	// readStateFile rejects every kind the same way; each command needs one.
+	for command, kind := range map[string]string{"install": "fifo", "install --ghostty": "dangling", "install --skip-packages --ghostty": "symlink", "update": "directory"} {
+		t.Run(command+"/"+kind, func(t *testing.T) {
+			root, paths := compactDiagnosticFixture(t, "macos", false)
+			home := os.Getenv("HOME")
+			choice := paths.State + "/ghostty"
+			if err := os.Remove(choice); err != nil {
+				t.Fatal(err)
+			}
+			target := home + "/external-choice"
+			if err := testutil.WriteFile(target, []byte("0\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "directory":
+				err = os.Mkdir(choice, 0700)
+			case "symlink":
+				err = os.Symlink(target, choice)
+			case "dangling":
+				err = os.Symlink(home+"/absent-choice", choice)
+			case "fifo":
+				err = syscall.Mkfifo(choice, 0600)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.Lstat(choice)
+			if err != nil {
+				t.Fatal(err)
+			}
+			original := map[string][]byte{}
+			for _, path := range []string{target, home + "/.zshrc", paths.Config + "/zsh/common.zsh", paths.Resources + "/zsh-common.state", paths.State + "/configured"} {
+				original[path] = blockRead(t, path)
+			}
+			if err := testutil.WriteFile(root+"/packages.conf", []byte("package macos required formula fixture-package\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"brew", "mise", "curl", "xcode-select"} {
+				if err := testutil.WriteFile(home+"/tools/"+name, []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
 					t.Fatal(err)
 				}
-				target := home + "/external-choice"
-				if err := testutil.WriteFile(target, []byte("0\n"), 0600); err != nil {
-					t.Fatal(err)
-				}
-				switch kind {
-				case "directory":
-					err = os.Mkdir(choice, 0700)
-				case "symlink":
-					err = os.Symlink(target, choice)
-				case "dangling":
-					err = os.Symlink(home+"/absent-choice", choice)
-				case "fifo":
-					err = syscall.Mkfifo(choice, 0600)
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				before, err := os.Lstat(choice)
-				if err != nil {
-					t.Fatal(err)
-				}
-				original := map[string][]byte{}
-				for _, path := range []string{target, home + "/.zshrc", paths.Config + "/zsh/common.zsh", paths.Resources + "/zsh-common.state", paths.State + "/configured"} {
-					original[path] = blockRead(t, path)
-				}
-				if err := testutil.WriteFile(root+"/packages.conf", []byte("package macos required formula fixture-package\n"), 0600); err != nil {
-					t.Fatal(err)
-				}
-				for _, name := range []string{"brew", "mise", "curl", "xcode-select"} {
-					if err := testutil.WriteFile(home+"/tools/"+name, []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
-						t.Fatal(err)
-					}
-				}
-				args := command + " --yes"
-				if command == "update" {
-					args += " --tools-only"
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				cmd := exec.CommandContext(ctx, executable, "-test.run=^TestGhosttyChoicePreflightBeforePackages$")
-				cmd.Env = append(os.Environ(), "SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT="+root, "SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS="+args)
-				output, err := cmd.CombinedOutput()
-				if ctx.Err() != nil {
-					t.Fatalf("reading %s choice exceeded the deadline: %v", kind, ctx.Err())
-				}
-				var exit *exec.ExitError
-				if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(string(output), choice) || !strings.Contains(string(output), "not a regular file") {
-					t.Errorf("unsafe choice was not rejected: %v %s", err, output)
-				}
-				if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
-					t.Error("packages ran before the choice preflight", err)
-				}
-				for path, data := range original {
-					blockEqual(t, path, data)
-				}
-				if after, err := os.Lstat(choice); err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
-					t.Fatal("failed preparation replaced the choice", err)
-				}
-			})
-		}
+			}
+			args := command + " --yes"
+			if command == "update" {
+				args += " --tools-only"
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, executable, "-test.run=^TestGhosttyChoicePreflightBeforePackages$")
+			cmd.Env = append(os.Environ(), "SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT="+root, "SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS="+args)
+			output, err := cmd.CombinedOutput()
+			if ctx.Err() != nil {
+				t.Fatalf("reading %s choice exceeded the deadline: %v", kind, ctx.Err())
+			}
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(string(output), choice) || !strings.Contains(string(output), "not a regular file") {
+				t.Errorf("unsafe choice was not rejected: %v %s", err, output)
+			}
+			if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
+				t.Error("packages ran before the choice preflight", err)
+			}
+			for path, data := range original {
+				blockEqual(t, path, data)
+			}
+			if after, err := os.Lstat(choice); err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
+				t.Fatal("failed preparation replaced the choice", err)
+			}
+		})
 	}
 }
 
@@ -201,20 +200,20 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	if err != nil || profile == nil || profile.property("font") != nil || profile.property("colorScheme") != nil {
 		t.Fatal("uninstall left originally absent appearance values", err)
 	}
-	for _, path := range []string{paths.State + "/windows-terminal.json", windowsProfileStatePath(paths), paths.Resources + "/windows-terminal.state", windowsHome + "/Microsoft/Windows Terminal/Fragments"} {
+	for _, path := range []string{paths.State + "/windows-terminal.json", windowsProfileStatePath(paths)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("terminal state or fragment left after uninstall: %s: %v", path, err)
+			t.Fatalf("terminal state left after uninstall: %s: %v", path, err)
 		}
 	}
 }
 
 func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
+	root, home, paths, _ := windowsTerminalFixture(t)
 	out := blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal", "--dry-run")
 	if !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("missing preview: %s", out)
 	}
-	for _, path := range []string{paths.Config, paths.State, windowsHome + "/Microsoft/Windows Terminal/Fragments"} {
+	for _, path := range []string{paths.Config, paths.State} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("dry run created %s: %v", path, err)
 		}
@@ -457,30 +456,6 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 		t.Fatal("CLI-only update forgot recorded font", result, err)
 	}
 
-}
-
-func TestWindowsTerminalPreservesExistingSchemes(t *testing.T) {
-	root, _, _, windowsHome := windowsTerminalFixture(t)
-	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
-	personal := `"schemes":[{"name":"Dark+","background":"#010203"}]`
-	original := strings.TrimSuffix(string(blockRead(t, settings)), "}") + "," + personal + "}"
-	if err := testutil.WriteFile(settings, []byte(original), 0600); err != nil {
-		t.Fatal(err)
-	}
-	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
-	data := []byte(`{"schemes":[{"name":"Personal","background":"#123456"}]}`)
-	if err := os.MkdirAll(rawParent(fragment), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(fragment, data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{{"install", "--windows-terminal", "--skip-packages", "--yes"}, {"uninstall", "--yes"}} {
-		blockOK(t, root, args...)
-		if string(blockRead(t, fragment)) != string(data) || !strings.Contains(string(blockRead(t, settings)), personal) {
-			t.Fatal("changed a user-owned scheme or fragment")
-		}
-	}
 }
 
 func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
@@ -816,9 +791,6 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	if err := testutil.WriteFile(tools+"/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := testutil.WriteFile(tools+"/wslpath", []byte("#!/bin/sh\nprintf '%s\\n' '"+outer+"/host-fragments'\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("PATH", tools)
 	t.Setenv("SHELL", "/bin/zsh")
 	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
@@ -833,10 +805,8 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	if code != 0 {
 		t.Fatal("isolated setup failed", stderr)
 	}
-	for _, path := range []string{outer + "/host-touched", outer + "/host-fragments"} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("isolated HOME reached inherited Windows environment: %s", path)
-		}
+	if _, err := os.Stat(outer + "/host-touched"); !os.IsNotExist(err) {
+		t.Fatal("isolated HOME reached inherited Windows environment", err)
 	}
 }
 

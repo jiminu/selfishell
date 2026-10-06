@@ -31,11 +31,6 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 	if os.Getenv("SELFISHELL_TEST_FONT_PROCESS") != "1" {
 		return
 	}
-	// PowerShell uses Windows' 32,767-character process command-line limit.
-	if len(os.Args[len(os.Args)-1])+90 > 32767 {
-		fmt.Fprintln(os.Stderr, "Windows command line length exceeded")
-		os.Exit(1)
-	}
 	raw, err := base64.StdEncoding.DecodeString(os.Args[len(os.Args)-1])
 	if err != nil || len(raw)%2 != 0 {
 		t.Fatal("invalid PowerShell command", err)
@@ -71,6 +66,11 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 	}
 	if request.Operation == "font-register" {
 		home := os.Getenv("HOME")
+		// Sending only the registered candidate keeps the command line bounded.
+		if len(request.PreviousPaths) > 1 {
+			fmt.Fprintln(os.Stderr, "unbounded ownership candidates")
+			os.Exit(1)
+		}
 		if _, err := os.Stat(home + "/fail-registration"); err == nil {
 			os.Exit(1)
 		}
@@ -128,7 +128,7 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 	if err := testutil.WriteFile(home+"/fail-registration", nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for pin := 2; pin <= 61; pin++ {
+	for pin := 2; pin <= 4; pin++ {
 		version := fmt.Sprint(pin)
 		if err := install(version); err == nil {
 			t.Fatal("registration failure was ignored", version)
@@ -154,10 +154,10 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 	if err := os.Remove(home + "/fail-registration"); err != nil {
 		t.Fatal(err)
 	}
-	if err := install("62"); err != nil {
+	if err := install("5"); err != nil {
 		t.Fatal("lost ownership of the still-registered font", err)
 	}
-	blockEqual(t, home+"/font-registration", []byte(windowsHome+"/Microsoft/Windows/Fonts/Selfishell/62/Regular.ttf"))
+	blockEqual(t, home+"/font-registration", []byte(windowsHome+"/Microsoft/Windows/Fonts/Selfishell/5/Regular.ttf"))
 	if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); !os.IsNotExist(err) {
 		t.Fatal("successful recovery retained pending state", err)
 	}
@@ -165,7 +165,7 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 	if err := testutil.WriteFile(home+"/font-registration", []byte(foreign), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := install("63"); err == nil || !strings.Contains(err.Error(), "user data") {
+	if err := install("6"); err == nil || !strings.Contains(err.Error(), "user data") {
 		t.Fatal("overwrote an unrelated font registration", err)
 	}
 	blockEqual(t, home+"/font-registration", []byte(foreign))

@@ -360,7 +360,8 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeTestFile(t, paths.State+"/original", "initial state\n", 0600)
-			// Check once while intact, then replace it before purge's apply recheck.
+			// The root is replaced before Run, so this covers the preflight checks,
+			// not purgeFiles' later recheck for a change during purge.
 			if _, err := backupInventory(paths); err != nil {
 				t.Fatal(err)
 			}
