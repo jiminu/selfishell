@@ -211,13 +211,22 @@ func legacyWSLProfileGUID(distro string) string {
 }
 
 func (j *terminalJSON) profile(guid string) (*terminalJSONNode, error) {
+	if err := j.root.unique("profiles"); err != nil {
+		return nil, err
+	}
 	profiles := j.root.property("profiles")
 	if profiles != nil && profiles.object {
+		if err := profiles.unique("list"); err != nil {
+			return nil, err
+		}
 		profiles = profiles.property("list")
 	}
 	var found *terminalJSONNode
 	if profiles != nil {
 		for _, profile := range profiles.items {
+			if err := profile.unique("guid"); err != nil {
+				return nil, err
+			}
 			if terminalGUID(j.text(profile.property("guid"))) == guid {
 				if found != nil {
 					return nil, fmt.Errorf("duplicate Windows Terminal profile GUID: %s", guid)
@@ -225,6 +234,12 @@ func (j *terminalJSON) profile(guid string) (*terminalJSONNode, error) {
 				found = profile
 			}
 		}
+	}
+	if err := found.unique("source", "hidden", "font", "colorScheme"); err != nil {
+		return nil, err
+	}
+	if err := found.property("font").unique("face"); err != nil {
+		return nil, err
 	}
 	return found, nil
 }

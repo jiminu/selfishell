@@ -115,7 +115,6 @@ func readTerminalJSONNode(d *json.Decoder, data []byte) (*terminalJSONNode, erro
 	}
 	if delimiter, ok := token.(json.Delim); ok {
 		n.object = delimiter == '{'
-		seen := map[string]bool{}
 		for d.More() {
 			var key string
 			start := terminalJSONStart(d, data)
@@ -125,10 +124,6 @@ func readTerminalJSONNode(d *json.Decoder, data []byte) (*terminalJSONNode, erro
 					return nil, err
 				}
 				key = token.(string)
-				if seen[key] {
-					return nil, fmt.Errorf("duplicate Windows Terminal settings key: %s", key)
-				}
-				seen[key] = true
 			}
 			child, err := readTerminalJSONNode(d, data)
 			if err != nil {
@@ -154,6 +149,26 @@ func (n *terminalJSONNode) property(key string) *terminalJSONNode {
 			if m.key == key {
 				return m.value
 			}
+		}
+	}
+	return nil
+}
+
+// Windows Terminal accepts duplicate keys. Reject them only where Selfishell
+// reads or edits, since the first and last occurrence may disagree.
+func (n *terminalJSONNode) unique(keys ...string) error {
+	if n == nil {
+		return nil
+	}
+	for _, key := range keys {
+		count := 0
+		for _, m := range n.members {
+			if m.key == key {
+				count++
+			}
+		}
+		if count > 1 {
+			return fmt.Errorf("duplicate Windows Terminal settings key: %s", key)
 		}
 	}
 	return nil

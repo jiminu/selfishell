@@ -29,7 +29,7 @@ const terminalSettingsFixture = `{
 `
 
 func TestWindowsProfileDiscoveryUsesDistroIdentity(t *testing.T) {
-	for _, scenario := range []string{"other-distro-renamed", "modern", "missing", "ambiguous", "current", "hidden", "malformed"} {
+	for _, scenario := range []string{"other-distro-renamed", "modern", "missing", "ambiguous", "current", "hidden", "malformed", "duplicate-face"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, home, paths, settings := existingWindowsProfileFixture(t)
 			data := `{"profiles":{"list":[{"guid":"{2c4de342-38b7-51cf-b940-2309a097f518}","source":"Windows.Terminal.Wsl","name":"Renamed shell"}]}}`
@@ -57,6 +57,8 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 				data = strings.Replace(data, `"name":`, `"hidden":true,"name":`, 1)
 			case "malformed":
 				data = `{"profiles":/*`
+			case "duplicate-face":
+				data = strings.Replace(data, `"name":`, `"font":{"face":"A","face":"B"},"name":`, 1)
 			}
 			if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
 				t.Fatal(err)
@@ -561,6 +563,7 @@ func TestWindowsProfileJSONCommentsAndAbsentProperties(t *testing.T) {
 		`, "font": {"face":"Original", /* comma , inside comment */ "size":17,}`,
 		`, "font": {"size":17, "face":"Original",}`,
 		`, "font": {"face":"Original",}, "colorScheme": {"dark": /* preserved */ "Campbell", "light":"One Half Light",}`,
+		`, "padding": "8", "padding": "4"`,
 	} {
 		t.Run(extra, func(t *testing.T) {
 			root, _, _, settings := existingWindowsProfileFixture(t)
