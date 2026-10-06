@@ -8,7 +8,7 @@ import (
 )
 
 // Windows Terminal accepts JSON comments and trailing commas. Keep byte offsets
-// so changing two properties never reformats unrelated settings or comments.
+// so the legacy restore never reformats unrelated settings or comments.
 type terminalJSON struct {
 	data, clean, punctuation []byte
 	root                     *terminalJSONNode
@@ -233,15 +233,6 @@ func (j *terminalJSON) set(n *terminalJSONNode, key string, value json.RawMessag
 			}
 		}
 		return
-	}
-	if value != nil {
-		pos, prefix := n.start+1, ""
-		if len(n.members) > 0 {
-			pos, prefix = n.members[len(n.members)-1].value.end, ","
-		}
-		name, _ := json.Marshal(key)
-		content := append([]byte(prefix+" "+string(name)+": "), value...)
-		*edits = append(*edits, terminalJSONEdit{pos, pos, content})
 	}
 }
 

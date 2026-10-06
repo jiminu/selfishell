@@ -67,14 +67,12 @@ declining it, run `selfishell install --ghostty`. To turn it off,
 On WSL, the optional Windows Terminal choice is saved separately in
 `${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/windows-terminal.json`.
 It also records the Windows local application-data path, WSL distribution,
-settings path, and existing profile GUID. Only that profile's font and theme
-are changed, using Windows Terminal's built-in Dark+ scheme. Original values and pending writes are
-recorded separately in `windows-terminal-profile.json`, with the original
-settings file retained in the state directory's `backups` folder.
-Tools updates reuse it without asking again; `selfishell install --windows-terminal`
-enables a previously declined choice. Uninstall clears the choice and restores
-unchanged managed font and
-theme values while preserving later user edits and installed fonts. See
+settings path, and existing profile GUID. A Windows Terminal fragment sets
+only that profile's font and the built-in Dark+ scheme; its path and checksum
+are recorded in `windows-terminal-fragment.json`. Tools updates reuse the choice
+without asking again; `selfishell install --windows-terminal` enables a
+previously declined choice. Uninstall clears the choice and removes an
+unchanged fragment, preserving installed fonts. See
 [Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
 
 Colors do not depend on Ghostty. The prompt, FZF, completion previews, and

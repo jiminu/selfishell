@@ -33,7 +33,7 @@ connects them to these locations; paths under `~/.config` follow
 | `~/.config/starship.toml` | Link to `~/.config/selfishell/starship.toml` | Moved to a backup |
 | `~/.config/mise/conf.d/selfishell.toml` | Link to `~/.config/selfishell/mise/selfishell.toml` | Moved to a backup |
 | `~/.config/mise/config.toml` | Created empty if absent | Never changed |
-| Windows Terminal `settings.json` (WSL, if chosen) | Existing distro profile: `font.face` and `colorScheme` only | Original values and full file backed up |
+| Windows Terminal `Fragments/Selfishell` (WSL, if chosen) | Fragment setting the distro profile's font and `Dark+`; `settings.json` is not edited | Backed up to the state directory |
 | Files under `~/.config/selfishell` | Managed copies, checksummed | Moved to a backup |
 
 A backup sits beside its original path as `<path>.backup.<timestamp>`, with a
@@ -239,12 +239,14 @@ can identify the target; otherwise setup reports the ambiguity and skips this
 integration. Missing profiles are never created. Stable, Preview, and unpackaged
 settings locations are checked; multiple indistinguishable candidates are skipped.
 
-Only `font.face` and `colorScheme` in the selected profile's `settings.json` are
-changed. The font is JetBrainsMonoNL Nerd Font Mono, and the color scheme is
-Windows Terminal's built-in `Dark+`. No custom scheme or fragment is installed.
-Profile names, launch commands, other profiles, the default profile,
-and other settings and comments are preserved. Existing settings use JSON with
-comments and trailing commas; Selfishell edits the selected values in place.
+Selfishell never edits `settings.json`. It adds a small Windows Terminal
+[JSON fragment](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)
+that sets the selected profile's font to JetBrainsMonoNL Nerd Font Mono and its
+color scheme to Windows Terminal's built-in `Dark+`. Profile names, launch
+commands, other profiles, the default profile, and all settings are preserved.
+A font or color scheme you set in Windows Terminal, on the profile or under
+Defaults, takes precedence over the fragment. Setup and `status` name such a
+value; remove it in Windows Terminal to use Selfishell's font and theme.
 Restart Windows Terminal after setup. On the first font installation, an
 already-open Terminal may briefly warn that it cannot find the font. Let setup
 finish, then close all Terminal windows and reopen your existing WSL profile.
@@ -265,15 +267,13 @@ reports the missing prerequisite. A missing or ambiguous profile instead skips
 the integration with an explanation. Automatic font installation and the settings
 apply to Windows Terminal; VS Code's terminal font remains a separate setting.
 
-The first application backs up the complete original settings file and records
-the two original values in a separate atomic JSON journal. Reinstall and tools
-updates retain that original backup; edits to other settings are accepted. A
-changed font or theme requires the normal overwrite-or-skip decision; `--yes`
-and non-interactive updates preserve those changes and report a conflict.
-`status` diagnoses the two managed values. Uninstall always restores each value
-that still matches Selfishell's applied value, preserving later user changes to
-either value and all unrelated settings. It clears the saved choice and journal;
-original backups remain in the state directory's `backups` folder. Fonts remain installed,
+The fragment is stored under Windows
+`%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell` and
+checksummed. If you edit it, updates ask before overwriting it; `--yes` and non-interactive
+updates keep your version and report a conflict. Uninstall removes an unchanged
+fragment and clears the saved choice. Releases 1.6.3 to 1.6.5 edited
+`settings.json` directly; the next install, update, or uninstall restores the
+values they set, keeping any you changed since. Fonts remain installed,
 like other packages. Font updates use a new version directory and change only
 an ownership-checked Selfishell registration; older payloads are retained so
 loaded fonts never need to be replaced. Restart Windows Terminal after a font

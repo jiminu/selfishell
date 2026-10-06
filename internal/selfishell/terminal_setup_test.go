@@ -172,35 +172,48 @@ esac
 func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	root, _, paths, windowsHome := windowsTerminalFixture(t)
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
+	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
 	original := blockRead(t, settings)
 	code, out, stderr := blockRun(t, root, "y\nn\n", "install", "--skip-packages")
 	if code != 0 || !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("choice: %d %s %s", code, out, stderr)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
-	if string(blockRead(t, settings)) != string(original) {
-		t.Fatal("declined choice was not retained")
+	if _, err := os.Stat(fragment); !os.IsNotExist(err) {
+		t.Fatal("declined choice was not retained", err)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
-	before := blockRead(t, settings)
-	if !strings.Contains(string(before), `"colorScheme": "Dark+"`) {
-		t.Fatalf("existing profile did not receive built-in Dark+: %s", before)
+	out = blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
+	want := []byte(`{
+  "profiles": [
+    {
+      "updates": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}",
+      "font": {
+        "face": "JetBrainsMonoNL Nerd Font Mono"
+      },
+      "colorScheme": "Dark+"
+    }
+  ]
+}
+`)
+	blockEqual(t, fragment, want)
+	if strings.Contains(out, "takes precedence") {
+		t.Fatal("reported an override without user values", out)
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
-	if string(blockRead(t, settings)) != string(before) {
-		t.Fatal("reinstall/update changed the profile")
-	}
-	blockOK(t, root, "uninstall", "--restore", "--yes")
-	j, err := parseTerminalJSON(blockRead(t, settings))
-	if err != nil {
+	blockEqual(t, fragment, want)
+	blockEqual(t, settings, original)
+	// Uninstall must inspect Windows records even after platform detection changes.
+	if err := testutil.WriteFile(os.Getenv("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	profile, err := j.profile("{963ff2f7-6aed-5ce3-9d91-90d99571f53a}")
-	if err != nil || profile == nil || profile.property("font") != nil || profile.property("colorScheme") != nil {
-		t.Fatal("uninstall left originally absent appearance values", err)
+	code, _, stderr = blockRun(t, root, "", "install", "--windows-terminal", "--skip-packages", "--yes")
+	if code != 2 || !strings.Contains(stderr, "only on Ubuntu on WSL") {
+		t.Fatalf("%d %s", code, stderr)
 	}
-	for _, path := range []string{paths.State + "/windows-terminal.json", windowsProfileStatePath(paths)} {
+	blockOK(t, root, "uninstall", "--restore", "--yes")
+	blockEqual(t, settings, original)
+	for _, path := range []string{rawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("terminal state left after uninstall: %s: %v", path, err)
 		}
@@ -208,12 +221,12 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 }
 
 func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
-	root, home, paths, _ := windowsTerminalFixture(t)
+	root, home, paths, windowsHome := windowsTerminalFixture(t)
 	out := blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal", "--dry-run")
 	if !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("missing preview: %s", out)
 	}
-	for _, path := range []string{paths.Config, paths.State} {
+	for _, path := range []string{paths.Config, paths.State, windowsHome + "/Microsoft/Windows Terminal/Fragments"} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("dry run created %s: %v", path, err)
 		}
@@ -301,36 +314,6 @@ printf '%s\n' '{"fontInstalled":true}'
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatal("external family overwritten")
-	}
-}
-
-func TestWindowsTerminalProfileBackupAndPlatformGuard(t *testing.T) {
-	root, _, paths, settings := existingWindowsProfileFixture(t)
-	original := blockRead(t, settings)
-	blockOK(t, root, "install", "--windows-terminal", "--skip-packages", "--yes")
-	first, err := readWindowsProfileState(paths)
-	if err != nil || first == nil {
-		t.Fatal("profile journal missing", err)
-	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	second, err := readWindowsProfileState(paths)
-	if err != nil || second == nil || first.Backup != second.Backup {
-		t.Fatal("backup changed", err)
-	}
-	if string(blockRead(t, first.Backup)) != string(original) {
-		t.Fatal("backup overwritten")
-	}
-	// Uninstall must inspect Windows records even after platform detection changes.
-	if err := testutil.WriteFile(os.Getenv("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	code, _, stderr := blockRun(t, root, "", "install", "--windows-terminal", "--skip-packages", "--yes")
-	if code != 2 || !strings.Contains(stderr, "only on Ubuntu on WSL") {
-		t.Fatalf("%d %s", code, stderr)
-	}
-	blockOK(t, root, "uninstall", "--restore", "--yes")
-	if string(blockRead(t, settings)) != string(original) {
-		t.Fatal("original profile not restored")
 	}
 }
 
@@ -903,13 +886,17 @@ func TestPrepareConfigIncludesWindowsTerminal(t *testing.T) {
 func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 	for _, command := range []string{"install", "update"} {
 		t.Run(command, func(t *testing.T) {
-			root, home, paths, settings := existingWindowsProfileFixture(t)
+			root, home, paths, _ := existingWindowsProfileFixture(t)
 			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			record, err := readWindowsFragmentRecord(paths)
+			if err != nil || record == nil {
+				t.Fatal("missing fragment record", err)
+			}
 			// A changed path must stop setup before a package-manager process runs.
-			if err := os.Remove(settings); err != nil {
+			if err := os.Remove(record.Path); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Symlink(home+"/absent-settings", settings); err != nil {
+			if err := os.Symlink(home+"/absent-fragment", record.Path); err != nil {
 				t.Fatal(err)
 			}
 			for _, name := range []string{"apt-get", "dpkg-query", "mise", "curl"} {
@@ -917,21 +904,19 @@ func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			journal := blockRead(t, windowsProfileStatePath(paths))
+			saved := blockRead(t, windowsFragmentRecordPath(paths))
 			args := []string{command, "--yes"}
 			if command == "update" {
 				args = append(args, "--tools-only")
 			}
 			code, _, stderr := blockRun(t, root, "", args...)
-			if code == 0 || !strings.Contains(stderr, "not a regular file") {
-				t.Fatalf("unsafe settings accepted: %d %s", code, stderr)
+			if code == 0 || !strings.Contains(stderr, "changed type") {
+				t.Fatalf("unsafe fragment accepted: %d %s", code, stderr)
 			}
 			if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
 				t.Fatal("packages ran before terminal preflight", err)
 			}
-			if string(blockRead(t, windowsProfileStatePath(paths))) != string(journal) {
-				t.Fatal("failed preflight changed journal")
-			}
+			blockEqual(t, windowsFragmentRecordPath(paths), saved)
 		})
 	}
 }

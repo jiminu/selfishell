@@ -83,7 +83,9 @@ If the warning remains, check the installation output for optional font
 installation failures and run `selfishell status --verbose`. An installation
 with `--skip-packages` does not download or register fonts. Resolve any reported
 font installation failure and rerun `selfishell install` without that flag,
-then restart Terminal again. See [Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
+then restart Terminal again. If Terminal keeps another font without a warning,
+`selfishell status` names any font or color scheme in your Windows Terminal
+settings that takes precedence. See [Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
 
 ## Clipboard over SSH and on WSL
 
