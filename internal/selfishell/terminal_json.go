@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"sort"
 )
 
-// Windows Terminal accepts JSON comments and trailing commas. Keep byte offsets
-// so the legacy restore never reformats unrelated settings or comments.
+// Windows Terminal accepts JSON comments and trailing commas; Selfishell only reads it.
 type terminalJSON struct {
-	data, clean, punctuation []byte
-	root                     *terminalJSONNode
+	clean []byte
+	root  *terminalJSONNode
 }
 
 type terminalJSONNode struct {
@@ -23,7 +21,6 @@ type terminalJSONNode struct {
 
 type terminalJSONMember struct {
 	key   string
-	start int
 	value *terminalJSONNode
 }
 
@@ -65,7 +62,6 @@ func parseTerminalJSON(data []byte) (*terminalJSON, error) {
 			i--
 		}
 	}
-	punctuation := bytes.Clone(clean)
 	for i := 0; i < len(clean); i++ {
 		if clean[i] == '"' {
 			for i++; i < len(clean); i++ {
@@ -94,7 +90,7 @@ func parseTerminalJSON(data []byte) (*terminalJSON, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &terminalJSON{data: data, clean: clean, punctuation: punctuation, root: root}, nil
+	return &terminalJSON{clean: clean, root: root}, nil
 }
 
 func terminalJSONSpace(ch byte) bool { return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' }
@@ -117,7 +113,6 @@ func readTerminalJSONNode(d *json.Decoder, data []byte) (*terminalJSONNode, erro
 		n.object = delimiter == '{'
 		for d.More() {
 			var key string
-			start := terminalJSONStart(d, data)
 			if n.object {
 				token, err = d.Token()
 				if err != nil {
@@ -130,7 +125,7 @@ func readTerminalJSONNode(d *json.Decoder, data []byte) (*terminalJSONNode, erro
 				return nil, err
 			}
 			if n.object {
-				n.members = append(n.members, terminalJSONMember{key, start, child})
+				n.members = append(n.members, terminalJSONMember{key, child})
 			} else {
 				n.items = append(n.items, child)
 			}
@@ -155,7 +150,7 @@ func (n *terminalJSONNode) property(key string) *terminalJSONNode {
 }
 
 // Windows Terminal accepts duplicate keys. Reject them only where Selfishell
-// reads or edits, since the first and last occurrence may disagree.
+// reads, since the first and last occurrence may disagree.
 func (n *terminalJSONNode) unique(keys ...string) error {
 	if n == nil {
 		return nil
@@ -183,67 +178,8 @@ func (j *terminalJSON) value(n *terminalJSONNode) json.RawMessage {
 	return value.Bytes()
 }
 
-func (j *terminalJSON) raw(n *terminalJSONNode) json.RawMessage {
-	if n == nil {
-		return nil
-	}
-	return j.data[n.start:n.end]
-}
-
 func (j *terminalJSON) text(n *terminalJSONNode) string {
 	var value string
 	_ = json.Unmarshal(j.value(n), &value)
 	return value
-}
-
-type terminalJSONEdit struct {
-	start, end int
-	value      []byte
-}
-
-func (j *terminalJSON) set(n *terminalJSONNode, key string, value json.RawMessage, edits *[]terminalJSONEdit) {
-	for i, m := range n.members {
-		if m.key != key {
-			continue
-		}
-		if value != nil {
-			*edits = append(*edits, terminalJSONEdit{m.value.start, m.value.end, value})
-			return
-		}
-		// Comments are whitespace in punctuation. Retain their original bytes
-		// and line endings while removing the property's JSON tokens.
-		var preserved []byte
-		for p := m.start; p < m.value.end; p++ {
-			if terminalJSONSpace(j.punctuation[p]) {
-				preserved = append(preserved, j.data[p])
-			}
-		}
-		*edits = append(*edits, terminalJSONEdit{m.start, m.value.end, preserved})
-		// Remove only one separator; leave surrounding whitespace and comments.
-		from, to := m.value.end, n.end-1
-		if i+1 < len(n.members) {
-			to = n.members[i+1].start
-		} else if i > 0 {
-			from, to = n.members[i-1].value.end, m.start
-		}
-		for p := from; p < to; p++ {
-			if j.punctuation[p] == ',' {
-				*edits = append(*edits, terminalJSONEdit{p, p + 1, nil})
-				break
-			}
-		}
-		return
-	}
-}
-
-func (j *terminalJSON) apply(edits []terminalJSONEdit) ([]byte, error) {
-	sort.SliceStable(edits, func(a, b int) bool { return edits[a].start > edits[b].start })
-	data := bytes.Clone(j.data)
-	for _, e := range edits {
-		data = append(append(append([]byte{}, data[:e.start]...), e.value...), data[e.end:]...)
-	}
-	if _, err := parseTerminalJSON(data); err != nil {
-		return nil, err
-	}
-	return data, nil
 }

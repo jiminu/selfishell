@@ -112,6 +112,5 @@ after Windows logout/login, for both a legacy `Windows.Terminal.Wsl` and a
 precedence and that Windows Terminal writes nothing to `settings.json`; repeat
 setup, upgrade the font pin while Windows has loaded the old font, reapply the
 previous pin, and confirm uninstall removes the fragment, reverts the
-appearance, and leaves fonts available. Also migrate a 1.6.5 installation that
-edited `settings.json`, verify an existing font family is preserved, and that
-`--skip-packages` never registers fonts.
+appearance, and leaves fonts available. Also verify an existing font family is
+preserved and that `--skip-packages` never registers fonts.

@@ -272,14 +272,12 @@ The fragment is stored under Windows `%LOCALAPPDATA%/Microsoft/Windows
 Terminal/Fragments/Selfishell` and checksummed. If you edit it, updates ask
 before overwriting it; `--yes` and non-interactive updates keep your version and
 report a conflict. Uninstall removes an unchanged fragment and clears the saved
-choice. Releases 1.6.3 to 1.6.5 edited `settings.json` directly; the next
-install, update, or uninstall restores the values they set, keeping any you
-changed since. Fonts remain installed, like other packages. Font updates use a
-new version directory and change only an ownership-checked Selfishell
-registration; older payloads are retained so loaded fonts never need to be
-replaced. Restart Windows Terminal after a font update; other Windows sessions
-may need sign-out to release their old font cache. The integration does not
-provide native Windows shell support.
+choice. Fonts remain installed, like other packages. Font updates use a new
+version directory and change only an ownership-checked Selfishell registration;
+older payloads are retained so loaded fonts never need to be replaced. Restart
+Windows Terminal after a font update; other Windows sessions may need sign-out
+to release their old font cache. The integration does not provide native Windows
+shell support.
 
 ## Other terminals
 

@@ -115,83 +115,15 @@ func TestWindowsTerminalOverrides(t *testing.T) {
 	}
 }
 
-func TestWindowsTerminalLegacyProfileMigration(t *testing.T) {
-	installed := strings.Replace(terminalSettingsFixture, `"face": "Cascadia Mono"`, `"face": "JetBrainsMonoNL Nerd Font Mono"`, 1)
-	installed = strings.Replace(installed, `{"dark": "Campbell", "light": "One Half Light"}`, `"Dark+"`, 1)
-	appearance := `"font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, `
-	absent := strings.Replace(terminalSettingsFixture, appearance, "", 1)
-	for _, tc := range []struct {
-		name, status, command, settings, want string
-		fontWasAbsent                         bool
-	}{
-		{"active-update", "active", "update", installed, terminalSettingsFixture, false},
-		{"pending-uninstall", "pending", "uninstall", installed, terminalSettingsFixture, false},
-		{"user-theme-install", "active", "install", strings.Replace(installed, `"Dark+"`, `"Personal"`, 1), strings.Replace(terminalSettingsFixture, `{"dark": "Campbell", "light": "One Half Light"}`, `"Personal"`, 1), false},
-		{"absent-update", "active", "update", strings.Replace(terminalSettingsFixture, appearance, `"font": {"face": "JetBrainsMonoNL Nerd Font Mono"}, "colorScheme": "Dark+", `, 1), absent, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root, _, paths, settings := existingWindowsProfileFixture(t)
-			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-			record, err := readWindowsFragmentRecord(paths)
-			if err != nil || record == nil {
-				t.Fatal("missing fragment record", err)
-			}
-			// Recreate a 1.6.5 installation: edited settings and a journal, no fragment.
-			for _, path := range []string{record.Path, windowsFragmentRecordPath(paths)} {
-				if err := os.Remove(path); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := testutil.WriteFile(settings, []byte(tc.settings), 0600); err != nil {
-				t.Fatal(err)
-			}
-			journal := map[string]any{"version": 1, "status": tc.status, "settingsPath": settings, "guid": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}", "backup": paths.State + "/backups/windows-terminal-settings.backup.1", "backupChecksum": "fixture", "fontWasAbsent": tc.fontWasAbsent, "appliedFace": terminalFont, "appliedScheme": "Dark+"}
-			if !tc.fontWasAbsent {
-				journal["originalFace"], journal["originalScheme"] = "Cascadia Mono", map[string]string{"dark": "Campbell", "light": "One Half Light"}
-				journal["originalSchemeText"] = `{"dark": "Campbell", "light": "One Half Light"}`
-			}
-			data, err := json.Marshal(journal)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := testutil.WriteFile(windowsProfileStatePath(paths), data, 0600); err != nil {
-				t.Fatal(err)
-			}
-			args := map[string][]string{"install": {"install", "--skip-packages"}, "update": {"update", "--tools-only", "--skip-packages"}, "uninstall": {"uninstall"}}[tc.command]
-			if tc.name == "active-update" {
-				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "earlier Selfishell") {
-					t.Fatal("status missed the legacy settings", out)
-				}
-			}
-			out := blockOK(t, root, append(args, "--yes")...)
-			after, err := parseTerminalJSON(blockRead(t, settings))
-			if err != nil {
-				t.Fatal(err)
-			}
-			want, err := parseTerminalJSON([]byte(tc.want))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(after.value(after.root), want.value(want.root)) {
-				t.Fatal("legacy values not restored as owned", string(after.data))
-			}
-			if _, err := os.Stat(windowsProfileStatePath(paths)); !os.IsNotExist(err) {
-				t.Fatal("legacy journal retained", err)
-			}
-			_, err = os.Stat(record.Path)
-			if (tc.command == "uninstall") != os.IsNotExist(err) {
-				t.Fatal("wrong fragment after migration", err)
-			}
-			if tc.name == "active-update" {
-				blockEqual(t, settings, []byte(terminalSettingsFixture))
-				if !strings.Contains(out, `profile font.face "Cascadia Mono" takes precedence`) || !strings.Contains(out, `Defaults colorScheme "Campbell" takes precedence`) {
-					t.Fatal("missing override notice", out)
-				}
-				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, `[INFO] Windows Terminal profile font.face "Cascadia Mono"`) {
-					t.Fatal("status missed the override", out)
-				}
-			}
-		})
+func TestWindowsTerminalReportsUserOverrides(t *testing.T) {
+	root, _, _, settings := existingWindowsProfileFixture(t)
+	out := blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	blockEqual(t, settings, []byte(terminalSettingsFixture))
+	if !strings.Contains(out, `profile font.face "Cascadia Mono" takes precedence`) || !strings.Contains(out, `Defaults colorScheme "Campbell" takes precedence`) {
+		t.Fatal("missing override notice", out)
+	}
+	if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, `[INFO] Windows Terminal profile font.face "Cascadia Mono"`) {
+		t.Fatal("status missed the override", out)
 	}
 }
 

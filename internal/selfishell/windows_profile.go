@@ -114,10 +114,6 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
-	// Releases 1.6.3-1.6.5 edited settings.json; restore it before the fragment applies.
-	if err := m.removeWindowsProfile(preflight); err != nil {
-		return err
-	}
 	j, profile, err := readWindowsProfile(choice.SettingsPath, choice.ProfileGUID)
 	if errors.Is(err, os.ErrNotExist) || (err == nil && profile == nil) {
 		if !preflight {
@@ -222,9 +218,6 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 }
 
 func (m *managed) removeWindowsTerminal(preflight bool) error {
-	if err := m.removeWindowsProfile(preflight); err != nil {
-		return err
-	}
 	record, err := readWindowsFragmentRecord(m.paths)
 	if err != nil || record == nil {
 		return err
@@ -269,15 +262,6 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 }
 
 func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, recordIssue bool) {
-	legacy, err := readWindowsProfileState(paths)
-	if err != nil {
-		c.sayDiagnostic("31", "MALFORMED", windowsProfileStatePath(paths))
-		return true, false, true
-	}
-	if legacy != nil {
-		c.sayDiagnostic("36", "INFO", "Windows Terminal settings from an earlier Selfishell; the next install or update moves them to a fragment")
-		return true, true, false
-	}
 	record, err := readWindowsFragmentRecord(paths)
 	if err != nil {
 		c.sayDiagnostic("31", "MALFORMED", windowsFragmentRecordPath(paths))
@@ -312,70 +296,6 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 	return true, true, false
 }
 
-// Releases 1.6.3-1.6.5 edited settings.json directly. Their journal only
-// supports restoring the values Selfishell applied; remove it after 1.6.6.
-type windowsProfileState struct {
-	Version            int             `json:"version"`
-	Status             string          `json:"status"`
-	SettingsPath       string          `json:"settingsPath"`
-	GUID               string          `json:"guid"`
-	Backup             string          `json:"backup"`
-	BackupChecksum     string          `json:"backupChecksum"`
-	FontWasAbsent      bool            `json:"fontWasAbsent"`
-	OriginalFace       json.RawMessage `json:"originalFace"`
-	OriginalScheme     json.RawMessage `json:"originalScheme"`
-	OriginalFaceText   string          `json:"originalFaceText,omitempty"`
-	OriginalSchemeText string          `json:"originalSchemeText,omitempty"`
-	AppliedFace        json.RawMessage `json:"appliedFace"`
-	AppliedScheme      json.RawMessage `json:"appliedScheme"`
-}
-
-func windowsProfileStatePath(paths Paths) string {
-	return paths.State + "/windows-terminal-profile.json"
-}
-
-func readWindowsProfileState(paths Paths) (*windowsProfileState, error) {
-	data, err := readStateFile(windowsProfileStatePath(paths))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var s windowsProfileState
-	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("invalid Windows Terminal profile journal: %w", err)
-	}
-	if s.Version != 1 || (s.Status != "pending" && s.Status != "active" && s.Status != "restoring") || !filepath.IsAbs(s.SettingsPath) || !filepath.IsAbs(s.Backup) || !validTerminalGUID(s.GUID) || s.BackupChecksum == "" || len(s.AppliedFace) == 0 || len(s.AppliedScheme) == 0 {
-		return nil, fmt.Errorf("invalid Windows Terminal profile journal")
-	}
-	// null represents a property that was absent; font and scheme null values
-	// are rejected by the profile preflight so these remain unambiguous.
-	for _, value := range []*json.RawMessage{&s.OriginalFace, &s.OriginalScheme, &s.AppliedFace, &s.AppliedScheme} {
-		if len(*value) == 0 || bytes.Equal(*value, []byte("null")) {
-			*value = nil
-		} else {
-			var compact bytes.Buffer
-			if err := json.Compact(&compact, *value); err != nil {
-				return nil, err
-			}
-			*value = compact.Bytes()
-		}
-	}
-	if s.AppliedFace == nil || s.AppliedScheme == nil {
-		return nil, fmt.Errorf("invalid Windows Terminal profile journal values")
-	}
-	return &s, nil
-}
-
-func (m *managed) saveWindowsProfile(s *windowsProfileState) error {
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return m.write(windowsProfileStatePath(m.paths), append(data, '\n'), 0600)
-}
-
 func readWindowsProfile(path, guid string) (*terminalJSON, *terminalJSONNode, error) {
 	data, err := readStateFile(path)
 	if err != nil {
@@ -386,122 +306,5 @@ func readWindowsProfile(path, guid string) (*terminalJSON, *terminalJSONNode, er
 		return nil, nil, err
 	}
 	profile, err := j.profile(guid)
-	if err != nil || profile == nil {
-		return j, profile, err
-	}
-	font := profile.property("font")
-	if font != nil && !font.object {
-		return nil, nil, fmt.Errorf("Windows Terminal profile font changed type; preserving it: %s", path)
-	}
-	for _, value := range []*terminalJSONNode{font.property("face"), profile.property("colorScheme")} {
-		if string(j.value(value)) == "null" {
-			return nil, nil, fmt.Errorf("Windows Terminal profile contains null settings; preserving it: %s", path)
-		}
-	}
-	return j, profile, nil
-}
-
-func writeWindowsSettings(path string, before, after []byte) error {
-	if bytes.Equal(before, after) {
-		return nil
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("Windows Terminal settings path changed; preserving it: %s", path)
-	}
-	mode := info.Mode().Perm()
-	return writeRaw(path, after, &mode, func(temp string) error {
-		current, err := readStateFile(path)
-		if err != nil {
-			return err
-		}
-		if !bytes.Equal(current, before) {
-			return fmt.Errorf("Windows Terminal settings changed during setup; preserving them: %s", path)
-		}
-		return os.Rename(temp, path)
-	})
-}
-
-func (j *terminalJSON) restoreProfileAppearance(profile *terminalJSONNode, face, scheme json.RawMessage, removeEmptyFont bool) ([]byte, error) {
-	var edits []terminalJSONEdit
-	if font := profile.property("font"); font != nil {
-		if removeEmptyFont && face == nil && len(font.members) == 1 && font.property("face") != nil && bytes.Equal(j.data[font.start:font.end], j.punctuation[font.start:font.end]) {
-			j.set(profile, "font", nil, &edits)
-		} else {
-			j.set(font, "face", face, &edits)
-		}
-	}
-	// Reparse after editing the font so adjacent removals each select the correct
-	// separator. The resulting settings still publish in one atomic write.
-	data, err := j.apply(edits)
-	if err != nil {
-		return nil, err
-	}
-	updated, err := parseTerminalJSON(data)
-	if err != nil {
-		return nil, err
-	}
-	selected, err := updated.profile(terminalGUID(j.text(profile.property("guid"))))
-	if err != nil || selected == nil {
-		return nil, fmt.Errorf("Windows Terminal profile disappeared during editing")
-	}
-	edits = nil
-	updated.set(selected, "colorScheme", scheme, &edits)
-	return updated.apply(edits)
-}
-
-// Restores only values still equal to what Selfishell applied, so a pending
-// journal is safe too; a removed target has nothing left to restore.
-func (m *managed) removeWindowsProfile(preflight bool) error {
-	s, err := readWindowsProfileState(m.paths)
-	if err != nil || s == nil {
-		return err
-	}
-	j, profile, err := readWindowsProfile(s.SettingsPath, s.GUID)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if preflight {
-		return nil
-	}
-	if m.dry {
-		m.say(reportPreview, "Would restore unchanged Windows Terminal font and theme: %s", s.SettingsPath)
-		return nil
-	}
-	if profile != nil {
-		face, scheme := j.value(profile.property("font").property("face")), j.value(profile.property("colorScheme"))
-		restoreFace := j.raw(profile.property("font").property("face"))
-		restoreScheme := j.raw(profile.property("colorScheme"))
-		if bytes.Equal(face, s.AppliedFace) {
-			restoreFace = s.OriginalFace
-			if s.OriginalFaceText != "" {
-				restoreFace = json.RawMessage(s.OriginalFaceText)
-			}
-		} else if !bytes.Equal(face, s.OriginalFace) {
-			m.say(reportWarning, "Preserving the user's changed Windows Terminal font.")
-		}
-		if bytes.Equal(scheme, s.AppliedScheme) {
-			restoreScheme = s.OriginalScheme
-			if s.OriginalSchemeText != "" {
-				restoreScheme = json.RawMessage(s.OriginalSchemeText)
-			}
-		} else if !bytes.Equal(scheme, s.OriginalScheme) {
-			m.say(reportWarning, "Preserving the user's changed Windows Terminal theme.")
-		}
-		after, err := j.restoreProfileAppearance(profile, restoreFace, restoreScheme, s.FontWasAbsent)
-		if err != nil {
-			return err
-		}
-		s.Status = "restoring"
-		if err := m.saveWindowsProfile(s); err != nil {
-			return err
-		}
-		if err := writeWindowsSettings(s.SettingsPath, j.data, after); err != nil {
-			return err
-		}
-		if !bytes.Equal(j.data, after) {
-			m.say(reportSuccess, "Restored the Windows Terminal font and theme in settings.json: %s", s.SettingsPath)
-		}
-	}
-	return os.Remove(windowsProfileStatePath(m.paths))
+	return j, profile, err
 }
