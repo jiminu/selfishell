@@ -17,7 +17,8 @@ releases; shell startup never updates them.
 Mise manages the Starship executable and its version; Selfishell still manages
 `starship.toml` and prompt initialization.
 
-Directories that are not writable show a bold red `[ro]` immediately after the path.
+Directories that are not writable show a red Nerd Font lock icon immediately
+after the path.
 
 The right prompt keeps short-lived command results before the more stable
 environment context. Node and Java show their major version (`node:24`,

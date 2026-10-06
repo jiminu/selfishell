@@ -80,10 +80,10 @@ integration uses only:
   `colorScheme` in Windows Terminal `settings.json`, backed up and journaled
   separately. Use the built-in `Dark+` color scheme without installing a custom
   scheme or fragment. Never create a profile or change its name, launch command,
-  or the default profile. Identify
-  existing profiles by distro identity, preserving renamed display names; skip
-  missing or ambiguous targets. Preserve unrelated JSON, comments, and user edits.
-  Uninstall restores only the two values that still match the applied values;
+  or the default profile. Identify existing profiles by distro identity,
+  preserving renamed display names; skip missing or ambiguous targets. Preserve
+  unrelated JSON, comments, and user edits. Uninstall restores only the two
+  values that still match the applied values;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
@@ -137,6 +137,7 @@ Preserve these lifecycle invariants:
 ## Packages and Dependencies
 
 Selfishell provides one development environment, without selectable profiles.
+The prompt and Neovim UI require a Nerd Font; do not add plain-Unicode fallbacks.
 Ghostty is a separate saved macOS installation choice; an existing app on PATH
 or in system/user Applications is preserved. Windows Terminal integration is a
 separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
