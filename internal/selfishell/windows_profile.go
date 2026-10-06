@@ -81,14 +81,14 @@ func windowsTerminalOverrides(j *terminalJSON, profile *terminalJSONNode) ([]str
 		if font == nil {
 			check("fontFace", layer.node.property("fontFace"), face, "Selfishell's font")
 		}
-		// An object sets each mode separately; a missing mode keeps the fragment's Dark+.
+		// An object sets each mode separately; a missing mode keeps the fragment's
+		// Dark+. A light-mode scheme is the user's choice for a light theme.
 		scheme, dark := layer.node.property("colorScheme"), []byte(`"Dark+"`)
 		if scheme != nil && scheme.object {
-			if err := scheme.unique("dark", "light"); err != nil {
+			if err := scheme.unique("dark"); err != nil {
 				return nil, err
 			}
 			check("colorScheme.dark", scheme.property("dark"), dark, "Dark+")
-			check("colorScheme.light", scheme.property("light"), dark, "Dark+ in light mode")
 		} else {
 			check("colorScheme", scheme, dark, "Dark+")
 		}
