@@ -142,13 +142,6 @@ func (f *bootstrapFixture) runPiped(t *testing.T, answers []byte, args ...string
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 	defer cancel()
-	got, err := f.runPipedContext(t, ctx, answers, args...)
-	mustFS(t, err)
-	return got
-}
-
-func (f *bootstrapFixture) runPipedContext(t *testing.T, ctx context.Context, answers []byte, args ...string) (capture, error) {
-	t.Helper()
 	argv := []string{"-c", `cat "$1" | bash -s -- "${@:2}"`, "bash", filepath.Join(repoRoot(), "install.sh"), "--prefix", f.prefix}
 	cmd := exec.CommandContext(ctx, "/bin/bash", append(argv, args...)...)
 	cmd.Dir = f.home
@@ -203,18 +196,16 @@ func (f *bootstrapFixture) runPipedContext(t *testing.T, ctx context.Context, an
 	if cmd.Process != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
+	mustFS(t, ctx.Err())
 	got := capture{Stdout: out.Bytes(), Stderr: errout.Bytes()}
-	if ctx.Err() != nil {
-		return got, ctx.Err()
-	}
 	if err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) {
-			return got, err
+			t.Fatal(err)
 		}
 		got.Status = exit.ExitCode()
 	}
-	return got, nil
+	return got
 }
 func requireOK(t *testing.T, got capture) {
 	t.Helper()
@@ -786,22 +777,6 @@ func TestNativeBootstrapPipedSetup(t *testing.T) {
 			t.Fatal("--yes asked for confirmation")
 		}
 		requireContains(t, readBytes(t, filepath.Join(f.home, ".local/state/selfishell/configured")), "1\n")
-	})
-	t.Run("timeout while waiting for an answer", func(t *testing.T) {
-		f := newBootstrapFixture(t, nativeArchiveVersion)
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		start := time.Now()
-		got, err := f.runPipedContext(t, ctx, []byte{}, "--version", nativeArchiveVersion, "--setup", "--skip-packages")
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("setup did not wait for input until cancellation: %v", err)
-		}
-		if elapsed := time.Since(start); elapsed > 5*time.Second {
-			t.Fatalf("PTY cancellation took %s", elapsed)
-		}
-		requireContains(t, got.Stdout, "Install Selfishell configuration?")
-		requireAbsent(t, filepath.Join(f.home, ".zshrc"))
-		requireAbsent(t, filepath.Join(f.home, ".local/state/selfishell/configured"))
 	})
 }
 

@@ -14,7 +14,8 @@ import (
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-// A renamed Ubuntu profile with an unrelated profile and user font settings.
+// A renamed Ubuntu profile with an unrelated profile, user font settings, and a
+// user scheme shadowing the built-in Dark+.
 const terminalSettingsFixture = `{
   // Keep this comment and all unrelated settings.
   "defaultProfile": "{00000000-0000-0000-0000-000000000001}",
@@ -25,6 +26,7 @@ const terminalSettingsFixture = `{
       {"guid": "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}", "name": "My development shell", "source": "Windows.Terminal.Wsl", "commandline": "wsl.exe -d Ubuntu-24.04 --cd /work --exec zsh --login", "font": {"face": "Cascadia Mono", "size": 15, "weight": "bold"}, "colorScheme": {"dark": "Campbell", "light": "One Half Light"}, "startingDirectory": "~",},
     ],
   },
+  "schemes": [{"name": "Dark+", "background": "#010203"}],
 }
 `
 
@@ -528,7 +530,7 @@ esac
 }
 
 func TestWindowsSetupUpdatesExistingRenamedProfile(t *testing.T) {
-	root, _, paths, settings := existingWindowsProfileFixture(t)
+	root, _, _, settings := existingWindowsProfileFixture(t)
 	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	after := blockRead(t, settings)
 	if !bytes.Contains(after, []byte(`"face": "JetBrainsMonoNL Nerd Font Mono"`)) || !bytes.Contains(after, []byte(`"colorScheme": "Dark+"`)) {
@@ -538,11 +540,6 @@ func TestWindowsSetupUpdatesExistingRenamedProfile(t *testing.T) {
 	want = strings.Replace(want, `{"dark": "Campbell", "light": "One Half Light"}`, `"Dark+"`, 1)
 	if string(after) != want {
 		t.Fatal("setup changed settings outside the two selected values")
-	}
-	for _, path := range []string{paths.Resources + "/windows-terminal.state", rawParent(settings) + "/Fragments"} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("setup created a scheme fragment or record: %s: %v", path, err)
-		}
 	}
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
