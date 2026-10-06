@@ -76,14 +76,15 @@ integration uses only:
   entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
   `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
-- when chosen on WSL, only the current distribution profile's `font.face` and
-  `colorScheme` in Windows Terminal `settings.json`, backed up and journaled
-  separately. Use the built-in `Dark+` color scheme without installing a custom
-  scheme or fragment. Never create a profile or change its name, launch command,
-  or the default profile. Identify existing profiles by distro identity,
-  preserving renamed display names; skip missing or ambiguous targets. Preserve
-  unrelated JSON, comments, and user edits. Uninstall restores only the two
-  values that still match the applied values;
+- when chosen on WSL, one recorded Windows Terminal JSON fragment under
+  `Fragments/Selfishell` that `updates` the current distribution profile's
+  `font.face` and `colorScheme` (built-in `Dark+`, no custom scheme). Never write
+  `settings.json`, except the one-time restore of values releases 1.6.3-1.6.5
+  applied there (only values still matching them). Never create a profile or
+  change its name, launch command, or the default profile. Identify existing
+  profiles by distro identity, preserving renamed display names; skip missing or
+  ambiguous targets. Font or color scheme values in the user's profile or
+  Defaults take precedence; report them instead of editing them;
 - managed links `~/.config/nvim`, `~/.config/starship.toml`, and
   `~/.config/mise/conf.d/selfishell.toml`, honoring `XDG_CONFIG_HOME`.
 
@@ -146,8 +147,7 @@ Existing font families are preserved; fonts use versioned paths so Windows-loade
 files are never replaced during pin updates. Retain each outgoing version's
 ownership evidence and reuse a retained file only when its recorded path and
 checksum match the approved pin and file contents. Change only an ownership-checked
-Selfishell font registration. Existing distro profiles use the built-in Dark+;
-their launch commands remain user-owned. Installer-owned fonts follow approved pins
+Selfishell font registration. Installer-owned fonts follow approved pins
 and remain installed after configuration uninstall. The `configured` marker
 in the state directory records completed setup, not a package selection.
 Behavior below is described for users in `docs/UPDATES.md`.

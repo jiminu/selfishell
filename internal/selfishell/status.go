@@ -268,7 +268,7 @@ func (c CLI) status(args []string) int {
 			result = 1
 		}
 	}
-	if tracked, profileIntact, profileRecordIssue := c.statusWindowsProfile(paths, verbose); tracked {
+	if tracked, profileIntact, profileRecordIssue := c.statusWindowsTerminal(paths, verbose); tracked {
 		count++
 		if profileIntact {
 			intact++

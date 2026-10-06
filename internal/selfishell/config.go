@@ -316,7 +316,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 			return err
 		}
 	}
-	if err := m.installWindowsProfile(p.windowsTerminal, false); err != nil {
+	if err := m.installWindowsTerminal(p.windowsTerminal, false); err != nil {
 		return err
 	}
 	if !m.dry {

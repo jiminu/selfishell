@@ -128,7 +128,7 @@ func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
-	return p.m.installWindowsProfile(choice, true)
+	return p.m.installWindowsTerminal(choice, true)
 }
 
 func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
