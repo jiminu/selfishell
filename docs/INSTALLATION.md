@@ -239,7 +239,7 @@ can identify the target; otherwise setup reports the ambiguity and skips this
 integration. Missing profiles are never created. Stable, Preview, and unpackaged
 settings locations are checked; multiple indistinguishable candidates are skipped.
 
-Selfishell never edits `settings.json`. It adds a small Windows Terminal
+Selfishell does not edit `settings.json`. It adds a small Windows Terminal
 [JSON fragment](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)
 that sets the selected profile's font to JetBrainsMonoNL Nerd Font Mono and its
 color scheme to Windows Terminal's built-in `Dark+`. Profile names, launch
@@ -269,8 +269,8 @@ apply to Windows Terminal; VS Code's terminal font remains a separate setting.
 
 The fragment is stored under Windows
 `%LOCALAPPDATA%/Microsoft/Windows Terminal/Fragments/Selfishell` and
-checksummed. If you edit it, updates ask before overwriting it; `--yes` and non-interactive
-updates keep your version and report a conflict. Uninstall removes an unchanged
+checksummed. If you edit it, updates ask before overwriting it; `--yes` and
+non-interactive updates keep your version and report a conflict. Uninstall removes an unchanged
 fragment and clears the saved choice. Releases 1.6.3 to 1.6.5 edited
 `settings.json` directly; the next install, update, or uninstall restores the
 values they set, keeping any you changed since. Fonts remain installed,
