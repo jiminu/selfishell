@@ -137,19 +137,19 @@ Preserve these lifecycle invariants:
 ## Packages and Dependencies
 
 Selfishell provides one development environment, without selectable profiles.
-The prompt and Neovim UI require a Nerd Font; do not add plain-Unicode fallbacks.
-Ghostty is a separate saved macOS installation choice; an existing app on PATH
-or in system/user Applications is preserved. Windows Terminal integration is a
-separate saved WSL choice. Its optional fonts are `ubuntu-wsl` direct package
-records with `font` download markers, installed and registered per Windows user.
-Existing font families are preserved; fonts use versioned paths so Windows-loaded
-files are never replaced during pin updates. Retain each outgoing version's
-ownership evidence and reuse a retained file only when its recorded path and
-checksum match the approved pin and file contents. Change only an ownership-checked
-Selfishell font registration. Installer-owned fonts follow approved pins
-and remain installed after configuration uninstall. The `configured` marker
-in the state directory records completed setup, not a package selection.
-Behavior below is described for users in `docs/UPDATES.md`.
+The prompt and Neovim UI require a Nerd Font; do not add plain-Unicode
+fallbacks. Ghostty is a separate saved macOS installation choice; an existing
+app on PATH or in system/user Applications is preserved. Windows Terminal
+integration is a separate saved WSL choice. Its optional fonts are `ubuntu-wsl`
+direct package records with `font` download markers, installed and registered
+per Windows user. Existing font families are preserved; fonts use versioned
+paths so Windows-loaded files are never replaced during pin updates. Retain each
+outgoing version's ownership evidence and reuse a retained file only when its
+recorded path and checksum match the approved pin and file contents. Change only
+an ownership-checked Selfishell font registration. Installer-owned fonts follow
+approved pins and remain installed after configuration uninstall. The
+`configured` marker in the state directory records completed setup, not a
+package selection. Behavior below is described for users in `docs/UPDATES.md`.
 
 - Installer-owned mise operations run from the release's `config/shared`
   directory so a caller's project cannot override approved tool versions.
