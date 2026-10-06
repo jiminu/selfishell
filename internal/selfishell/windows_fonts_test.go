@@ -18,11 +18,9 @@ import (
 )
 
 type fontRegistrationRequest struct {
-	Operation             string   `json:"operation"`
-	Path                  string   `json:"path"`
-	PreviousPath          string   `json:"previousPath"`
-	AlternatePreviousPath string   `json:"alternatePreviousPath"`
-	PreviousPaths         []string `json:"previousPaths"`
+	Operation     string   `json:"operation"`
+	Path          string   `json:"path"`
+	PreviousPaths []string `json:"previousPaths"`
 }
 
 // Simulate the Windows registration boundary while exercising real downloads,
@@ -78,8 +76,7 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
-		owned := []string{request.Path, request.PreviousPath, request.AlternatePreviousPath}
-		owned = append(owned, request.PreviousPaths...)
+		owned := append([]string{request.Path}, request.PreviousPaths...)
 		if len(existing) != 0 && !slices.Contains(owned, string(existing)) {
 			fmt.Fprintln(os.Stderr, "Existing Windows font registration is user data")
 			os.Exit(1)
@@ -135,12 +132,17 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 		}
 		blockEqual(t, home+"/font-registration", []byte(windowsHome+"/Microsoft/Windows/Fonts/Selfishell/1/Regular.ttf"))
 		if version == "3" {
-			// Existing journals only stored the two legacy candidate fields.
+			// Journals from 1.6.3 kept candidates only in the two single fields.
 			journal := paths.State + "/pending-fonts/jetbrainsmono-regular"
-			var legacy map[string]json.RawMessage
+			var legacy map[string]any
 			if err := json.Unmarshal(blockRead(t, journal), &legacy); err != nil {
 				t.Fatal(err)
 			}
+			candidates := legacy["previousPaths"].([]any)
+			if len(candidates) != 2 {
+				t.Fatal("unexpected candidates", candidates)
+			}
+			legacy["previousPath"], legacy["alternatePreviousPath"] = candidates[0], candidates[1]
 			delete(legacy, "previousPaths")
 			data, err := json.Marshal(legacy)
 			if err != nil {
