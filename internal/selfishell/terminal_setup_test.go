@@ -37,7 +37,6 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 	if _, err := os.Stat(paths.Resources + "/user-ghostty.state"); err != nil {
 		t.Fatal(err)
 	}
-	f := newPackageFixture(t)
 	apps := t.TempDir()
 	t.Setenv("SELFISHELL_TEST_APPLICATIONS_DIR", apps)
 	if err := os.MkdirAll(apps+"/Ghostty.app/Contents/MacOS", 0700); err != nil {
@@ -46,13 +45,19 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 	if err := testutil.WriteFile(apps+"/Ghostty.app/Contents/MacOS/ghostty", []byte("#!/bin/sh\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	f.executable("brew", "echo attempted >\"$HOME/brew-attempted\"; exit 90")
-	c := CLI{Root: root, Out: &f.out, Err: &f.err}
-	if err := c.installPackages(context.Background(), f.op, paths, nil, "macos", "arm64", true, false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.home + "/brew-attempted"); !os.IsNotExist(err) {
-		t.Fatalf("tried installing an existing Ghostty: %v", err)
+	for _, cask := range []string{"", "ghostty"} {
+		f := newPackageFixture(t)
+		f.executable("brew", "if [ \"$1\" = list ]; then echo "+cask+"; exit 0; fi\necho attempted >\"$HOME/brew-attempted\"; exit 90")
+		c := CLI{Root: root, Out: &f.out, Err: &f.err}
+		if err := c.installPackages(context.Background(), f.op, paths, nil, "macos", "arm64", true, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(f.home + "/brew-attempted"); !os.IsNotExist(err) {
+			t.Fatalf("tried installing an existing Ghostty: %v", err)
+		}
+		if preserved := strings.Contains(f.out.String(), "preserving the app"); preserved != (cask == "") {
+			t.Fatalf("cask %q: preserving note %v: %s", cask, preserved, f.out.String())
+		}
 	}
 }
 

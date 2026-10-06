@@ -67,8 +67,18 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 	}
 	if platform == "macos" && ghostty {
 		if ghosttyInstalled(o.Process) {
-			o.report(reportInfo, "Ghostty is already installed; preserving the app.")
-			return nil
+			// The Homebrew cask stays with Homebrew; only another app is external.
+			casks := map[string]bool{}
+			if !dry && o.brewPath() != "" {
+				var err error
+				if casks, err = o.brewInventory(ctx, "cask"); err != nil {
+					return err
+				}
+			}
+			if !casks["ghostty"] {
+				o.report(reportInfo, "Ghostty is already installed; preserving the app.")
+				return nil
+			}
 		}
 		return o.InstallHomebrew(ctx, "optional", "cask", dry, "ghostty")
 	}
