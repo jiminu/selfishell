@@ -799,7 +799,7 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 }
 
 func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
-	for _, scenario := range []string{"declined", "enabled", "absent", "in-memory"} {
+	for _, scenario := range []string{"declined", "enabled", "absent", "in-memory", "malformed"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, _, paths, _ := windowsTerminalFixture(t)
 			enabled := scenario == "enabled"
@@ -814,6 +814,15 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 			if scenario == "absent" {
 				if err := os.Remove(paths.State + "/windows-terminal.json"); err != nil {
 					t.Fatal(err)
+				}
+			}
+			if scenario == "malformed" {
+				if err := testutil.WriteFile(paths.State+"/windows-terminal.json", []byte("{\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				code, out, stderr := blockRun(t, root, "", "status")
+				if code != 1 || !strings.Contains(out, "[MALFORMED] ~/.local/state/selfishell/windows-terminal.json") || !strings.Contains(out, "Configuration:") || stderr != "" {
+					t.Fatalf("status stopped before diagnosing the choice: %d %s %s", code, out, stderr)
 				}
 			}
 			root = t.TempDir() // The normal CLI fixture root is the source checkout.
@@ -836,16 +845,22 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 			if scenario == "in-memory" {
 				op.windowsTerminal = &windowsTerminalChoice{Enabled: true}
 			}
-			if err := c.installPackages(context.Background(), op, paths, packages, "ubuntu-wsl", "amd64", false, true); err != nil {
-				t.Fatal(err)
-			}
-			for _, name := range []string{"wsl-helper", "wsl-package", "ubuntu-package"} {
-				if !strings.Contains(out.String(), name) {
-					t.Errorf("install skipped %s: %s", name, out.String())
+			err = c.installPackages(context.Background(), op, paths, packages, "ubuntu-wsl", "amd64", false, true)
+			if scenario == "malformed" {
+				if err == nil {
+					t.Fatal("install accepted a malformed choice")
 				}
-			}
-			if strings.Contains(out.String(), "fixture-font") != (enabled || scenario == "in-memory") || strings.Contains(out.String(), "mac-package") {
-				t.Errorf("wrong install selection: %s", out.String())
+			} else if err != nil {
+				t.Fatal(err)
+			} else {
+				for _, name := range []string{"wsl-helper", "wsl-package", "ubuntu-package"} {
+					if !strings.Contains(out.String(), name) {
+						t.Errorf("install skipped %s: %s", name, out.String())
+					}
+				}
+				if strings.Contains(out.String(), "fixture-font") != (enabled || scenario == "in-memory") || strings.Contains(out.String(), "mac-package") {
+					t.Errorf("wrong install selection: %s", out.String())
+				}
 			}
 			selected, err := diagnosticPackages(root, "ubuntu-wsl")
 			if err != nil {
