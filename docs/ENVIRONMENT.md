@@ -115,6 +115,88 @@ settings by adding `~/.config/nvim/after/lsp/<server>.lua` (for example
 `after/lsp/rust_analyzer.lua`), returning a config table Neovim's built-in
 LSP client merges in (see `:help lsp-config`).
 
+### Debugging
+
+Selfishell includes nvim-dap, nvim-dap-ui, nvim-nio and mason-nvim-dap at
+approved commits. They load on the first debug key or DAP command. Install
+only the adapters you need, then open Neovim from the project root:
+
+```vim
+:DapInstall python
+:DapInstall delve
+```
+
+These install Python's debugpy and Go's Delve respectively. The language
+runtime/toolchain must also be installed. Mason installs supported adapters
+and the bridge registers their available default launch configurations,
+including installations completed during the current Neovim session.
+`:MasonInstall debugpy` and `:MasonInstall delve` also work. No debug adapter
+is installed merely by opening Neovim or running Selfishell setup.
+
+Set a breakpoint with `F9`, then press `F5` and select a launch configuration.
+Debug panels open once the session initializes and close on termination or exit.
+Use Normal mode for the following keys:
+
+| Action | Function key | Space shortcut |
+| --- | --- | --- |
+| Start / continue | `F5` | `Space D c` |
+| Toggle breakpoint | `F9` | `Space D b` |
+| Step over | `F10` | `Space D o` |
+| Step into | `F11` | `Space D i` |
+| Step out | `Shift+F11` | `Space D O` |
+| Terminate | `Shift+F5` | `Space D t` |
+| Toggle debug panels | | `Space D u` |
+| Evaluate expression | | `Space D e` (also Visual mode) |
+
+The Space shortcuts also work when a keyboard or terminal intercepts function
+keys. Which-key shows the actions and their function-key equivalents. `Space d`
+still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+
+Python's default launch runs the current file. On each launch, Selfishell
+selects an executable from `VIRTUAL_ENV`, then `CONDA_PREFIX`, then the current
+project's `.venv/bin/python`, then `python3` or `python` on PATH. The adapter's
+own Python environment is separate from the interpreter running your program.
+Go uses the bridge's package and test launch configurations; run Neovim from
+the appropriate project directory or specify the package explicitly.
+
+For project-specific entrypoints, arguments, environment variables or attach
+settings, use `.vscode/launch.json`. nvim-dap reads it when starting a session;
+its `type` must match a registered adapter (for these defaults, `python` or
+`delve`). Only a subset of VS Code's format is supported; use standard JSON
+without trailing commas. See `:help dap-launch.json`.
+
+Adapter installation does not guarantee a default launch configuration for
+every language. Java, for example, needs JDTLS plus `java-debug-adapter` and
+additional JDTLS/DAP integration, commonly through
+[nvim-jdtls](https://github.com/mfussenegger/nvim-jdtls#debugger-via-nvim-dap).
+`:DapInstall javadbg` installs that package; it does not complete the integration.
+Selfishell does not configure Java or framework-specific launch workflows.
+
+For personal adapter settings, add `~/.config/nvim/lua/plugins/dap_user.lua`
+(under `$XDG_CONFIG_HOME` when set). Existing lazy.nvim imports load it;
+Selfishell does not create, replace or remove this file. For example:
+
+```lua
+return {
+  {
+    "jay-babu/mason-nvim-dap.nvim",
+    opts = function(_, opts)
+      opts.handlers.python = function(config)
+        config.configurations[1].pythonPath = "/absolute/path/to/venv/bin/python"
+        require("mason-nvim-dap").default_setup(config)
+      end
+    end,
+  },
+}
+```
+
+Use overrides for the included plugins; installing additional Neovim plugins
+into the managed plugin directory is subject to
+[plugin synchronization](UPDATES.md). Adapter updates and removal remain under
+`:Mason` control; see [debug adapter updates](UPDATES.md#neovim-debug-adapters).
+
+### Editor behavior
+
 New splits open to the right and below, four lines of context remain above and
 below the cursor when possible, commands that would discard unsaved changes ask
 for confirmation, and `:substitute` results preview in a split before they are
