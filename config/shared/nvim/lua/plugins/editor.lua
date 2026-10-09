@@ -54,31 +54,7 @@ return {
 
   plugin("folke/which-key.nvim", {
     event = "VeryLazy",
-    keys = {
-      {
-        "<leader>w",
-        function() require("which-key").show({ keys = "<leader>w", loop = true }) end,
-        desc = "Resize windows",
-      },
-    },
     opts = {
-      spec = {
-        {
-          "<leader>w",
-          group = "Resize windows",
-          -- Virtual keys keep the entry mapping immediate and h/j/k/l local
-          -- to the popup. Which-key owns repetition and Escape handling.
-          expand = function()
-            return {
-              { "h", function() vim.cmd("vertical resize -5") end, desc = "Width -5" },
-              { "l", function() vim.cmd("vertical resize +5") end, desc = "Width +5" },
-              { "j", function() vim.cmd("resize -2") end, desc = "Height -2" },
-              { "k", function() vim.cmd("resize +2") end, desc = "Height +2" },
-              { "=", function() vim.cmd("wincmd =") end, desc = "Equalize windows" },
-            }
-          end,
-        },
-      },
       icons = {
         -- which-key deep-merges keys, so every Nerd Font default needs an override.
         mappings = false,

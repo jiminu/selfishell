@@ -27,6 +27,28 @@ end
 
 M.set_window_navigation()
 
+map("n", "<leader>w", function()
+  local commands = {
+    h = "vertical resize -5", l = "vertical resize +5",
+    j = "resize -2", k = "resize +2", ["="] = "wincmd =",
+  }
+  while true do
+    vim.api.nvim_echo({ { "Resize: h/l width -/+5 | j/k height -/+2 | = equalize | Esc done", "ModeMsg" } }, false, {})
+    vim.cmd.redraw()
+    local ok, key = pcall(vim.fn.getcharstr)
+    if not ok or not commands[key] then
+      vim.api.nvim_echo({ { "" } }, false, {})
+      if ok and key ~= vim.keycode("<Esc>") then
+        -- Replay only the exit key, ahead of any remaining input. A ':' or
+        -- window navigation key should perform its ordinary mapped action.
+        vim.api.nvim_feedkeys(key, "mi", false)
+      end
+      return
+    end
+    vim.cmd(commands[key])
+  end
+end, { desc = "Resize windows", silent = true })
+
 -- Buffer management: deferred to call time since Snacks isn't guaranteed to
 -- be loaded yet when this module is evaluated.
 map("n", "<leader>bd", function()
