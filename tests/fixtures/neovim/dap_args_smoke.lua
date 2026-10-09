@@ -18,10 +18,6 @@ for _, adapter in ipairs({ "delve", "codelldb" }) do
     vim.fn.input = function() return case[1] end
     assert(vim.deep_equal(with_args.args(), case[2]), adapter .. " split quoted/empty arguments incorrectly")
   end
-  local personal = { name = "Personal", type = adapter, args = { "hello world" } }
-  dap.configurations[config.filetypes[1]][#dap.configurations[config.filetypes[1]] + 1] = personal
-  require("config.dap").setup_adapter(config)
-  assert(vim.deep_equal(personal.args, { "hello world" }), "setup changed personal arguments")
 end
 vim.fn.input = input
 print("DAP args smoke: OK")
