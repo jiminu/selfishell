@@ -185,6 +185,16 @@ On Ubuntu and Ubuntu on WSL, the `~/.zshenv` block contains only
 initialize `compinit` before Selfishell's own. Selfishell does not manage
 `~/.zshenv` on macOS.
 
+## Neovim customization
+
+For personal debug configuration, add
+`~/.config/nvim/lua/plugins/dap_user.lua`, honoring `XDG_CONFIG_HOME` if set.
+This file is user-owned: Selfishell never creates, replaces or removes it.
+After uninstall removes the Neovim link, it remains under
+`~/.config/selfishell/nvim/lua/plugins/`. Project `.vscode/launch.json` files
+also remain user-owned. See [debugging](ENVIRONMENT.md#debugging) for setup,
+function keys and an override example.
+
 ## Ghostty customization
 
 On macOS, Selfishell manages two Ghostty paths and recognizes an optional third

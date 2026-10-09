@@ -116,6 +116,20 @@ Registry or server installation failures fail the update and skip mise cleanup;
 earlier tool and configuration changes may already have applied. Resolve the
 reported error and retry with `selfishell update --tools-only`.
 
+### Neovim debug adapters
+
+The common DAP plugins follow the approved commits in `dependencies.conf` and
+are synchronized with the other Neovim plugins. Debug adapters installed by
+the user through `:DapInstall` or `:Mason` are user-managed Mason packages:
+Selfishell does not install, upgrade or remove them during setup or updates.
+They remain installed after configuration uninstall and purge. Use `:Mason`
+to update or remove them explicitly.
+
+Personal `nvim/lua/plugins/dap_user.lua` settings and project
+`.vscode/launch.json` files are not managed resources and are preserved.
+`--skip-packages`, CLI-only updates and dry-run do not install debug plugins
+or adapters. See [debugging](ENVIRONMENT.md#debugging) for setup and shortcuts.
+
 ### Unused mise versions
 
 After successful synchronization, Selfishell runs `mise prune --tools --yes`

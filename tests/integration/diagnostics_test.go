@@ -226,7 +226,7 @@ func TestConfiguredDiagnostics(t *testing.T) {
 				t.Fatalf("inconsistent diagnostic header: %s", got.Stdout)
 			}
 			requireContains(t, got.Stdout, "[OK] System: Ubuntu (amd64), 4 checks passed")
-			requireContains(t, got.Stdout, "Configuration: 31 paths intact")
+			requireContains(t, got.Stdout, "Configuration: 33 paths intact")
 			requireContains(t, got.Stdout, "Optional tool: optional is not installed")
 			requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
 			if tc.name == "status-verbose" {

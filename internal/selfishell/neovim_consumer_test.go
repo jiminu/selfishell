@@ -164,4 +164,5 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		t.Fatal(fmt.Errorf("BufNewFile probe created its target: %v", err))
 	}
 	runNeovimConfigFixtures(t, root, p, "nvim", mise)
+	runNeovimDAPConsumer(t, ctx, root, home, p, op, paths, nvim, mise)
 }

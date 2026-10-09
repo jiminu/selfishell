@@ -1,5 +1,6 @@
 local modules = {
   "plugins.completion",
+  "plugins.dap",
   "plugins.editor",
   "plugins.lsp",
   "plugins.ui",
