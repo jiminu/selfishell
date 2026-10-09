@@ -8,6 +8,11 @@ vim.api.nvim_win_set_cursor(0, { 3, 0 })
 press("<F9>")
 local dap = require("dap")
 assert(dap.adapters.python and dap.adapters.delve, "installed adapters were not registered after restart")
+local python_launch = dap.configurations.python[1]
+dap.configurations.python = {}
+dap.providers.configs["consumer"] = function(bufnr)
+  return vim.bo[bufnr].filetype == "python" and { python_launch } or {}
+end
 local stopped, exited = 0, false
 dap.listeners.after.event_stopped.consumer = function() stopped = stopped + 1 end
 dap.listeners.after.event_terminated.consumer = function() exited = true end
@@ -57,4 +62,10 @@ press("<F10>")
 assert(vim.wait(15000, function() return stopped > before or exited end, 50), "Go step did not advance")
 press("<S-F5>")
 assert(vim.wait(15000, function() return not dap.session() end, 50), "Go session did not terminate")
+assert(vim.wait(1000, function()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.bo[vim.api.nvim_win_get_buf(win)].filetype:match("^dapui_") then return false end
+  end
+  return true
+end), "debug session closed but panels remained open")
 print("DAP consumer: OK")

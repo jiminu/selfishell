@@ -134,7 +134,8 @@ including installations completed during the current Neovim session.
 is installed merely by opening Neovim or running Selfishell setup.
 
 Set a breakpoint with `F9`, then press `F5` and select a launch configuration.
-Debug panels open once the session initializes and close on termination or exit.
+Debug panels open once the session initializes and close when the last session
+closes, including disconnects and adapter failures.
 Use Normal mode for the following keys:
 
 | Action | Function key | Space shortcut |

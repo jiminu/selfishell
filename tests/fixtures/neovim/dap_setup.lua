@@ -11,7 +11,7 @@ assert(#bridge.opts.ensure_installed == 0 and bridge.opts.automatic_installation
   "opening Neovim must not install debug adapters")
 
 -- Offline boundary: real Selfishell callbacks, a debugger that records requests.
-local actions, notifications = {}, {}
+local actions = {}
 local dap = { adapters = {}, configurations = {}, listeners = { after = { event_initialized = {} }, before = { event_terminated = {}, event_exited = {} } } }
 local session
 dap.session = function() return session end
@@ -38,13 +38,15 @@ package.preload["mason-nvim-dap"] = function()
     end
   end }
 end
-vim.notify = function(message) notifications[#notifications + 1] = message end
 local keys = {}
 for _, key in ipairs(bridge.keys) do keys[key[1]] = key[2] end
 vim.bo.filetype = "python"
+-- A user may supply launch configurations through native providers alone.
+-- F5 must delegate to DAP just like :DapContinue, including dap-srcft buffers.
+dap.providers = { configs = { user = function() return { { name = "Custom launch" } } end } }
 keys["<F5>"]()
-assert(#actions == 0 and notifications[1]:find(":DapInstall"), "missing adapter needs actionable guidance")
-assert(not panel_open, "missing adapter opened the debug UI")
+assert(actions[#actions] == "continue", "F5 bypassed native DAP configuration providers")
+assert(not panel_open, "starting a session opened the UI before initialization")
 
 local config = {
   name = "python", adapters = { type = "executable", command = "debugpy-adapter" },
@@ -80,13 +82,14 @@ for key, action in pairs({
   assert(actions[#actions] == action, "incorrect debug action: " .. key)
 end
 require("config.dap").setup_ui()
-dap.listeners.after.event_initialized.selfishell()
+session = { on_close = {} }
+dap.listeners.after.event_initialized.selfishell(session)
 assert(panel_open, "initialized session did not open UI")
-dap.listeners.before.event_terminated.selfishell()
-assert(not panel_open, "terminated session left UI open")
-dap.listeners.after.event_initialized.selfishell()
-dap.listeners.before.event_exited.selfishell()
-assert(not panel_open, "exited session left UI open")
+assert(session.on_close.selfishell, "debug UI must also close on disconnect or adapter failure")
+local closed = session
+session = nil
+closed.on_close.selfishell(closed)
+assert(vim.wait(1000, function() return not panel_open end), "closed session left UI open")
 keys["<leader>Du"]()
 assert(panel_open, "manual UI toggle did not open UI")
 vim.bo.filetype = "dapui_scopes"

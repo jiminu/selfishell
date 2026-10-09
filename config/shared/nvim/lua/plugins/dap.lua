@@ -4,10 +4,6 @@ local function action(name)
   return function() require("dap")[name]() end
 end
 
-local function continue()
-  require("config.dap").continue()
-end
-
 return {
   plugin("mfussenegger/nvim-dap", { lazy = true }),
   plugin("rcarriga/nvim-dap-ui", {
@@ -36,13 +32,13 @@ return {
       "DapToggleRepl", "DapEval", "DapPause", "DapRestartFrame",
     },
     keys = {
-      { "<F5>", continue, desc = "Debug: start / continue" },
+      { "<F5>", action("continue"), desc = "Debug: start / continue" },
       { "<F9>", action("toggle_breakpoint"), desc = "Debug: toggle breakpoint" },
       { "<F10>", action("step_over"), desc = "Debug: step over" },
       { "<F11>", action("step_into"), desc = "Debug: step into" },
       { "<S-F11>", action("step_out"), desc = "Debug: step out" },
       { "<S-F5>", action("terminate"), desc = "Debug: terminate" },
-      { "<leader>Dc", continue, desc = "Debug: start / continue (F5)" },
+      { "<leader>Dc", action("continue"), desc = "Debug: start / continue (F5)" },
       { "<leader>Db", action("toggle_breakpoint"), desc = "Debug: toggle breakpoint (F9)" },
       { "<leader>Do", action("step_over"), desc = "Debug: step over (F10)" },
       { "<leader>Di", action("step_into"), desc = "Debug: step into (F11)" },

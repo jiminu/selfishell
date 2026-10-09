@@ -27,26 +27,16 @@ function M.setup_adapter(config)
   require("mason-nvim-dap").default_setup(config)
 end
 
-function M.continue()
-  local dap = require("dap")
-  local configurations = dap.configurations[vim.bo.filetype] or {}
-  if not dap.session() and #configurations == 0 and vim.fn.filereadable(".vscode/launch.json") == 0 then
-    vim.notify(
-      "No debug configuration for " .. vim.bo.filetype
-        .. ". Install a supported adapter with :DapInstall (for example :DapInstall python),"
-        .. " or configure .vscode/launch.json and its adapter. See :help dap-configuration.",
-      vim.log.levels.INFO
-    )
-    return
-  end
-  dap.continue()
-end
-
 function M.setup_ui()
   local dap, ui = require("dap"), require("dapui")
-  dap.listeners.after.event_initialized.selfishell = function() ui.open() end
-  dap.listeners.before.event_terminated.selfishell = function() ui.close() end
-  dap.listeners.before.event_exited.selfishell = function() ui.close() end
+  dap.listeners.after.event_initialized.selfishell = function(session)
+    ui.open()
+    -- Disconnects and adapter failures do not always send terminated/exited.
+    -- on_close may run in a libuv callback; wait until DAP clears its session.
+    session.on_close.selfishell = vim.schedule_wrap(function()
+      if not dap.session() then ui.close() end
+    end)
+  end
   vim.api.nvim_create_autocmd("FileType", {
     group = vim.api.nvim_create_augroup("SelfishellDebugWindows", { clear = true }),
     pattern = { "dapui_*", "dap-repl" },
