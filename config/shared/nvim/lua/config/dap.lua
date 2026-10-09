@@ -97,7 +97,65 @@ local function python_path()
   return require("dap").ABORT
 end
 
+local function setup_javascript(config)
+  local dap = require("dap")
+  if not dap.adapters["pwa-node"] then
+    -- Mason installs js-debug, but the bridge has no adapter/launch mapping.
+    config.name = "pwa-node"
+    config.adapters = {
+      type = "server",
+      host = "127.0.0.1",
+      port = "${port}",
+      executable = {
+        command = vim.fn.exepath("js-debug-adapter"),
+        args = { "${port}", "127.0.0.1" },
+      },
+      enrich_config = function(launch, on_config)
+        local resolved = vim.deepcopy(launch)
+        if resolved.type == "node" then resolved.type = "pwa-node" end
+        -- Standalone js-debug needs the workspace to discover source maps
+        -- before the program starts, including for project launch.json files.
+        resolved.__workspaceFolder = resolved.__workspaceFolder or vim.fn.getcwd()
+        on_config(resolved)
+      end,
+    }
+    config.filetypes = { "javascript", "typescript" }
+    config.configurations = {
+      { name = "Node: Launch current file", request = "launch", program = "${file}" },
+      {
+        name = "Node: Launch JavaScript file", request = "launch",
+        program = function()
+          local path = vim.fn.input("Path to JavaScript entrypoint: ", vim.fn.getcwd() .. "/", "file")
+          return path ~= "" and vim.fn.fnamemodify(path, ":p") or dap.ABORT
+        end,
+      },
+      {
+        name = "Node: Attach (port)", request = "attach", address = "127.0.0.1",
+        port = function()
+          local input = vim.fn.input("Node inspector port: ", "9229")
+          if input == "" then return dap.ABORT end
+          local port = tonumber(input)
+          if port and port % 1 == 0 and port >= 1 and port <= 65535 then return port end
+          vim.notify("Node inspector port must be an integer from 1 to 65535.", vim.log.levels.WARN)
+          return dap.ABORT
+        end,
+      },
+    }
+    for _, launch in ipairs(config.configurations) do
+      launch.type = "pwa-node"
+      launch.cwd = "${workspaceFolder}"
+      launch.sourceMaps = true
+      launch.skipFiles = { "<node_internals>/**" }
+      launch.outFiles = { "${workspaceFolder}/**/*.js", "${workspaceFolder}/**/*.mjs", "${workspaceFolder}/**/*.cjs", "!**/node_modules/**" }
+    end
+    require("mason-nvim-dap").default_setup(config)
+  end
+  -- VS Code launch.json files normally use the shorter alias.
+  dap.adapters.node = dap.adapters.node or dap.adapters["pwa-node"]
+end
+
 function M.setup_adapter(config)
+  if config.name == "js" then return setup_javascript(config) end
   -- Mason emits install success on reinstalls too. Keep existing registrations,
   -- including user overrides, rather than append duplicate launch configurations.
   if require("dap").adapters[config.name] then return end

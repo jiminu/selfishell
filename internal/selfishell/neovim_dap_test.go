@@ -1,9 +1,13 @@
 package selfishell
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"io"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,7 +36,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 	if err := testutil.WriteFile(config+"/plugin-versions.conf", manifest, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"project/.venv/bin/python", "active/bin/python", "conda/bin/python", "other/.venv/bin/python", "bin/python3"} {
+	for _, name := range []string{"project/.venv/bin/python", "active/bin/python", "conda/bin/python", "other/.venv/bin/python", "bin/python3", "bin/js-debug-adapter"} {
 		path := home + "/" + name
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
@@ -95,20 +99,32 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		t.Fatal(err)
 	}
 	for name, content := range map[string]string{
-		"main.py": "value = 41\nvalue += 1\nprint(value)\n",
-		"go.mod":  "module debugfixture\n\ngo 1.20\n",
-		"main.go": "package main\nimport \"fmt\"\nfunc main() {\n value := 41\n value++\n fmt.Println(value)\n}\n",
+		"main.py":         "value = 41\nvalue += 1\nprint(value)\n",
+		"go.mod":          "module debugfixture\n\ngo 1.20\n",
+		"main.go":         "package main\nimport \"fmt\"\nfunc main() {\n value := 41\n value++\n fmt.Println(value)\n}\n",
+		"main.cjs":        "let value = 41;\nvalue += 1;\nconsole.log(value);\nvalue += 1;\nconsole.log(value);\n",
+		"main.ts":         "type Count = number;\nlet value: Count = 41;\nvalue += 1;\nconsole.log(value);\nvalue += 1;\nconsole.log(value);\n",
+		"mapped.ts":       "type Count = number;\nlet value: Count = 41;\nvalue += 1;\nconsole.log(value);\nvalue += 1;\nconsole.log(value);\n",
+		"dist/mapped.cjs": "let value = 41;\nvalue += 1;\nconsole.log(value);\nvalue += 1;\nconsole.log(value);\n//# sourceMappingURL=mapped.cjs.map\n",
+		// Each generated line maps to the next TS line, after the erased type alias.
+		"dist/mapped.cjs.map": `{"version":3,"file":"mapped.cjs","sources":["../mapped.ts"],"names":[],"mappings":"AACA;AACA;AACA;AACA;AACA"}`,
+		"attach.cjs":          "let value = 41;\nvalue += 1;\nconsole.log(value);\nsetInterval(() => {}, 1000);\n",
 	} {
+		if err := os.MkdirAll(filepath.Dir(project+"/"+name), 0700); err != nil {
+			t.Fatal(err)
+		}
 		if err := testutil.WriteFile(project+"/"+name, []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
+	inspectorPort := ""
 	run := func(fixture string) {
 		t.Helper()
 		var output bytes.Buffer
 		command := withEnvironment(p, map[string]string{
-			"SELFISHELL_DAP_PROJECT":       project,
-			"SELFISHELL_NVIM_TEST_FIXTURE": root + "/tests/fixtures/neovim/" + fixture,
+			"SELFISHELL_DAP_PROJECT":         project,
+			"SELFISHELL_NVIM_TEST_FIXTURE":   root + "/tests/fixtures/neovim/" + fixture,
+			"SELFISHELL_NODE_INSPECTOR_PORT": inspectorPort,
 			// Delve builds with Go. Keep its caches private and removable by TempDir.
 			"GOPATH": home + "/go", "GOMODCACHE": home + "/go/pkg/mod",
 			"GOCACHE": home + "/.cache/go-build", "GOFLAGS": "-modcacherw",
@@ -123,7 +139,7 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 	}
 	run("dap_install_smoke.lua")
 	before := map[string][]byte{}
-	for _, name := range []string{"debugpy", "delve"} {
+	for _, name := range []string{"debugpy", "delve", "js-debug-adapter"} {
 		path := home + "/.local/share/nvim/mason/packages/" + name + "/mason-receipt.json"
 		before[path], err = os.ReadFile(path)
 		if err != nil {
@@ -140,4 +156,49 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		}
 	}
 	run("dap_debug_smoke.lua")
+	if err := os.MkdirAll(project+"/.vscode", 0700); err != nil {
+		t.Fatal(err)
+	}
+	launch := `{"version":"0.2.0","configurations":[{"name":"TS project launch","type":"node","request":"launch","program":"${workspaceFolder}/dist/mapped.cjs","cwd":"${workspaceFolder}","outFiles":["${workspaceFolder}/dist/**/*.cjs"]}]}`
+	if err := testutil.WriteFile(project+"/.vscode/launch.json", []byte(launch), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Go owns the attach target and cleanup; the Lua probe exercises Neovim.
+	node, err := op.miseOutput(ctx, p, mise, "-C", root+"/config/shared", "which", "node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attached := exec.CommandContext(ctx, node, "--inspect-brk=127.0.0.1:0", project+"/attach.cjs")
+	attached.Env, attached.Dir = p.environment(), project
+	stderr, err := attached.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := attached.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = attached.Process.Kill(); _ = attached.Wait() }()
+	ready := make(chan string, 1)
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			if endpoint, found := strings.CutPrefix(scanner.Text(), "Debugger listening on "); found {
+				if parsed, err := url.Parse(endpoint); err == nil {
+					ready <- parsed.Port()
+					_, _ = io.Copy(io.Discard, stderr)
+					return
+				}
+			}
+		}
+		ready <- ""
+	}()
+	select {
+	case inspectorPort = <-ready:
+		if inspectorPort == "" {
+			t.Fatal("Node inspector did not report a port")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Node inspector startup timed out")
+	}
+	run("dap_javascript_smoke.lua")
 }

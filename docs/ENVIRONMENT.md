@@ -124,13 +124,16 @@ only the adapters you need, then open Neovim from the project root:
 ```vim
 :DapInstall python
 :DapInstall delve
+:DapInstall js
 ```
 
-These install Python's debugpy and Go's Delve respectively. The language
-runtime/toolchain must also be installed. Mason installs supported adapters
+These install Python's debugpy, Go's Delve and the JavaScript/TypeScript
+debugger respectively. The language runtime/toolchain must also be installed.
+Mason installs supported adapters
 and the bridge registers their available default launch configurations,
 including installations completed during the current Neovim session.
-`:MasonInstall debugpy` and `:MasonInstall delve` also work. No debug adapter
+`:MasonInstall debugpy`, `:MasonInstall delve` and
+`:MasonInstall js-debug-adapter` also work. No debug adapter
 is installed merely by opening Neovim or running Selfishell setup.
 
 Save the source files with `:w` (or `:wa` for all edited files) before starting:
@@ -177,11 +180,41 @@ own Python environment is separate from the interpreter running your program.
 Go uses the bridge's package and test launch configurations; run Neovim from
 the appropriate project directory or specify the package explicitly.
 
+JavaScript and TypeScript share Microsoft's `js-debug-adapter`. Installing
+`:DapInstall js` registers the following defaults for both languages:
+
+| Configuration | Use |
+| --- | --- |
+| `Node: Launch current file` | Run the open file with Node on PATH. |
+| `Node: Launch JavaScript file` | Choose a JavaScript entrypoint, including compiled TypeScript output. |
+| `Node: Attach (port)` | Connect to a local Node inspector; the prompt defaults to port 9229. |
+
+Selfishell's Node 24 can run `.ts`, `.mts` and `.cts` files with erasable type
+annotations directly. This does not type-check or apply `tsconfig.json`;
+enums, decorators, JSX/TSX and path aliases may need your project's compiler
+or runtime. For compiled TypeScript, enable source maps in the project build,
+open the original `.ts` file, set a breakpoint and choose
+`Node: Launch JavaScript file`. Select the generated `.js`, `.mjs` or `.cjs`
+entrypoint. Source maps are enabled, and generated files are searched under
+the working directory, excluding `node_modules`. Run the project's build
+again after edits; F5 does not build automatically.
+For a project that already uses `tsx`, a project launch configuration can
+set `"runtimeArgs": ["--import", "tsx"]` to run its TypeScript entrypoint.
+Selfishell does not install project runtimes or build dependencies.
+
+For attach, start your program with `node --inspect-brk=127.0.0.1:9229 app.js`
+(or the equivalent flags in your project command), then select
+`Node: Attach (port)`. Node may pause at entry; F5 continues to your breakpoint.
+Framework launches use project-specific configuration. Browser debugging
+also needs a browser adapter registration; these defaults target Node.js.
+See [Node's TypeScript support](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
+and [js-debug options](https://github.com/microsoft/vscode-js-debug/blob/main/OPTIONS.md).
+
 For project-specific entrypoints, arguments, environment variables or attach
 settings, use `.vscode/launch.json`. nvim-dap reads it when starting a session;
-its `type` must match a registered adapter (for these defaults, `python` or
-`delve`). Only a subset of VS Code's format is supported; use standard JSON
-without trailing commas. See `:help dap-launch.json`.
+its `type` must match a registered adapter (for these defaults, `python`,
+`delve`, or `pwa-node` / `node` for JS/TS). Only a subset of VS Code's format
+is supported; use standard JSON without trailing commas. See `:help dap-launch.json`.
 
 Adapter installation does not guarantee a default launch configuration for
 every language. Java, for example, needs JDTLS plus `java-debug-adapter` and
