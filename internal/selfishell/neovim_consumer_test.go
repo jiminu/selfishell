@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPinnedNeovimConsumer(t *testing.T) {
@@ -144,12 +146,13 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		{"rainbow", "main.py", "", "Rainbow-delimiters smoke: OK"},
 		{"bufnewfile", "brand-new.py", "", "BufNewFile indent smoke: OK"},
 		{"dap_layout", "debug-layout.txt", "", "DAP layout smoke: OK"},
-		{"dap_focus", "debug-focus.txt", "", "DAP focus smoke: OK"},
+		{"dap_focus", "debug-focus.txt", "source fixture\n", "DAP focus smoke: OK"},
+		{"dap_args", "debug-args.txt", "", "DAP args smoke: OK"},
 		{"window_resize", "resize.txt", "", "Window resize input smoke: OK"},
 	} {
 		file := filepath.Join(home, probe.filename)
 		if probe.content != "" {
-			if err := os.WriteFile(file, []byte(probe.content), 0600); err != nil {
+			if err := testutil.WriteFile(file, []byte(probe.content), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}

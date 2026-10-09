@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +101,19 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		t.Fatal(err)
 	}
 	for name, content := range map[string]string{
+		"cpp/main.cpp": `#include <cstring>
+#include <fstream>
+#include <unistd.h>
+int main(int argc, char** argv) {
+ std::ofstream("probe.pid") << getpid() << '\n';
+ int value = argc == 3 && std::strcmp(argv[1], "hello world") == 0 && argv[2][0] == '\0' ? 41 : -1;
+ value += 1;
+ volatile unsigned long counter = 0;
+ while (true) {
+  ++counter;
+ }
+}
+`,
 		"main.py":         "value = 41\nvalue += 1\nprint(value)\n",
 		"go.mod":          "module debugfixture\n\ngo 1.20\n",
 		"main.go":         "package main\nimport \"fmt\"\nfunc main() {\n value := 41\n value++\n fmt.Println(value)\n}\n",
@@ -118,6 +133,12 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		if err := testutil.WriteFile(project+"/"+name, []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	var compiled bytes.Buffer
+	compiler := p
+	compiler.Dir, compiler.Out, compiler.Err = project+"/cpp", &compiled, &compiled
+	if code, err := compiler.Run(ctx, "c++", "-g", "-O0", "main.cpp", "-o", "cpp-probe"); err != nil || code != 0 {
+		t.Fatalf("C++ debug fixture build: code=%d err=%v output=%s", code, err, compiled.String())
 	}
 	inspectorPort := ""
 	run := func(fixture string) {
@@ -141,7 +162,7 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 	}
 	run("dap_install_smoke.lua")
 	before := map[string][]byte{}
-	for _, name := range []string{"debugpy", "delve", "js-debug-adapter"} {
+	for _, name := range []string{"debugpy", "delve", "js-debug-adapter", "codelldb"} {
 		path := home + "/.local/share/nvim/mason/packages/" + name + "/mason-receipt.json"
 		before[path], err = os.ReadFile(path)
 		if err != nil {
@@ -158,6 +179,31 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		}
 	}
 	run("dap_debug_smoke.lua")
+	func() {
+		// A failed Lua assertion can bypass DAP termination. Stop the exact
+		// fixture process before moving on or removing its private directory.
+		defer func() {
+			data, err := os.ReadFile(project + "/cpp/probe.pid")
+			if os.IsNotExist(err) {
+				return // Launch never reached main.
+			}
+			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
+			if err != nil || parseErr != nil || pid <= 0 {
+				t.Errorf("C++ fixture PID: read=%v parse=%v pid=%d", err, parseErr, pid)
+				return
+			}
+			process, err := os.FindProcess(pid)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer process.Release()
+			if err := process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				t.Errorf("C++ fixture cleanup: %v", err)
+			}
+		}()
+		run("dap_cpp_smoke.lua")
+	}()
 	if err := os.MkdirAll(project+"/.vscode", 0700); err != nil {
 		t.Fatal(err)
 	}

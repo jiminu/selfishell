@@ -24,6 +24,7 @@ return {
     },
     opts = {},
     config = function(_, opts)
+      opts.select_window = opts.select_window or require("config.dap").source_window
       require("dapui").setup(opts)
       require("config.dap").setup_ui()
     end,
@@ -57,6 +58,8 @@ return {
       { "<leader>Di", action("step_into"), desc = "Debug: step into (F11)" },
       { "<leader>DO", action("step_out"), desc = "Debug: step out (Shift+F11)" },
       { "<leader>Dt", action("terminate"), desc = "Debug: terminate (Shift+F5)" },
+      { "<leader>Dp", action("pause"), desc = "Debug: pause" },
+      { "<leader>Df", action("focus_frame"), desc = "Debug: go to current frame" },
       { "<leader>Du", function() require("config.dap").toggle_ui() end, desc = "Debug: toggle UI" },
       { "<leader>De", function() require("dapui").eval() end, mode = { "n", "x" }, desc = "Debug: evaluate expression" },
     },

@@ -125,10 +125,12 @@ only the adapters you need, then open Neovim from the project root:
 :DapInstall python
 :DapInstall delve
 :DapInstall js
+:DapInstall codelldb
 ```
 
-These install Python's debugpy, Go's Delve and the JavaScript/TypeScript
-debugger respectively. The language runtime/toolchain must also be installed.
+These install Python's debugpy, Go's Delve, the JavaScript/TypeScript debugger,
+and CodeLLDB for C/C++ and Rust respectively. The language runtime/toolchain
+must also be installed.
 Mason installs supported adapters
 and the bridge registers their available default launch configurations,
 including installations completed during the current Neovim session.
@@ -163,6 +165,8 @@ Use Normal mode for the following keys:
 | Step into | `F11` | `Space D i` |
 | Step out | `Shift+F11` | `Space D O` |
 | Terminate | `Shift+F5` | `Space D t` |
+| Pause execution | | `Space D p` |
+| Go to current frame | | `Space D f` |
 | Toggle debug panels | | `Space D u` |
 | Evaluate expression | | `Space D e` (also Visual mode) |
 
@@ -171,6 +175,11 @@ keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
 Stepping follows the execution line in a source window, including after moving
 between debug panels. The REPL keeps input focus while the source view follows.
+Use `Space D p` (or `:DapPause`) during a long-running operation to inspect where
+it is executing; adapters may ask which thread to pause. `Space D f` returns
+the source view to the selected stack frame after browsing elsewhere.
+`No stopped threads. Cannot move` means the program is running: wait for it to
+stop, or pause it before using F10/F11.
 `Space D u` hides all remaining debug panels, even if some were closed with
 `:q`; when all panels are hidden, it opens the complete layout.
 
@@ -178,6 +187,9 @@ between debug panels. The REPL keeps input focus while the source view follows.
 windows were closed, terminating the session or hiding panels with `Space D u`
 restores an editor for the source buffer. A deleted buffer is not reopened;
 an empty editor is created instead.
+In Breakpoints or Stacks, `o` opens the selected location, recreating an editor
+if needed. Panel navigation reuses an available editor; use a personal
+dap-ui `select_window` option to choose a different window-selection policy.
 
 Terminals that report `Shift+F5` / `Shift+F11` as `F17` / `F23` are supported.
 Windows Terminal binds F11 to full screen by default. Remove or change that
@@ -193,6 +205,37 @@ project's `.venv/bin/python`, then `python3` or `python` on PATH. The adapter's
 own Python environment is separate from the interpreter running your program.
 Go uses the bridge's package and test launch configurations; run Neovim from
 the appropriate project directory or specify the package explicitly.
+
+For C/C++, build with debug information, then use `LLDB: Launch` and select the
+executable. For a CMake project using a single-configuration generator:
+
+```sh
+cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/debug
+```
+
+Use the project's existing Debug preset when provided. With a multi-configuration
+generator, select Debug at build time with `--config Debug`. F5 launches the
+existing executable; rebuild after source changes. Rust's `cargo build` normally
+produces a debug executable under `target/debug/`.
+`LLDB: Launch (args)` and Go's `Delve: Debug (Arguments)` accept quoted arguments,
+such as `--label "hello world"`; quotes group one argument and are removed. These
+inputs do not run a shell or expand variables. For repeatable runs, set `program`,
+`cwd` and an `args` array in the project's launch configuration. Relative data
+paths are resolved from `cwd`, which defaults to the project directory.
+
+CodeLLDB enables C++ throw exception breakpoints by default. It can stop in
+`__cxa_throw` even if the application catches the exception and continues.
+Code without source debug information is shown as disassembly. To turn off
+exception breakpoints for the current session while keeping ordinary breakpoints:
+
+```vim
+:lua require("dap").set_exception_breakpoints({})
+```
+
+Then press F5 to continue. To restore the adapter's exception defaults in that
+session, use `:lua require("dap").set_exception_breakpoints("default")`.
+See [CodeLLDB's disassembly documentation](https://github.com/vadimcn/codelldb/blob/master/MANUAL.md#disassembly-view).
 
 JavaScript and TypeScript share Microsoft's `js-debug-adapter`. Installing
 `:DapInstall js` registers the following defaults for both languages:
@@ -232,7 +275,7 @@ and [js-debug options](https://github.com/microsoft/vscode-js-debug/blob/main/OP
 For project-specific entrypoints, arguments, environment variables or attach
 settings, use `.vscode/launch.json`. nvim-dap reads it when starting a session;
 its `type` must match a registered adapter (for these defaults, `python`,
-`delve`, or `pwa-node` / `node` for JS/TS). Only a subset of VS Code's format
+`delve`, `codelldb`, or `pwa-node` / `node` for JS/TS). Only a subset of VS Code's format
 is supported; use standard JSON without trailing commas. See `:help dap-launch.json`.
 
 Adapter installation does not guarantee a default launch configuration for
