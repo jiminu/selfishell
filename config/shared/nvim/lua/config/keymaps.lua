@@ -50,8 +50,9 @@ map("n", "<leader>w", function()
     j = function() move_border(false, 2) end,
     ["="] = function() vim.cmd("wincmd =") end,
   }
+  local hint = "Resize: h/l left/right 5 | k/j up/down 2 | = equalize | Esc done"
   while true do
-    vim.api.nvim_echo({ { "Resize: h/l left/right 5 | k/j up/down 2 | = equalize | Esc done", "ModeMsg" } }, false, {})
+    vim.api.nvim_echo({ { hint:sub(1, vim.v.echospace), "ModeMsg" } }, false, {})
     vim.cmd.redraw()
     local ok, key = pcall(vim.fn.getcharstr)
     if not ok or not commands[key] then

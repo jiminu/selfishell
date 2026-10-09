@@ -42,6 +42,19 @@ assert(not vim.fn.execute("messages"):find("Recursion detected", 1, true), "resi
 vim.bo.modified = false
 vim.cmd.only()
 
+-- Overflowing the command area creates a hit-enter prompt in a real TUI.
+local echo, overflow = vim.api.nvim_echo, false
+vim.api.nvim_echo = function(chunks, ...)
+  local text = table.concat(vim.tbl_map(function(chunk) return chunk[1] end, chunks))
+  overflow = overflow or vim.fn.strdisplaywidth(text) > vim.v.echospace
+  return echo(chunks, ...)
+end
+vim.o.columns = 40
+press("<Space>wl<Esc>")
+vim.api.nvim_echo = echo
+vim.o.columns = 160
+assert(not overflow, "resize hint exceeded the available command-line space")
+
 -- Fixed-width sidebars and bottom debug panels follow screen directions too.
 require("lazy").load({ plugins = { "nvim-tree.lua", "nvim-dap-ui" } })
 local tree = require("nvim-tree.api").tree
