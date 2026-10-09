@@ -13,6 +13,7 @@ assert(#bridge.opts.ensure_installed == 0 and bridge.opts.automatic_installation
 -- Offline boundary: real Selfishell callbacks, a debugger that records requests.
 local actions = {}
 local dap = { ABORT = {}, adapters = {}, configurations = {}, listeners = { on_config = {}, after = { event_initialized = {} }, before = { event_terminated = {}, event_exited = {} } } }
+dap.defaults = { fallback = {} }
 local session
 dap.session = function() return session end
 dap.sessions = function() return session and { session } or {} end
@@ -253,4 +254,8 @@ local custom = { type = "server", port = 9876 }
 dap.adapters.python = custom
 handler(config)
 assert(dap.adapters.python == custom, "automatic setup replaced a user adapter")
+local custom_switchbuf = function() end
+dap.defaults.fallback.switchbuf = custom_switchbuf
+require("config.dap").setup_start()
+assert(dap.defaults.fallback.switchbuf == custom_switchbuf, "setup replaced personal frame navigation")
 print("DAP configuration: OK")

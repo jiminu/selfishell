@@ -1,6 +1,43 @@
 local M = {}
 local editors = {}
 
+local function focus_source(buf, line, column)
+  local api = vim.api
+  local current = api.nvim_get_current_win()
+  local keep_repl = vim.bo[api.nvim_win_get_buf(current)].filetype == "dap-repl"
+  local candidates = { current, vim.fn.win_getid(vim.fn.winnr("#")) }
+  vim.list_extend(candidates, api.nvim_tabpage_list_wins(0))
+  local target
+  -- Prefer an existing view of this source, then a normal editor. The previous
+  -- window may be a dap-ui panel whose buffer guard rejects source navigation.
+  for _, existing in ipairs({ true, false }) do
+    for _, win in ipairs(candidates) do
+      if api.nvim_win_is_valid(win) and api.nvim_win_get_config(win).relative == "" then
+        local shown = api.nvim_win_get_buf(win)
+        if (existing and shown == buf) or (not existing and vim.bo[shown].buftype == "" and not vim.wo[win].winfixbuf) then
+          target = win
+          break
+        end
+      end
+    end
+    if target then break end
+  end
+  if not target then
+    vim.cmd("botright vertical sbuffer " .. buf)
+    target = api.nvim_get_current_win()
+    local editor = editors[api.nvim_get_current_tabpage()]
+    for option, value in pairs(editor and editor.options or {}) do vim.wo[target][option] = value end
+  end
+  api.nvim_win_set_buf(target, buf)
+  local ok, err = pcall(api.nvim_win_set_cursor, target, { line, math.max(column - 1, 0) })
+  if not ok then
+    vim.notify("Cannot show debug location: " .. tostring(err) .. ". Check that source and executable match.", vim.log.levels.WARN)
+  else
+    api.nvim_win_call(target, function() vim.cmd("normal! zv") end)
+  end
+  api.nvim_set_current_win(keep_repl and current or target)
+end
+
 function M.continue()
   local dap = require("dap")
   if dap.session() or next(dap.sessions()) then return dap.continue() end
@@ -42,7 +79,9 @@ function M.continue()
 end
 
 function M.setup_start()
-  require("dap").listeners.on_config.selfishell = function(config)
+  local dap = require("dap")
+  dap.defaults.fallback.switchbuf = dap.defaults.fallback.switchbuf or focus_source
+  dap.listeners.on_config.selfishell = function(config)
     if config.request ~= "launch" or config.__pendingTargetId then return config end
     local root = vim.fn.getcwd():gsub("/$", "") .. "/"
     local modified = {}
