@@ -9,7 +9,7 @@ api.nvim_buf_set_lines(source, 0, -1, false, lines)
 vim.bo[source].modified = false
 require("nvim-tree.api").tree.open()
 api.nvim_set_current_win(editor)
-ui.open()
+require("config.dap").toggle_ui()
 local panels = {}
 for _, win in ipairs(api.nvim_list_wins()) do
   local ft = vim.bo[api.nvim_win_get_buf(win)].filetype
@@ -67,5 +67,27 @@ assert(restored and api.nvim_win_get_cursor(restored)[1] == 75, "no editor resto
 for ft, win in pairs(panels) do
   assert(api.nvim_win_is_valid(win) and vim.bo[api.nvim_win_get_buf(win)].filetype == ft,
     "source recovery consumed a debug panel: " .. ft)
+end
+-- Opening a breakpoint uses dap-ui's own navigation, not Session:_frame_set.
+api.nvim_set_current_win(restored)
+api.nvim_win_set_cursor(restored, { 90, 0 })
+dap.toggle_breakpoint()
+ui.update_render({})
+local breakpoint_win = panels.dapui_breakpoints
+assert(vim.wait(1000, function()
+  return api.nvim_buf_line_count(api.nvim_win_get_buf(breakpoint_win)) > 1
+end), "breakpoint list did not render")
+api.nvim_win_close(restored, true)
+api.nvim_set_current_win(breakpoint_win)
+api.nvim_win_set_cursor(breakpoint_win, { 2, 0 })
+vim.fn.maparg("o", "n", false, true).callback()
+assert(vim.wait(1000, function() return #vim.fn.win_findbuf(source) > 0 end),
+  "opening a breakpoint after :q did not restore a source window")
+local reopened = vim.fn.win_findbuf(source)[1]
+assert(api.nvim_win_get_cursor(reopened)[1] == 90 and vim.wo[reopened].number,
+  "reopened breakpoint lost its position or editor options")
+for ft, win in pairs(panels) do
+  assert(api.nvim_win_is_valid(win) and vim.bo[api.nvim_win_get_buf(win)].filetype == ft,
+    "opening a breakpoint consumed a debug panel: " .. ft)
 end
 print("DAP focus smoke: OK")

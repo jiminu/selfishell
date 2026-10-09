@@ -1,10 +1,10 @@
 local M = {}
 local editors = {}
 
-local function focus_source(buf, line, column)
+-- Shared by nvim-dap frame jumps and dap-ui's Breakpoints/Stacks navigation.
+function M.source_window(buf)
   local api = vim.api
   local current = api.nvim_get_current_win()
-  local keep_repl = vim.bo[api.nvim_win_get_buf(current)].filetype == "dap-repl"
   local candidates = { current, vim.fn.win_getid(vim.fn.winnr("#")) }
   vim.list_extend(candidates, api.nvim_tabpage_list_wins(0))
   local target
@@ -23,11 +23,19 @@ local function focus_source(buf, line, column)
     if target then break end
   end
   if not target then
-    vim.cmd("botright vertical sbuffer " .. buf)
+    vim.cmd("botright vertical " .. (buf and "sbuffer " .. buf or "new"))
     target = api.nvim_get_current_win()
     local editor = editors[api.nvim_get_current_tabpage()]
     for option, value in pairs(editor and editor.options or {}) do vim.wo[target][option] = value end
   end
+  return target
+end
+
+local function focus_source(buf, line, column)
+  local api = vim.api
+  local current = api.nvim_get_current_win()
+  local keep_repl = vim.bo[api.nvim_win_get_buf(current)].filetype == "dap-repl"
+  local target = M.source_window(buf)
   api.nvim_win_set_buf(target, buf)
   local ok, err = pcall(api.nvim_win_set_cursor, target, { line, math.max(column - 1, 0) })
   if not ok then
@@ -261,6 +269,14 @@ function M.setup_adapter(config)
   if config.name == "python" then
     for _, launch in ipairs(config.configurations or {}) do
       launch.pythonPath = python_path
+    end
+  elseif config.name == "delve" or config.name == "codelldb" then
+    for _, launch in ipairs(config.configurations or {}) do
+      if type(launch.args) == "function" then
+        launch.args = function()
+          return require("dap.utils").splitstr(vim.fn.input("Args: "))
+        end
+      end
     end
   end
   require("mason-nvim-dap").default_setup(config)

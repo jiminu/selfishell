@@ -19,7 +19,7 @@ dap.session = function() return session end
 dap.sessions = function() return session and { session } or {} end
 local launched
 dap.run = function(config) launched = config; actions[#actions + 1] = "run" end
-for _, name in ipairs({ "continue", "toggle_breakpoint", "step_over", "step_into", "step_out", "terminate" }) do
+for _, name in ipairs({ "continue", "toggle_breakpoint", "step_over", "step_into", "step_out", "terminate", "pause", "focus_frame" }) do
   dap[name] = function() actions[#actions + 1] = name end
 end
 package.preload["dap"] = function() return dap end
@@ -228,6 +228,7 @@ for key, action in pairs({
   ["<F23>"] = "step_out", ["<F17>"] = "terminate",
   ["<leader>Dc"] = "continue", ["<leader>Db"] = "toggle_breakpoint", ["<leader>Do"] = "step_over",
   ["<leader>Di"] = "step_into", ["<leader>DO"] = "step_out", ["<leader>Dt"] = "terminate",
+  ["<leader>Dp"] = "pause", ["<leader>Df"] = "focus_frame",
 }) do
   assert(keys[key], "missing debug key: " .. key)
   keys[key]()
