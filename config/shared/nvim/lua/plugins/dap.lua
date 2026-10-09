@@ -52,7 +52,7 @@ return {
       { "<leader>Di", action("step_into"), desc = "Debug: step into (F11)" },
       { "<leader>DO", action("step_out"), desc = "Debug: step out (Shift+F11)" },
       { "<leader>Dt", action("terminate"), desc = "Debug: terminate (Shift+F5)" },
-      { "<leader>Du", function() require("dapui").toggle() end, desc = "Debug: toggle UI" },
+      { "<leader>Du", function() require("config.dap").toggle_ui() end, desc = "Debug: toggle UI" },
       { "<leader>De", function() require("dapui").eval() end, mode = { "n", "x" }, desc = "Debug: evaluate expression" },
     },
     opts = {

@@ -157,6 +157,12 @@ Use Normal mode for the following keys:
 The Space shortcuts also work when a keyboard or terminal intercepts function
 keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+
+`:q` closes a window while its source buffer can remain loaded. If all source
+windows were closed, terminating the session or hiding panels with `Space D u`
+restores an editor for the source buffer. A deleted buffer is not reopened;
+an empty editor is created instead.
+
 Terminals that report `Shift+F5` / `Shift+F11` as `F17` / `F23` are supported.
 On a Mac keyboard, use `Fn` (or Globe) with a function key, or enable standard
 function keys in Keyboard settings; macOS shortcuts such as Show Desktop can

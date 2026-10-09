@@ -51,8 +51,18 @@ stopped, exited = 0, false
 vim.cmd.edit(project .. "/main.py")
 press("<F5>")
 wait_stop()
+local source = vim.api.nvim_get_current_buf()
+assert(vim.bo[source].filetype == "python", "Python source window was not focused at the breakpoint")
+vim.cmd.quit()
 press("<F17>")
 assert(vim.wait(15000, function() return not dap.session() end, 50), "Python session did not terminate with F17")
+assert(vim.wait(1000, function()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+    if ft:match("^dapui_") or ft == "dap-repl" then return false end
+  end
+  return #vim.fn.win_findbuf(source) > 0
+end), "closing the Python source before F17 left debug panels or no editor")
 
 stopped, exited = 0, false
 vim.cmd.edit(project .. "/main.go")
