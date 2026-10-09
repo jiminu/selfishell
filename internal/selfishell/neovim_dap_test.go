@@ -78,3 +78,66 @@ func TestNeovimDAPUserConfigurationSurvivesLifecycle(t *testing.T) {
 	blockEqual(t, user, []byte(contents))
 	blockEqual(t, receipt, []byte("user-owned adapter\n"))
 }
+
+// The opt-in pinned consumer owns network provisioning. These probes use real
+// plugin commits and real adapters; all language projects and installs are private.
+func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, p Process, op *PackageOperation, paths Paths, nvim, mise string) {
+	t.Helper()
+	pins, err := approvedMisePins(root+"/config/shared/mise.toml", []string{"python"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := op.InstallMise(ctx, root, paths, "required", false, pins...); err != nil {
+		t.Fatal("DAP Python provisioning", err)
+	}
+	project := home + "/debug-project"
+	if err := os.MkdirAll(project, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"main.py": "value = 41\nvalue += 1\nprint(value)\n",
+		"go.mod":  "module debugfixture\n\ngo 1.20\n",
+		"main.go": "package main\nimport \"fmt\"\nfunc main() {\n value := 41\n value++\n fmt.Println(value)\n}\n",
+	} {
+		if err := testutil.WriteFile(project+"/"+name, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(fixture string) {
+		t.Helper()
+		var output bytes.Buffer
+		command := withEnvironment(p, map[string]string{
+			"SELFISHELL_DAP_PROJECT":       project,
+			"SELFISHELL_NVIM_TEST_FIXTURE": root + "/tests/fixtures/neovim/" + fixture,
+			// Delve builds with Go. Keep its caches private and removable by TempDir.
+			"GOPATH": home + "/go", "GOMODCACHE": home + "/go/pkg/mod",
+			"GOCACHE": home + "/.cache/go-build", "GOFLAGS": "-modcacherw",
+			"GOENV": "off", "GOWORK": "off", "GOTOOLCHAIN": "local",
+		}, "VIRTUAL_ENV", "CONDA_PREFIX", "WSL_DISTRO_NAME")
+		command.Dir, command.Out, command.Err = root+"/config/shared", &output, &output
+		code, err := command.Run(ctx, mise, "-C", command.Dir, "exec", "--", nvim, "--headless", "+lua dofile(vim.env.SELFISHELL_NVIM_TEST_FIXTURE)", "+qa!")
+		if err != nil || code != 0 || !strings.Contains(output.String(), "DAP consumer: OK") {
+			t.Fatalf("%s: code=%d err=%v output=%s", fixture, code, err, output.String())
+		}
+		t.Logf("%s: DAP consumer passed", fixture)
+	}
+	run("dap_install_smoke.lua")
+	before := map[string][]byte{}
+	for _, name := range []string{"debugpy", "delve"} {
+		path := home + "/.local/share/nvim/mason/packages/" + name + "/mason-receipt.json"
+		before[path], err = os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := op.UpdateDefaultLSP(ctx, root, paths, false); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range before {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("LSP sync changed user adapter %s: %v", path, err)
+		}
+	}
+	run("dap_debug_smoke.lua")
+}
