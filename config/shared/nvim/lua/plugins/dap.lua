@@ -4,8 +4,18 @@ local function action(name)
   return function() require("dap")[name]() end
 end
 
+local function start_or_continue()
+  require("config.dap").continue()
+end
+
 return {
-  plugin("mfussenegger/nvim-dap", { lazy = true }),
+  plugin("mfussenegger/nvim-dap", {
+    lazy = true,
+    config = function()
+      vim.fn.sign_define("DapBreakpoint", { text = "", texthl = "DiagnosticError" })
+      require("config.dap").setup_start()
+    end,
+  }),
   plugin("rcarriga/nvim-dap-ui", {
     lazy = true,
     dependencies = {
@@ -32,19 +42,22 @@ return {
       "DapToggleRepl", "DapEval", "DapPause", "DapRestartFrame",
     },
     keys = {
-      { "<F5>", action("continue"), desc = "Debug: start / continue" },
+      { "<F5>", start_or_continue, desc = "Debug: start / continue" },
       { "<F9>", action("toggle_breakpoint"), desc = "Debug: toggle breakpoint" },
       { "<F10>", action("step_over"), desc = "Debug: step over" },
       { "<F11>", action("step_into"), desc = "Debug: step into" },
       { "<S-F11>", action("step_out"), desc = "Debug: step out" },
       { "<S-F5>", action("terminate"), desc = "Debug: terminate" },
-      { "<leader>Dc", action("continue"), desc = "Debug: start / continue (F5)" },
+      -- Traditional terminals decode Shift+F5/F11 as F17/F23.
+      { "<F23>", action("step_out"), desc = "Debug: step out" },
+      { "<F17>", action("terminate"), desc = "Debug: terminate" },
+      { "<leader>Dc", start_or_continue, desc = "Debug: start / continue (F5)" },
       { "<leader>Db", action("toggle_breakpoint"), desc = "Debug: toggle breakpoint (F9)" },
       { "<leader>Do", action("step_over"), desc = "Debug: step over (F10)" },
       { "<leader>Di", action("step_into"), desc = "Debug: step into (F11)" },
       { "<leader>DO", action("step_out"), desc = "Debug: step out (Shift+F11)" },
       { "<leader>Dt", action("terminate"), desc = "Debug: terminate (Shift+F5)" },
-      { "<leader>Du", function() require("dapui").toggle() end, desc = "Debug: toggle UI" },
+      { "<leader>Du", function() require("config.dap").toggle_ui() end, desc = "Debug: toggle UI" },
       { "<leader>De", function() require("dapui").eval() end, mode = { "n", "x" }, desc = "Debug: evaluate expression" },
     },
     opts = {

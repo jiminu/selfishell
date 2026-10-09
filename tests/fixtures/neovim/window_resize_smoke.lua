@@ -1,0 +1,84 @@
+require("lazy").load({ plugins = { "which-key.nvim" } })
+-- The consumer invokes this fixture before the normal startup event.
+vim.api.nvim_exec_autocmds("VimEnter", {})
+assert(vim.wait(1000, function() return require("which-key.config").loaded end), "which-key did not initialize")
+vim.o.columns, vim.o.lines = 160, 50
+vim.cmd.enew()
+vim.bo.buftype = "nofile"
+vim.api.nvim_buf_set_lines(0, 0, -1, false, { "abcdefghij" })
+vim.cmd.vsplit()
+local left = vim.fn.win_getid(vim.fn.winnr("h"))
+vim.cmd.split()
+local target = vim.api.nvim_get_current_win()
+local width, height = vim.api.nvim_win_get_width(target), vim.api.nvim_win_get_height(target)
+local function press(keys)
+  vim.api.nvim_feedkeys(vim.keycode(keys), "xt", false)
+end
+
+-- Buffered input must stay in resize mode until Escape, including fast repeats.
+press("<Space>wllhjk<Esc>")
+assert(vim.api.nvim_win_get_width(target) == width - 5, "buffered resize keys were lost or moved the border the wrong way")
+assert(vim.api.nvim_win_get_height(target) == height, "buffered height resize keys were lost")
+assert(vim.api.nvim_win_get_cursor(target)[2] == 0, "resize keys leaked into normal movement")
+press("l")
+assert(vim.api.nvim_win_get_cursor(target)[2] == 1, "Escape did not restore normal movement")
+
+-- An unrelated key exits and is handled normally, without replaying Space w.
+press("<Space>w:let g:resize_command_completed = 1<CR>")
+assert(not vim.fn.execute("messages"):find("Recursion detected", 1, true), "resize mode recursed on colon")
+assert(vim.g.resize_command_completed == 1, "resize mode swallowed command-line input")
+press("h")
+assert(vim.api.nvim_win_get_cursor(target)[2] == 0, "command-line exit reopened resize mode")
+press("<Space>w<C-h>")
+assert(vim.api.nvim_get_current_win() == left, "resize mode swallowed window navigation")
+press("l")
+assert(vim.api.nvim_win_get_cursor(left)[2] == 1, "window navigation reopened resize mode")
+
+vim.api.nvim_set_current_win(target)
+press("<Space>w=<Esc>")
+assert(math.abs(vim.api.nvim_win_get_width(target) - vim.api.nvim_win_get_width(left)) <= 1,
+  "resize mode did not equalize columns")
+assert(not vim.fn.execute("messages"):find("Recursion detected", 1, true), "resize mode recursed")
+vim.bo.modified = false
+vim.cmd.only()
+
+-- Overflowing the command area creates a hit-enter prompt in a real TUI.
+local echo, overflow = vim.api.nvim_echo, false
+vim.api.nvim_echo = function(chunks, ...)
+  local text = table.concat(vim.tbl_map(function(chunk) return chunk[1] end, chunks))
+  overflow = overflow or vim.fn.strdisplaywidth(text) > vim.v.echospace
+  return echo(chunks, ...)
+end
+vim.o.columns = 40
+press("<Space>wl<Esc>")
+vim.api.nvim_echo = echo
+vim.o.columns = 160
+assert(not overflow, "resize hint exceeded the available command-line space")
+
+-- Fixed-width sidebars and bottom debug panels follow screen directions too.
+require("lazy").load({ plugins = { "nvim-tree.lua", "nvim-dap-ui" } })
+local tree = require("nvim-tree.api").tree
+tree.open()
+local explorer = tree.winid()
+vim.api.nvim_set_current_win(explorer)
+width = vim.api.nvim_win_get_width(explorer)
+press("<Space>wl<Esc>")
+assert(vim.api.nvim_win_get_width(explorer) == width + 5, "l did not move the tree divider right")
+press("<Space>wh<Esc>")
+assert(vim.api.nvim_win_get_width(explorer) == width, "h did not move the tree divider left")
+local ui = require("dapui")
+ui.open()
+local repl
+for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dap-repl" then repl = win end
+end
+assert(repl, "debug REPL window is missing")
+vim.api.nvim_set_current_win(repl)
+height = vim.api.nvim_win_get_height(repl)
+press("<Space>wk<Esc>")
+assert(vim.api.nvim_win_get_height(repl) == height + 2, "k did not expand the bottom debug panel upward")
+press("<Space>wj<Esc>")
+assert(vim.api.nvim_win_get_height(repl) == height, "j did not move the debug panel divider downward")
+ui.toggle()
+tree.close()
+print("Window resize input smoke: OK")

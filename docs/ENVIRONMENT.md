@@ -124,16 +124,33 @@ only the adapters you need, then open Neovim from the project root:
 ```vim
 :DapInstall python
 :DapInstall delve
+:DapInstall js
 ```
 
-These install Python's debugpy and Go's Delve respectively. The language
-runtime/toolchain must also be installed. Mason installs supported adapters
+These install Python's debugpy, Go's Delve and the JavaScript/TypeScript
+debugger respectively. The language runtime/toolchain must also be installed.
+Mason installs supported adapters
 and the bridge registers their available default launch configurations,
 including installations completed during the current Neovim session.
-`:MasonInstall debugpy` and `:MasonInstall delve` also work. No debug adapter
+`:MasonInstall debugpy`, `:MasonInstall delve` and
+`:MasonInstall js-debug-adapter` also work. No debug adapter
 is installed merely by opening Neovim or running Selfishell setup.
+When F5 or `Space D c` finds no launch configuration, Selfishell shows the
+installation command for supported defaults if the adapter is missing.
+If an adapter is already installed or registered, it points to launch
+configuration help instead. Personal Lua providers and `launch.json` are
+checked before showing this guidance.
 
-Set a breakpoint with `F9`, then press `F5` and select a launch configuration.
+Save the source files with `:w` (or `:wa` for all edited files) before starting:
+debuggers run the files on disk, so unsaved edits can leave breakpoints out of
+sync. New launches warn about unsaved changes in the current file and other
+loaded files under the working directory. The warning leaves your edits
+unsaved and lets the launch proceed; save and restart to debug the new code.
+It does not repeat when continuing a paused session or attaching to a process.
+In Python, launching an empty file with unsaved code can report
+`line 0` / `Invalid cursor line`; terminate the session, save, and launch again.
+Set a breakpoint with `F9` (a red circle in the gutter), then press `F5` and
+select a launch configuration.
 Debug panels open once the session initializes and close when the last session
 closes, including disconnects and adapter failures.
 Use Normal mode for the following keys:
@@ -152,6 +169,18 @@ Use Normal mode for the following keys:
 The Space shortcuts also work when a keyboard or terminal intercepts function
 keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+`Space D u` hides all remaining debug panels, even if some were closed with
+`:q`; when all panels are hidden, it opens the complete layout.
+
+`:q` closes a window while its source buffer can remain loaded. If all source
+windows were closed, terminating the session or hiding panels with `Space D u`
+restores an editor for the source buffer. A deleted buffer is not reopened;
+an empty editor is created instead.
+
+Terminals that report `Shift+F5` / `Shift+F11` as `F17` / `F23` are supported.
+On a Mac keyboard, use `Fn` (or Globe) with a function key, or enable standard
+function keys in Keyboard settings; macOS shortcuts such as Show Desktop can
+also intercept F11. See [Apple's function-key guide](https://support.apple.com/102439).
 
 Python's default launch runs the current file. On each launch, Selfishell
 selects an executable from `VIRTUAL_ENV`, then `CONDA_PREFIX`, then the current
@@ -160,11 +189,46 @@ own Python environment is separate from the interpreter running your program.
 Go uses the bridge's package and test launch configurations; run Neovim from
 the appropriate project directory or specify the package explicitly.
 
+JavaScript and TypeScript share Microsoft's `js-debug-adapter`. Installing
+`:DapInstall js` registers the following defaults for both languages:
+
+| Configuration | Use |
+| --- | --- |
+| `Node: Launch current file` | Run the open file with Node on PATH. |
+| `Node: Launch JavaScript file` | Choose a JavaScript entrypoint, including compiled TypeScript output. |
+| `Node: Attach (port)` | Connect to a local Node inspector; the prompt defaults to port 9229. |
+
+Both launch options use the debug UI's Console terminal, so programs using
+`readline` or other standard input work. Move to Console and press `i` to
+enter input. Press `Ctrl+\` then `Ctrl+n` to return to Normal mode before
+using debug shortcuts. Attach keeps the process's existing terminal.
+
+Selfishell's Node 24 can run `.ts`, `.mts` and `.cts` files with erasable type
+annotations directly. This does not type-check or apply `tsconfig.json`;
+enums, decorators, JSX/TSX and path aliases may need your project's compiler
+or runtime. For compiled TypeScript, enable source maps in the project build,
+open the original `.ts` file, set a breakpoint and choose
+`Node: Launch JavaScript file`. Select the generated `.js`, `.mjs` or `.cjs`
+entrypoint. Source maps are enabled, and generated files are searched under
+the working directory, excluding `node_modules`. Run the project's build
+again after edits; F5 does not build automatically.
+For a project that already uses `tsx`, a project launch configuration can
+set `"runtimeArgs": ["--import", "tsx"]` to run its TypeScript entrypoint.
+Selfishell does not install project runtimes or build dependencies.
+
+For attach, start your program with `node --inspect-brk=127.0.0.1:9229 app.js`
+(or the equivalent flags in your project command), then select
+`Node: Attach (port)`. Node may pause at entry; F5 continues to your breakpoint.
+Framework launches use project-specific configuration. Browser debugging
+also needs a browser adapter registration; these defaults target Node.js.
+See [Node's TypeScript support](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
+and [js-debug options](https://github.com/microsoft/vscode-js-debug/blob/main/OPTIONS.md).
+
 For project-specific entrypoints, arguments, environment variables or attach
 settings, use `.vscode/launch.json`. nvim-dap reads it when starting a session;
-its `type` must match a registered adapter (for these defaults, `python` or
-`delve`). Only a subset of VS Code's format is supported; use standard JSON
-without trailing commas. See `:help dap-launch.json`.
+its `type` must match a registered adapter (for these defaults, `python`,
+`delve`, or `pwa-node` / `node` for JS/TS). Only a subset of VS Code's format
+is supported; use standard JSON without trailing commas. See `:help dap-launch.json`.
 
 Adapter installation does not guarantee a default launch configuration for
 every language. Java, for example, needs JDTLS plus `java-debug-adapter` and
@@ -204,6 +268,19 @@ for confirmation, and `:substitute` results preview in a split before they are
 applied. Bufferline shows open buffers across the top; use `[b` and `]b` to move
 between them, and `Space b d` to close the current buffer without closing its
 editor window.
+
+To resize a split, focus it with `Ctrl+h/j/k/l`, then press `Space w` in Normal
+mode. A hint appears at the bottom: repeat `h` / `l` to move the divider left /
+right by five columns, `k` / `j` to move it up / down by two lines, or `=` to
+equalize resizable splits. The right / bottom divider is used when available;
+at the screen edge, the left / top divider is used instead. For example, `h`
+narrows a left sidebar but widens the rightmost editor, and `k` expands a bottom
+debug panel upward. `Esc` exits resize mode and restores normal movement keys.
+Any other key exits and performs its normal action, so `:` opens the command
+line and `Ctrl+h/j/k/l` switches windows immediately.
+This also works in nvim-tree and debug panels, using keys that travel through
+ordinary terminal and SSH connections. To set an exact width, use
+`:vertical resize 40` for 40 columns.
 
 When Neovim is available, `vim` resolves to Neovim while `vi` remains the
 system editor. `EDITOR` defaults to `nvim` and `VISUAL` defaults to `EDITOR`,
