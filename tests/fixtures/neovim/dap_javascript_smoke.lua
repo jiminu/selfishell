@@ -51,6 +51,8 @@ end
 for _, case in ipairs({
   { file = "main.cjs", line = 3, config = "Node: Launch current file" },
   { file = "main.ts", line = 4, config = "Node: Launch current file" },
+  { file = "input.cjs", line = 4, config = "Node: Launch current file", input = true, finish = true },
+  { file = "input.ts", line = 4, config = "Node: Launch current file", input = true },
   { file = "mapped.ts", line = 4, config = "Node: Launch JavaScript file" },
   { file = "mapped.ts", line = 4, config = "TS project launch" },
   { file = "attach.cjs", line = 3, config = "Node: Attach (port)" },
@@ -61,6 +63,21 @@ for _, case in ipairs({
   vim.api.nvim_win_set_cursor(0, { case.line, 0 })
   press("<F9>")
   press("<F5>")
+  if case.input then
+    local terminal
+    assert(vim.wait(15000, function()
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        local job = vim.b[buf].terminal_job_id
+        if vim.bo[buf].buftype == "terminal" and vim.bo[buf].filetype == "dapui_console"
+          and job and vim.fn.jobwait({ job }, 0)[1] == -1 and #vim.fn.win_findbuf(buf) > 0
+          and table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"):find("Value?", 1, true) then
+          terminal = buf
+          return true
+        end
+      end
+    end, 20), "interactive program did not prompt in the debug console")
+    vim.fn.chansend(vim.b[terminal].terminal_job_id, "41\n")
+  end
   if selected == "Node: Attach (port)" then
     -- --inspect-brk pauses at entry before the requested breakpoint.
     assert(vim.wait(15000, function()
@@ -73,7 +90,7 @@ for _, case in ipairs({
   evaluate()
   press("<F10>")
   wait_stop(case.file, case.line + 1)
-  if selected == "Node: Launch JavaScript file" then
+  if case.finish or selected == "Node: Launch JavaScript file" then
     press("<F5>")
     assert(vim.wait(15000, closed, 20), "JS session hierarchy remained after normal exit")
   else

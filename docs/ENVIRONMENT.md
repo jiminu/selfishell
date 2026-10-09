@@ -135,10 +135,19 @@ including installations completed during the current Neovim session.
 `:MasonInstall debugpy`, `:MasonInstall delve` and
 `:MasonInstall js-debug-adapter` also work. No debug adapter
 is installed merely by opening Neovim or running Selfishell setup.
+When F5 or `Space D c` finds no launch configuration, Selfishell shows the
+installation command for supported defaults if the adapter is missing.
+If an adapter is already installed or registered, it points to launch
+configuration help instead. Personal Lua providers and `launch.json` are
+checked before showing this guidance.
 
 Save the source files with `:w` (or `:wa` for all edited files) before starting:
 debuggers run the files on disk, so unsaved edits can leave breakpoints out of
-sync. In Python, launching an empty file with unsaved code can report
+sync. New launches warn about unsaved changes in the current file and other
+loaded files under the working directory. The warning leaves your edits
+unsaved and lets the launch proceed; save and restart to debug the new code.
+It does not repeat when continuing a paused session or attaching to a process.
+In Python, launching an empty file with unsaved code can report
 `line 0` / `Invalid cursor line`; terminate the session, save, and launch again.
 Set a breakpoint with `F9` (a red circle in the gutter), then press `F5` and
 select a launch configuration.
@@ -188,6 +197,11 @@ JavaScript and TypeScript share Microsoft's `js-debug-adapter`. Installing
 | `Node: Launch current file` | Run the open file with Node on PATH. |
 | `Node: Launch JavaScript file` | Choose a JavaScript entrypoint, including compiled TypeScript output. |
 | `Node: Attach (port)` | Connect to a local Node inspector; the prompt defaults to port 9229. |
+
+Both launch options use the debug UI's Console terminal, so programs using
+`readline` or other standard input work. Move to Console and press `i` to
+enter input. Press `Ctrl+\` then `Ctrl+n` to return to Normal mode before
+using debug shortcuts. Attach keeps the process's existing terminal.
 
 Selfishell's Node 24 can run `.ts`, `.mts` and `.cts` files with erasable type
 annotations directly. This does not type-check or apply `tsconfig.json`;

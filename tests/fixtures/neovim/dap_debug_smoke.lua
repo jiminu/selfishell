@@ -34,9 +34,19 @@ local function evaluate()
   assert(not failure and result.result == "42", "wrong variable value: " .. vim.inspect({ failure, result }))
 end
 
+local notify, notices = vim.notify, {}
+vim.notify = function(message) notices[#notices + 1] = message end
+vim.api.nvim_buf_set_lines(0, -1, -1, false, { "# unsaved edit" })
 press("<F5>")
 wait_stop()
 evaluate()
+local warnings = 0
+for _, message in ipairs(notices) do
+  if message:find(":wa", 1, true) then warnings = warnings + 1 end
+end
+assert(warnings == 1, "new launch did not warn once about unsaved edits")
+local edited = vim.api.nvim_get_current_buf()
+assert(vim.bo[edited].modified and #vim.fn.readfile(project .. "/main.py") == 3, "debugger saved edited source")
 local windows = vim.tbl_filter(function(win)
   return vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dapui_scopes"
 end, vim.api.nvim_list_wins())
@@ -45,6 +55,14 @@ assert(#windows == 1, "debug variable panel did not open")
 vim.api.nvim_set_current_win(windows[1])
 press("<F5>")
 assert(vim.wait(15000, function() return exited and not dap.session() end, 50), "Python session did not finish")
+local after = 0
+for _, message in ipairs(notices) do
+  if message:find(":wa", 1, true) then after = after + 1 end
+end
+assert(after == warnings, "resuming from a debug panel repeated the save warning")
+vim.notify = notify
+vim.api.nvim_buf_set_lines(edited, 3, -1, false, {})
+vim.bo[edited].modified = false
 
 -- Traditional terminal input decodes Shift+F5 as F17.
 stopped, exited = 0, false

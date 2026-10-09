@@ -1,6 +1,65 @@
 local M = {}
 local editors = {}
 
+function M.continue()
+  local dap = require("dap")
+  if dap.session() or next(dap.sessions()) then return dap.continue() end
+  local buf = vim.api.nvim_get_current_buf()
+  local filetype = vim.b[buf]["dap-srcft"] or vim.bo[buf].filetype
+  -- Providers can yield and supply configurations without dap.configurations.
+  -- Collect once so custom providers do not prompt or perform work twice.
+  require("dap.async").run(function()
+    local configs = {}
+    local names = vim.tbl_keys(dap.providers.configs)
+    table.sort(names)
+    for _, name in ipairs(names) do
+      local supplied = dap.providers.configs[name](buf)
+      if not vim.islist(supplied) then
+        vim.notify("Debug configuration provider " .. name .. " must return a list.", vim.log.levels.WARN)
+      else
+        vim.list_extend(configs, supplied)
+      end
+    end
+    if #configs == 0 then
+      local adapters = { python = "python", go = "delve", javascript = "js", typescript = "js", c = "codelldb", cpp = "codelldb", rust = "codelldb" }
+      local adapter = adapters[filetype]
+      local hint = "Add a launch configuration (:help dap-configuration or :help dap-launch.json)."
+      local registered = adapter and (dap.adapters[adapter] or (adapter == "js" and (dap.adapters["pwa-node"] or dap.adapters.node)))
+      if adapter and not registered then
+        local package_name = require("mason-nvim-dap.mappings.source").nvim_dap_to_package[adapter]
+        local ok, package = pcall(require("mason-registry").get_package, package_name)
+        if not ok or not package:is_installed() then
+          hint = "Install the debugger with :DapInstall " .. adapter .. ". Custom setups: :help dap-configuration."
+        end
+      end
+      vim.notify("No debug configuration for " .. (filetype ~= "" and filetype or "this buffer") .. ". " .. hint, vim.log.levels.INFO)
+      return
+    end
+    require("dap.ui").pick_if_many(configs, "Configuration: ", function(config) return config.name end, function(config)
+      if config then dap.run(config, { filetype = filetype }) end
+    end)
+  end)
+end
+
+function M.setup_start()
+  require("dap").listeners.on_config.selfishell = function(config)
+    if config.request ~= "launch" or config.__pendingTargetId then return config end
+    local root = vim.fn.getcwd():gsub("/$", "") .. "/"
+    local modified = {}
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      local name = vim.api.nvim_buf_get_name(buf)
+      if vim.bo[buf].buflisted and vim.bo[buf].buftype == "" and vim.bo[buf].modified
+        and (vim.startswith(name, root) or buf == vim.api.nvim_get_current_buf()) then
+        modified[#modified + 1] = name == "" and "[No Name]" or vim.fn.fnamemodify(name, ":.")
+      end
+    end
+    if #modified > 0 then
+      vim.notify("Unsaved changes in " .. table.concat(modified, ", ") .. ". Debugging uses files on disk; save with :wa and restart.", vim.log.levels.WARN)
+    end
+    return config
+  end
+end
+
 local function remember_editor()
   local api = vim.api
   local wins = api.nvim_tabpage_list_wins(0)
@@ -145,6 +204,7 @@ local function setup_javascript(config)
       launch.type = "pwa-node"
       launch.cwd = "${workspaceFolder}"
       launch.sourceMaps = true
+      if launch.request == "launch" then launch.console = "integratedTerminal" end
       launch.skipFiles = { "<node_internals>/**" }
       launch.outFiles = { "${workspaceFolder}/**/*.js", "${workspaceFolder}/**/*.mjs", "${workspaceFolder}/**/*.cjs", "!**/node_modules/**" }
     end

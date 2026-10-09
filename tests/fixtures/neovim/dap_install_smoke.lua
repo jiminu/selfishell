@@ -1,8 +1,19 @@
 local lazy = require("lazy.core.config").plugins
 assert(not lazy["nvim-dap"]._.loaded, "debugger loaded before a debug action")
+vim.cmd.edit(vim.env.SELFISHELL_DAP_PROJECT .. "/main.ts")
+local notify, notices = vim.notify, {}
+vim.notify = function(message) notices[#notices + 1] = message end
+vim.api.nvim_feedkeys(vim.keycode("<F5>"), "xt", false)
+assert(vim.wait(1000, function()
+  for _, message in ipairs(notices) do
+    if message:find(":DapInstall js", 1, true) then return true end
+  end
+end), "F5 without an installed adapter did not show installation guidance")
+local dap = require("dap")
+assert(not dap.session() and not dap.adapters["pwa-node"], "installation hint started or installed a debugger")
+vim.notify = notify
 vim.cmd("DapInstall python delve js")
 local registry = require("mason-registry")
-local dap = require("dap")
 assert(vim.wait(180000, function()
   return registry.get_package("debugpy"):is_installed()
     and registry.get_package("delve"):is_installed()

@@ -109,6 +109,8 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 		// Each generated line maps to the next TS line, after the erased type alias.
 		"dist/mapped.cjs.map": `{"version":3,"file":"mapped.cjs","sources":["../mapped.ts"],"names":[],"mappings":"AACA;AACA;AACA;AACA;AACA"}`,
 		"attach.cjs":          "let value = 41;\nvalue += 1;\nconsole.log(value);\nsetInterval(() => {}, 1000);\n",
+		"input.cjs":           "const rl = require('node:readline').createInterface({ input: process.stdin, output: process.stdout });\nrl.question('Value? ', (answer) => {\n  const value = Number(answer) + 1;\n  console.log(value);\n  rl.close();\n});\n",
+		"input.ts":            "const rl = require('node:readline').createInterface({ input: process.stdin, output: process.stdout });\nrl.question('Value? ', (answer: string) => {\n  const value: number = Number(answer) + 1;\n  console.log(value);\n  rl.close();\n});\n",
 	} {
 		if err := os.MkdirAll(filepath.Dir(project+"/"+name), 0700); err != nil {
 			t.Fatal(err)
