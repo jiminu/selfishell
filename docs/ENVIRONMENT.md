@@ -133,7 +133,12 @@ including installations completed during the current Neovim session.
 `:MasonInstall debugpy` and `:MasonInstall delve` also work. No debug adapter
 is installed merely by opening Neovim or running Selfishell setup.
 
-Set a breakpoint with `F9`, then press `F5` and select a launch configuration.
+Save the source files with `:w` (or `:wa` for all edited files) before starting:
+debuggers run the files on disk, so unsaved edits can leave breakpoints out of
+sync. In Python, launching an empty file with unsaved code can report
+`line 0` / `Invalid cursor line`; terminate the session, save, and launch again.
+Set a breakpoint with `F9` (a red circle in the gutter), then press `F5` and
+select a launch configuration.
 Debug panels open once the session initializes and close when the last session
 closes, including disconnects and adapter failures.
 Use Normal mode for the following keys:
@@ -152,6 +157,10 @@ Use Normal mode for the following keys:
 The Space shortcuts also work when a keyboard or terminal intercepts function
 keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+Terminals that report `Shift+F5` / `Shift+F11` as `F17` / `F23` are supported.
+On a Mac keyboard, use `Fn` (or Globe) with a function key, or enable standard
+function keys in Keyboard settings; macOS shortcuts such as Show Desktop can
+also intercept F11. See [Apple's function-key guide](https://support.apple.com/102439).
 
 Python's default launch runs the current file. On each launch, Selfishell
 selects an executable from `VIRTUAL_ENV`, then `CONDA_PREFIX`, then the current
@@ -204,6 +213,14 @@ for confirmation, and `:substitute` results preview in a split before they are
 applied. Bufferline shows open buffers across the top; use `[b` and `]b` to move
 between them, and `Space b d` to close the current buffer without closing its
 editor window.
+
+To resize a split, focus it with `Ctrl+h/j/k/l`, then press `Space w` in Normal
+mode. The popup stays open: repeat `h` / `l` to shrink / grow its width by five
+columns, `j` / `k` to shrink / grow its height by two lines, or `=` to equalize
+resizable splits. `Esc` exits resize mode and restores normal movement keys.
+This also works in nvim-tree and debug panels, using keys that travel through
+ordinary terminal and SSH connections. To set an exact width, use
+`:vertical resize 40` for 40 columns.
 
 When Neovim is available, `vim` resolves to Neovim while `vi` remains the
 system editor. `EDITOR` defaults to `nvim` and `VISUAL` defaults to `EDITOR`,

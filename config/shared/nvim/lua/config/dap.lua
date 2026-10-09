@@ -34,7 +34,13 @@ function M.setup_ui()
     -- Disconnects and adapter failures do not always send terminated/exited.
     -- on_close may run in a libuv callback; wait until DAP clears its session.
     session.on_close.selfishell = vim.schedule_wrap(function()
-      if not dap.session() then ui.close() end
+      if not dap.session() then
+        -- Match toggle's close order: removing the left panel before the
+        -- bottom tray makes Neovim add its width to an adjacent file explorer.
+        for layout = #require("dapui.config").layouts, 1, -1 do
+          ui.close({ layout = layout })
+        end
+      end
     end)
   end
   vim.api.nvim_create_autocmd("FileType", {

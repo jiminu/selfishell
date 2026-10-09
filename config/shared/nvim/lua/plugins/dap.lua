@@ -5,7 +5,12 @@ local function action(name)
 end
 
 return {
-  plugin("mfussenegger/nvim-dap", { lazy = true }),
+  plugin("mfussenegger/nvim-dap", {
+    lazy = true,
+    config = function()
+      vim.fn.sign_define("DapBreakpoint", { text = "", texthl = "DiagnosticError" })
+    end,
+  }),
   plugin("rcarriga/nvim-dap-ui", {
     lazy = true,
     dependencies = {
@@ -38,6 +43,9 @@ return {
       { "<F11>", action("step_into"), desc = "Debug: step into" },
       { "<S-F11>", action("step_out"), desc = "Debug: step out" },
       { "<S-F5>", action("terminate"), desc = "Debug: terminate" },
+      -- Traditional terminals decode Shift+F5/F11 as F17/F23.
+      { "<F23>", action("step_out"), desc = "Debug: step out" },
+      { "<F17>", action("terminate"), desc = "Debug: terminate" },
       { "<leader>Dc", action("continue"), desc = "Debug: start / continue (F5)" },
       { "<leader>Db", action("toggle_breakpoint"), desc = "Debug: toggle breakpoint (F9)" },
       { "<leader>Do", action("step_over"), desc = "Debug: step over (F10)" },

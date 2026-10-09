@@ -28,6 +28,9 @@ package.preload["dapui"] = function()
     eval = function() actions[#actions + 1] = "eval" end,
   }
 end
+package.preload["dapui.config"] = function()
+  return { layouts = { { position = "left" }, { position = "bottom" } } }
+end
 local registered = 0
 package.preload["mason-nvim-dap"] = function()
   return { default_setup = function(config)
@@ -74,6 +77,7 @@ assert(path() == home .. "/bin/python3", "stale virtualenv path was selected")
 for key, action in pairs({
   ["<F5>"] = "continue", ["<F9>"] = "toggle_breakpoint", ["<F10>"] = "step_over",
   ["<F11>"] = "step_into", ["<S-F11>"] = "step_out", ["<S-F5>"] = "terminate",
+  ["<F23>"] = "step_out", ["<F17>"] = "terminate",
   ["<leader>Dc"] = "continue", ["<leader>Db"] = "toggle_breakpoint", ["<leader>Do"] = "step_over",
   ["<leader>Di"] = "step_into", ["<leader>DO"] = "step_out", ["<leader>Dt"] = "terminate",
 }) do

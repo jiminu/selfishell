@@ -46,6 +46,14 @@ vim.api.nvim_set_current_win(windows[1])
 press("<F5>")
 assert(vim.wait(15000, function() return exited and not dap.session() end, 50), "Python session did not finish")
 
+-- Traditional terminal input decodes Shift+F5 as F17.
+stopped, exited = 0, false
+vim.cmd.edit(project .. "/main.py")
+press("<F5>")
+wait_stop()
+press("<F17>")
+assert(vim.wait(15000, function() return not dap.session() end, 50), "Python session did not terminate with F17")
+
 stopped, exited = 0, false
 vim.cmd.edit(project .. "/main.go")
 vim.api.nvim_win_set_cursor(0, { 6, 0 })

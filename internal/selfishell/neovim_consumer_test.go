@@ -143,6 +143,7 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		{"python", "main.py", "def nested(value):\n    return {\"items\": [(value,)]}\n", "Python highlighting smoke: OK"},
 		{"rainbow", "main.py", "", "Rainbow-delimiters smoke: OK"},
 		{"bufnewfile", "brand-new.py", "", "BufNewFile indent smoke: OK"},
+		{"dap_layout", "debug-layout.txt", "", "DAP layout smoke: OK"},
 	} {
 		file := filepath.Join(home, probe.filename)
 		if probe.content != "" {

@@ -91,4 +91,33 @@ local listchars = vim.opt.listchars:get()
 assert(listchars.tab == "  " and listchars.nbsp == "␣", "tabs or non-breaking spaces are not listed: " .. vim.inspect(listchars))
 assert(vim.opt.fileencodings:get()[1] == "ucs-bom", "byte order marks are not detected first")
 
+local which_key = plugin_spec("plugins.editor", "folke/which-key.nvim")
+assert(plugin_key("plugins.editor", "folke/which-key.nvim", "<leader>w"), "missing window resize mode")
+local resize = {}
+for _, group in ipairs(which_key.opts.spec or {}) do
+  if group[1] == "<leader>w" then
+    for _, key in ipairs(group.expand()) do resize[key[1]] = key[2] end
+  end
+end
+vim.o.columns, vim.o.lines = 160, 50
+vim.cmd.vsplit()
+local other_column = vim.fn.win_getid(vim.fn.winnr("h"))
+vim.cmd.split()
+local target = vim.api.nvim_get_current_win()
+local width, height = vim.api.nvim_win_get_width(target), vim.api.nvim_win_get_height(target)
+resize.l()
+resize.l()
+assert(vim.api.nvim_win_get_width(target) == width + 10, "repeated resize did not grow the focused split")
+resize.h()
+assert(vim.api.nvim_win_get_width(target) == width + 5, "resize did not shrink the focused split")
+resize.j()
+assert(vim.api.nvim_win_get_height(target) == height - 2, "resize did not shrink the focused split's height")
+resize.k()
+assert(vim.api.nvim_win_get_height(target) == height, "resize did not grow the focused split's height")
+resize["="]()
+assert(math.abs(vim.api.nvim_win_get_width(target) - vim.api.nvim_win_get_width(other_column)) <= 1,
+  "resize equalize did not balance columns")
+assert(vim.api.nvim_get_current_win() == target, "resizing moved focus")
+vim.cmd.only()
+
 print("editor workflows: OK")
