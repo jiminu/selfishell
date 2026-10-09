@@ -215,9 +215,12 @@ between them, and `Space b d` to close the current buffer without closing its
 editor window.
 
 To resize a split, focus it with `Ctrl+h/j/k/l`, then press `Space w` in Normal
-mode. A hint appears at the bottom: repeat `h` / `l` to shrink / grow its width by
-five columns, `j` / `k` to shrink / grow its height by two lines, or `=` to equalize
-resizable splits. `Esc` exits resize mode and restores normal movement keys.
+mode. A hint appears at the bottom: repeat `h` / `l` to move the divider left /
+right by five columns, `k` / `j` to move it up / down by two lines, or `=` to
+equalize resizable splits. The right / bottom divider is used when available;
+at the screen edge, the left / top divider is used instead. For example, `h`
+narrows a left sidebar but widens the rightmost editor, and `k` expands a bottom
+debug panel upward. `Esc` exits resize mode and restores normal movement keys.
 Any other key exits and performs its normal action, so `:` opens the command
 line and `Ctrl+h/j/k/l` switches windows immediately.
 This also works in nvim-tree and debug panels, using keys that travel through

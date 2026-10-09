@@ -28,12 +28,30 @@ end
 M.set_window_navigation()
 
 map("n", "<leader>w", function()
+  local function move_border(horizontal, offset)
+    local win = vim.fn.winnr()
+    -- Prefer the right/bottom border. At the screen edge, move the shared
+    -- left/top border instead, keeping the same on-screen direction.
+    if vim.fn.winnr(horizontal and "l" or "j") == win then
+      local adjacent = vim.fn.winnr(horizontal and "h" or "k")
+      if adjacent == win then return end
+      win = adjacent
+    end
+    if horizontal then
+      vim.fn.win_move_separator(win, offset)
+    else
+      vim.fn.win_move_statusline(win, offset)
+    end
+  end
   local commands = {
-    h = "vertical resize -5", l = "vertical resize +5",
-    j = "resize -2", k = "resize +2", ["="] = "wincmd =",
+    h = function() move_border(true, -5) end,
+    l = function() move_border(true, 5) end,
+    k = function() move_border(false, -2) end,
+    j = function() move_border(false, 2) end,
+    ["="] = function() vim.cmd("wincmd =") end,
   }
   while true do
-    vim.api.nvim_echo({ { "Resize: h/l width -/+5 | j/k height -/+2 | = equalize | Esc done", "ModeMsg" } }, false, {})
+    vim.api.nvim_echo({ { "Resize: h/l left/right 5 | k/j up/down 2 | = equalize | Esc done", "ModeMsg" } }, false, {})
     vim.cmd.redraw()
     local ok, key = pcall(vim.fn.getcharstr)
     if not ok or not commands[key] then
@@ -45,7 +63,7 @@ map("n", "<leader>w", function()
       end
       return
     end
-    vim.cmd(commands[key])
+    commands[key]()
   end
 end, { desc = "Resize windows", silent = true })
 

@@ -17,7 +17,7 @@ end
 
 -- Buffered input must stay in resize mode until Escape, including fast repeats.
 press("<Space>wllhjk<Esc>")
-assert(vim.api.nvim_win_get_width(target) == width + 5, "buffered resize keys were lost")
+assert(vim.api.nvim_win_get_width(target) == width - 5, "buffered resize keys were lost or moved the border the wrong way")
 assert(vim.api.nvim_win_get_height(target) == height, "buffered height resize keys were lost")
 assert(vim.api.nvim_win_get_cursor(target)[2] == 0, "resize keys leaked into normal movement")
 press("l")
@@ -41,4 +41,31 @@ assert(math.abs(vim.api.nvim_win_get_width(target) - vim.api.nvim_win_get_width(
 assert(not vim.fn.execute("messages"):find("Recursion detected", 1, true), "resize mode recursed")
 vim.bo.modified = false
 vim.cmd.only()
+
+-- Fixed-width sidebars and bottom debug panels follow screen directions too.
+require("lazy").load({ plugins = { "nvim-tree.lua", "nvim-dap-ui" } })
+local tree = require("nvim-tree.api").tree
+tree.open()
+local explorer = tree.winid()
+vim.api.nvim_set_current_win(explorer)
+width = vim.api.nvim_win_get_width(explorer)
+press("<Space>wl<Esc>")
+assert(vim.api.nvim_win_get_width(explorer) == width + 5, "l did not move the tree divider right")
+press("<Space>wh<Esc>")
+assert(vim.api.nvim_win_get_width(explorer) == width, "h did not move the tree divider left")
+local ui = require("dapui")
+ui.open()
+local repl
+for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dap-repl" then repl = win end
+end
+assert(repl, "debug REPL window is missing")
+vim.api.nvim_set_current_win(repl)
+height = vim.api.nvim_win_get_height(repl)
+press("<Space>wk<Esc>")
+assert(vim.api.nvim_win_get_height(repl) == height + 2, "k did not expand the bottom debug panel upward")
+press("<Space>wj<Esc>")
+assert(vim.api.nvim_win_get_height(repl) == height, "j did not move the debug panel divider downward")
+ui.toggle()
+tree.close()
 print("Window resize input smoke: OK")
