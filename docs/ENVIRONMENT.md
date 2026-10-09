@@ -169,6 +169,8 @@ Use Normal mode for the following keys:
 The Space shortcuts also work when a keyboard or terminal intercepts function
 keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+Stepping follows the execution line in a source window, including after moving
+between debug panels. The REPL keeps input focus while the source view follows.
 `Space D u` hides all remaining debug panels, even if some were closed with
 `:q`; when all panels are hidden, it opens the complete layout.
 
@@ -178,6 +180,9 @@ restores an editor for the source buffer. A deleted buffer is not reopened;
 an empty editor is created instead.
 
 Terminals that report `Shift+F5` / `Shift+F11` as `F17` / `F23` are supported.
+Windows Terminal binds F11 to full screen by default. Remove or change that
+binding in Settings > Actions to pass F11 to Neovim, or use `Space D i`.
+See [Windows Terminal actions](https://learn.microsoft.com/en-us/windows/terminal/customize-settings/actions#toggle-full-screen).
 On a Mac keyboard, use `Fn` (or Globe) with a function key, or enable standard
 function keys in Keyboard settings; macOS shortcuts such as Show Desktop can
 also intercept F11. See [Apple's function-key guide](https://support.apple.com/102439).
