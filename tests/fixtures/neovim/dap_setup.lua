@@ -31,6 +31,7 @@ end
 package.preload["dapui.config"] = function()
   return { layouts = { { position = "left" }, { position = "bottom" } } }
 end
+package.preload["dapui.windows"] = function() return { layouts = {} } end
 local registered = 0
 package.preload["mason-nvim-dap"] = function()
   return { default_setup = function(config)

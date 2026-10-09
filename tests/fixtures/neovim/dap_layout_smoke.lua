@@ -33,6 +33,45 @@ for cycle = 1, 3 do
   assert_width(30, "session closed " .. cycle)
 end
 
+local function panel_windows()
+  return vim.tbl_filter(function(win)
+    local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+    return ft:match("^dapui_") or ft == "dap-repl"
+  end, vim.api.nvim_list_wins())
+end
+
+-- Starting after :q on one panel must rebuild the incomplete layout.
+require("config.dap").toggle_ui()
+for _, win in ipairs(panel_windows()) do
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dapui_scopes" then vim.api.nvim_win_close(win, true) end
+end
+vim.api.nvim_set_current_win(editor)
+local repaired = { on_close = {} }
+local opened, message = pcall(dap.listeners.after.event_initialized.selfishell, repaired)
+assert(opened, "partly closed panels broke initialization: " .. tostring(message))
+assert(repaired.on_close.selfishell, "initialization did not register cleanup")
+assert(#panel_windows() == 6, "initialization did not restore all panels")
+close_session(repaired)
+
+-- Hiding a partly closed UI must not reopen its missing layout.
+require("config.dap").toggle_ui()
+for _, win in ipairs(panel_windows()) do
+  local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+  if ft == "dap-repl" or ft == "dapui_console" then vim.api.nvim_win_close(win, true) end
+end
+require("config.dap").toggle_ui()
+assert(#panel_windows() == 0, "UI toggle exchanged visible layouts instead of hiding them")
+
+-- A standalone REPL is independent of the UI toggle.
+dap.repl.open()
+local standalone = panel_windows()[1]
+require("config.dap").toggle_ui()
+assert(#panel_windows() > 1, "standalone REPL prevented the UI from opening")
+require("config.dap").toggle_ui()
+assert(#panel_windows() == 1 and vim.api.nvim_win_is_valid(standalone), "UI toggle closed the standalone REPL")
+vim.api.nvim_win_close(standalone, true)
+vim.api.nvim_set_current_win(editor)
+
 -- Preserve a manual width, including changes made while debugging.
 vim.api.nvim_win_set_width(explorer, 37)
 local session = { on_close = {} }
@@ -83,8 +122,14 @@ dap.listeners.after.event_initialized.selfishell(session)
 vim.cmd.quit()
 vim.cmd.tabnew()
 local other_tab, other_win = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win()
+local second_session = { on_close = {} }
+dap.listeners.after.event_initialized.selfishell(second_session)
+assert(vim.api.nvim_get_current_win() == other_win, "initializing another session stole tab focus")
+for _, win in ipairs(panel_windows()) do
+  assert(vim.api.nvim_win_get_tabpage(win) ~= other_tab, "initializing another session moved the debug UI")
+end
 require("config.dap").toggle_ui()
-close_session(session)
+close_session(second_session)
 assert(vim.api.nvim_get_current_tabpage() == other_tab and vim.api.nvim_get_current_win() == other_win,
   "debug cleanup stole focus from another tab")
 editor = vim.fn.win_findbuf(source)[1]

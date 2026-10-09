@@ -157,6 +157,8 @@ Use Normal mode for the following keys:
 The Space shortcuts also work when a keyboard or terminal intercepts function
 keys. Which-key shows the actions and their function-key equivalents. `Space d`
 still shows LSP diagnostics; `Ctrl+h/j/k/l` moves between debug windows.
+`Space D u` hides all remaining debug panels, even if some were closed with
+`:q`; when all panels are hidden, it opens the complete layout.
 
 `:q` closes a window while its source buffer can remain loaded. If all source
 windows were closed, terminating the session or hiding panels with `Space D u`
