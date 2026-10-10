@@ -54,6 +54,9 @@ shares Ubuntu's configuration implementation, so its configuration matrix covers
 install/restore with empty, existing and XDG homes. Release reproducibility checks
 combine a relocated source tree, changed mtimes, hostile build variables and a
 fresh cache; the shell builder is compared with those verified Go-built assets.
+Lifecycle fixtures reuse the production-built payload with different version
+metadata and checksums, preparing only the host archive. Published-release
+fixtures still include all four platforms.
 
 Test fixture builds use temporary Go caches by default. `SELFISHELL_TEST_GO_CACHE`
 selects an absolute compiler-cache path instead: the repository gate uses

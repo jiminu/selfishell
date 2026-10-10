@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/pty"
-	"github.com/jiminu/selfishell/internal/releasebuild"
 	"github.com/jiminu/selfishell/internal/selfishell"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -37,18 +37,45 @@ type nativeAssetFixture struct {
 
 var extraNative sync.Map
 
-func nativeVersionAssets(t *testing.T, version string) string {
+func nativeVersionAssets(t *testing.T, version string, allPlatforms bool) string {
 	t.Helper()
 	if version == nativeArchiveVersion {
 		return nativeAssetDir(t)
 	}
-	value, _ := extraNative.LoadOrStore(version, &nativeAssetFixture{})
+	source := nativeAssetDir(t)
+	key := struct {
+		version      string
+		allPlatforms bool
+	}{version, allPlatforms}
+	value, _ := extraNative.LoadOrStore(key, &nativeAssetFixture{})
 	holder := value.(*nativeAssetFixture)
 	holder.once.Do(func() {
 		holder.dir, holder.err = os.MkdirTemp("", "selfishell-native-"+version+"-")
-		if holder.err == nil {
-			holder.err = releasebuild.Build(context.Background(), repoRoot(), version, holder.dir)
+		if holder.err != nil {
+			return
 		}
+		// Versions live in VERSION, not the binary. Reuse the production-built
+		// payload; lifecycle fixtures only need the current host's archive.
+		holder.err = fmt.Errorf("incomplete release fixture for %s", version)
+		names := []string{hostArchive(version)}
+		if allPlatforms {
+			names = releaseAssetNames(version)
+		}
+		var sums strings.Builder
+		for _, name := range names {
+			original := strings.Replace(name, "selfishell-"+version+"-", "selfishell-"+nativeArchiveVersion+"-", 1)
+			archive := filepath.Join(holder.dir, name)
+			mustFS(t, copyFile(filepath.Join(source, original), archive))
+			rewriteSuppliedArchive(t, archive, func(members map[string]archiveMember) {
+				entry := members["VERSION"]
+				entry.data = []byte(version + "\n")
+				members["VERSION"] = entry
+			})
+			fmt.Fprintf(&sums, "%x  %s\n", sha256.Sum256(readBytes(t, archive)), name)
+		}
+		mustFS(t, testutil.WriteFile(filepath.Join(holder.dir, "SHA256SUMS"), []byte(sums.String()), 0644))
+		mustFS(t, testutil.WriteFile(filepath.Join(holder.dir, "VERSION"), []byte(version+"\n"), 0644))
+		holder.err = nil
 	})
 	if holder.err != nil {
 		t.Fatal(holder.err)
@@ -108,7 +135,7 @@ func newBootstrapFixture(t *testing.T, versions ...string) *bootstrapFixture {
 }
 func (f *bootstrapFixture) addVersion(t *testing.T, version string) {
 	t.Helper()
-	assets := nativeVersionAssets(t, version)
+	assets := nativeVersionAssets(t, version, false)
 	target := filepath.Join(f.remote, "download", "v"+version)
 	mustFS(t, os.MkdirAll(target, 0700))
 	for _, name := range []string{hostArchive(version), "SHA256SUMS", "VERSION"} {

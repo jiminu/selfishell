@@ -25,7 +25,7 @@ func maintenanceMiseEnv(home string) []string {
 func publishedFixture(t *testing.T, version string) (string, []string) {
 	t.Helper()
 	home := t.TempDir()
-	assets := nativeVersionAssets(t, version)
+	assets := nativeVersionAssets(t, version, true)
 	assertAssetSet(t, assets, version)
 	releaseRoot := filepath.Join(home, "releases")
 	rawRoot := filepath.Join(home, "raw")
