@@ -122,6 +122,7 @@ func (c CLI) statusPlugins(dependencies []Dependency) bool {
 		return false
 	}
 	var missing, dirty, drifted []string
+	reported := false
 	for _, d := range dependencies {
 		if d.Kind != "zsh-plugin" {
 			continue
@@ -132,9 +133,10 @@ func (c CLI) statusPlugins(dependencies []Dependency) bool {
 			missing = append(missing, d.Name)
 			continue
 		}
-		changes, _, ok := runInventory("", append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), "git", "-C", dir, "status", "--porcelain")
-		if !ok {
-			drifted = append(drifted, d.Name)
+		changes, err := runInventoryQuery("", append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), "git", "-C", dir, "status", "--porcelain")
+		if err != nil {
+			c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: could not inspect %s: %s", d.Name, err))
+			reported = true
 			continue
 		}
 		if changes != "" {
@@ -142,16 +144,18 @@ func (c CLI) statusPlugins(dependencies []Dependency) bool {
 			continue
 		}
 		head, err := inventoryGitHead(dir)
-		if err != nil || head != d.Version {
+		if err != nil {
+			c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: could not inspect %s: %s", d.Name, err))
+			reported = true
+		} else if head != d.Version {
 			drifted = append(drifted, d.Name)
 		}
 	}
 	if len(missing) > 0 {
 		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d not provisioned (%s)", len(missing), strings.Join(missing, " ")))
 		fmt.Fprintf(c.Out, "        Run '%s' to provision them; shell startup never downloads plugins.\n", c.bold("selfishell install"))
-		return true
+		reported = true
 	}
-	reported := false
 	if len(dirty) > 0 {
 		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d modified locally (%s)", len(dirty), strings.Join(dirty, " ")))
 		reported = true
@@ -160,9 +164,10 @@ func (c CLI) statusPlugins(dependencies []Dependency) bool {
 		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d at an unapproved revision (%s)", len(drifted), strings.Join(drifted, " ")))
 		reported = true
 	}
-	if reported {
+	if len(dirty)+len(drifted) > 0 {
 		c.diagnosticHint("Restore the approved Zsh plugin revisions with:", "selfishell update --tools-only")
-	} else {
+	}
+	if !reported {
 		c.sayDiagnostic("32", "OK", "Zsh plugins: provisioned")
 	}
 	return reported

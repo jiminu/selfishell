@@ -25,11 +25,14 @@ type ToolInventory struct {
 	dependencies                                     []Dependency
 	apt                                              map[string]string
 	aptReady                                         bool
+	aptError                                         error
 	brewFormulae, brewCasks                          map[string]string
 	brewJSONReady, brewFormulaeReady, brewCasksReady bool
+	brewFormulaeError, brewCasksError                error
 	miseVersions                                     map[string]string
 	miseApproved                                     map[string]string
 	miseReady                                        bool
+	miseError                                        error
 }
 
 func NewToolInventory(root string, paths Paths, warnings io.Writer) (*ToolInventory, error) {
@@ -43,15 +46,16 @@ func NewToolInventory(root string, paths Paths, warnings io.Writer) (*ToolInvent
 func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult, error) {
 	result := ToolResult{"missing", "none", "package-manager"}
 	var version string
+	var queryError error
 	switch manager {
 	case "apt":
-		version = i.aptVersion(name)
+		version, queryError = i.aptVersion(name)
 		if version != "" {
 			result.Installed, result.Source = version, "apt"
 			return result, nil
 		}
 	case "formula", "cask":
-		version = i.brewVersion(manager, name)
+		version, queryError = i.brewVersion(manager, name)
 		if version != "" {
 			result.Installed = version
 			result.Source = "homebrew"
@@ -64,6 +68,7 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 		return i.directVersion(name, platform, arch)
 	case "mise":
 		i.loadMise()
+		queryError = i.miseError
 		result.Approved = i.miseApproved[name]
 		if version = i.miseVersions[name]; version != "" {
 			result.Installed, result.Source = version, "mise"
@@ -71,6 +76,10 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 		}
 	default:
 		return result, fmt.Errorf("unknown package manager: %s", manager)
+	}
+	if queryError != nil {
+		result.Installed = "unknown"
+		return result, queryError
 	}
 	executable := toolExecutable(name)
 	path, err := exec.LookPath(executable)
@@ -142,19 +151,40 @@ func inventoryGitHead(dir string) (string, error) {
 }
 
 func runInventoryContext(ctx context.Context, dir string, env []string, name string, args ...string) (string, string, bool) {
+	out, stderr, _, err := runInventoryResult(ctx, dir, env, name, args...)
+	return out, stderr, err == nil
+}
+
+func runInventoryQuery(dir string, env []string, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, _, _, err := runInventoryResult(ctx, dir, env, name, args...)
+	return out, err
+}
+
+func runInventoryResult(ctx context.Context, dir string, env []string, name string, args ...string) (string, string, int, error) {
 	var out, stderr bytes.Buffer
 	p := Process{Out: &out, Err: &stderr, Dir: dir, Env: env}
 	code, err := p.Run(ctx, name, args...)
-	return out.String(), stderr.String(), err == nil && code == 0
+	if err != nil {
+		err = fmt.Errorf("%s: %w", name, err)
+	} else if code != 0 {
+		err = fmt.Errorf("%s exited %d", name, code)
+	}
+	if err != nil && strings.TrimSpace(stderr.String()) != "" {
+		err = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return out.String(), stderr.String(), code, err
 }
 
-func (i *ToolInventory) aptVersion(name string) string {
+func (i *ToolInventory) aptVersion(name string) (string, error) {
 	if !i.aptReady {
 		i.aptReady = true
 		i.apt = map[string]string{}
 		if _, err := exec.LookPath("dpkg-query"); err == nil {
-			output, _, ok := runInventory("", nil, "dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n")
-			if ok {
+			output, err := runInventoryQuery("", nil, "dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n")
+			i.aptError = err
+			if err == nil {
 				for _, line := range strings.Split(output, "\n") {
 					f := strings.Split(line, "\t")
 					if len(f) != 3 || len(f[1]) != 3 || f[1][1] != 'i' || f[1][2] != ' ' || f[2] == "" {
@@ -168,7 +198,7 @@ func (i *ToolInventory) aptVersion(name string) string {
 			}
 		}
 	}
-	return i.apt[name]
+	return i.apt[name], i.aptError
 }
 
 func parseBrewLines(output string) map[string]string {
@@ -229,41 +259,53 @@ func (i *ToolInventory) loadBrewJSON() {
 	i.brewFormulaeReady = true
 	i.brewCasksReady = true
 }
-func (i *ToolInventory) brewVersion(manager, name string) string {
+func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
 	if _, err := exec.LookPath("brew"); err != nil {
-		return ""
+		return "", nil
 	}
 	i.loadBrewJSON()
 	if manager == "formula" {
 		if !i.brewFormulaeReady {
 			i.brewFormulaeReady = true
-			output, _, ok := runInventory("", nil, "brew", "list", "--formula", "--versions")
-			if ok {
+			output, err := runInventoryQuery("", nil, "brew", "list", "--formula", "--versions")
+			i.brewFormulaeError = err
+			if err == nil {
 				i.brewFormulae = parseBrewLines(output)
 			}
 		}
+		if i.brewFormulaeError != nil {
+			return "", i.brewFormulaeError
+		}
 		if version := i.brewFormulae[name]; version != "" {
-			return version
+			return version, nil
 		}
 		// Homebrew may list a formula under its canonical name rather than an alias.
-		output, _, ok := runInventory("", nil, "brew", "list", "--versions", name)
-		if !ok {
-			return ""
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		output, stderr, code, err := runInventoryResult(ctx, "", nil, "brew", "list", "--versions", name)
+		if err != nil {
+			// Homebrew signals an absent named formula with empty output and an
+			// unsuccessful exit. A diagnostic instead means inspection failed.
+			if code != 1 || strings.TrimSpace(output) != "" || strings.TrimSpace(stderr) != "" {
+				return "", err
+			}
+			return "", nil
 		}
 		_, version, found := strings.Cut(strings.TrimSpace(output), " ")
 		if found {
-			return version
+			return version, nil
 		}
-		return ""
+		return "", nil
 	}
 	if !i.brewCasksReady {
 		i.brewCasksReady = true
-		output, _, ok := runInventory("", nil, "brew", "list", "--cask", "--versions")
-		if ok {
+		output, err := runInventoryQuery("", nil, "brew", "list", "--cask", "--versions")
+		i.brewCasksError = err
+		if err == nil {
 			i.brewCasks = parseBrewLines(output)
 		}
 	}
-	return i.brewCasks[name]
+	return i.brewCasks[name], i.brewCasksError
 }
 
 func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, error) {
@@ -392,18 +434,16 @@ func (i *ToolInventory) loadMise() {
 	}
 	shared := filepath.Join(i.root, "config", "shared")
 	env := append(os.Environ(), "NO_COLOR=1", "MISE_GLOBAL_CONFIG_FILE="+config)
-	output, stderr, ok := runInventory(shared, env, command, "-C", shared, "ls", "--current", "--installed", "--no-header", "--no-truncate")
-	if !ok {
-		line, _, _ := strings.Cut(stderr, "\n")
+	output, err := runInventoryQuery(shared, env, command, "-C", shared, "ls", "--current", "--installed", "--no-header", "--no-truncate")
+	if err != nil {
+		i.miseError = fmt.Errorf("mise could not list installed tools: %w", err)
+		line, _, _ := strings.Cut(i.miseError.Error(), "\n")
 		if i.warnings != nil {
 			prefix := "selfishell: warning:"
 			if os.Getenv("NO_COLOR") == "" && IsTerminal(i.warnings) {
 				prefix = "\x1b[33mselfishell: warning:\x1b[0m"
 			}
-			if line != "" {
-				line = ": " + line
-			}
-			fmt.Fprintf(i.warnings, "%s mise could not list installed tools%s\n", prefix, line)
+			fmt.Fprintf(i.warnings, "%s %s\n", prefix, line)
 		}
 		return
 	}

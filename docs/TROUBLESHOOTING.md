@@ -25,12 +25,19 @@ remains an alias of `status`.
 
 A tool's source is `selfishell`, `mise`, `homebrew`, `homebrew-cask`, `apt`,
 `external` (found, but installed some other way), or `none` when the tool is
-missing. Package-manager versions are reported without an exact approved
-version because those repositories control resolution. `status` returns
-nonzero when a system check fails, required tools are missing, a Zsh plugin
+missing or its inspection failed. Package-manager versions are reported without
+an exact approved version because those repositories control resolution.
+`status` returns nonzero when a system check fails, required tools are missing, a Zsh plugin
 checkout is missing, modified, or at an unapproved revision, or managed
 configuration is not installed, missing, or changed. Optional missing tools
 remain informational, including in the summary.
+If an installed package manager cannot list its tools, those tools are reported
+as `unknown` with the inspection error, and diagnosis continues. Inspection
+failures return nonzero even for optional tools; resolve the reported error and
+rerun `selfishell status` before deciding whether to install anything. Executables
+on PATH are classified as external only when the manager is absent or its
+inventory query succeeds. Failed Git inspections are reported separately from
+unapproved plugin revisions, and missing plugins do not hide other plugin issues.
 Problem groups include a next step, and paths beneath the current home
 directory use `~`.
 
