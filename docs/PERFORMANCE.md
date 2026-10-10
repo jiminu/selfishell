@@ -80,6 +80,8 @@ the caller's PATH tools and package managers.
 It does not install the remaining developer tools or system packages, so these
 results describe a partially provisioned environment, not a complete setup.
 HOME, XDG directories, and mise data/cache/state paths point into the temporary tree.
+On WSL, diagnostics omit the distribution identity so setup cannot discover or
+configure the host's Windows Terminal; shell timing retains it for PATH handling.
 Prompt and diagnostic measurements also bound mise's ancestor configuration
 search with `MISE_CEILING_PATHS`, excluding settings above the measured directory
 or source root.
