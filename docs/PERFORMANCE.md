@@ -80,9 +80,31 @@ the caller's PATH tools and package managers.
 It does not install the remaining developer tools or system packages, so these
 results describe a partially provisioned environment, not a complete setup.
 HOME, XDG directories, and mise data/cache/state paths point into the temporary tree.
+On WSL, diagnostics omit the distribution identity so setup cannot discover or
+configure the host's Windows Terminal; shell timing retains it for PATH handling.
 Prompt and diagnostic measurements also bound mise's ancestor configuration
 search with `MISE_CEILING_PATHS`, excluding settings above the measured directory
 or source root.
+
+## WSL first prompt
+
+WSL startup temporarily removes inherited Windows drive paths while initializing
+Linux tools, then restores them for Windows commands. When PATH still matches
+mise's activation snapshot, restoration also advances that snapshot so the first
+prompt can reuse the environment already computed during activation. Otherwise,
+mise would rescan the restored Windows paths in a second environment calculation.
+User PATH or mise environment changes still trigger its normal hooks, and project
+directory changes still switch tool versions and environment variables.
+
+This uses the pinned mise version's optional `__MISE_ZSH_ACTIVATE_PATH` snapshot;
+external versions without it retain their normal behavior. CI exercises the real
+pinned activation hooks, including project switching, when dependencies change.
+Run the same check locally with an already-provisioned pinned binary:
+
+```sh
+SELFISHELL_TEST_PINNED_MISE=/absolute/path/to/mise \
+  go test ./tests/integration -run '^TestNativeRealMiseWSLFirstPrompt$' -count=1 -v
+```
 
 ## Startup caches
 

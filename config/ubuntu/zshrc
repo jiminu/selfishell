@@ -19,6 +19,13 @@ else
 fi
 
 if (( ${#SELFISHELL_WINDOWS_PATH[@]} )); then
+  _selfishell_before_windows_path="$PATH"
   path+=("${SELFISHELL_WINDOWS_PATH[@]}")
+  # Keep mise's first-prompt fast path for our Windows suffix restoration only.
+  # A PATH change after activation, or mise without this snapshot, stays intact.
+  if [[ "${__MISE_ZSH_ACTIVATE_PATH:-}" == "$_selfishell_before_windows_path" ]]; then
+    export __MISE_ZSH_ACTIVATE_PATH="$PATH"
+  fi
+  unset _selfishell_before_windows_path
 fi
 unset SELFISHELL_WINDOWS_PATH

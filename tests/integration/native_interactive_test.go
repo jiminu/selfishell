@@ -3,7 +3,6 @@ package integration_test
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -13,6 +12,13 @@ import (
 
 func interactiveSource() string {
 	return filepath.Join(repoRoot(), "config/shared/zsh/interactive.zsh")
+}
+func interactiveFzfSource(t *testing.T, home string) string {
+	t.Helper()
+	// Keep the system fallback fixture private, regardless of installed fzf.
+	source := filepath.Join(home, "interactive.zsh")
+	nativeWrite(t, source, strings.ReplaceAll(nativeRead(t, interactiveSource()), "/usr/share/doc/fzf/examples/key-bindings.zsh", `"$HOME/key-bindings.zsh"`), 0600)
+	return source
 }
 func interactiveRun(t *testing.T, home, code string, env ...string) capture {
 	t.Helper()
@@ -162,7 +168,7 @@ printf 'print old\n'
 }
 func TestNativeFzfCacheGeneration(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"success", "invalid-syntax"} {
+	for _, kind := range []string{"success", "nonzero-exit", "empty-output", "invalid-syntax"} {
 		t.Run(kind, func(t *testing.T) {
 			home := nativeHome(t)
 			dir := interactiveCache(t, home)
@@ -170,11 +176,15 @@ func TestNativeFzfCacheGeneration(t *testing.T) {
 			bin := fakeExecutable(t, home, "fzf", `printf 'bindkey -M emacs "^R" fzf-history-widget\n'`)
 			if kind == "invalid-syntax" {
 				nativeWrite(t, filepath.Join(bin, "fzf"), "#!/bin/sh\nprintf 'if [[ not valid zsh\\n'\n", 0700)
+			} else if kind == "nonzero-exit" {
+				nativeWrite(t, filepath.Join(bin, "fzf"), "#!/bin/sh\nprintf 'print partial\\n'\nexit 1\n", 0700)
+			} else if kind == "empty-output" {
+				nativeWrite(t, filepath.Join(bin, "fzf"), "#!/bin/sh\nexit 0\n", 0700)
 			}
 			if kind != "success" {
 				nativeWrite(t, p, "# preexisting fzf cache\n", 0600)
 			}
-			r := interactiveRun(t, home, `if _selfishell_generate_fzf_cache "$SELFISHELL_TEST_CACHE"; then [[ "$SELFISHELL_TEST_KIND" == success ]] || exit 10; else [[ "$SELFISHELL_TEST_KIND" != success ]] || exit 11; fi`, "SELFISHELL_TEST_KIND="+kind, "PATH="+bin, "SELFISHELL_TEST_CACHE="+p)
+			r := interactiveRun(t, home, `if _selfishell_generate_fzf_cache "$SELFISHELL_TEST_CACHE"; then [[ "$SELFISHELL_TEST_KIND" == success ]] || exit 10; else [[ "$SELFISHELL_TEST_KIND" != success ]] || exit 11; fi`, "SELFISHELL_TEST_KIND="+kind, "PATH="+bin, "SELFISHELL_TEST_CACHE="+p, "SELFISHELL_SOURCE="+interactiveFzfSource(t, home))
 			nativeQuiet(t, r)
 			if kind == "success" {
 				if !strings.Contains(nativeRead(t, p), "fzf-history-widget") {
@@ -189,27 +199,38 @@ func TestNativeFzfCacheGeneration(t *testing.T) {
 }
 func TestNativeFzfFallbackCopy(t *testing.T) {
 	t.Parallel()
-	if _, err := os.Stat("/usr/share/doc/fzf/examples/key-bindings.zsh"); err != nil {
-		t.Skip("system fzf key bindings absent")
+	for _, tc := range []struct {
+		name, fzf, fallback string
+		valid               bool
+	}{
+		{"missing-fzf", "", "# fallback bindings\n", true},
+		{"nonzero-exit", "printf 'print partial\\n'\nexit 1\n", "# fallback bindings\n", true},
+		{"empty-output", "exit 0\n", "# fallback bindings\n", true},
+		{"empty-fallback", "", "", false},
+		{"invalid-fallback", "", "if [[ not valid zsh\n", false},
+		{"invalid-output", "printf 'if [[ not valid zsh\\n'\n", "# fallback bindings\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := nativeHome(t)
+			dir := interactiveCache(t, home)
+			bin := interactiveBin(t, home)
+			mustFS(t, os.Symlink("/bin/cat", filepath.Join(bin, "cat")))
+			if tc.fzf != "" {
+				fakeExecutable(t, home, "fzf", tc.fzf)
+			}
+			nativeWrite(t, filepath.Join(home, "key-bindings.zsh"), tc.fallback, 0600)
+			p := filepath.Join(dir, "fallback-cache.zsh")
+			nativeWrite(t, p, "# preexisting fzf cache\n", 0600)
+			r := interactiveRun(t, home, `if _selfishell_generate_fzf_cache "$SELFISHELL_TEST_CACHE"; then [[ "$SELFISHELL_TEST_VALID" == true ]] || exit 10; else [[ "$SELFISHELL_TEST_VALID" == false ]] || exit 11; fi`, "SELFISHELL_TEST_CACHE="+p, "SELFISHELL_TEST_VALID="+fmt.Sprint(tc.valid), "SELFISHELL_SOURCE="+interactiveFzfSource(t, home))
+			nativeQuiet(t, r)
+			want := "# preexisting fzf cache\n"
+			if tc.valid {
+				want = "\n# fallback bindings\n"
+			}
+			cacheEqual(t, p, want)
+			nativeAssertNoTemp(t, dir)
+		})
 	}
-	home := nativeHome(t)
-	dir := interactiveCache(t, home)
-	bin := filepath.Join(home, "bin")
-	mustFS(t, os.MkdirAll(bin, 0700))
-	for _, name := range []string{"mkdir", "rm", "mv", "zsh", "cp"} {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		mustFS(t, os.Symlink(path, filepath.Join(bin, name)))
-	}
-	p := filepath.Join(dir, "fallback-cache.zsh")
-	r := interactiveRun(t, home, `_selfishell_generate_fzf_cache "$SELFISHELL_TEST_CACHE" || exit 10`, "PATH="+bin, "SELFISHELL_TEST_CACHE="+p)
-	nativeQuiet(t, r)
-	if len(nativeRead(t, p)) == 0 {
-		t.Fatal("empty fallback")
-	}
-	nativeAssertNoTemp(t, dir)
 }
 func TestNativeKubectlCanonicalCompletion(t *testing.T) {
 	t.Parallel()

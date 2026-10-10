@@ -163,6 +163,58 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	}
 }
 
+func TestFullDiagnosticsDoNotReachWindowsIntegration(t *testing.T) {
+	root := repositoryRoot(t)
+	cli := buildTestCLI(t, root)
+	private := t.TempDir()
+	guardedCLI, guardLog := guardDiagnosticCLI(t, private, cli)
+	// Exercise the full-mode diagnostics without provisioning shell tools. The
+	// real CLI sees WSL on every host, but can reach only guarded interop tools.
+	for name, contents := range map[string]string{
+		"os-release":   "ID=ubuntu\n",
+		"proc-version": "Linux microsoft WSL2\n",
+		"wsl-selfishell": fmt.Sprintf(`#!/bin/sh
+export SELFISHELL_TEST_SYSTEM_NAME=Linux
+export SELFISHELL_TEST_OS_RELEASE_FILE='%s/os-release'
+export SELFISHELL_TEST_PROC_VERSION_FILE='%s/proc-version'
+exec '%s' "$@"
+`, private, private, guardedCLI),
+	} {
+		if err := testutil.WriteFile(filepath.Join(private, name), []byte(contents), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := filepath.Join(private, "benchmark")
+	home := filepath.Join(dir, "home")
+	bin := filepath.Join(home, ".local/bin")
+	if err := os.MkdirAll(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(filepath.Join(bin, "mise"), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	f := &fixture{
+		options: options{root: root, cli: filepath.Join(private, "wsl-selfishell"), mode: "full", iterations: 1},
+		dir:     dir, home: home, data: filepath.Join(home, ".local/share"),
+		env: map[string]string{"PATH": "/usr/bin:/bin", "WSL_DISTRO_NAME": "Ubuntu-benchmark"},
+		out: &out, stderr: &stderr,
+	}
+	if err := f.diagnosticsRun(context.Background()); err != nil {
+		t.Fatalf("diagnostics: %v: %s", err, stderr.String())
+	}
+	if data, err := os.ReadFile(guardLog); !os.IsNotExist(err) {
+		t.Fatalf("diagnostics reached commands outside its private HOME: %q (%v)", data, err)
+	}
+	if !strings.Contains(out.String(), "[OK] Configuration:") {
+		t.Fatalf("diagnostics did not inspect configured HOME: %s", out.String())
+	}
+	choice := filepath.Join(dir, "diagnostics-home/.local/state/selfishell/windows-terminal.json")
+	if _, err := os.Lstat(choice); !os.IsNotExist(err) {
+		t.Fatalf("diagnostics saved a Windows Terminal choice: %v", err)
+	}
+}
+
 func TestSelectedPins(t *testing.T) {
 	root := repositoryRoot(t)
 	data, e := selectedPins(filepath.Join(root, "config/shared/mise.toml"))
@@ -289,7 +341,7 @@ func guardDiagnosticCLI(t *testing.T, private, realCLI string) (string, string) 
 		t.Fatal(e)
 	}
 	log := filepath.Join(private, "guard-called")
-	for _, name := range []string{"apt-get", "apt", "sudo", "chsh", "curl", "wget", "brew", "git"} {
+	for _, name := range []string{"apt-get", "apt", "sudo", "chsh", "curl", "wget", "brew", "git", "powershell.exe", "wslpath"} {
 		body := fmt.Sprintf(`#!/bin/sh
 case %s in
  brew) case "$1" in install|upgrade|update|tap|uninstall|reinstall) ;; *) exit 1;; esac ;;

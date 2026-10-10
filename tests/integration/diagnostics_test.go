@@ -340,8 +340,8 @@ func TestStatusPlugins(t *testing.T) {
 			expected := map[string]string{
 				"missing":        "Zsh plugins: 1 not provisioned (test/plugin)",
 				"clean":          "Zsh plugins: provisioned",
-				"broken":         "Zsh plugins: 1 at an unapproved revision (test/plugin)",
-				"invalid-config": "Zsh plugins: 1 at an unapproved revision (test/plugin)",
+				"broken":         "Zsh plugins: could not inspect test/plugin",
+				"invalid-config": "Zsh plugins: could not inspect test/plugin",
 				"untracked":      "Zsh plugins: 1 modified locally (test/plugin)",
 				"drift":          "Zsh plugins: 1 at an unapproved revision (test/plugin)",
 				"dirty":          "Zsh plugins: 1 modified locally (test/plugin)",

@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
@@ -24,11 +26,12 @@ func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
 		}
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("WSL_DISTRO_NAME", "")
 	t.Setenv("PATH", bin+":/usr/bin:/bin")
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf"))
-	if err := os.WriteFile(filepath.Join(root, "dependencies.conf"), []byte(""), 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Join(root, "dependencies.conf"), []byte(""), 0600); err != nil {
 		t.Fatal(err)
 	}
 	paths, err := UserPaths()
@@ -42,7 +45,7 @@ func fixtureFile(t *testing.T, path, content string, mode os.FileMode) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+	if err := testutil.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -88,19 +91,123 @@ func TestInventoryAptStatusesAndCache(t *testing.T) {
 		t.Fatalf("calls %q", calls)
 	}
 }
+
+func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
+	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
+		t.Run(manager, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			t.Setenv("PATH", bin)
+			fixtureFile(t, root+"/config/shared/mise.toml", "[tools]\nprobe = \"1.0\"\n", 0600)
+			command := map[string]string{"apt": "dpkg-query", "formula": "brew", "cask": "brew", "mise": "mise"}[manager]
+			fixtureFile(t, bin+"/"+command, "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/query-calls\"\nprintf 'database permission denied\\n' >&2\nexit 2\n", 0700)
+			fixtureFile(t, bin+"/probe", "#!/bin/sh\nexit 0\n", 0700)
+			inv := inventory(t, root, paths, warnings)
+			for range 2 {
+				got, err := inv.Detect(manager, "probe", "linux", "amd64")
+				if err == nil || !strings.Contains(err.Error(), "database permission denied") {
+					t.Fatalf("query failure discarded: tool=%+v error=%v", got, err)
+				}
+				if got.Installed != "unknown" || got.Source != "none" {
+					t.Fatalf("failed query asserted absence or external ownership: %+v", got)
+				}
+			}
+			calls, err := os.ReadFile(os.Getenv("HOME") + "/query-calls")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "call\n"
+			if command == "brew" {
+				want += "call\n" // JSON failure must still try the compatible legacy inventory.
+			}
+			if string(calls) != want {
+				t.Fatalf("failed inventory was not cached: %q", calls)
+			}
+		})
+	}
+}
+
+func TestInventorySuccessfulEmptyQueryAllowsMissingAndExternal(t *testing.T) {
+	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
+		t.Run(manager, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			t.Setenv("PATH", bin)
+			command := map[string]string{"apt": "dpkg-query", "formula": "brew", "cask": "brew", "mise": "mise"}[manager]
+			fixtureFile(t, bin+"/"+command, "#!/bin/sh\nexit 0\n", 0700)
+			inv := inventory(t, root, paths, warnings)
+			got, err := inv.Detect(manager, "probe", "linux", "amd64")
+			if err != nil || got.Installed != "missing" {
+				t.Fatalf("successful empty inventory: %+v, %v", got, err)
+			}
+			fixtureFile(t, bin+"/probe", "#!/bin/sh\nexit 0\n", 0700)
+			got, err = inv.Detect(manager, "probe", "linux", "amd64")
+			if err != nil || got.Installed != "detected" || got.Source != "external" {
+				t.Fatalf("successful query lost external fallback: %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestInventoryMiseFailureWithoutStderrRetainsExitStatus(t *testing.T) {
+	root, paths, warnings, bin := inventoryFixture(t)
+	t.Setenv("PATH", bin)
+	fixtureFile(t, bin+"/mise", "#!/bin/sh\nexit 7\n", 0700)
+	got, err := inventory(t, root, paths, warnings).Detect("mise", "probe", "linux", "amd64")
+	if got.Installed != "unknown" || err == nil || !strings.Contains(err.Error(), "exited 7") {
+		t.Fatalf("silent process error lost: tool=%+v error=%v", got, err)
+	}
+}
+
+func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		unknown        bool
+	}{
+		{"absent", "exit 1", false},
+		{"silent failure", "exit 7", true},
+		{"inspection failure", "printf 'database locked\\n' >&2; exit 2", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			t.Setenv("PATH", bin)
+			fixtureFile(t, bin+"/brew", "#!/bin/sh\ncase \"$*\" in\n 'list --versions --json') printf '{\"formulae\":[],\"casks\":[]}' ;;\n 'list --versions probe') "+tc.response+";;\nesac\n", 0700)
+			got, err := inventory(t, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
+			if tc.unknown {
+				if err == nil || got.Installed != "unknown" {
+					t.Fatalf("alias inspection failure discarded: tool=%+v error=%v", got, err)
+				}
+			} else if err != nil || got.Installed != "missing" {
+				t.Fatalf("absent alias misdiagnosed: tool=%+v error=%v", got, err)
+			}
+		})
+	}
+}
+
+func TestInventoryBrewAliasExecutionFailureIsUnknown(t *testing.T) {
+	root, paths, warnings, bin := inventoryFixture(t)
+	t.Setenv("PATH", bin)
+	// A successful bulk query followed by a missing executable must not be
+	// confused with Homebrew's ordinary silent exit 1 for an absent formula.
+	fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[],\"casks\":[]}'\n/bin/rm \"$0\"\n", 0700)
+	fixtureFile(t, bin+"/probe", "#!/bin/sh\nexit 0\n", 0700)
+	got, err := inventory(t, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
+	if err == nil || got.Installed != "unknown" || got.Source != "none" || !strings.Contains(err.Error(), "brew") {
+		t.Fatalf("alias execution failure swallowed: tool=%+v error=%v", got, err)
+	}
+}
 func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 	legacy := "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"
 	for _, tc := range []struct{ name, json, calls string }{
 		{"json", `{"formulae":[{"name":"starship","versions":["1.26.0"]}],"casks":[{"token":"ghostty","versions":["1.3.1"]}]}`, "list --versions --json\n"},
 		{"invalid", "invalid", legacy},
 		{"empty", "  ", legacy},
+		{"unsupported", "unsupported", legacy},
 		{"null cask versions", `{"formulae":[],"casks":[{"token":"ghostty","versions":null}]}`, legacy},
 		{"null formula versions", `{"formulae":[{"name":"starship","versions":null}],"casks":[{"token":"ghostty","versions":["0.0.0"]}]}`, legacy},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, paths, warnings, bin := inventoryFixture(t)
 			t.Setenv("BREW_JSON", tc.json)
-			fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') printf '%s\\n' \"$BREW_JSON\";;\n 'list --formula --versions') printf 'starship 1.26.0\\n';;\n 'list --cask --versions') printf 'ghostty 1.3.1\\n';;\nesac\n", 0700)
+			fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') if [ \"$BREW_JSON\" = unsupported ]; then printf 'unknown option: --json\\n' >&2; exit 2; fi; printf '%s\\n' \"$BREW_JSON\";;\n 'list --formula --versions') printf 'starship 1.26.0\\n';;\n 'list --cask --versions') printf 'ghostty 1.3.1\\n';;\nesac\n", 0700)
 			inv := inventory(t, root, paths, warnings)
 			got, err := inv.Detect("formula", "starship", "macos", "arm64")
 			if err != nil {
@@ -202,19 +309,19 @@ func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 	fixtureFile(t, filepath.Join(os.Getenv("HOME"), "mise-fail"), "", 0600)
 	inv = inventory(t, root, paths, warnings)
 	got, err = inv.Detect("mise", "gh", "linux", "amd64")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "mise ERROR untrusted") || !strings.Contains(err.Error(), "extra detail") {
+		t.Fatalf("query error lost: %v", err)
 	}
-	wantTool(t, got, "missing", "none", "2.100.0")
+	wantTool(t, got, "unknown", "none", "2.100.0")
 	got, err = inv.Detect("mise", "node", "linux", "amd64")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "mise ERROR untrusted") {
+		t.Fatalf("cached query error lost: %v", err)
 	}
-	wantTool(t, got, "missing", "none", "24.18.0")
+	wantTool(t, got, "unknown", "none", "24.18.0")
 	if strings.Count(warnings.String(), "mise could not list installed tools") != 1 {
 		t.Fatalf("warning count: %q", warnings.String())
 	}
-	if !strings.Contains(warnings.String(), "mise could not list installed tools: mise ERROR untrusted") {
+	if !strings.Contains(warnings.String(), "mise ERROR untrusted") {
 		t.Fatalf("warning %q", warnings.String())
 	}
 }

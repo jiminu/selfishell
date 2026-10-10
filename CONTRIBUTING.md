@@ -54,13 +54,20 @@ shares Ubuntu's configuration implementation, so its configuration matrix covers
 install/restore with empty, existing and XDG homes. Release reproducibility checks
 combine a relocated source tree, changed mtimes, hostile build variables and a
 fresh cache; the shell builder is compared with those verified Go-built assets.
+Lifecycle fixtures reuse the production-built payload with different version
+metadata and checksums, preparing only the host archive. Published-release
+fixtures still include all four platforms.
 
 Test fixture builds use temporary Go caches by default. `SELFISHELL_TEST_GO_CACHE`
 selects an absolute compiler-cache path instead: the repository gate uses
 `.build/test-go-cache` in the checkout so repeated runs reuse fixture builds, and
-CI passes its restored cache. The test process leaves that caller-owned cache in
-place. Test homes and mise state remain private, and the reproducibility check
-still uses a fresh cache.
+CI passes its restored cache to the gate and native archive E2E fixtures. CI's
+pinned `setup-go` action keys its cache from `go.mod`; no `go.sum` is required.
+The Neovim E2E setup also retains that compiler cache when switching to its
+temporary home. The test process leaves the caller-owned cache in place. Test
+homes, XDG paths and mise state remain private, and the reproducibility check
+still uses a fresh cache. Package and tool downloads are not shared between
+test homes.
 
 Integration tests call `t.Parallel()` unless they must change the test process
 environment with `t.Setenv`. Give each test its own temporary HOME and pass

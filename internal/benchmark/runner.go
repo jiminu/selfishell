@@ -589,14 +589,12 @@ RPROMPT+='__SFS_READY_${_selfishell_benchmark_prompt}__'
 }
 func (f *fixture) diagnosticEnv(home, path string) []string {
 	data := filepath.Join(home, ".local/share")
-	env := []string{"HOME=" + home, "PATH=" + path, "SHELL=/bin/zsh", "TMPDIR=" + f.dir, "TERM=dumb", "NO_COLOR=1",
+	// --yes setup must not discover Windows Terminal outside the private HOME.
+	// Shell timing retains WSL identity, but diagnostics omit WSL_DISTRO_NAME.
+	return []string{"HOME=" + home, "PATH=" + path, "SHELL=/bin/zsh", "TMPDIR=" + f.dir, "TERM=dumb", "NO_COLOR=1",
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_DATA_HOME=" + data, "XDG_STATE_HOME=" + filepath.Join(home, ".local/state"), "XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
 		"MISE_DATA_DIR=" + filepath.Join(f.data, "mise"), "MISE_CACHE_DIR=" + filepath.Join(home, ".cache/mise"), "MISE_STATE_DIR=" + filepath.Join(home, ".local/state/mise"),
 		"MISE_OFFLINE=1", "MISE_CEILING_PATHS=" + f.root, "HOMEBREW_NO_AUTO_UPDATE=1", "HOMEBREW_NO_ANALYTICS=1"}
-	if v := f.env["WSL_DISTRO_NAME"]; v != "" {
-		env = append(env, "WSL_DISTRO_NAME="+v)
-	}
-	return env
 }
 func (f *fixture) prepareDiagnosticHome(home string) error {
 	if e := mkdir(filepath.Join(home, ".local/share")); e != nil {

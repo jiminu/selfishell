@@ -1,10 +1,74 @@
 package selfishell
 
 import (
+	"bytes"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
+	for _, requirement := range []string{"required", "optional"} {
+		t.Run(requirement, func(t *testing.T) {
+			root, paths, warnings, bin := inventoryFixture(t)
+			t.Setenv("PATH", bin)
+			fixtureFile(t, bin+"/dpkg-query", "#!/bin/sh\nprintf 'database locked\\n' >&2\nexit 2\n", 0700)
+			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"present\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
+			var out bytes.Buffer
+			cli := CLI{Out: &out}
+			problem, err := cli.statusTools([]Package{
+				{Name: "probe", Manager: "apt", Requirement: requirement},
+				{Name: "present", Manager: "formula", Requirement: "required"},
+			}, inventory(t, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
+			if err != nil || !problem {
+				t.Fatalf("query failure aborted listing or passed diagnosis: problem=%v error=%v output=%s", problem, err, &out)
+			}
+			for _, want := range []string{"database locked", "Installed: unknown", "present | Installed: 1.0", "Tools: 1 present, 1 unknown"} {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("diagnosis omitted %q: %s", want, &out)
+				}
+			}
+			if strings.Contains(out.String(), "missing") || strings.Contains(out.String(), "selfishell update --tools-only") {
+				t.Fatalf("query failure incorrectly recommended installation: %s", &out)
+			}
+		})
+	}
+}
+
+func TestStatusPluginsReportsMissingDirtyDriftedAndInspectionFailures(t *testing.T) {
+	_, _, _, bin := inventoryFixture(t)
+	t.Setenv("PATH", bin)
+	data := os.Getenv("XDG_DATA_HOME") + "/zinit"
+	fixtureFile(t, data+"/zinit.git/zinit.zsh", "# fixture\n", 0600)
+	version := strings.Repeat("a", 40)
+	for _, name := range []string{"dirty", "drifted", "broken", "bad-head"} {
+		head := strings.Repeat("b", 40)
+		if name == "bad-head" {
+			head = "invalid"
+		}
+		fixtureFile(t, data+"/plugins/test---"+name+"/.git/HEAD", head+"\n", 0600)
+	}
+	fixtureFile(t, bin+"/git", "#!/bin/sh\ncase \"$2\" in\n *dirty) printf ' M tracked\\n';;\n *broken) printf 'fatal: corrupt repository\\n' >&2; exit 128;;\n *bad-head) if [ \"$3\" = rev-parse ]; then printf 'fatal: invalid HEAD\\n' >&2; exit 128; fi;;\nesac\n", 0700)
+	var out bytes.Buffer
+	var deps []Dependency
+	for _, name := range []string{"missing", "dirty", "drifted", "broken", "bad-head"} {
+		deps = append(deps, Dependency{Kind: "zsh-plugin", Name: "test/" + name, Version: version})
+	}
+	if !(CLI{Out: &out}).statusPlugins(deps) {
+		t.Fatal("plugin issues passed diagnosis")
+	}
+	for _, want := range []string{"1 not provisioned (test/missing)", "1 modified locally (test/dirty)", "1 at an unapproved revision (test/drifted)", "could not inspect", "test/broken", "corrupt repository", "test/bad-head", "invalid HEAD"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("plugin diagnosis omitted %q: %s", want, &out)
+		}
+	}
+	if strings.Contains(out.String(), "unapproved revision (test/drifted test/broken") || strings.Contains(out.String(), "[OK] Zsh plugins") {
+		t.Fatalf("uncertain inspection classified as approved/unapproved: %s", &out)
+	}
+	if strings.Count(out.String(), "selfishell update --tools-only") != 1 {
+		t.Fatalf("missing plugin hid or duplicated other repair hint: %s", &out)
+	}
+}
 
 func compactDiagnosticFixture(t *testing.T, platform string, ghostty bool) (string, Paths) {
 	t.Helper()

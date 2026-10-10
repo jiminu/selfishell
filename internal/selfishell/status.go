@@ -320,13 +320,17 @@ func (c CLI) status(args []string) int {
 	return result
 }
 
-// statusTools reports whether a required tool is missing.
+// statusTools reports missing required tools and failed tool inspections.
 func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform Platform, verbose bool) (bool, error) {
-	present, requiredMissing, optionalMissing := 0, 0, 0
+	present, requiredMissing, optionalMissing, unknown := 0, 0, 0, 0
 	for _, p := range packages {
 		tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
 		if e != nil {
-			return false, e
+			if tool.Installed != "unknown" {
+				return false, e
+			}
+			unknown++
+			c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Tool: %s could not be inspected (%s): %s", p.Name, p.Manager, e))
 		}
 		if tool.Installed == "missing" {
 			c.missingTool(p)
@@ -335,15 +339,15 @@ func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform 
 			} else {
 				optionalMissing++
 			}
-		} else {
+		} else if tool.Installed != "unknown" {
 			present++
 		}
 		if verbose {
 			fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, tool.Installed, tool.Source, tool.Approved)
 		}
 	}
-	c.toolsSummary(present, requiredMissing, optionalMissing)
-	return requiredMissing > 0, nil
+	c.toolsSummary(present, requiredMissing, optionalMissing, unknown)
+	return requiredMissing+unknown > 0, nil
 }
 func blockLabel(name string) string {
 	switch name {
@@ -369,20 +373,27 @@ func (c CLI) missingTool(p Package) {
 	}
 }
 
-func (c CLI) toolsSummary(present, requiredMissing, optionalMissing int) {
+func (c CLI) toolsSummary(present, requiredMissing, optionalMissing, unknown int) {
 	message := fmt.Sprintf("Tools: %d present", present)
 	color, label := "32", "OK"
+	if unknown > 0 {
+		color, label = "31", "ERROR"
+		message += fmt.Sprintf(", %d unknown", unknown)
+	}
 	if requiredMissing > 0 {
 		color, label = "31", "ERROR"
 		message += fmt.Sprintf(", %d required missing", requiredMissing)
 	}
 	if optionalMissing > 0 {
-		if requiredMissing == 0 {
+		if requiredMissing+unknown == 0 {
 			color, label = "36", "INFO"
 		}
 		message += fmt.Sprintf(", %d optional not installed", optionalMissing)
 	}
 	c.sayDiagnostic(color, label, message)
+	if unknown > 0 {
+		c.diagnosticHint("Resolve the reported inspection errors, then rerun selfishell status.", "")
+	}
 	if requiredMissing+optionalMissing > 0 {
 		c.diagnosticHint("Synchronize missing tools with:", "selfishell update --tools-only")
 	}

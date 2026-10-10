@@ -388,6 +388,26 @@ SELFISHELL_TEST_INITIALIZED=1
 		t.Fatalf("WSL path: want %q got %+v", want, r)
 	}
 }
+
+func TestNativeWSLDeferredPathPreservesMiseSnapshot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, setup, check string
+	}{
+		{"unchanged", `export __MISE_ZSH_ACTIVATE_PATH="$PATH"`, `[[ "$__MISE_ZSH_ACTIVATE_PATH" == "$PATH" ]]`},
+		{"changed_after_activation", `export __MISE_ZSH_ACTIVATE_PATH="$PATH"; path=("$HOME/custom/bin" $path)`, `[[ "$__MISE_ZSH_ACTIVATE_PATH" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/bin" ]]`},
+		{"without_snapshot", `:`, `(( ! ${+__MISE_ZSH_ACTIVATE_PATH} ))`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := nativeHome(t)
+			nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), tc.setup+"\n", 0600)
+			r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; [[ "$path[-1]" == /mnt/c/Windows ]] || exit 10; `+tc.check+` || exit 11`,
+				"PATH=/usr/bin:/mnt/c/Windows:/bin", "WSL_DISTRO_NAME=Ubuntu-24.04", "SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/ubuntu/zshrc"))
+			nativeQuiet(t, r)
+		})
+	}
+}
+
 func TestNativeCommandLookupPathSemantics(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
