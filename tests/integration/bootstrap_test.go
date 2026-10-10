@@ -612,6 +612,83 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 	})
 }
 
+func TestNativeBootstrapActivationFailure(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"retained previous", "absent previous", "replaced link", "replaced file", "replaced directory", "restoration failure"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
+			requireOK(t, f.run(t, "--version", nativeArchiveVersion))
+			currentVersion, requestedVersion := nextNativeVersion, nativeArchiveVersion
+			if kind == "absent previous" {
+				currentVersion, requestedVersion = nativeArchiveVersion, nextNativeVersion
+			} else {
+				requireOK(t, f.run(t, "--version", nextNativeVersion))
+			}
+			previous := filepath.Join(f.share, "previous")
+			personal := filepath.Join(f.home, "personal")
+			if kind == "replaced file" {
+				mustFS(t, testutil.WriteFile(personal, []byte("personal data\n"), 0600))
+			} else if kind == "replaced directory" {
+				mustFS(t, os.Mkdir(personal, 0700))
+			} else if kind == "replaced link" {
+				mustFS(t, os.Symlink("/personal", personal))
+			}
+			bin := filepath.Join(f.home, "fakebin")
+			mustFS(t, os.Mkdir(bin, 0700))
+			mv, err := exec.LookPath("mv")
+			mustFS(t, err)
+			mustFS(t, testutil.WriteFile(filepath.Join(bin, "mv"), []byte(`#!/bin/bash
+for destination; do :; done
+if [[ "$destination" == "$SELFISHELL_FAIL_CURRENT" ]]; then
+  if [[ "$SELFISHELL_FAILURE_KIND" == replaced* && -L "$SELFISHELL_FAIL_PREVIOUS" && "$(readlink "$SELFISHELL_FAIL_PREVIOUS")" == "$SELFISHELL_OLD_CURRENT" ]]; then
+    rm "$SELFISHELL_FAIL_PREVIOUS"
+    "$SELFISHELL_REAL_MV" "$SELFISHELL_PERSONAL" "$SELFISHELL_FAIL_PREVIOUS"
+  fi
+  exit 73
+fi
+if [[ "$SELFISHELL_FAILURE_KIND" == "restoration failure" && "$destination" == "$SELFISHELL_FAIL_PREVIOUS" && "$(readlink "$2")" == "$SELFISHELL_OLD_PREVIOUS" ]]; then
+  exit 74
+fi
+exec "$SELFISHELL_REAL_MV" "$@"
+`), 0755))
+			f.env = append(f.env, "PATH="+bin+":"+f.systembin, "SELFISHELL_REAL_MV="+mv,
+				"SELFISHELL_FAIL_CURRENT="+filepath.Join(f.share, "current"), "SELFISHELL_FAIL_PREVIOUS="+previous,
+				"SELFISHELL_FAILURE_KIND="+kind, "SELFISHELL_OLD_CURRENT=releases/"+currentVersion,
+				"SELFISHELL_OLD_PREVIOUS=releases/"+nativeArchiveVersion, "SELFISHELL_PERSONAL="+personal)
+			got := f.run(t, "--version", requestedVersion)
+			requireExit(t, got, 73)
+			requireLink(t, filepath.Join(f.share, "current"), "releases/"+currentVersion)
+			requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+currentVersion+"\n")
+			switch kind {
+			case "retained previous":
+				requireLink(t, previous, "releases/"+nativeArchiveVersion)
+				requireOK(t, f.cliRun(t, "rollback", "--yes"))
+				requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion+"\n")
+			case "absent previous":
+				requireAbsent(t, previous)
+			case "replaced link":
+				requireLink(t, previous, "/personal")
+			case "replaced file":
+				if string(readBytes(t, previous)) != "personal data\n" {
+					t.Fatal("replaced previous file changed")
+				}
+			case "replaced directory":
+				info, err := os.Lstat(previous)
+				mustFS(t, err)
+				if !info.IsDir() {
+					t.Fatalf("replaced previous directory changed: %v", info.Mode())
+				}
+			case "restoration failure":
+				requireLink(t, previous, "releases/"+currentVersion)
+			}
+			if strings.HasPrefix(kind, "replaced") || kind == "restoration failure" {
+				requireContains(t, got.Stderr, "Failed to restore the previous release link")
+			}
+		})
+	}
+}
+
 func TestNativeBootstrapStagingAndTermination(t *testing.T) {
 	t.Parallel()
 	t.Run("termination", func(t *testing.T) {

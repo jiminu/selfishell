@@ -103,3 +103,71 @@ func TestPrebuiltSmokeRejectsWrongCPUAndPayload(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeBootstrapValidatesExecutable(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{"fresh", "retained"} {
+		for _, kind := range []string{"directory", "symlink", "non-executable"} {
+			t.Run(source+" "+kind, func(t *testing.T) {
+				t.Parallel()
+				f := newBootstrapFixture(t, nativeArchiveVersion)
+				release := filepath.Join(f.share, "releases", nativeArchiveVersion)
+				if source == "fresh" {
+					dir := filepath.Join(f.remote, "download", "v"+nativeArchiveVersion)
+					archive := filepath.Join(dir, hostArchive(nativeArchiveVersion))
+					rewriteSuppliedArchive(t, archive, func(m map[string]archiveMember) {
+						entry := m["bin/selfishell"]
+						switch kind {
+						case "directory":
+							entry.kind, entry.data = tar.TypeDir, nil
+						case "symlink":
+							m["bin/selfishell-real"] = entry
+							entry.kind, entry.link, entry.data = tar.TypeSymlink, "selfishell-real", nil
+						case "non-executable":
+							entry.mode = 0644
+						}
+						m["bin/selfishell"] = entry
+					})
+					sum := fmt.Sprintf("%x  %s\n", sha256.Sum256(readBytes(t, archive)), hostArchive(nativeArchiveVersion))
+					mustFS(t, testutil.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(sum), 0644))
+				} else {
+					mustFS(t, os.MkdirAll(filepath.Join(release, "bin"), 0700))
+					mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte(nativeArchiveVersion+"\n"), 0644))
+					exe := filepath.Join(release, "bin/selfishell")
+					switch kind {
+					case "directory":
+						mustFS(t, os.Mkdir(exe, 0755))
+					case "symlink":
+						mustFS(t, testutil.WriteFile(exe+"-real", []byte("#!/bin/sh\nexit 0\n"), 0755))
+						mustFS(t, os.Symlink("selfishell-real", exe))
+					case "non-executable":
+						mustFS(t, testutil.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0644))
+					}
+				}
+				var before []byte
+				if source == "retained" {
+					before = homeSnapshot(t, release)
+				}
+				got := f.run(t, "--version", nativeArchiveVersion)
+				if kind == "symlink" {
+					// Native release validation follows links to regular executables.
+					requireOK(t, got)
+					requireLink(t, filepath.Join(release, "bin/selfishell"), "selfishell-real")
+					requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
+					return
+				}
+				requireExit(t, got, 1)
+				if source == "fresh" {
+					requireContains(t, got.Stderr, "Release archive is invalid")
+					requireAbsent(t, release)
+				} else {
+					requireContains(t, got.Stderr, "Existing release is incomplete")
+					assertHomeSnapshot(t, release, before)
+				}
+				requireAbsent(t, filepath.Join(f.share, "current"))
+				requireAbsent(t, filepath.Join(f.share, "previous"))
+				requireAbsent(t, f.cli)
+			})
+		}
+	}
+}

@@ -242,7 +242,7 @@ bootstrap_atomic_link() {
     temporary_link="${link_path}.tmp.$$.${suffix}"
   done
 
-  ln -s "$link_target" "$temporary_link"
+  ln -s "$link_target" "$temporary_link" || return
   if mv -fT "$temporary_link" "$link_path" 2>/dev/null; then
     return
   fi
@@ -382,6 +382,9 @@ main() {
   local current_target=""
   local current_version=""
   local previous_target=""
+  local saved_previous_target=""
+  local previous_changed=0
+  local activation_status
   local install_sfs=1
   local nested_staging
   local reason
@@ -491,7 +494,7 @@ main() {
       bootstrap_error "Release path is not a directory: $release_dir"
       return 1
     fi
-    if [[ ! -r "$release_dir/VERSION" || "$(<"$release_dir/VERSION")" != "$version" || ! -x "$release_dir/bin/selfishell" ]]; then
+    if [[ ! -r "$release_dir/VERSION" || "$(<"$release_dir/VERSION")" != "$version" || ! -f "$release_dir/bin/selfishell" || ! -x "$release_dir/bin/selfishell" ]]; then
       bootstrap_error "Existing release is incomplete: $release_dir"
       return 1
     fi
@@ -501,7 +504,7 @@ main() {
     SELFISHELL_STAGING_DIR="$staging_dir"
     tar -xzf "$archive_file" -C "$staging_dir"
     bootstrap_reject_unexpected_members "$staging_dir" || return 1
-    if [[ ! -r "$staging_dir/VERSION" || "$(<"$staging_dir/VERSION")" != "$version" || ! -x "$staging_dir/bin/selfishell" ]]; then
+    if [[ ! -r "$staging_dir/VERSION" || "$(<"$staging_dir/VERSION")" != "$version" || ! -f "$staging_dir/bin/selfishell" || ! -x "$staging_dir/bin/selfishell" ]]; then
       bootstrap_error "Release archive is invalid or has the wrong version."
       return 1
     fi
@@ -516,12 +519,31 @@ main() {
   bootstrap_validate_release_link "$share_dir/previous"
   [[ ! -L "$share_dir/current" ]] || current_target="$(readlink "$share_dir/current")"
   [[ ! -L "$share_dir/previous" ]] || previous_target="$(readlink "$share_dir/previous")"
+  saved_previous_target="$previous_target"
   current_version="${current_target##*/}"
   if [[ -n "$current_target" && "$current_version" != "$version" ]]; then
     bootstrap_atomic_link "$current_target" "$share_dir/previous"
     previous_target="$current_target"
+    previous_changed=1
   fi
-  bootstrap_atomic_link "releases/$version" "$share_dir/current"
+  if bootstrap_atomic_link "releases/$version" "$share_dir/current"; then
+    :
+  else
+    activation_status=$?
+    if [[ "$previous_changed" == 1 ]]; then
+      # Restore only the link this activation wrote; a replacement is user data.
+      if [[ ! -L "$share_dir/previous" || "$(readlink "$share_dir/previous")" != "$current_target" ]]; then
+        bootstrap_error "warning: Failed to restore the previous release link: previous release link changed during activation."
+      elif [[ -n "$saved_previous_target" ]]; then
+        bootstrap_atomic_link "$saved_previous_target" "$share_dir/previous" ||
+          bootstrap_error "warning: Failed to restore the previous release link: $share_dir/previous"
+      else
+        rm "$share_dir/previous" ||
+          bootstrap_error "warning: Failed to restore the previous release link: $share_dir/previous"
+      fi
+    fi
+    return "$activation_status"
+  fi
   bootstrap_atomic_link "$share_dir/current/bin/selfishell" "$bin_dir/selfishell"
   [[ "$install_sfs" == 0 ]] || bootstrap_atomic_link selfishell "$bin_dir/sfs"
   bootstrap_prune_releases "$releases_dir" "releases/$version" "$previous_target"
