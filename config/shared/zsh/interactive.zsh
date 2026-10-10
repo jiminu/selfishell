@@ -49,44 +49,20 @@ _selfishell_generate_zsh_cache() {
   }
 }
 
-_selfishell_generate_fzf_cache() {
-  local target="$1"
-  local temporary="${target}.tmp.$$.$RANDOM"
+_selfishell_fzf_init() {
   local fzf_init
 
-  command mkdir -p "${target:h}" 2>/dev/null || return 1
-
   if fzf_init="$(fzf --zsh 2>/dev/null)" && [[ -n "$fzf_init" ]]; then
-    print -r -- "$fzf_init" >|"$temporary" || {
-      command rm -f "$temporary"
-      return 1
-    }
+    print -r -- "$fzf_init"
   elif [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
-    command cp /usr/share/doc/fzf/examples/key-bindings.zsh "$temporary" 2>/dev/null || {
-      command rm -f "$temporary"
-      return 1
-    }
+    command cat /usr/share/doc/fzf/examples/key-bindings.zsh
   else
     return 1
   fi
+}
 
-  [[ -s "$temporary" ]] || {
-    command rm -f "$temporary"
-    return 1
-  }
-  command zsh -n "$temporary" >/dev/null 2>&1 || {
-    command rm -f "$temporary"
-    return 1
-  }
-  local init="$(<"$temporary")"
-  print -r -- "${_selfishell_zsh_cache_key:-}"$'\n'"$init" >|"$temporary" || {
-    command rm -f "$temporary"
-    return 1
-  }
-  command mv -f "$temporary" "$target" || {
-    command rm -f "$temporary"
-    return 1
-  }
+_selfishell_generate_fzf_cache() {
+  _selfishell_generate_zsh_cache "$1" _selfishell_fzf_init
 }
 
 if _selfishell_zoxide_bin="$(command -v zoxide)"; then
