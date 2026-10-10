@@ -165,7 +165,7 @@ jobs:
         run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" go test ./tests/integration -run '^TestNativeMacInstalledArchiveConsumer$' -count=1 -timeout 12m -v
 
   neovim-developer-e2e:
-    name: Pinned Go mise cleanup and Neovim developer E2E
+    name: Pinned mise and Neovim developer E2E
     needs: changes
     if: needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
@@ -180,7 +180,7 @@ jobs:
       - name: Install build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get install -y build-essential zsh
 
       - name: Set up pinned Go toolchain
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -200,6 +200,9 @@ jobs:
 
       - name: Verify Go cleanup with pinned mise
         run: PATH="$(dirname "$PINNED_MISE"):$PATH" go test ./internal/selfishell -run '^TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly$' -count=1 -v
+
+      - name: Verify WSL shell hooks with pinned mise
+        run: SELFISHELL_TEST_PINNED_MISE="$PINNED_MISE" go test ./tests/integration -run '^TestNativeRealMiseWSLFirstPrompt$' -count=1 -v
 
       - name: Run Go Neovim lifecycle consumer
         env:
