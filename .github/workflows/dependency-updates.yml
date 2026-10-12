@@ -46,24 +46,17 @@ jobs:
       - name: Check dependency changes
         id: changes
         run: |
-          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua' ':!go.mod' ':!mise.toml')"
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua')"
           [[ -z "$unexpected" ]] || {
             printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
             exit 1
           }
-          if git diff --quiet -- dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua go.mod mise.toml; then
+          if git diff --quiet -- dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua; then
             printf 'All approved dependencies are current.\n'
             printf 'changed=false\n' >>"$GITHUB_OUTPUT"
           else
             printf 'changed=true\n' >>"$GITHUB_OUTPUT"
           fi
-
-      - name: Set up updated Go toolchain
-        if: steps.changes.outputs.changed == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
 
       - name: Install shell tooling
         if: steps.changes.outputs.changed == 'true'
@@ -80,8 +73,8 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         run: |
           # Recheck after verification; only the approved files leave this job.
-          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua go.mod mise.toml)
-          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua' ':!go.mod' ':!mise.toml')"
+          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua)
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua')"
           [[ -z "$unexpected" ]] || {
             printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
             exit 1
@@ -135,12 +128,12 @@ jobs:
           BRANCH: automation/dependency-updates
           PATCH: ${{ runner.temp }}/dependency-updates/dependency-updates.patch
         run: |
-          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua go.mod mise.toml)
+          tracked_files=(dependencies.conf config/shared/zsh/completion.zsh config/shared/zsh/interactive.zsh config/shared/mise.toml config/shared/nvim/lua/config/languages.lua)
           bot_name='github-actions[bot]'
           bot_email='41898282+github-actions[bot]@users.noreply.github.com'
           # The patch comes from a job that ran third-party code; accept only approved files.
           git apply "$PATCH"
-          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua' ':!go.mod' ':!mise.toml')"
+          unexpected="$(git status --porcelain -- . ':!dependencies.conf' ':!config/shared/zsh/completion.zsh' ':!config/shared/zsh/interactive.zsh' ':!config/shared/mise.toml' ':!config/shared/nvim/lua/config/languages.lua')"
           [[ -z "$unexpected" ]] || {
             printf 'Dependency update touched unexpected files:\n%s\n' "$unexpected" >&2
             exit 1
@@ -169,7 +162,7 @@ jobs:
               --base main \
               --head "$BRANCH" \
               --title 'Update approved dependencies' \
-              --body 'Updates approved dependency pins, mise-managed tool versions, default LSP pins, Go toolchain patches, and verified download checksums. Review release notes and CI results before merging. This workflow never merges or releases automatically.'
+              --body 'Updates approved dependency pins, mise-managed tool versions, default LSP pins, and verified download checksums. Review release notes and CI results before merging. This workflow never merges or releases automatically.'
           else
             printf 'A dependency update PR is already open on %s; nothing to create.\n' "$BRANCH"
           fi

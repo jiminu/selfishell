@@ -117,18 +117,21 @@ rewrites the approved pins:
   `interactive.zsh`;
 - mise tool versions in `config/shared/mise.toml`;
 - default LSP pins in `config/shared/nvim/lua/config/languages.lua`, from the
-  published Mason registry and only for the declared servers;
-- Go patch releases within the current release line, in `go.mod` and the root
-  `mise.toml` together. This does not add Go to the installed environment.
+  published Mason registry and only for the declared servers.
 
-Node and Python release lines and a new Go release line remain maintainer
-choices. Discovery requires curl and Git; `--metadata FILE` applies saved
+Node and Python release lines remain maintainer choices. The build Go toolchain
+is excluded from dependency automation, including patch updates. Keep `go.mod`
+and the root `mise.toml` pinned to the same exact version; update both in a
+separate reviewed change for security fixes, support needs, or required features
+and bug fixes. This does not add Go to the installed environment.
+
+Discovery requires curl and Git; `--metadata FILE` applies saved
 metadata without network access. All edits are validated and staged before any
 file is replaced, and each replacement uses an atomic rename.
 
 The weekly Dependency updates workflow runs the same script without write
 permission. When no pins change, it skips shell tooling setup and the
-repository gate; otherwise it runs the gate with the updated compiler, and a
+repository gate; otherwise it runs the gate with the pinned compiler, and a
 separate job applies only the approved files and opens or refreshes a PR from
 `automation/dependency-updates`. It never merges the PR or publishes a release.
 Because the workflow pushes with its `GITHUB_TOKEN`, each CI run for the PR

@@ -15,8 +15,8 @@ gate. Neovim at the version pinned in `config/shared/mise.toml` is optional; it
 enables the Neovim configuration tests, which skip without it.
 The root `mise.toml` selects the same Go version for local development; keep it
 in sync with `go.mod`. With mise installed, run `mise trust` and `mise install go`
-from the checkout before building. Dependency automation updates both pins for
-Go patch releases; see
+from the checkout before building. Dependency automation leaves both pins
+unchanged. Update them together in a separate reviewed change when needed; see
 [approved dependency updates](docs/RELEASING.md#approved-dependency-updates).
 
 Source build scripts share `scripts/go-env.sh`: they require that exact Go
