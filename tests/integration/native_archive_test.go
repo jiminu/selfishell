@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -369,9 +370,25 @@ func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
 	}
 }
 func TestUnavailableOrWrongNativeToolchain(t *testing.T) {
+	// Follow the source pin so dependency updates keep the error expectations current.
+	root := repoRoot()
+	var required string
+	for _, line := range strings.Split(string(readBytes(t, filepath.Join(root, "go.mod"))), "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "go" {
+			required = fields[1]
+			break
+		}
+	}
+	parts := strings.Split(required, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected an exact Go patch version in go.mod, got %q", required)
+	}
+	patch, err := strconv.Atoi(parts[2])
+	mustFS(t, err)
+	wrongVersion := fmt.Sprintf("go%s.%s.%d", parts[0], parts[1], patch+1)
 	for _, tc := range []struct{ name, goStub, want string }{
 		{"unavailable", "", "Go toolchain required"},
-		{"wrong", "#!/bin/sh\nprintf 'go1.26.9\\n'\n", "Go 1.27.1 required"},
+		{"wrong_patch", fmt.Sprintf("#!/bin/sh\nprintf '%s\\n'\n", wrongVersion), "Go " + required + " required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			privateNativeHome(t)
@@ -381,7 +398,7 @@ func TestUnavailableOrWrongNativeToolchain(t *testing.T) {
 			}
 			t.Setenv("PATH", bin)
 			out := filepath.Join(t.TempDir(), "absent")
-			e := releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, out)
+			e := releasebuild.Build(context.Background(), root, nativeArchiveVersion, out)
 			if e == nil || !strings.Contains(e.Error(), tc.want) {
 				t.Fatalf("error %v", e)
 			}
