@@ -374,7 +374,7 @@ func TestUnavailableOrWrongNativeToolchain(t *testing.T) {
 	mustFS(t, testutil.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/test\n\ngo 1.27.2\n"), 0600))
 	for _, tc := range []struct{ name, goStub, want string }{
 		{"unavailable", "", "Go toolchain required"},
-		{"wrong", "#!/bin/sh\nprintf 'go1.26.9\\n'\n", "Go 1.27.2 required"},
+		{"wrong_patch", "#!/bin/sh\nprintf 'go1.27.1\\n'\n", "Go 1.27.2 required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			privateNativeHome(t)
