@@ -369,9 +369,12 @@ func TestCanceledNativeBuildDoesNotPublish(t *testing.T) {
 	}
 }
 func TestUnavailableOrWrongNativeToolchain(t *testing.T) {
+	// Dependency updates must not change this fixture's expected toolchain errors.
+	root := t.TempDir()
+	mustFS(t, testutil.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.invalid/test\n\ngo 1.27.2\n"), 0600))
 	for _, tc := range []struct{ name, goStub, want string }{
 		{"unavailable", "", "Go toolchain required"},
-		{"wrong", "#!/bin/sh\nprintf 'go1.26.9\\n'\n", "Go 1.27.1 required"},
+		{"wrong", "#!/bin/sh\nprintf 'go1.26.9\\n'\n", "Go 1.27.2 required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			privateNativeHome(t)
@@ -381,7 +384,7 @@ func TestUnavailableOrWrongNativeToolchain(t *testing.T) {
 			}
 			t.Setenv("PATH", bin)
 			out := filepath.Join(t.TempDir(), "absent")
-			e := releasebuild.Build(context.Background(), repoRoot(), nativeArchiveVersion, out)
+			e := releasebuild.Build(context.Background(), root, nativeArchiveVersion, out)
 			if e == nil || !strings.Contains(e.Error(), tc.want) {
 				t.Fatalf("error %v", e)
 			}
