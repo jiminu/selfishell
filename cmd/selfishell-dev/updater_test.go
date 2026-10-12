@@ -172,7 +172,7 @@ while (($#)); do
   shift
 done
 case "$url" in
-  'https://go.dev/dl/?mode=json' | */releases/latest) [[ -z "$out" ]] || exec >"$out" ;;
+  */releases/latest) [[ -z "$out" ]] || exec >"$out" ;;
   *)
     [[ "${DISCOVERY_FAILURE:-}" != download ]] || exit 22
     if [[ "$url" == */registry.json.zip ]]; then
@@ -183,9 +183,6 @@ case "$url" in
 esac
 if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 case "$url" in
-  'https://go.dev/dl/?mode=json')
-    [[ "${DISCOVERY_FAILURE:-}" != go-line ]] || { printf '[{"version":"go1.28.0","stable":true}]'; exit 0; }
-    printf '[{"version":"go1.28.0","stable":true},{"version":"go1.27.3rc1","stable":false},{"version":"go1.27.2","stable":true},{"version":"go1.26.9","stable":true}]' ;;
   */jqlang/jq/releases/latest) printf '{"tag_name":"jq-2.0.0"}\n' ;;
   */zdharma-continuum/zinit/releases/latest) printf '{"tag_name":"v1.2.3"}\n' ;;
   *) printf '{"tag_name":"v1.2.3"}\n' ;;
@@ -257,6 +254,9 @@ esac
 		t.Fatalf("annotated tag not peeled: %s", gitlog)
 	}
 	calls, _ := os.ReadFile(log)
+	if strings.Contains(string(calls), "go.dev/dl") {
+		t.Fatal("dependency discovery queried build Go releases")
+	}
 	if strings.Contains(string(calls), "private-secret") {
 		t.Fatal("GitHub token exposed in curl arguments")
 	}
@@ -269,9 +269,9 @@ esac
 	}
 	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
 	exact(t, languagePath, strings.Replace(strings.Replace(languages, "lua_ls@3.19.1", "lua_ls@3.20.0", 1), "tombi@v1.5.5", "tombi@v1.5.6", 1))
-	exact(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.2\n")
-	exact(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.2\"\n")
-	for _, failure := range []string{"curl", "json", "git", "download", "registry", "go-line"} {
+	exact(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.1\n")
+	exact(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.1\"\n")
+	for _, failure := range []string{"curl", "json", "git", "download", "registry"} {
 		t.Run(failure+" preserves files", func(t *testing.T) {
 			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath, filepath.Join(zroot, "go.mod"), filepath.Join(zroot, "mise.toml")}
 			before := make(map[string]string)

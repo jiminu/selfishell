@@ -175,8 +175,9 @@ package selection. Behavior below is described for users in `docs/UPDATES.md`.
 
 Dependency automation may open a review PR but must never auto-merge or
 auto-publish a release; a maintainer merges `automation/dependency-updates` and
-then runs the normal manual release. Go patch discovery stays within the
-current release line; selecting a new line is a maintainer choice.
+then runs the normal manual release. The build Go toolchain is excluded from
+dependency automation. Maintainers update `go.mod` and the root `mise.toml`
+together in a separate change when needed.
 Vulnerability scans run in the dedicated scheduled workflow, outside the
 ordinary local gate.
 

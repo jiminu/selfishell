@@ -528,14 +528,14 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 	}
 	order := strings.Join(job.lines, "\n") + "\n"
 	previous := -1
-	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Export verified dependency changes", "Upload verified dependency changes"} {
+	for _, name := range []string{"Update dependency manifest", "Check dependency changes", "Install shell tooling", "Validate updated manifest", "Export verified dependency changes", "Upload verified dependency changes"} {
 		index := strings.Index(order, "      - name: "+name+"\n")
 		if index <= previous {
 			t.Fatalf("dependency step %q missing or out of order", name)
 		}
 		previous = index
 	}
-	for _, name := range []string{"Set up updated Go toolchain", "Install shell tooling", "Validate updated manifest", "Export verified dependency changes"} {
+	for _, name := range []string{"Install shell tooling", "Validate updated manifest", "Export verified dependency changes"} {
 		if condition := policyField(t, policyStep(t, job, name), "        ", "if"); condition != "steps.changes.outputs.changed == 'true'" {
 			t.Errorf("%s does not require dependency changes: %q", name, condition)
 		}
@@ -561,8 +561,8 @@ func TestDependencyWorkflowChanges(t *testing.T) {
 			{"interactive", "config/shared/zsh/interactive.zsh", 0, "changed=true\n"},
 			{"mise", "config/shared/mise.toml", 0, "changed=true\n"},
 			{"lsp", "config/shared/nvim/lua/config/languages.lua", 0, "changed=true\n"},
-			{"go_toolchain", "go.mod", 0, "changed=true\n"},
-			{"development_mise", "mise.toml", 0, "changed=true\n"},
+			{"go_toolchain", "go.mod", 1, ""},
+			{"development_mise", "mise.toml", 1, ""},
 			{"unexpected_tracked_only", "README.md", 1, ""},
 			{"unexpected_untracked_only", "unexpected.txt", 1, ""},
 		} {
@@ -638,15 +638,18 @@ func TestDependencyWorkflowPRBlock(t *testing.T) {
 	const branch = "automation/dependency-updates"
 	const bot = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 	for _, tc := range []struct {
-		name             string
-		remote           []string // authors of existing branch commits, oldest first
-		open, unexpected bool
-		status           int
+		name       string
+		remote     []string // authors of existing branch commits, oldest first
+		open       bool
+		unexpected string
+		status     int
 	}{
-		{"create_when_absent", nil, false, false, 0},
-		{"refresh_bot_branch_when_open", []string{bot, bot}, true, false, 0},
-		{"keep_maintainer_commit", []string{bot, "Maintainer <maintainer@selfishell.invalid>"}, true, false, 1},
-		{"reject_unexpected_path", nil, false, true, 1},
+		{"create_when_absent", nil, false, "", 0},
+		{"refresh_bot_branch_when_open", []string{bot, bot}, true, "", 0},
+		{"keep_maintainer_commit", []string{bot, "Maintainer <maintainer@selfishell.invalid>"}, true, "", 1},
+		{"reject_unexpected_path", nil, false, "README.md", 1},
+		{"reject_go_toolchain", nil, false, "go.mod", 1},
+		{"reject_development_mise", nil, false, "mise.toml", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home, repo := dependencyRepo(t)
@@ -672,8 +675,8 @@ func TestDependencyWorkflowPRBlock(t *testing.T) {
 			// The patch stands in for the artifact from the read-only job.
 			policyWrite(t, filepath.Join(repo, "dependencies.conf"), classificationDeps("2222222222222222222222222222222222222222", "1.0"))
 			policyWrite(t, filepath.Join(repo, "config/shared/nvim/lua/config/languages.lua"), "return { lsp = { \"lua_ls@3.19.1\" } }\n")
-			if tc.unexpected {
-				policyWrite(t, filepath.Join(repo, "README.md"), "unrelated change\n")
+			if tc.unexpected != "" {
+				policyWrite(t, filepath.Join(repo, tc.unexpected), "unrelated change\n")
 			}
 			patch := filepath.Join(home, "dependency-updates.patch")
 			policyWrite(t, patch, policyGit(t, home, repo, "diff", "--binary"))
@@ -708,7 +711,7 @@ exit 90
 			}
 			if tc.status != 0 {
 				want := "Dependency update touched unexpected files:"
-				if !tc.unexpected {
+				if tc.unexpected == "" {
 					want = branch + " has commits not authored by github-actions[bot]:"
 					if !strings.Contains(string(got.Stderr), "Maintainer <maintainer@selfishell.invalid>") || !strings.Contains(string(got.Stderr), "Merge the dependency update PR, or close it and delete the branch") {
 						t.Errorf("maintainer guidance missing: %s", got.Stderr)
