@@ -164,6 +164,14 @@ return {
 
   plugin("nvim-tree/nvim-tree.lua", {
     main = "nvim-tree",
+    config = function(_, opts)
+      local remote = require("config.git_remote")
+      opts.renderer.decorators = {
+        "Git", "Open", "Hidden", "Modified", "Bookmark", "Diagnostics", "Copied", "Cut", remote.decorator(),
+      }
+      require("nvim-tree").setup(opts)
+      remote.setup()
+    end,
     cmd = {
       "NvimTreeToggle",
       "NvimTreeOpen",
@@ -286,6 +294,10 @@ return {
 
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
+    config = function(_, opts)
+      require("config.git_remote").setup()
+      require("lualine").setup(opts)
+    end,
     opts = {
       options = {
         theme = "vscode",
@@ -308,6 +320,20 @@ return {
               return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
             end,
             padding = { left = 0, right = 1 },
+          },
+          {
+            function() return require("config.git_remote").status():match("↑%d+") or "" end,
+            color = function()
+              return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
+            end,
+            padding = 0,
+          },
+          {
+            function() return require("config.git_remote").status():match("↓%d+") or "" end,
+            color = function()
+              return { fg = vim.o.background == "dark" and "#F44747" or "#FF0000" }
+            end,
+            padding = 0,
           },
           {
             "filename",

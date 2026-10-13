@@ -140,6 +140,7 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		t.Fatalf("approved LSP versions: %v\n%s", err, output.String())
 	}
 	runDefaultLSPSelection(t, root, nvim)
+	runNeovimGitRemote(t, root, nvim, home+"/.local/share/nvim/lazy")
 	for _, probe := range []struct{ name, filename, content, marker string }{
 		{"terraform", "main.tf", "terraform { required_version = \">= 1.0\" }\n", "Neovim developer smoke: OK"},
 		{"python", "main.py", "def nested(value):\n    return {\"items\": [(value,)]}\n", "Python highlighting smoke: OK"},
