@@ -75,6 +75,7 @@ Neovim synchronization can remove plugin checkouts no longer used by its
 configuration. Before cleanup, Selfishell checks directories absent from the
 release's plugin manifest. A non-Git or unreadable checkout, local changes,
 or untracked or ignored files stop synchronization and preserve the directory.
+Generated `doc/tags` files are excluded from this check.
 Move the reported directory outside `nvim/lazy` before retrying if you need to
 keep its contents. Clean unused Git checkouts can still be removed.
 
@@ -128,7 +129,7 @@ to update or remove them explicitly.
 Personal `nvim/lua/plugins/dap_user.lua` settings and project
 `.vscode/launch.json` files are not managed resources and are preserved.
 `--skip-packages`, CLI-only updates and dry-run do not install debug plugins
-or adapters. See [debugging](ENVIRONMENT.md#debugging) for setup and shortcuts.
+or adapters. See [Debugging in Neovim](DEBUGGING.md) for setup and shortcuts.
 
 ### Unused mise versions
 

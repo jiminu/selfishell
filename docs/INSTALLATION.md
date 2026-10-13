@@ -48,8 +48,14 @@ mise tools, Zinit, and Neovim plugins under `~/.local/share`.
 
 ## Reinstallation
 
-Before removing an old installation, keep a separate copy of personal
-configuration and any backups you need. Use the
+To reapply the current environment, run `selfishell install` again. Saved
+terminal choices and original backups are reused. For configuration only,
+use `selfishell install --skip-packages`; see
+[modified managed files](TROUBLESHOOTING.md#modified-managed-file) for conflict
+handling and missing-block repair.
+
+If you need to remove the installation before starting over, keep a separate
+copy of personal configuration and any backups you need. Use the
 [uninstall procedure](#uninstallation) to preview and restore managed paths
 before explicitly purging the CLI. Resolve any reported conflicts first; do
 not delete configuration or state directories by hand. Then follow the normal
@@ -192,10 +198,25 @@ For personal debug configuration, add
 This file is user-owned: Selfishell never creates, replaces or removes it.
 After uninstall removes the Neovim link, it remains under
 `~/.config/selfishell/nvim/lua/plugins/`. Project `.vscode/launch.json` files
-also remain user-owned. See [debugging](ENVIRONMENT.md#debugging) for setup,
+also remain user-owned. See [Debugging in Neovim](DEBUGGING.md) for setup,
 function keys and an override example.
 
-## Ghostty customization
+## Ghostty on macOS
+
+Ghostty has a separate saved installation choice. On macOS, the first
+`selfishell install` asks whether to install it and manage its configuration.
+If Ghostty is already present on PATH or in the system or
+user Applications directory, the prompt offers configuration only and the app
+is preserved. Ghostty is the recommended terminal, so pressing Enter
+accepts; `--yes` also accepts, and a non-interactive run without `--yes`
+declines. The answer is saved in
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/ghostty` and reused by later
+`install` and `update` runs without asking again. To add Ghostty after
+declining it, run `selfishell install --ghostty`. To turn it off,
+`selfishell uninstall` clears the saved choice, and the next
+`selfishell install` asks again. Uninstall leaves the Ghostty app installed.
+
+### Ghostty customization
 
 On macOS, Selfishell manages two Ghostty paths and recognizes an optional third
 path for personal overrides:
@@ -229,8 +250,6 @@ settings such as `font-family` combine with the defaults and are not listed.
 checksums, or deletes it, and its absence is normal — Ghostty simply has no
 overrides applied.
 
-See [Environment](ENVIRONMENT.md) for how the Ghostty choice is saved.
-
 ## Windows Terminal on WSL
 
 When Windows Terminal is installed and WSL Windows interoperability is enabled,
@@ -242,6 +261,14 @@ tools updates. To enable it after declining:
 ```sh
 selfishell install --windows-terminal
 ```
+
+The choice, Windows local application-data path, distribution, settings path and
+profile GUID are saved in
+`${XDG_STATE_HOME:-$HOME/.local/state}/selfishell/windows-terminal.json`.
+The fragment's path and checksum are recorded in `windows-terminal-fragment.json`
+in the same directory.
+
+### Profile selection
 
 Selfishell identifies the distribution from `WSL_DISTRO_NAME`, then matches its
 Windows Terminal profile by GUID. Both legacy `Windows.Terminal.Wsl` profiles
@@ -258,6 +285,8 @@ the clone to set it up there. Clones are recognized by `WSL_DISTRO_NAME`, which
 a shell reached through SSH may lack, so run Selfishell from a WSL shell started
 on Windows.
 
+### Font and theme
+
 Selfishell does not edit `settings.json`. It adds a small Windows Terminal
 [JSON fragment](https://learn.microsoft.com/en-us/windows/terminal/json-fragment-extensions)
 that sets the selected profile's font to JetBrainsMonoNL Nerd Font Mono and its
@@ -272,6 +301,8 @@ already-open Terminal may briefly warn that it cannot find the font. Let setup
 finish, then close all Terminal windows and reopen your existing WSL profile.
 See [the font warning guidance](TROUBLESHOOTING.md#windows-terminal-cannot-find-the-font)
 if the warning remains.
+
+### Font installation and removal
 
 If the font family is already available to Windows, Selfishell preserves it.
 Otherwise it installs four pinned, SHA-256-verified Nerd Fonts 3.4.0 TTF files
@@ -329,7 +360,8 @@ the following:
   it from macOS 26; on earlier macOS versions, use iTerm2 or Ghostty.
 
 For light color schemes, see the minimum contrast note in
-[Environment](ENVIRONMENT.md); for copying from Neovim over SSH, see
+[Environment](ENVIRONMENT.md#prompt-and-colors); for copying from Neovim over
+SSH, see
 [Clipboard over SSH and on WSL](TROUBLESHOOTING.md#clipboard-over-ssh-and-on-wsl).
 
 ## Uninstallation
