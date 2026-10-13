@@ -317,21 +317,21 @@ return {
           {
             "branch",
             color = function()
-              return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitAdded", link = false }).fg) }
             end,
             padding = { left = 0, right = 1 },
           },
           {
-            function() return require("config.git_remote").status():match("↑%d+") or "" end,
+            function() return require("config.git_remote").status():match("⇡%d+") or "" end,
             color = function()
-              return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitAdded", link = false }).fg) }
             end,
             padding = 0,
           },
           {
-            function() return require("config.git_remote").status():match("↓%d+") or "" end,
+            function() return require("config.git_remote").status():match("⇣%d+") or "" end,
             color = function()
-              return { fg = vim.o.background == "dark" and "#F44747" or "#FF0000" }
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitDeleted", link = false }).fg) }
             end,
             padding = 0,
           },

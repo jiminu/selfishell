@@ -155,7 +155,7 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 		}
 		if pluginRoot != "" {
 			status := strings.ReplaceAll(want.Status, " ", "")
-			if status != "" && !strings.Contains(got.Line, status) || status == "" && strings.ContainsAny(got.Line, "↑↓") {
+			if status != "" && !strings.Contains(got.Line, status) || status == "" && strings.ContainsAny(got.Line, "⇡⇣") {
 				t.Fatalf("statusline: %q, want count %q", got.Line, status)
 			}
 			incoming := false
@@ -186,31 +186,31 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 	}
 	check(client, "", false, false) // Remote commits remain invisible until fetch.
 	git(client, "fetch", "origin")
-	check(client, "↓1", true, true) // External fetch refreshes an idle tree/statusline.
+	check(client, "⇣1", true, true) // External fetch refreshes an idle tree/statusline.
 	write(client+"/local.ts", "local commit\n")
 	git(client, "add", "local.ts")
 	git(client, "commit", "-m", "local change")
 	write(client+"/src/change.ts", "uncommitted\n")
-	check(client, "↑1 ↓1", true, false)
+	check(client, "⇡1 ⇣1", true, false)
 	git(client, "switch", "-c", "no-upstream")
 	check(client, "", false, false)
 	git(client, "checkout", "--detach")
 	check(client, "", false, false)
 	git(client, "switch", "main")
-	check(client, "↑1 ↓1", true, false)
+	check(client, "⇡1 ⇣1", true, false)
 	git(client, "reset", "--hard", "origin/main")
 	check(client, "", false, false)
 	git(client, "commit", "--allow-empty", "-m", "ahead only")
-	check(client, "↑1", false, false)
+	check(client, "⇡1", false, false)
 	worktree := home + "/linked"
 	git(client, "worktree", "add", "-b", "linked", worktree, "origin/main")
 	check(worktree, "", false, false)
 	git(worktree, "commit", "--allow-empty", "-m", "worktree ahead one")
 	git(worktree, "commit", "--allow-empty", "-m", "worktree ahead two")
 	if pluginRoot != "" {
-		check(client, "↑1", false, false, worktree)
+		check(client, "⇡1", false, false, worktree)
 	}
-	check(client, "↑1", false, false)
+	check(client, "⇡1", false, false)
 	check(home, "", false, false)
 
 	// Rename similarity must not lazily download missing partial-clone blobs.
@@ -226,7 +226,7 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 	if !strings.Contains(missing, "?") {
 		t.Fatal("partial clone fixture has no missing blob")
 	}
-	probe(partial, snapshot{"↓1", map[string]string{"renamed.ts": "↓D", "newer.ts": "↓A"}}, false)
+	probe(partial, snapshot{"⇣1", map[string]string{"renamed.ts": "↓D", "newer.ts": "↓A"}}, false)
 	if after := git(partial, "rev-list", "--objects", "--missing=print", "HEAD..origin/main"); after != missing {
 		t.Fatal("Git decoration downloaded missing partial-clone objects")
 	}
