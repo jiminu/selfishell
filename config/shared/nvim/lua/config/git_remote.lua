@@ -105,8 +105,8 @@ local function refresh(root)
         return
       end
       local parts = {}
-      if tonumber(ahead) > 0 then parts[#parts + 1] = "⇡" .. ahead end
-      if tonumber(behind) > 0 then parts[#parts + 1] = "⇣" .. behind end
+      if tonumber(ahead) > 0 then parts[#parts + 1] = "↑" .. ahead end
+      if tonumber(behind) > 0 then parts[#parts + 1] = "↓" .. behind end
       local status = table.concat(parts, " ")
       if tonumber(behind) == 0 then
         finish(refs, status, {})

@@ -322,14 +322,14 @@ return {
             padding = { left = 0, right = 1 },
           },
           {
-            function() return require("config.git_remote").status():match("⇡%d+") or "" end,
+            function() return require("config.git_remote").status():match("↑%d+") or "" end,
             color = function()
               return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitAdded", link = false }).fg) }
             end,
             padding = 0,
           },
           {
-            function() return require("config.git_remote").status():match("⇣%d+") or "" end,
+            function() return require("config.git_remote").status():match("↓%d+") or "" end,
             color = function()
               return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitDeleted", link = false }).fg) }
             end,

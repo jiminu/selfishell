@@ -51,7 +51,7 @@ for line in io.lines() do
       local badges, line_text = rendered()
       local counts = request.want.status:gsub(" ", "")
       if counts ~= "" and not line_text:find(counts, 1, true) then return false end
-      if request.want.status == "" and (line_text:find("⇡", 1, true) or line_text:find("⇣", 1, true)) then return false end
+      if request.want.status == "" and (line_text:find("↑", 1, true) or line_text:find("↓", 1, true)) then return false end
       for name, status in pairs(request.want.files) do
         if status ~= "" and vim.uv.fs_stat(request.path .. "/" .. name) and not badges:find(status, 1, true) then return false end
       end

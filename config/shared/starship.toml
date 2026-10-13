@@ -36,9 +36,9 @@ renamed = '[»](green)'
 conflicted = '[~${count}](bold bright-red)'
 stashed = '[*${count}](bright-black)'
 
-ahead = '[⇡${count}](green) '
-behind = '[⇣${count}](red) '
-diverged = '[⇡${ahead_count}](bold green)[⇣${behind_count}](bold red) '
+ahead = '[↑${count}](green) '
+behind = '[↓${count}](red) '
+diverged = '[↑${ahead_count}](bold green)[↓${behind_count}](bold red) '
 
 [character]
 success_symbol = '[❯](bold green)'

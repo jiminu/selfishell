@@ -101,8 +101,8 @@ Press `Space g g` to open Lazygit for repository-wide Git operations, including
 staging, commits, and branch management. You can also run `lazygit` directly
 from a terminal. Gitsigns remains available for changes in the current buffer.
 
-The statusline shows outgoing (green `⇡2`) and incoming (red `⇣4`) commit counts
-beside the branch, joined as `⇡2⇣4` to match Starship and omitting zero counts.
+The statusline shows outgoing (green `↑2`) and incoming (red `↓4`) commit counts
+beside the branch, joined as `↑2↓4` to match Starship and omitting zero counts.
 NvimTree adds incoming file badges such as
 `↓M` (modified), `↓D` (deleted), and `↓R` (renamed); directories with incoming
 changes show `↓`, including additions that do not exist locally yet. Incoming
