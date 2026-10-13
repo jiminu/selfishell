@@ -164,6 +164,14 @@ return {
 
   plugin("nvim-tree/nvim-tree.lua", {
     main = "nvim-tree",
+    config = function(_, opts)
+      local remote = require("config.git_remote")
+      opts.renderer.decorators = {
+        "Git", "Open", "Hidden", "Modified", "Bookmark", "Diagnostics", "Copied", "Cut", remote.decorator(),
+      }
+      require("nvim-tree").setup(opts)
+      remote.setup()
+    end,
     cmd = {
       "NvimTreeToggle",
       "NvimTreeOpen",
@@ -286,6 +294,10 @@ return {
 
   plugin("nvim-lualine/lualine.nvim", {
     event = "VeryLazy",
+    config = function(_, opts)
+      require("config.git_remote").setup()
+      require("lualine").setup(opts)
+    end,
     opts = {
       options = {
         theme = "vscode",
@@ -305,9 +317,23 @@ return {
           {
             "branch",
             color = function()
-              return { fg = vim.o.background == "dark" and "#5fd700" or "#008000" }
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitAdded", link = false }).fg) }
             end,
             padding = { left = 0, right = 1 },
+          },
+          {
+            function() return require("config.git_remote").status():match("↑%d+") or "" end,
+            color = function()
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitAdded", link = false }).fg) }
+            end,
+            padding = 0,
+          },
+          {
+            function() return require("config.git_remote").status():match("↓%d+") or "" end,
+            color = function()
+              return { fg = string.format("#%06x", vim.api.nvim_get_hl(0, { name = "SelfishellGitDeleted", link = false }).fg) }
+            end,
+            padding = 0,
           },
           {
             "filename",

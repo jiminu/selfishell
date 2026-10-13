@@ -43,6 +43,7 @@ func ManagedResources(root string) ([]Resource, error) {
 		{Kind: "file", Name: "nvim-lua-config-lazy", Target: paths.Config + "/nvim/lua/config/lazy.lua", Source: root + "/config/shared/nvim/lua/config/lazy.lua"},
 		{Kind: "file", Name: "nvim-lua-config-languages", Target: paths.Config + "/nvim/lua/config/languages.lua", Source: root + "/config/shared/nvim/lua/config/languages.lua"},
 		{Kind: "file", Name: "nvim-lua-config-dap", Target: paths.Config + "/nvim/lua/config/dap.lua", Source: root + "/config/shared/nvim/lua/config/dap.lua"},
+		{Kind: "file", Name: "nvim-lua-config-git-remote", Target: paths.Config + "/nvim/lua/config/git_remote.lua", Source: root + "/config/shared/nvim/lua/config/git_remote.lua"},
 		{Kind: "file", Name: "nvim-lua-config-plugin-versions", Target: paths.Config + "/nvim/lua/config/plugin_versions.lua", Source: root + "/config/shared/nvim/lua/config/plugin_versions.lua"},
 		{Kind: "file", Name: "nvim-plugin-versions", Target: paths.Config + "/nvim/plugin-versions.conf", Source: root + "/dependencies.conf"},
 		{Kind: "file", Name: "nvim-lua-plugins-ui", Target: paths.Config + "/nvim/lua/plugins/ui.lua", Source: root + "/config/shared/nvim/lua/plugins/ui.lua"},
