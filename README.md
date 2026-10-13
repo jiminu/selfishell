@@ -82,6 +82,7 @@ startup.
 - [Installation](docs/INSTALLATION.md) — setup, uninstallation, Ghostty, other
   terminals, and platform notes.
 - [Environment](docs/ENVIRONMENT.md) — managed tools and Neovim workflow.
+- [Debugging in Neovim](docs/DEBUGGING.md) — adapters, shortcuts and language setup.
 - [Python development](docs/PYTHON.md) — Python tooling and project setup.
 - [Updates and rollback](docs/UPDATES.md) — release updates and recovery.
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — common installation and shell

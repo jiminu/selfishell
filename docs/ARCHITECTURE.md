@@ -3,44 +3,47 @@
 The installed `selfishell` command is a native Go executable with all seven
 public commands: `help`, `version`, `install`, `status`, `update`, `rollback`,
 and `uninstall`; `doctor` is a hidden alias of `status`. `sfs` is an optional
-link. The standalone Bash 3.2 bootstrap transports a verified archive; native Zsh and editor configuration
-continue to run in their own languages. Users do not need Go. Package
-membership and pins live in
+link. The standalone Bash 3.2 bootstrap transports a verified archive; native
+Zsh and editor configuration continue to run in their own languages. Users do
+not need Go. Package membership and pins live in
 `packages.conf`, `dependencies.conf`, and `config/shared/mise.toml`.
 
 ## Development and platform boundary
 
-`go.mod` pins the exact Go version for source builds and CI. Build explicitly with
-`bash scripts/build-cli.sh`; `bin/selfishell` then executes the existing
-`.build/selfishell` and gives a build instruction if it is absent. Ordinary
-invocation never compiles. `scripts/build-release.sh --version VERSION` is the
-single production builder and writes native archives without a source `VERSION`
-file. Release executables use `CGO_ENABLED=0`, `GOAMD64=v1` and `GOARM64=v8.0`.
-Developer build entrypoints use `scripts/go-env.sh` to check the pin before
-compilation and isolate Go settings from the caller. Full benchmark provisioning
+The source launcher `bin/selfishell` executes an existing `.build/selfishell`
+and gives a build instruction if it is absent; ordinary invocation never compiles.
+See [local development](../CONTRIBUTING.md#local-development) for prerequisites
+and build commands.
+
+Source build scripts share `scripts/go-env.sh`: they require the exact Go
+version pinned in `go.mod` on `PATH`, disable automatic toolchain downloads and
+ignore caller Go settings, workspaces, build flags and cross-compilation targets.
+They build in module mode without CGO, module downloads or VCS stamping and
+preserve explicit compiler/module cache paths. Full benchmark provisioning
 applies the same policy inside its private child process.
 
+`scripts/build-release.sh` is the single production builder. It selects its
+four targets explicitly, using `CGO_ENABLED=0`, `GOAMD64=v1` and `GOARM64=v8.0`,
+and generates release-only version metadata without modifying the checkout.
+See [release artifacts](RELEASING.md#optional-local-artifact-check) for the
+output contract. Other shell scripts provide narrow maintenance/CI glue or
+benchmark launchers.
+
 Dependency discovery and pin rewriting live in the `selfishell-dev` Go command;
-`scripts/update-dependencies.sh` only builds and invokes it. See
+`scripts/update-dependencies.sh` only builds it with the same Go policy and
+invokes it. See
 [approved dependency updates](RELEASING.md#approved-dependency-updates).
 
-The target floor is macOS 13, Ubuntu 24.04 LTS, and Ubuntu on WSL 2, for AMD64
-and ARM64 archive formats. See [verification coverage](../CONTRIBUTING.md#verification-coverage)
-for environments exercised in CI and the limits of simulated platform tests.
+See [supported platforms](INSTALLATION.md) and
+[verification coverage](../CONTRIBUTING.md#verification-coverage) for the target
+baseline, environments exercised in CI and limits of simulated platform tests.
 
 ## Tests
 
-Tests exercise the current CLI directly, including exit statuses, diagnostic
-output, personal-file bytes and modes, managed links, state and backups.
-Integration tests in `tests/integration` use the current checkout.
-
-All maintained test orchestration, setup, assertions and cleanup use Go.
-Native Zsh probes cover shell startup, completion, widgets and notices; Lua
-probes cover Neovim APIs. Small child-process fixtures inject external failures.
-Shell scripts under `scripts/` are bootstrap, narrow maintenance/CI glue,
-explicit builders or benchmark launchers. `scripts/check.sh` is the repository
-gate: shell checks, Go format/vet/tests, four builds and native host checks.
-Release publication is a separate manual tag decision.
+See [tests and repository gate](../CONTRIBUTING.md#tests-and-repository-gate)
+for test ownership, isolated fixtures and local verification, and
+[verification coverage](../CONTRIBUTING.md#verification-coverage) for CI and
+native WSL checks.
 
 ## Product behavior
 
@@ -66,11 +69,11 @@ process group for terminal input.
 
 An existing user file with the same bytes as a managed default is backed up
 before adoption and preserved on restore.
-Three operational limits remain intentional. Optional package failures warn
-without invalidating a setup that otherwise completes; a fresh download may
-activate before a later state commit failure is reported; and concurrent
-installers have no lock guarantee. Run one bootstrap/update/rollback at a time.
-A failure after activation requires checking `selfishell version` before retry.
+Optional package failures do not invalidate an otherwise completed setup.
+Release activation and state commit are separate operations, and concurrent
+installers have no lock guarantee. See
+[CLI releases and rollback](UPDATES.md#cli-releases-and-rollback) for failure
+recovery and concurrency limits.
 
 ## Managed-state format
 

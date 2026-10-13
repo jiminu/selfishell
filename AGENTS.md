@@ -1,16 +1,17 @@
 # Selfishell Agent Guide
 
-This file contains repository-wide rules for coding agents: constraints that
-affect implementation. User and maintainer procedures live in the linked
-documents; link to them instead of repeating them here.
+Repository-wide implementation constraints for coding agents. Keep user and
+maintainer procedures in the linked documents rather than repeating them here.
 
 ## Project and Sources of Truth
 
 Selfishell provides a consistent Zsh development environment for macOS, Ubuntu,
-and Ubuntu on WSL. Installation must be simple, maintenance predictable, and the
-user experience consistent across supported platforms.
+and Ubuntu on WSL. Keep installation simple and maintenance predictable.
 
 - The immutable `v<version>` Git tag is the release version source of truth.
+  `scripts/build-release.sh` generates `VERSION` only in release payloads;
+  checkouts report `selfishell development`. Never track `VERSION`, add a
+  release-only version commit, or introduce a second version source.
 - `packages.conf` defines the environment's package membership.
 - `dependencies.conf` pins direct downloads and Git dependencies, including
   Zinit, Zsh plugin, and Neovim plugin commits. Zsh plugin commits are repeated
@@ -21,8 +22,14 @@ user experience consistent across supported platforms.
   `server@version`; the update tools phase applies them through Mason, replacing
   a different installed version. User-added Mason packages are not managed.
 - `go.mod` and the root `mise.toml` pin the development Go toolchain together.
-- `docs/UPDATES.md` defines user-facing update behavior; `docs/RELEASING.md`
-  defines the release and dependency-update procedures.
+
+Before changing an area, read its governing document and keep it in sync:
+
+- Managed paths and integration: [Installation](docs/INSTALLATION.md#files-selfishell-manages).
+- Update behavior and dependency synchronization: [Updates](docs/UPDATES.md).
+- State format and recovery: [Architecture](docs/ARCHITECTURE.md#managed-state-format).
+- Tests and verification: [Contributing](CONTRIBUTING.md#tests-and-repository-gate).
+- Releases and dependency automation: [Releasing](docs/RELEASING.md).
 
 ## Product Contract
 
@@ -42,7 +49,7 @@ Supported commands are `help`, `version`, `install`, `status`, `update`,
 - rollback uses a retained release without downloading it again;
 - purge removes the CLI only when explicitly requested.
 
-Install Selfishell without root privileges under XDG-compatible user paths:
+Install Selfishell under these XDG-compatible user paths:
 
 ```text
 ~/.local/bin/selfishell
@@ -66,7 +73,10 @@ to restore their approved pins: Zsh plugin checkouts, and Zinit or direct
 downloads recorded as Selfishell-installed. A usable unrecorded installation is
 preserved as external. Neovim plugin checkouts move to approved commits only
 while clean: a modified or non-Git checkout stops install and update until the
-user removes it.
+user removes it. Before removing unused plugin checkouts, stop synchronization
+and preserve any directory that is non-Git, unreadable, locally modified, or
+contains untracked or ignored files (excluding generated `doc/tags`). Only
+clean unused Git checkouts may be removed.
 
 Managed defaults are copied under `~/.config/selfishell`. User-facing
 integration uses only:
@@ -96,7 +106,7 @@ Preserve these lifecycle invariants:
 
 - write pending state before moving user data or creating a managed path;
 - write state through a temporary file and atomic rename;
-- retain the original backup path across idempotent reinstalls;
+- make repeated setup safe and idempotent; retain the original backup path;
 - checksum managed regular files;
 - synchronize update tools and configuration without a blanket confirmation;
   ask only before overwriting locally modified managed files or blocks, retaining
@@ -109,8 +119,9 @@ Preserve these lifecycle invariants:
   configuration changes during install and update;
 - remove only an intact installer-managed loader;
 - retain direct-dependency ownership and font recovery records across purge,
-  because the installed tools and fonts remain in place;
-- make dry-run create no directories, state, backups, links, or files;
+  leaving installed tools and fonts in place;
+- make dry-run create no directories, state, backups, links, or files, and never
+  invoke mise: even its read-only commands write metadata;
 - increment the fixed-line state format version before changing field order or
   meaning.
 
@@ -123,10 +134,9 @@ Preserve these lifecycle invariants:
   platform branches through command implementations.
 - Keep `packages.conf` declarative: only supported `package` records, never
   executable shell code.
-- Make repeated setup safe and idempotent.
 - Download to a temporary location, verify it, and activate it atomically.
 - Never execute an unversioned remote release payload as the installer.
-- Avoid `sudo` for Selfishell files; use it only for system package operations
+- Never use `sudo` for Selfishell files; use it only for system package operations
   that require it.
 - Respect `HOME`, XDG variables, proxy variables, and non-interactive
   execution.
@@ -151,7 +161,7 @@ recorded path and checksum match the approved pin and file contents. Change only
 an ownership-checked Selfishell font registration. Installer-owned fonts follow
 approved pins and remain installed after configuration uninstall. The
 `configured` marker in the state directory records completed setup, not a
-package selection. Behavior below is described for users in `docs/UPDATES.md`.
+package selection.
 
 - Installer-owned mise operations run from the release's `config/shared`
   directory so a caller's project cannot override approved tool versions.
@@ -165,13 +175,14 @@ package selection. Behavior below is described for users in `docs/UPDATES.md`.
 - `--skip-packages` skips package and tool installation and applies managed
   configuration only. An already-current default update exits before the tools
   phase; only `update --tools-only --skip-packages` reapplies it network-free.
-- After a successful tools sync, prune unused versions of the platform's
-  declared mise tools, never with an empty tool list. Protect current pins via
+- Prune unused mise versions only after a successful update tools sync, using
+  the platform's declared tools, never an empty tool list. Protect current pins via
   mise's tracked configuration, exclude the previous release's configuration
   even if tracked, and keep the CLI rollback release and project tracking.
-  Skip on incomplete setup (including optional failures), `--skip-packages`,
-  and CLI-only or no-op updates; cleanup failures only warn.
-- Dry-run must not invoke mise; even its read-only commands write metadata.
+  Skip during install, rollback, incomplete sync (including optional failures),
+  `--skip-packages`, CLI-only or no-op updates, or when mise `ignored_config_paths`
+  is configured. Cleanup and retention-preflight failures only warn; see
+  [unused mise versions](docs/UPDATES.md#unused-mise-versions).
 
 Dependency automation may open a review PR but must never auto-merge or
 auto-publish a release; a maintainer merges `automation/dependency-updates` and
@@ -183,21 +194,16 @@ ordinary local gate.
 
 ## Release Rules
 
-- `install.sh` verifies an exact platform archive against `SHA256SUMS`,
-  installs it into a versioned release directory, and switches links
-  atomically. An explicit version uses only its own
-  `releases/download/v<version>` path and never falls back to latest.
-- No `VERSION` file is tracked: `scripts/build-release.sh` generates it inside
-  the release payload, so a checkout reports `selfishell development`. Never
-  add a release-only version commit or a second version source.
+- `install.sh` verifies the exact platform archive against `SHA256SUMS` before
+  atomic installation and link activation in the versioned release layout above.
+  Explicit versions use only `releases/download/v<version>`, never latest.
 - Readiness, audit, or preparation requests are non-publishing. Only an
   explicit request to release, publish, or tag authorizes pushing a tag; first
   read `docs/RELEASING.md` and `.github/workflows/release.yml`.
-- Tag a pushed, verified `main` commit with an annotated `v<version>` tag; the
-  Release workflow reruns full CI for it before building and publishing.
-- Tags and releases are immutable, enforced by a `v*` tag ruleset and GitHub
-  immutable releases. Never move a tag or replace assets; publish a new patch
-  version, and verify each publication as `docs/RELEASING.md` describes.
+- Tag only a pushed, verified `main` commit with an annotated `v<version>` tag.
+- Never move a tag or replace release assets; publish a new patch version.
+  Follow [release verification](docs/RELEASING.md#verify-the-published-release)
+  after every publication.
 
 ## Verification
 
@@ -212,8 +218,8 @@ lifecycle, package, dependency, or release change.
   home fixtures; Windows integration fixtures must explicitly provide a fake
   Windows environment or a private native scratch directory.
 - Integration tests call `t.Parallel()` unless they need `t.Setenv`. They write
-  files only through `testutil.WriteFile` or `testutil.AppendFile`: a concurrent
-  fork would inherit a plain write descriptor and make exec fail with ETXTBSY.
+  files only through `testutil.WriteFile` or `testutil.AppendFile` to prevent
+  ETXTBSY from concurrent forks; see [test rules](CONTRIBUTING.md#tests-and-repository-gate).
 - Behavioral changes require tests, especially for empty/existing paths,
   repeated operations, interruptions, unsupported platforms, `--skip-packages`,
   uninstall, restore, update, and rollback.
@@ -226,15 +232,10 @@ lifecycle, package, dependency, or release change.
 
 ## Repository Map
 
-| Path | Responsibility |
-| --- | --- |
-| `bin/`, `cmd/`, `internal/` | Explicit source launcher, native CLI, lifecycle, platform and package adapters |
-| `config/` | Managed shared, macOS, and Ubuntu shell/editor configuration |
-| `packages.conf`, `dependencies.conf` | Declarative packages and approved dependencies |
-| `tests/` | Go-owned isolated unit and lifecycle coverage; native runtime and external-process fixtures |
-| `scripts/` | Validation, benchmarks, dependency discovery, release builds |
-| `.github/` | CI, dependency automation, and release publication |
-| `docs/` | User, maintainer, and security documentation |
+`bin/`, `cmd/`, and `internal/` hold the launcher, CLI and lifecycle/platform
+adapters; `config/` holds managed shell/editor defaults; `tests/` holds isolated
+coverage and runtime fixtures; `scripts/` holds validation, benchmarks and
+maintenance tools; `.github/` holds automation; `docs/` holds project guides.
 
 ## Working Process
 

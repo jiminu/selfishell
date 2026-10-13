@@ -2,9 +2,6 @@
 
 Keep each change focused and preserve unrelated worktree changes. Behavioral
 changes need Go-owned tests with private `HOME`, XDG, mise and temporary paths.
-Go owns maintained setup, process execution, assertions and cleanup. Keep
-native Zsh/Lua probes for their runtime APIs and small child-process fixtures
-for external fault injection.
 
 ## Local development
 
@@ -19,14 +16,6 @@ from the checkout before building. Dependency automation leaves both pins
 unchanged. Update them together in a separate reviewed change when needed; see
 [approved dependency updates](docs/RELEASING.md#approved-dependency-updates).
 
-Source build scripts share `scripts/go-env.sh`: they require that exact Go
-version on `PATH`, disable automatic toolchain downloads and ignore caller
-Go settings, workspaces, build flags and cross-compilation targets. They build
-in module mode without CGO, module downloads or VCS stamping and preserve
-explicit compiler/module cache paths. The release builder selects its four
-targets explicitly. `scripts/update-dependencies.sh` builds its Go maintenance
-tool the same way.
-
 ```bash
 bash scripts/build-cli.sh       # Build the host CLI at .build/selfishell
 bin/selfishell help            # Source launcher executes that existing binary
@@ -35,12 +24,19 @@ bash scripts/build-cli.sh --all # Cross-build macOS/Linux × AMD64/ARM64
 bash scripts/check.sh           # Syntax, format, vet, tests and four builds
 ```
 
-The source launcher never compiles on invocation. The production artifact
-builder is `bash scripts/build-release.sh --version VERSION --output DIR`; it writes
-four native archives, `VERSION` and `SHA256SUMS` without modifying the source
-checkout. The seven public commands run Go logic. The standalone Bash 3.2
-bootstrap remains the installer transport, and maintenance scripts retain
-narrow shell glue where needed.
+The source launcher never compiles on invocation. See
+[build isolation](docs/ARCHITECTURE.md#development-and-platform-boundary) for
+compiler settings and
+[local release artifacts](docs/RELEASING.md#optional-local-artifact-check) for
+archive builds. Publication follows the [release procedure](docs/RELEASING.md#publish).
+
+## Tests and repository gate
+
+`bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, then runs
+Go format, vet, tests and four target builds through `scripts/check-go.sh`.
+Go owns maintained setup, process execution, assertions and cleanup. Native
+Zsh/Lua probes cover their runtime APIs; small child-process fixtures inject
+external failures.
 
 Tests use the current checkout. Integration tests live in `tests/integration`
 and cover updates, rollback, backup, restore and interrupted-operation recovery.
@@ -48,15 +44,28 @@ and cover updates, rollback, backup, restore and interrupted-operation recovery.
 runs, including signal and benchmark tests. Fixtures that need their own release
 root copy the executable so configuration discovery stays local to the fixture.
 
+Integration tests call `t.Parallel()` unless they must change the test process
+environment with `t.Setenv`. Give each test its own temporary HOME and pass
+child environments explicitly. Write fixture files with `testutil.WriteFile` or
+`testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
+cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
+
 Keep command parsing and shared failure cases focused; do not repeat basic
-help/version or successful reinstall checks in every lifecycle scenario. WSL
-shares Ubuntu's configuration implementation, so its configuration matrix covers
+help/version or successful reinstall checks in every lifecycle scenario.
+
+### Lifecycle and release fixtures
+
+Tests check exit statuses, diagnostic output, personal-file bytes and modes,
+managed links, state and backups. WSL shares Ubuntu's configuration implementation,
+so its configuration matrix covers
 install/restore with empty, existing and XDG homes. Release reproducibility checks
 combine a relocated source tree, changed mtimes, hostile build variables and a
 fresh cache; the shell builder is compared with those verified Go-built assets.
 Lifecycle fixtures reuse the production-built payload with different version
 metadata and checksums, preparing only the host archive. Published-release
 fixtures still include all four platforms.
+
+### Fixture build caches
 
 Test fixture builds use temporary Go caches by default. `SELFISHELL_TEST_GO_CACHE`
 selects an absolute compiler-cache path instead: the repository gate uses
@@ -68,16 +77,6 @@ temporary home. The test process leaves the caller-owned cache in place. Test
 homes, XDG paths and mise state remain private, and the reproducibility check
 still uses a fresh cache. Package and tool downloads are not shared between
 test homes.
-
-Integration tests call `t.Parallel()` unless they must change the test process
-environment with `t.Setenv`. Give each test its own temporary HOME and pass
-child environments explicitly. Write fixture files with `testutil.WriteFile` or
-`testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
-cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
-
-`scripts/check-go.sh` runs Go format, vet, tests and target builds through the
-repository gate. See [architecture](docs/ARCHITECTURE.md) for supported behavior
-and [release procedure](docs/RELEASING.md) for manual publication.
 
 ## Verification coverage
 
