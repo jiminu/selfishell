@@ -65,6 +65,9 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 			valid[index] = o.validZinitPlugin(ctx, target, dep.Version)
 		}
 		if valid[index] {
+			if err := repairZinitCompletions(ctx, dataHome, target); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -88,8 +91,12 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 		defer os.RemoveAll(stageRoot)
 		p := o.Process
 		p.In = strings.NewReader("")
+		// cloneonly still creates completions and may run compinit. Keep both
+		// private so links to the staging checkout never reach the user's fpath.
 		code, runErr := p.Run(ctx, "zsh", "-f", "-c", `typeset -A ZINIT
 ZINIT[PLUGINS_DIR]="$4"
+ZINIT[COMPLETIONS_DIR]="$4/.completions"
+ZINIT[ZCOMPDUMP_PATH]="$4/.zcompdump"
 source "$1" || exit 1
 zinit ice cloneonly "ver${3}" || exit 1
 zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
@@ -143,9 +150,102 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 			return err
 		}
 		replaced[target] = true
+		if err := repairZinitCompletions(ctx, dataHome, target); err != nil {
+			return err
+		}
 		if moved {
 			os.RemoveAll(previous)
 			o.report(reportSuccess, "Updated Zsh plugin: %s", dep.Name)
+		}
+	}
+	return nil
+}
+
+// Only broken links into our former staging directories are ownership evidence.
+// Other completions, including Zinit's disabled (non-underscore) links, are user data.
+func repairZinitCompletions(ctx context.Context, dataHome, target string) error {
+	dir := dataHome + "/zinit/completions"
+	info, err := os.Lstat(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	pluginRoot, err := filepath.EvalSymlinks(rawParent(target))
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink == 0 || !strings.HasPrefix(entry.Name(), "_") {
+			continue
+		}
+		path := dir + "/" + entry.Name()
+		reference, err := os.Readlink(path)
+		if err != nil {
+			return err
+		}
+		prefix := dataHome + "/zinit/plugins/.selfishell-zinit."
+		if !strings.HasPrefix(reference, prefix) {
+			// Zinit resolves plugin completion targets to physical paths.
+			prefix = pluginRoot + "/.selfishell-zinit."
+			if !strings.HasPrefix(reference, prefix) {
+				continue
+			}
+		}
+		stage, suffix, ok := strings.Cut(strings.TrimPrefix(reference, prefix), "/")
+		pluginPrefix := filepath.Base(target) + "/"
+		if !ok || stage == "" {
+			continue
+		}
+		completionTarget := target
+		if entry.Name() == "_zinit" && suffix == "_local---zinit/_zinit" {
+			completionTarget = dataHome + "/zinit/zinit.git"
+			pluginPrefix = "_local---zinit/"
+		} else if !strings.HasPrefix(suffix, pluginPrefix) {
+			continue
+		}
+		relative := strings.TrimPrefix(suffix, pluginPrefix)
+		if !filepath.IsLocal(relative) || filepath.Clean(relative) != relative || filepath.Base(relative) != entry.Name() {
+			continue
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			continue
+		}
+		replacement := completionTarget + "/" + relative
+		if info, err := os.Stat(replacement); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		f, err := createRawTemp(path)
+		if err != nil {
+			return err
+		}
+		name := f.Name()
+		f.Close()
+		if err := os.Remove(name); err != nil {
+			return err
+		}
+		if err := os.Symlink(replacement, name); err != nil {
+			return err
+		}
+		if current, err := os.Readlink(path); err != nil || current != reference {
+			os.Remove(name)
+			return fmt.Errorf("Zinit completion target changed during repair: %s", path)
+		}
+		err = os.Rename(name, path)
+		os.Remove(name)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

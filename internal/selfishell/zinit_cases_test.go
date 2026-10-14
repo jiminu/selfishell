@@ -28,6 +28,12 @@ const zinitFixture = `zinit() {
     command mkdir -p "$plugin_dir/._zinit"
     print -r -- '*' > "$plugin_dir/._zinit/.gitignore"
     print -r -- cloneonly > "$plugin_dir/._zinit/ice"
+    if [[ -f "$plugin_dir/src/_fixture" ]]; then
+      completion_dir="${ZINIT[COMPLETIONS_DIR]:-${XDG_DATA_HOME:-$HOME/.local/share}/zinit/completions}"
+      command mkdir -p "$completion_dir"
+      [[ -e "$completion_dir/_fixture" || -L "$completion_dir/_fixture" ]] ||
+        command ln -s "$plugin_dir/src/_fixture" "$completion_dir/_fixture"
+    fi
     [[ "$SELFISHELL_TEST_ZINIT_FAIL" != after ]]
   fi
 }
@@ -40,7 +46,8 @@ func zinitFixtureSetup(t *testing.T, count int) (*PackageOperation, Paths, strin
 	os.MkdirAll(repo, 0700)
 	gitCommand(t, repo, "init", "--quiet")
 	writeTestFile(t, repo+"/marker", "marker\n", 0600)
-	gitCommand(t, repo, "add", "marker")
+	writeTestFile(t, repo+"/src/_fixture", "#compdef fixture\n", 0600)
+	gitCommand(t, repo, "add", ".")
 	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
 	head := gitCommand(t, repo, "rev-parse", "HEAD")
 	names := []string{"zsh-users/zsh-completions", "Aloxaf/fzf-tab", "zsh-users/zsh-autosuggestions", "zdharma-continuum/fast-syntax-highlighting"}
@@ -261,5 +268,114 @@ func TestZinitDryRun(t *testing.T) {
 	os.Remove(home + "/data/zinit/zinit.git/zinit.zsh")
 	if err := op.InstallZinitPlugins(context.Background(), paths, manifest, true); err != nil || !strings.Contains(output(op), "Would sync") {
 		t.Fatalf("dry run: %v %q", err, output(op))
+	}
+}
+
+func TestZinitProvisionDoesNotPublishTemporaryCompletionLinks(t *testing.T) {
+	op, paths, manifest, home, _, _ := zinitFixtureSetup(t, 1)
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	assertNoPath(t, home+"/data/zinit/completions/_fixture")
+}
+
+func TestZinitRepairsOnlyItsBrokenStagingCompletionLinks(t *testing.T) {
+	op, paths, manifest, home, _, names := zinitFixtureSetup(t, 1)
+	target := pluginTarget(home, names[0])
+	os.MkdirAll(filepath.Dir(target), 0700)
+	gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
+	dir := home + "/data/zinit/completions"
+	os.MkdirAll(dir, 0700)
+	stale := home + "/data/zinit/plugins/.selfishell-zinit.123/zsh-users---zsh-completions/src/_fixture"
+	zinitStale := home + "/data/zinit/plugins/.selfishell-zinit.123/_local---zinit/_zinit"
+	writeTestFile(t, home+"/data/zinit/zinit.git/_zinit", "#compdef zinit\n", 0600)
+	for name, reference := range map[string]string{
+		"_fixture": stale,
+		"_zinit":   zinitStale,
+		"_foreign": home + "/missing/_foreign",
+		"fixture":  stale, // Disabled completion stays disabled.
+		"_unknown": home + "/data/zinit/plugins/.selfishell-zinit.123/other---plugin/src/_unknown",
+	} {
+		if err := os.Symlink(reference, dir+"/"+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, dir+"/_user", "user completion\n", 0600)
+	for _, dryRun := range []bool{true, false, false} {
+		if err := op.InstallZinitPlugins(context.Background(), paths, manifest, dryRun); err != nil {
+			t.Fatal(err)
+		}
+		want := target + "/src/_fixture"
+		if dryRun {
+			want = stale
+		}
+		if got, err := os.Readlink(dir + "/_fixture"); err != nil || got != want {
+			t.Fatalf("completion target = %q, %v; want %q", got, err, want)
+		}
+		zinitWant := home + "/data/zinit/zinit.git/_zinit"
+		if dryRun {
+			zinitWant = zinitStale
+		}
+		if got, err := os.Readlink(dir + "/_zinit"); err != nil || got != zinitWant {
+			t.Fatalf("Zinit completion target = %q, %v; want %q", got, err, zinitWant)
+		}
+		if got, _ := os.Readlink(dir + "/_unknown"); got != home+"/data/zinit/plugins/.selfishell-zinit.123/other---plugin/src/_unknown" {
+			t.Fatal("unmanaged plugin completion changed")
+		}
+		if got, _ := os.Readlink(dir + "/_foreign"); got != home+"/missing/_foreign" {
+			t.Fatal("foreign link changed")
+		}
+		if got, _ := os.Readlink(dir + "/fixture"); got != stale {
+			t.Fatal("disabled completion changed")
+		}
+		if got := readTestFile(t, dir+"/_user"); got != "user completion\n" {
+			t.Fatal("user file changed")
+		}
+	}
+	assertNoPath(t, home+"/zinit.log") // Repair does not reprovision valid plugins.
+}
+
+func TestZinitRepairsCanonicalCompletionLinksWithSymlinkDataHome(t *testing.T) {
+	op, paths, manifest, home, _, names := zinitFixtureSetup(t, 1)
+	target := pluginTarget(home, names[0])
+	os.MkdirAll(filepath.Dir(target), 0700)
+	gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
+	if err := os.Symlink(home+"/data", home+"/data-alias"); err != nil {
+		t.Fatal(err)
+	}
+	paths.Data = home + "/data-alias/selfishell"
+	dir := home + "/data/zinit/completions"
+	os.MkdirAll(dir, 0700)
+	if err := os.Symlink(home+"/data/zinit/plugins/.selfishell-zinit.123/zsh-users---zsh-completions/src/_fixture", dir+"/_fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTestFile(t, dir+"/_fixture"); got != "#compdef fixture\n" {
+		t.Fatalf("completion not recovered: %q", got)
+	}
+}
+
+func TestZinitCompletionRepairRetainsSymlinkDotDotTraversal(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	target := home + "/data/zinit/plugins/zsh-users---zsh-completions"
+	writeTestFile(t, target+"/src/_fixture", "#compdef fixture\n", 0600)
+	os.MkdirAll(home+"/nested/deep", 0700)
+	if err := os.Symlink(home+"/nested/deep", home+"/alias"); err != nil {
+		t.Fatal(err)
+	}
+	dir := home + "/data/zinit/completions"
+	os.MkdirAll(dir, 0700)
+	if err := os.Symlink(home+"/data/zinit/plugins/.selfishell-zinit.123/zsh-users---zsh-completions/src/_fixture", dir+"/_fixture"); err != nil {
+		t.Fatal(err)
+	}
+	dataHome := home + "/alias/../../data"
+	if err := repairZinitCompletions(context.Background(), dataHome, dataHome+"/zinit/plugins/zsh-users---zsh-completions"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readTestFile(t, dir+"/_fixture"); got != "#compdef fixture\n" {
+		t.Fatalf("completion not recovered: %q", got)
 	}
 }
