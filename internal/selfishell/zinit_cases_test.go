@@ -285,7 +285,6 @@ func TestZinitCleansDanglingStagingCompletions(t *testing.T) {
 	dir := home + "/data/zinit/completions"
 	links := map[string]string{
 		"_fixture": "/physical/.selfishell-zinit.2/zsh-users---zsh-completions/src/_fixture",
-		"_zinit":   stage + "/_local---zinit/_zinit",
 		"_live":    stage + "/live/_live",
 		"_foreign": home + "/missing/_foreign",
 		"_file":    home + "/notes/.selfishell-zinit.1",
@@ -318,6 +317,13 @@ func TestZinitCleansDanglingStagingCompletions(t *testing.T) {
 		}
 	}
 	assertNoPath(t, home+"/zinit.log") // Cleanup does not reprovision valid plugins.
+	if err := os.Rename(dir+"/_zinit", dir+"/zinit"); err != nil {
+		t.Fatal(err)
+	}
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	assertNoPath(t, dir+"/_zinit") // A disabled _zinit stays disabled.
 	moved, gone := home+"/completions", stage+"/gone/_gone"
 	if err := errors.Join(os.Rename(dir, moved), os.Symlink(moved, dir), os.Symlink(gone, moved+"/_gone")); err != nil {
 		t.Fatal(err)

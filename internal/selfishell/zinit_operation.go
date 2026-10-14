@@ -161,9 +161,9 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 
 var zinitStagePattern = regexp.MustCompile(`/\.selfishell-zinit\.[0-9]+/`)
 
-// v1.4.0–v1.6.9 let Zinit link staging completions into its shared directory.
-// Plugins add their own fpath, so drop those dangling links (matched by staging
-// directory, as Zinit stores physical paths); only _zinit gets its installed target.
+// v1.4.0–v1.6.9 left dangling Zinit completion links into staging checkouts, and
+// Zinit later dropped _zinit for good. Plugins add their own fpath, so remove the
+// links (by staging directory; Zinit stores physical paths) and restore _zinit.
 func cleanStagedZinitCompletions(dataHome string) error {
 	dir := dataHome + "/zinit/completions"
 	if info, err := os.Lstat(dir); os.IsNotExist(err) || err == nil && !info.IsDir() {
@@ -173,7 +173,6 @@ func cleanStagedZinitCompletions(dataHome string) error {
 	if err != nil {
 		return err
 	}
-	installed := dataHome + "/zinit/zinit.git/_zinit"
 	for _, entry := range entries {
 		path := dir + "/" + entry.Name()
 		// Names without the underscore are disabled completions.
@@ -186,19 +185,21 @@ func cleanStagedZinitCompletions(dataHome string) error {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			continue
 		}
-		if entry.Name() == "_zinit" {
-			if info, err := os.Stat(installed); err == nil && info.Mode().IsRegular() {
-				if err := replaceLink(installed, path); err != nil {
-					return err
-				}
-				continue
-			}
-		}
 		if err := os.Remove(path); err != nil {
 			return err
 		}
 	}
-	return nil
+	// Zinit's cdisable renames _zinit to zinit.
+	for _, name := range []string{"_zinit", "zinit"} {
+		if _, err := os.Lstat(dir + "/" + name); !os.IsNotExist(err) {
+			return err
+		}
+	}
+	installed := dataHome + "/zinit/zinit.git/_zinit"
+	if info, err := os.Stat(installed); err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
+	return os.Symlink(installed, dir+"/_zinit")
 }
 
 func validPluginName(name string) bool {
