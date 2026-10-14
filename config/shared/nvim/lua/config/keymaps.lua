@@ -27,7 +27,7 @@ end
 
 M.set_window_navigation()
 
-map("n", "<leader>w", function()
+map("n", "<leader>wr", function()
   local function move_border(horizontal, offset)
     local win = vim.fn.winnr()
     -- Prefer the right/bottom border. At the screen edge, move the shared

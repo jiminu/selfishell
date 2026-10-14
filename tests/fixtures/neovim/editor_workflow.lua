@@ -91,8 +91,9 @@ local listchars = vim.opt.listchars:get()
 assert(listchars.tab == "  " and listchars.nbsp == "␣", "tabs or non-breaking spaces are not listed: " .. vim.inspect(listchars))
 assert(vim.opt.fileencodings:get()[1] == "ucs-bom", "byte order marks are not detected first")
 
+assert(vim.fn.maparg("<Space>w", "n") == "", "window prefix must not enter resize mode by itself")
 local function resize(keys)
-  vim.api.nvim_feedkeys(vim.keycode("<Space>w" .. keys .. "<Esc>"), "xt", false)
+  vim.api.nvim_feedkeys(vim.keycode("<Space>wr" .. keys .. "<Esc>"), "xt", false)
 end
 vim.o.columns, vim.o.lines = 160, 50
 vim.cmd.vsplit()

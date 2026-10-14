@@ -1,5 +1,33 @@
 local M = {}
 local editors = {}
+local pending_sizes = {}
+
+function M.preserve_ui_sizes()
+  local windows = package.loaded["dapui.windows"]
+  if not windows then return end
+  local tab = vim.api.nvim_get_current_tabpage()
+  if pending_sizes[tab] then return end
+  local sizes = {}
+  for _, layout in ipairs(windows.layouts) do
+    for _, win in pairs(layout.opened_wins) do
+      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_tabpage(win) == tab then
+        sizes[#sizes + 1] = { win = win, size = layout.get_area_size(win), resize = layout.set_area_size }
+        break
+      end
+    end
+  end
+  if #sizes == 0 then return end
+  pending_sizes[tab] = true
+  -- TreePreOpen and TreeClose run before Neovim redistributes split space.
+  -- Preserve the user's current sidebar width and tray height, not defaults.
+  -- Buffered toggles share the first snapshot until the layout settles.
+  vim.schedule(function()
+    pending_sizes[tab] = nil
+    for _, item in ipairs(sizes) do
+      if vim.api.nvim_win_is_valid(item.win) then item.resize(item.win, item.size) end
+    end
+  end)
+end
 
 -- Shared by nvim-dap frame jumps and dap-ui's Breakpoints/Stacks navigation.
 function M.source_window(buf)
@@ -284,6 +312,11 @@ end
 
 function M.setup_ui()
   local dap, ui = require("dap"), require("dapui")
+  local function open_ui()
+    local tree = package.loaded["nvim-tree.api"]
+    if tree then tree.tree.close() end
+    ui.open()
+  end
   dap.listeners.after.event_initialized.selfishell = function(session)
     remember_editor()
     -- Disconnects and adapter failures do not always send terminated/exited.
@@ -297,9 +330,9 @@ function M.setup_ui()
     -- window IDs cannot break initialization, keeping the UI in its original tab.
     local tab = close_ui()
     if tab then
-      vim.api.nvim_win_call(vim.api.nvim_tabpage_get_win(tab), function() ui.open() end)
+      vim.api.nvim_win_call(vim.api.nvim_tabpage_get_win(tab), open_ui)
     else
-      ui.open()
+      open_ui()
     end
   end
   vim.api.nvim_create_autocmd("FileType", {

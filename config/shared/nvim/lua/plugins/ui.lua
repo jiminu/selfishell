@@ -170,6 +170,10 @@ return {
         "Git", "Open", "Hidden", "Modified", "Bookmark", "Diagnostics", "Copied", "Cut", remote.decorator(),
       }
       require("nvim-tree").setup(opts)
+      local api = require("nvim-tree.api")
+      for _, event in ipairs({ api.events.Event.TreePreOpen, api.events.Event.TreeClose }) do
+        api.events.subscribe(event, function() require("config.dap").preserve_ui_sizes() end)
+      end
       remote.setup()
     end,
     cmd = {
