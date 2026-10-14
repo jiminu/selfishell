@@ -276,6 +276,10 @@ func atomicReleaseLink(target, path string) error {
 	if err := releaseLinkReplaceable(path); err != nil {
 		return err
 	}
+	return replaceLink(target, path)
+}
+
+func replaceLink(target, path string) error {
 	f, err := createRawTemp(path)
 	if err != nil {
 		return err

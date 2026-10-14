@@ -72,11 +72,11 @@ Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
 
 Zsh plugins, their completion links, and completion caches are prepared in a
-private temporary directory. Normal shell loading exposes completions from the
-final checkout. Tools synchronization also repairs broken completion links left by
-older Selfishell installations when they point into Selfishell's former staging
-directories and the completion still exists in the approved checkout. Other
-files, links, and disabled completions are preserved.
+private temporary directory; loaded plugins add their final checkout to
+`fpath`. Selfishell v1.4.0 through v1.6.9 left Zinit completion links pointing
+into those staging directories. Tools synchronization removes such dangling
+links and points Zinit's own `_zinit` link at its installed file. Other files,
+links, and disabled completions are preserved.
 
 Neovim synchronization can remove plugin checkouts no longer used by its
 configuration. Before cleanup, Selfishell checks directories absent from the
