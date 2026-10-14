@@ -158,6 +158,16 @@ return {
     lazy = false,
     priority = 1000,
     config = function()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        pattern = "vscode",
+        callback = function()
+          -- vscode.nvim's dark CursorLine (#222222) is nearly invisible on #1F1F1F;
+          -- VS Code marks the line with #282828.
+          if vim.o.background == "dark" then
+            vim.api.nvim_set_hl(0, "CursorLine", { bg = "#282828" })
+          end
+        end,
+      })
       vim.cmd.colorscheme("vscode")
     end,
   }),
