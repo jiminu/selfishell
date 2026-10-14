@@ -74,10 +74,11 @@ Apt upgrade policy separately.
 Zsh plugins, their completion links, and completion caches are prepared in a
 private temporary directory; loaded plugins add their final checkout to
 `fpath`. Selfishell v1.4.0 through v1.6.9 left Zinit completion links pointing
-into those staging directories. Tools synchronization removes such dangling
-links and points Zinit's own `_zinit` link at its installed file. Other files,
-links, disabled completions, and a completions directory replaced by a link are
-preserved.
+into those staging directories, after which Zinit dropped its own `_zinit`
+link. Tools synchronization removes such dangling links and restores a missing
+`_zinit` link to Zinit's installed file unless that completion is disabled.
+Other files, links, disabled completions, and a completions directory replaced
+by a link are preserved.
 
 Neovim synchronization can remove plugin checkouts no longer used by its
 configuration. Before cleanup, Selfishell checks directories absent from the
