@@ -71,6 +71,14 @@ Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
 
+Zsh plugins, their completion links, and completion caches are prepared in a
+private temporary directory; loaded plugins add their final checkout to
+`fpath`. Selfishell v1.4.0 through v1.6.9 left Zinit completion links pointing
+into those staging directories. Tools synchronization removes such dangling
+links and points Zinit's own `_zinit` link at its installed file. Other files,
+links, disabled completions, and a completions directory replaced by a link are
+preserved.
+
 Neovim synchronization can remove plugin checkouts no longer used by its
 configuration. Before cleanup, Selfishell checks directories absent from the
 release's plugin manifest. A non-Git or unreadable checkout, local changes,

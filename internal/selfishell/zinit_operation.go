@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -28,6 +29,9 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 	info, err := os.Stat(script)
 	if err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("Zinit is not installed: %s", script)
+	}
+	if err := cleanStagedZinitCompletions(dataHome); err != nil {
+		o.warn("Could not clean stale Zinit completion links: " + err.Error())
 	}
 	var plugins []Dependency
 	for _, dep := range o.dependencies {
@@ -88,8 +92,12 @@ func (o *PackageOperation) InstallZinitPlugins(ctx context.Context, paths Paths,
 		defer os.RemoveAll(stageRoot)
 		p := o.Process
 		p.In = strings.NewReader("")
+		// cloneonly still creates completions and may run compinit. Keep both
+		// private so links to the staging checkout never reach the user's fpath.
 		code, runErr := p.Run(ctx, "zsh", "-f", "-c", `typeset -A ZINIT
 ZINIT[PLUGINS_DIR]="$4"
+ZINIT[COMPLETIONS_DIR]="$4/.completions"
+ZINIT[ZCOMPDUMP_PATH]="$4/.zcompdump"
 source "$1" || exit 1
 zinit ice cloneonly "ver${3}" || exit 1
 zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
@@ -146,6 +154,48 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 		if moved {
 			os.RemoveAll(previous)
 			o.report(reportSuccess, "Updated Zsh plugin: %s", dep.Name)
+		}
+	}
+	return nil
+}
+
+var zinitStagePattern = regexp.MustCompile(`/\.selfishell-zinit\.[0-9]+/`)
+
+// v1.4.0–v1.6.9 let Zinit link staging completions into its shared directory.
+// Plugins add their own fpath, so drop those dangling links (matched by staging
+// directory, as Zinit stores physical paths); only _zinit gets its installed target.
+func cleanStagedZinitCompletions(dataHome string) error {
+	dir := dataHome + "/zinit/completions"
+	if info, err := os.Lstat(dir); os.IsNotExist(err) || err == nil && !info.IsDir() {
+		return nil // A replaced directory is user data.
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	installed := dataHome + "/zinit/zinit.git/_zinit"
+	for _, entry := range entries {
+		path := dir + "/" + entry.Name()
+		// Names without the underscore are disabled completions.
+		if !strings.HasPrefix(entry.Name(), "_") {
+			continue
+		}
+		if reference, err := os.Readlink(path); err != nil || !zinitStagePattern.MatchString(reference) {
+			continue
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			continue
+		}
+		if entry.Name() == "_zinit" {
+			if info, err := os.Stat(installed); err == nil && info.Mode().IsRegular() {
+				if err := replaceLink(installed, path); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if err := os.Remove(path); err != nil {
+			return err
 		}
 	}
 	return nil

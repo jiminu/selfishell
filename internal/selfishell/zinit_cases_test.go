@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,12 @@ const zinitFixture = `zinit() {
     command mkdir -p "$plugin_dir/._zinit"
     print -r -- '*' > "$plugin_dir/._zinit/.gitignore"
     print -r -- cloneonly > "$plugin_dir/._zinit/ice"
+    if [[ -f "$plugin_dir/src/_fixture" ]]; then
+      completion_dir="${ZINIT[COMPLETIONS_DIR]:-${XDG_DATA_HOME:-$HOME/.local/share}/zinit/completions}"
+      command mkdir -p "$completion_dir"
+      [[ -e "$completion_dir/_fixture" || -L "$completion_dir/_fixture" ]] ||
+        command ln -s "$plugin_dir/src/_fixture" "$completion_dir/_fixture"
+    fi
     [[ "$SELFISHELL_TEST_ZINIT_FAIL" != after ]]
   fi
 }
@@ -40,7 +47,8 @@ func zinitFixtureSetup(t *testing.T, count int) (*PackageOperation, Paths, strin
 	os.MkdirAll(repo, 0700)
 	gitCommand(t, repo, "init", "--quiet")
 	writeTestFile(t, repo+"/marker", "marker\n", 0600)
-	gitCommand(t, repo, "add", "marker")
+	writeTestFile(t, repo+"/src/_fixture", "#compdef fixture\n", 0600)
+	gitCommand(t, repo, "add", ".")
 	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
 	head := gitCommand(t, repo, "rev-parse", "HEAD")
 	names := []string{"zsh-users/zsh-completions", "Aloxaf/fzf-tab", "zsh-users/zsh-autosuggestions", "zdharma-continuum/fast-syntax-highlighting"}
@@ -82,6 +90,7 @@ func TestZinitProvisionsDeclaredPluginsWithoutLoading(t *testing.T) {
 	if len(log) != 2*len(names) {
 		t.Fatalf("unexpected calls: %q", log)
 	}
+	assertNoPath(t, home+"/data/zinit/completions/_fixture") // Staging links stay private.
 	for index, dep := range deps {
 		if seen[dep.Version] {
 			t.Fatalf("duplicate fixture revision: %s", dep.Version)
@@ -261,5 +270,62 @@ func TestZinitDryRun(t *testing.T) {
 	os.Remove(home + "/data/zinit/zinit.git/zinit.zsh")
 	if err := op.InstallZinitPlugins(context.Background(), paths, manifest, true); err != nil || !strings.Contains(output(op), "Would sync") {
 		t.Fatalf("dry run: %v %q", err, output(op))
+	}
+}
+
+func TestZinitCleansDanglingStagingCompletions(t *testing.T) {
+	op, paths, manifest, home, _, names := zinitFixtureSetup(t, 1)
+	target := pluginTarget(home, names[0])
+	os.MkdirAll(filepath.Dir(target), 0700)
+	gitCommand(t, filepath.Dir(target), "clone", "--quiet", home+"/repo", target)
+	installed := home + "/data/zinit/zinit.git/_zinit"
+	writeTestFile(t, installed, "#compdef zinit\n", 0600)
+	stage := home + "/data/zinit/plugins/.selfishell-zinit.1"
+	writeTestFile(t, stage+"/live/_live", "#compdef live\n", 0600)
+	dir := home + "/data/zinit/completions"
+	links := map[string]string{
+		"_fixture": "/physical/.selfishell-zinit.2/zsh-users---zsh-completions/src/_fixture",
+		"_zinit":   stage + "/_local---zinit/_zinit",
+		"_live":    stage + "/live/_live",
+		"_foreign": home + "/missing/_foreign",
+		"_file":    home + "/notes/.selfishell-zinit.1",
+		"_named":   home + "/notes/.selfishell-zinit.notes/_named",
+		"fixture":  stage + "/gone/fixture", // disabled completion
+	}
+	os.MkdirAll(dir, 0700)
+	for name, reference := range links {
+		if err := os.Symlink(reference, dir+"/"+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, dir+"/_user", "user completion\n", 0600)
+	for _, dryRun := range []bool{true, false, false} {
+		if err := op.InstallZinitPlugins(context.Background(), paths, manifest, dryRun); err != nil {
+			t.Fatal(err)
+		}
+		if !dryRun {
+			delete(links, "_fixture")
+			links["_zinit"] = installed
+			assertNoPath(t, dir+"/_fixture")
+		}
+		for name, want := range links {
+			if got, err := os.Readlink(dir + "/" + name); err != nil || got != want {
+				t.Fatalf("%s -> %q, %v; want %q", name, got, err, want)
+			}
+		}
+		if got := readTestFile(t, dir+"/_user"); got != "user completion\n" {
+			t.Fatal("user file changed")
+		}
+	}
+	assertNoPath(t, home+"/zinit.log") // Cleanup does not reprovision valid plugins.
+	moved, gone := home+"/completions", stage+"/gone/_gone"
+	if err := errors.Join(os.Rename(dir, moved), os.Symlink(moved, dir), os.Symlink(gone, moved+"/_gone")); err != nil {
+		t.Fatal(err)
+	}
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.Readlink(moved + "/_gone"); err != nil || got != gone {
+		t.Fatal("cleanup followed a replaced completions directory")
 	}
 }
