@@ -43,7 +43,9 @@ In Python, launching an empty file with unsaved code can report
 Set a breakpoint with `F9` (a red circle in the gutter), then press `F5` and
 select a launch configuration.
 Debug panels open once the session initializes and close when the last session
-closes, including disconnects and adapter failures.
+closes, including disconnects and adapter failures. The file explorer closes
+when the debug panels open for a session; use `Space e` to reopen it when needed.
+Toggling the explorer preserves the debug panel sizes, including manual resizing.
 Use Normal mode for the following keys:
 
 | Action | Function key | Space shortcut |

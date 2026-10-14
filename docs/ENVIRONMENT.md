@@ -110,7 +110,7 @@ applied. Bufferline shows open buffers across the top; use `[b` and `]b` to move
 between them, and `Space b d` to close the current buffer without closing its
 editor window.
 
-To resize a split, focus it with `Ctrl+h/j/k/l`, then press `Space w` in Normal
+To resize a split, focus it with `Ctrl+h/j/k/l`, then press `Space w r` in Normal
 mode. A hint appears at the bottom: repeat `h` / `l` to move the divider left /
 right by five columns, `k` / `j` to move it up / down by two lines, or `=` to
 equalize resizable splits. The right / bottom divider is used when available;

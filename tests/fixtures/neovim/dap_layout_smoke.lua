@@ -1,4 +1,18 @@
-require("lazy").load({ plugins = { "nvim-tree.lua", "nvim-dap-ui" } })
+if vim.env.SELFISHELL_TEST_NVIM_PLUGIN_ROOT then
+  for _, name in ipairs({ "nvim-tree.lua", "nvim-dap", "nvim-dap-ui", "nvim-nio" }) do
+    vim.opt.rtp:append(vim.env.SELFISHELL_TEST_NVIM_PLUGIN_ROOT .. "/" .. name)
+  end
+  require("config.options")
+  for _, spec in ipairs(require("plugins.ui")) do
+    if spec[1] == "nvim-tree/nvim-tree.lua" then spec.config(nil, spec.opts) end
+  end
+  vim.cmd("runtime plugin/nvim-tree.lua")
+  for _, spec in ipairs(require("plugins.dap")) do
+    if spec.config then spec.config(nil, spec.opts) end
+  end
+else
+  require("lazy").load({ plugins = { "nvim-tree.lua", "nvim-dap-ui" } })
+end
 vim.o.columns, vim.o.lines = 180, 55
 
 local tree = require("nvim-tree.api").tree
@@ -25,12 +39,50 @@ local function close_session(session)
 end
 
 assert_width(30, "initial")
+-- Repeated explorer toggles must not donate its width to the debug sidebar.
+ui.open()
+local scopes, repl
+for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dapui_scopes" then scopes = win end
+  if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "dap-repl" then repl = win end
+end
+local function settle_tree()
+  local settled = false
+  vim.schedule(function() settled = true end)
+  assert(vim.wait(1000, function() return settled end), "tree resize did not settle")
+end
+for _, width in ipairs({ 40, 47 }) do
+  vim.api.nvim_win_set_width(scopes, width)
+  vim.api.nvim_win_set_height(repl, 12)
+  for cycle = 1, 6 do
+    tree.toggle()
+    settle_tree()
+    assert(vim.api.nvim_win_get_width(scopes) == width,
+      "tree toggle " .. cycle .. " changed debug width to " .. vim.api.nvim_win_get_width(scopes) .. ", expected " .. width)
+    assert(vim.api.nvim_win_get_height(repl) == 12, "tree toggle changed the custom debug tray height")
+  end
+  vim.api.nvim_set_current_win(tree.winid())
+  vim.cmd.quit()
+  settle_tree()
+  assert(vim.api.nvim_win_get_width(scopes) == width, "closing the explorer with :q changed debug width")
+  vim.cmd.NvimTreeOpen()
+  settle_tree()
+  assert(vim.api.nvim_win_get_width(scopes) == width, ":NvimTreeOpen changed debug width")
+  assert(vim.api.nvim_win_get_width(tree.winid()) == 30, "debug resizing changed explorer width")
+  for _ = 1, 6 do tree.toggle() end
+  settle_tree()
+  assert(vim.api.nvim_win_get_width(scopes) == width, "buffered explorer toggles accumulated debug width")
+end
+require("config.dap").toggle_ui()
+explorer = tree.winid()
 for cycle = 1, 3 do
+  tree.open()
+  vim.api.nvim_set_current_win(editor)
   local session = { on_close = {} }
   dap.listeners.after.event_initialized.selfishell(session)
-  assert_width(30, "session opened " .. cycle)
+  assert(not tree.is_visible(), "session start left the explorer between debug panels and source")
   close_session(session)
-  assert_width(30, "session closed " .. cycle)
+  assert(not tree.is_visible(), "session close reopened the explorer")
 end
 
 local function panel_windows()
@@ -72,11 +124,11 @@ assert(#panel_windows() == 1 and vim.api.nvim_win_is_valid(standalone), "UI togg
 vim.api.nvim_win_close(standalone, true)
 vim.api.nvim_set_current_win(editor)
 
--- Preserve a manual width, including changes made while debugging.
-vim.api.nvim_win_set_width(explorer, 37)
+-- An explorer deliberately reopened while debugging keeps its manual width.
 local session = { on_close = {} }
 dap.listeners.after.event_initialized.selfishell(session)
-assert_width(37, "custom width at session start")
+tree.open()
+explorer = tree.winid()
 vim.api.nvim_win_set_width(explorer, 43)
 close_session(session)
 assert_width(43, "custom width at session close")
@@ -86,15 +138,17 @@ session = { on_close = {} }
 dap.listeners.after.event_initialized.selfishell(session)
 ui.toggle()
 close_session(session)
-assert_width(43, "manual toggle before session close")
+assert(not tree.is_visible(), "manual toggle before session close reopened the explorer")
 
 -- :q closes the source window, but its buffer remains available for recovery.
 local source = vim.api.nvim_win_get_buf(editor)
 for _, with_tree in ipairs({ true, false }) do
-  if not with_tree then tree.close() end
-  vim.api.nvim_set_current_win(with_tree and explorer or editor)
+  if with_tree then tree.open() else tree.close() end
+  vim.api.nvim_set_current_win(with_tree and tree.winid() or editor)
   session = { on_close = {} }
   dap.listeners.after.event_initialized.selfishell(session)
+  assert(not tree.is_visible(), "initializing from the explorer did not close it")
+  if with_tree then tree.open() end
   vim.api.nvim_set_current_win(editor)
   vim.cmd.quit()
   close_session(session)
@@ -122,9 +176,12 @@ dap.listeners.after.event_initialized.selfishell(session)
 vim.cmd.quit()
 vim.cmd.tabnew()
 local other_tab, other_win = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win()
+tree.open()
+vim.api.nvim_set_current_win(other_win)
 local second_session = { on_close = {} }
 dap.listeners.after.event_initialized.selfishell(second_session)
 assert(vim.api.nvim_get_current_win() == other_win, "initializing another session stole tab focus")
+assert(tree.is_visible(), "initializing another session closed the explorer in an unrelated tab")
 for _, win in ipairs(panel_windows()) do
   assert(vim.api.nvim_win_get_tabpage(win) ~= other_tab, "initializing another session moved the debug UI")
 end

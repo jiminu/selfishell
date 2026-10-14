@@ -110,7 +110,7 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		stdin.Close()
 		if err := command.Wait(); err != nil {
 			t.Errorf("Neovim: %v %s", err, stderr.String())
@@ -119,7 +119,7 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 			t.Log(stderr.String())
 		}
 		cancel()
-	})
+	}()
 	scanner := bufio.NewScanner(stdout)
 	type snapshot struct {
 		Status string            `json:"status"`
