@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -287,6 +288,8 @@ func TestZinitCleansDanglingStagingCompletions(t *testing.T) {
 		"_zinit":   stage + "/_local---zinit/_zinit",
 		"_live":    stage + "/live/_live",
 		"_foreign": home + "/missing/_foreign",
+		"_file":    home + "/notes/.selfishell-zinit.1",
+		"_named":   home + "/notes/.selfishell-zinit.notes/_named",
 		"fixture":  stage + "/gone/fixture", // disabled completion
 	}
 	os.MkdirAll(dir, 0700)
@@ -315,4 +318,14 @@ func TestZinitCleansDanglingStagingCompletions(t *testing.T) {
 		}
 	}
 	assertNoPath(t, home+"/zinit.log") // Cleanup does not reprovision valid plugins.
+	moved, gone := home+"/completions", stage+"/gone/_gone"
+	if err := errors.Join(os.Rename(dir, moved), os.Symlink(moved, dir), os.Symlink(gone, moved+"/_gone")); err != nil {
+		t.Fatal(err)
+	}
+	if err := installPlugins(op, paths, manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.Readlink(moved + "/_gone"); err != nil || got != gone {
+		t.Fatal("cleanup followed a replaced completions directory")
+	}
 }

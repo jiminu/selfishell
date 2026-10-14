@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -158,15 +159,17 @@ zinit light "$2"`, "zsh", script, dep.Name, dep.Version, stageRoot)
 	return nil
 }
 
+var zinitStagePattern = regexp.MustCompile(`/\.selfishell-zinit\.[0-9]+/`)
+
 // v1.4.0–v1.6.9 let Zinit link staging completions into its shared directory.
 // Plugins add their own fpath, so drop those dangling links (matched by staging
-// name, as Zinit stores physical paths); only _zinit gets its installed target.
+// directory, as Zinit stores physical paths); only _zinit gets its installed target.
 func cleanStagedZinitCompletions(dataHome string) error {
 	dir := dataHome + "/zinit/completions"
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil
+	if info, err := os.Lstat(dir); os.IsNotExist(err) || err == nil && !info.IsDir() {
+		return nil // A replaced directory is user data.
 	}
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
@@ -177,7 +180,7 @@ func cleanStagedZinitCompletions(dataHome string) error {
 		if !strings.HasPrefix(entry.Name(), "_") {
 			continue
 		}
-		if reference, err := os.Readlink(path); err != nil || !strings.Contains(reference, "/.selfishell-zinit.") {
+		if reference, err := os.Readlink(path); err != nil || !zinitStagePattern.MatchString(reference) {
 			continue
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
