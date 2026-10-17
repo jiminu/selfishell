@@ -275,6 +275,21 @@ func TestNativeCompletionAudit(t *testing.T) {
 	}
 }
 
+// Terminals restoring several tabs start shells that recompile the dump at once.
+func TestNativeConcurrentDumpCompile(t *testing.T) {
+	t.Parallel()
+	home := nativeHome(t)
+	r := nativeRun(t, home, `startup='_selfishell_command_path() { return 1; }; source "$SELFISHELL_SOURCE"'
+zsh -fc "$startup"
+for i in {1..8}; do
+  zsh -fc "repeat 20; do command touch \"\$HOME/.zcompdump\"; $startup; done" &
+done
+wait
+leftovers=("$HOME"/.zcompdump.tmp*(DN))
+(( ! $#leftovers )) || print -rl -- $leftovers`, "ZDOTDIR="+home, "SELFISHELL_SOURCE="+nativeCompletion())
+	nativeQuiet(t, r)
+}
+
 func nativeCompletionProbe(t *testing.T, home, dir, mode, compile string) capture {
 	t.Helper()
 	if mode == "" {
