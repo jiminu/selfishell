@@ -276,6 +276,7 @@ func TestNativeCompletionAudit(t *testing.T) {
 }
 
 // Terminals restoring several tabs start shells that recompile the dump at once.
+// A directory occupying the bytecode path must not receive the compiled file.
 func TestNativeConcurrentDumpCompile(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
@@ -285,7 +286,10 @@ for i in {1..8}; do
   zsh -fc "repeat 20; do command touch \"\$HOME/.zcompdump\"; $startup; done" &
 done
 wait
-leftovers=("$HOME"/.zcompdump.tmp*(DN))
+command rm -f "$HOME/.zcompdump.zwc" && command mkdir "$HOME/.zcompdump.zwc" &&
+  command touch -t 202001010000 "$HOME/.zcompdump.zwc" || exit 10
+zsh -fc "$startup"
+leftovers=("$HOME"/.zcompdump.tmp*(DN) "$HOME"/.zcompdump.zwc/*(DN))
 (( ! $#leftovers )) || print -rl -- $leftovers`, "ZDOTDIR="+home, "SELFISHELL_SOURCE="+nativeCompletion())
 	nativeQuiet(t, r)
 }

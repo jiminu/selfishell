@@ -41,9 +41,11 @@ _selfishell_completion_files_changed() {
 
 # zcompile unlinks and recreates the read-only .zwc in place, so concurrent
 # shells fail with "can't write zwc file"; compile privately, then rename.
+# mv would move the file into a directory occupying the target, so skip one.
 _selfishell_completion_compile() {
   local temporary="$ZCOMPDUMP.tmp.$$.$RANDOM.zwc"
 
+  [[ ! -d "$ZCOMPDUMP.zwc" ]] || return 1
   zcompile "$temporary" "$ZCOMPDUMP" && command mv -f "$temporary" "$ZCOMPDUMP.zwc" || {
     command rm -f "$temporary"
     return 1
