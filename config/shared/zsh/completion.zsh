@@ -39,6 +39,19 @@ _selfishell_completion_files_changed() {
   return 1
 }
 
+# zcompile unlinks and recreates the read-only .zwc in place, so concurrent
+# shells fail with "can't write zwc file"; compile privately, then rename.
+# mv would move the file into a directory occupying the target, so skip one.
+_selfishell_completion_compile() {
+  local temporary="$ZCOMPDUMP.tmp.$$.$RANDOM.zwc"
+
+  [[ ! -d "$ZCOMPDUMP.zwc" ]] || return 1
+  zcompile "$temporary" "$ZCOMPDUMP" && command mv -f "$temporary" "$ZCOMPDUMP.zwc" || {
+    command rm -f "$temporary"
+    return 1
+  }
+}
+
 if [[ -o interactive ]] && { _selfishell_completion_needs_audit "$ZCOMPDUMP" ||
      _selfishell_completion_files_changed "$ZCOMPDUMP"; }; then
   # -i excludes insecure entries; -D rebuilds even when an unaudited dump has
@@ -56,7 +69,7 @@ if [[ -o interactive ]] && { _selfishell_completion_needs_audit "$ZCOMPDUMP" ||
     fi
     # Invalidate the old marker before rebuilding; a failed write must not
     # let the next shell skip the audit and restore insecure fpath entries.
-    if compdump && zcompile "$ZCOMPDUMP" && [[ "${_comp_secure:-}" != yes &&
+    if compdump && _selfishell_completion_compile && [[ "${_comp_secure:-}" != yes &&
          ! -e "$ZCOMPDUMP.audit" && ! -L "$ZCOMPDUMP.audit" ]]; then
       command touch "$ZCOMPDUMP.audit" 2>/dev/null
     fi
@@ -64,11 +77,12 @@ if [[ -o interactive ]] && { _selfishell_completion_needs_audit "$ZCOMPDUMP" ||
 else
   compinit -C -d "$ZCOMPDUMP"
 fi
-unfunction _selfishell_completion_needs_audit _selfishell_completion_files_changed
 
 if [[ -s "$ZCOMPDUMP" && ( ! -s "$ZCOMPDUMP.zwc" || "$ZCOMPDUMP" -nt "$ZCOMPDUMP.zwc" ) ]]; then
-  zcompile "$ZCOMPDUMP"
+  _selfishell_completion_compile
 fi
+unfunction _selfishell_completion_needs_audit _selfishell_completion_files_changed \
+  _selfishell_completion_compile
 
 if (( $+functions[zinit] )); then
   zinit cdreplay -q
