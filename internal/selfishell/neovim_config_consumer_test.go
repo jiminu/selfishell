@@ -125,7 +125,11 @@ func TestStandaloneNeovimSelectsPinnedPhysicalPathWithPrivateOuterHome(t *testin
 
 func standaloneNeovimProcess(t *testing.T, nvim string) Process {
 	t.Helper()
-	root := t.TempDir()
+	// Neovim's getcwd() resolves symlinks such as macOS /var -> /private/var.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	home := root + "/home"
 	if err := os.MkdirAll(home+"/tmp", 0700); err != nil {
 		t.Fatal(err)
