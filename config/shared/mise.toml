@@ -1,5 +1,5 @@
 [tools]
-starship = "1.26.0"
+starship = "1.27.0"
 fzf = "0.74.5"
 zoxide = "0.10.0"
 ripgrep = "15.2.0"
@@ -10,9 +10,9 @@ node = "24.18.0"
 python = "3.13.14"
 neovim = "0.12.6"
 tree-sitter = "0.27.1"
-uv = "0.13.0"
+uv = "0.13.1"
 gh = "2.102.0"
-lazygit = "0.66.1"
+lazygit = "0.66.2"
 
 [settings]
 not_found_auto_install = false
