@@ -6,7 +6,7 @@ if (( $+functions[zinit] )); then
     # dependencies.conf; keep the two in sync.
     # The provisioned plugin adds its own src directory to fpath. Blocking
     # that would require a separate completion installation after cloneonly.
-    zinit ice ver'6661b4b68173784ba31ef10ce4b5cb1c9ecfdcac'
+    zinit ice ver'989b23277ab33e8d5e82df6aed936e846db9d8b8'
     zinit light zsh-users/zsh-completions
   fi
 fi
