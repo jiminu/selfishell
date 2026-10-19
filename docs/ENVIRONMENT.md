@@ -84,7 +84,10 @@ needed to detect it are not available locally.
 Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
 available as well. `Space c a` opens code actions and `Space c f` formats the
-buffer when an attached server supports formatting.
+buffer when an attached server supports formatting. NvimTree underlines files
+with errors or warnings, and their parent directories, in the diagnostic color
+while keeping the Git name color. Only files a server has analyzed, usually
+open ones, are marked.
 
 Selfishell pins eight default LSP servers and synchronizes them through Mason;
 see [LSP updates](UPDATES.md#neovim-lsp-servers).
