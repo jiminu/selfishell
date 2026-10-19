@@ -149,6 +149,16 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if !found {
 		return fmt.Errorf("current mise config is not tracked: %s", config)
 	}
+	data := envValue(base.Env, "MISE_DATA_DIR")
+	if data == "" {
+		data = envValue(base.Env, "XDG_DATA_HOME")
+		if data == "" {
+			data = envValue(base.Env, "HOME") + "/.local/share"
+		}
+		data += "/mise"
+	}
+	installs := data + "/installs"
+	before := miseInstalledVersions(installs)
 	code, err := base.Run(ctx, mise, append([]string{"-C", shared, "prune", "--tools", "--yes"}, tools...)...)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -162,5 +172,28 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if o.Process.progress != nil {
 		o.report(reportSuccess, "Cleaned up unused mise versions.")
 	}
+	after := miseInstalledVersions(installs)
+	for version := range before {
+		if !after[version] {
+			// Open shells keep absolute paths, such as Starship's init, to removed versions.
+			o.note("Run 'exec zsh' in open shells to reload updated tools.")
+			break
+		}
+	}
 	return nil
+}
+
+// miseInstalledVersions lists <tool>/<version> directories, skipping alias links.
+func miseInstalledVersions(installs string) map[string]bool {
+	versions := map[string]bool{}
+	tools, _ := os.ReadDir(installs)
+	for _, tool := range tools {
+		entries, _ := os.ReadDir(installs + "/" + tool.Name())
+		for _, entry := range entries {
+			if entry.IsDir() {
+				versions[tool.Name()+"/"+entry.Name()] = true
+			}
+		}
+	}
+	return versions
 }
