@@ -100,7 +100,7 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 		t.Fatalf("default LSP provisioning: %v\n%s", err, output.String())
 	}
 	receipts, err := filepath.Glob(home + "/.local/share/nvim/mason/packages/*/mason-receipt.json")
-	if err != nil || len(receipts) != 7 {
+	if err != nil || len(receipts) != 8 {
 		t.Fatalf("default LSP receipts: %v %v\n%s", receipts, err, output.String())
 	}
 	installed := make(map[string]time.Time)

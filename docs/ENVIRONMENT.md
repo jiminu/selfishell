@@ -83,9 +83,10 @@ needed to detect it are not available locally.
 
 Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
-available as well.
+available as well. `Space c a` opens code actions and `Space c f` formats the
+buffer when an attached server supports formatting.
 
-Selfishell pins seven default LSP servers and synchronizes them through Mason;
+Selfishell pins eight default LSP servers and synchronizes them through Mason;
 see [LSP updates](UPDATES.md#neovim-lsp-servers).
 
 Additional LSP servers are installed with `:LspInstall <server>`, the standard

@@ -145,7 +145,7 @@ func TestResources(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home+"/cache")
 	t.Setenv("XDG_DATA_HOME", home+"/data")
 	all, err := ManagedResources("/release/alias/..")
-	if err != nil || len(all) != 36 {
+	if err != nil || len(all) != 37 {
 		t.Fatalf("resources: %d %v", len(all), err)
 	}
 	if all[0].Target != home+"/alias/../config space/selfishell/zsh/zshrc" {
@@ -158,9 +158,9 @@ func TestResources(t *testing.T) {
 		zsh      string
 		zshenv   bool
 	}{
-		{"macos", false, 33, "macos", false}, {"macos", true, 35, "macos", false},
-		{"ubuntu", false, 34, "ubuntu", true}, {"ubuntu", true, 34, "ubuntu", true},
-		{"ubuntu-wsl", false, 34, "ubuntu", true},
+		{"macos", false, 34, "macos", false}, {"macos", true, 36, "macos", false},
+		{"ubuntu", false, 35, "ubuntu", true}, {"ubuntu", true, 35, "ubuntu", true},
+		{"ubuntu-wsl", false, 35, "ubuntu", true},
 	} {
 		resources, err := ResourcesForPlatform("/release", tc.platform, tc.ghostty)
 		if err != nil || len(resources) != tc.count {

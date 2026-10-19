@@ -55,7 +55,7 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 			if err != nil || (code != 0) != tc.failed || !strings.Contains(output.String(), tc.want) {
 				t.Fatalf("code=%d err=%v output=%s", code, err, output.String())
 			}
-			if tc.mode == "current" && strings.Count(output.String(), "checked:") != 7 {
+			if tc.mode == "current" && strings.Count(output.String(), "checked:") != 8 {
 				t.Fatalf("did not check every default server: %s", output.String())
 			}
 			if tc.mode == "current" && strings.Contains(output.String(), "registry:updated") {
