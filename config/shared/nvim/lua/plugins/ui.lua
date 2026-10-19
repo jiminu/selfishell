@@ -170,6 +170,18 @@ return {
         "Git", "Open", "Hidden", "Modified", "Bookmark", "Diagnostics", "Copied", "Cut", remote.decorator(),
       }
       require("nvim-tree").setup(opts)
+      -- nvim-tree records diagnostics only on DiagnosticChanged; replay those
+      -- reported before this lazy load.
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        local diagnostics = vim.diagnostic.get(buf)
+        if #diagnostics > 0 then
+          vim.api.nvim_exec_autocmds("DiagnosticChanged", {
+            group = "NvimTree",
+            buffer = buf,
+            data = { diagnostics = diagnostics },
+          })
+        end
+      end
       local api = require("nvim-tree.api")
       for _, event in ipairs({ api.events.Event.TreePreOpen, api.events.Event.TreeClose }) do
         api.events.subscribe(event, function() require("config.dap").preserve_ui_sizes() end)
@@ -212,10 +224,17 @@ return {
       filters = {
         git_ignored = false,
       },
+      diagnostics = {
+        enable = true,
+        show_on_dirs = true,
+        severity = { min = vim.diagnostic.severity.WARN },
+      },
       renderer = {
         add_trailing = true,
         group_empty = true,
         highlight_git = "name",
+        -- The default undercurl leaves the Git name color visible.
+        highlight_diagnostics = "name",
         indent_markers = {
           enable = true,
           inline_arrows = true,
@@ -245,6 +264,7 @@ return {
             folder = false,
             folder_arrow = true,
             git = true,
+            diagnostics = false,
           },
         },
       },
