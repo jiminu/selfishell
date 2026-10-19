@@ -1,6 +1,7 @@
 package selfishell
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -26,7 +27,7 @@ printf '%s|%s|%s|%s|%s\n' "$PWD" "$MISE_OFFLINE" "$MISE_GLOBAL_CONFIG_FILE" "$MI
 case "$*" in
   *'settings get ignored_config_paths'*) printf '%s\n' "${IGNORED_RESULT:-[]}" ;;
   *'config ls --tracked-configs'*) printf '%s\n' "${TRACKED_RESULT:-$MISE_GLOBAL_CONFIG_FILE}" ;;
-  *'prune --tools --yes'*) exit "${PRUNE_EXIT:-0}" ;;
+  *'prune --tools --yes'*) rm -rf "${PRUNE_REMOVE:-/nonexistent}"; exit "${PRUNE_EXIT:-0}" ;;
 esac
 `, 0755)
 	op.Process.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
@@ -53,6 +54,20 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	}
 	if got, _ := os.Readlink(home + "/selfishell/previous"); got != "releases/1.0.0" {
 		t.Fatalf("changed previous: %s", got)
+	}
+	installs := envValue(op.Process.Env, "MISE_DATA_DIR") + "/installs/node"
+	writeTestFile(t, installs+"/24.18.0/bin/node", "", 0755)
+	if err := os.Symlink("24.18.0", installs+"/latest"); err != nil {
+		t.Fatal(err)
+	}
+	for _, remove := range []string{installs + "/latest", installs + "/24.18.0"} {
+		op.Process = withEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": remove})
+		if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", false); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(op.Process.Out.(*bytes.Buffer).String(), "exec zsh"); got != (remove == installs+"/24.18.0") {
+			t.Fatalf("restart note after removing %s: %t", remove, got)
+		}
 	}
 	if err := os.WriteFile(home+"/selfishell/releases/1.0.0/VERSION", []byte("invalid\n"), 0600); err != nil {
 		t.Fatal(err)

@@ -154,6 +154,8 @@ versions installed outside Selfishell: versions used only through environment
 variables, one-off `mise exec tool@version`, or untracked projects can be
 removed. Record those versions in project configuration and load it with mise
 before updating. See [mise prune](https://mise.jdx.dev/cli/prune.html).
+When cleanup removes a version, the update notes that open shells should run
+`exec zsh`: they keep paths to the removed versions, such as Starship's prompt.
 
 Cleanup is skipped on installation, rollback, `--cli-only`, `--skip-packages`,
 an already-current default update, or incomplete synchronization, including

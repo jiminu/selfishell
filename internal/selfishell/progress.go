@@ -123,8 +123,16 @@ func (c CLI) complete(message string) {
 }
 
 func (o *PackageOperation) report(tone reportTone, format string, args ...any) {
+	o.reportIn("Tools", tone, format, args...)
+}
+
+func (o *PackageOperation) note(format string, args ...any) {
+	o.reportIn("Notes", reportInfo, format, args...)
+}
+
+func (o *PackageOperation) reportIn(section string, tone reportTone, format string, args ...any) {
 	if o.Process.progress != nil && o.Process.progress.compact {
-		o.Process.progress.events = append(o.Process.progress.events, progressEvent{"Tools", fmt.Sprintf(format, args...), tone})
+		o.Process.progress.events = append(o.Process.progress.events, progressEvent{section, fmt.Sprintf(format, args...), tone})
 		return
 	}
 	color, _ := o.color(o.Process.Out, "\x1b[32m")
