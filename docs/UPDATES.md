@@ -105,7 +105,8 @@ default updates skip the entire phase.
 ### Neovim LSP servers
 
 The tools phase checks local installation versions and synchronizes only Selfishell's
-seven default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, and marksman.
+eight default servers: lua_ls, pyright, bashls, jsonls, yamlls, tombi, marksman,
+and ruff.
 Their exact versions are pinned in
 `config/shared/nvim/lua/config/languages.lua` as `server@version` entries.
 Missing servers are installed; servers already at the approved version are left

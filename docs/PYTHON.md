@@ -66,3 +66,7 @@ source .venv/bin/activate
 Create the virtual environment and install dependencies before launching
 `nvim` from the project root. With auto-activation configured, Neovim inherits
 the uv project's virtualenv Python path for its Python tooling.
+
+Pyright provides type checking, completion, and navigation. Ruff provides
+linting, formatting (`Space c f`), and import organization through code actions
+(`Space c a`), using the project's `pyproject.toml` or `ruff.toml` settings.
