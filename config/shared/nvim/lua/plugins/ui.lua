@@ -2,6 +2,8 @@ local plugin = require("config.plugin_versions").spec
 
 local excluded_scope_filetypes = {
   NvimTree = true,
+  -- Without Tree-sitter, scope scans by indent: ~0.5 s per million lines.
+  bigfile = true,
   help = true,
   lazy = true,
   log = true,
@@ -518,6 +520,11 @@ return {
       },
     },
     opts = {
+      -- Files over 1.5 MB or minified open as `bigfile`, skipping LSP and
+      -- Tree-sitter. The statusline filetype says so; the notice would prompt.
+      bigfile = {
+        notify = false,
+      },
       -- Selfishell installs ripgrep, but not fd.
       picker = {
         ui_select = false,

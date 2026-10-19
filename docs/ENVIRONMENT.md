@@ -89,6 +89,10 @@ with errors or warnings, and their parent directories, in the diagnostic color
 while keeping the Git name color. Only files a server has analyzed, usually
 open ones, are marked.
 
+Files over 1.5 MB, or minified files with very long lines, open with the
+`bigfile` filetype shown in the statusline. LSP, Tree-sitter, and the scope
+guide stay off for them, while regular syntax highlighting remains.
+
 Selfishell pins eight default LSP servers and synchronizes them through Mason;
 see [LSP updates](UPDATES.md#neovim-lsp-servers).
 
