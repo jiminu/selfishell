@@ -6,6 +6,10 @@ return {
     opts = {},
   }),
 
+  plugin("kylechui/nvim-surround", {
+    event = "VeryLazy",
+  }),
+
   -- nvim-treesitter 1.0+ does not support lazy-loading.
   plugin("nvim-treesitter/nvim-treesitter", {
     lazy = false,
