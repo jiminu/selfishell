@@ -69,6 +69,24 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 			t.Fatalf("restart note after removing %s: %t", remove, got)
 		}
 	}
+	python := envValue(op.Process.Env, "MISE_DATA_DIR") + "/installs/python"
+	dataHome := envValue(op.Process.Env, "XDG_DATA_HOME")
+	if dataHome == "" {
+		dataHome = home + "/.local/share"
+	}
+	mason := dataHome + "/nvim/mason/packages"
+	writeTestFile(t, python+"/3.14.8/bin/python3", "", 0755)
+	for name, base := range map[string]string{"debugpy": python + "/3.14.8/bin", "current": python + "/3.14.9/bin", "homebrew": "/opt/homebrew/opt/python@3.14/bin"} {
+		writeTestFile(t, mason+"/"+name+"/venv/pyvenv.cfg", "home = "+base+"\nversion = 3.14\n", 0600)
+	}
+	op.Process = withEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": python + "/3.14.8"})
+	op.Process.Out = &bytes.Buffer{}
+	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := op.Process.Out.(*bytes.Buffer).String(); !strings.Contains(got, "':MasonInstall --force debugpy'") {
+		t.Fatalf("Mason virtualenv on removed Python: %s", got)
+	}
 	if err := os.WriteFile(home+"/selfishell/releases/1.0.0/VERSION", []byte("invalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

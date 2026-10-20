@@ -173,14 +173,49 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		o.report(reportSuccess, "Cleaned up unused mise versions.")
 	}
 	after := miseInstalledVersions(installs)
+	removed := map[string]bool{}
 	for version := range before {
 		if !after[version] {
-			// Open shells keep absolute paths, such as Starship's init, to removed versions.
-			o.note("Run 'exec zsh' in open shells to reload updated tools.")
+			removed[version] = true
+		}
+	}
+	if len(removed) != 0 {
+		// Open shells keep absolute paths, such as Starship's init, to removed versions.
+		o.note("Run 'exec zsh' in open shells to reload updated tools.")
+	}
+	dataHome := envValue(base.Env, "XDG_DATA_HOME")
+	if dataHome == "" {
+		dataHome = envValue(base.Env, "HOME") + "/.local/share"
+	}
+	if stale := masonPackagesOnRemovedPython(dataHome+"/nvim/mason/packages", installs, removed); len(stale) != 0 {
+		o.note("Run ':MasonInstall --force %s' in Neovim: its virtualenv used a removed Python.", strings.Join(stale, " "))
+	}
+	return nil
+}
+
+// masonPackagesOnRemovedPython lists Mason packages whose virtualenv was built
+// on a pruned mise Python; a virtualenv keeps its interpreter's absolute path.
+func masonPackagesOnRemovedPython(packages, installs string, removed map[string]bool) []string {
+	var stale []string
+	entries, _ := os.ReadDir(packages)
+	for _, entry := range entries {
+		config, err := os.ReadFile(packages + "/" + entry.Name() + "/venv/pyvenv.cfg")
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(config), "\n") {
+			key, value, ok := strings.Cut(line, "=")
+			if !ok || strings.TrimSpace(key) != "home" {
+				continue
+			}
+			version, ok := strings.CutPrefix(strings.TrimSpace(value), installs+"/python/")
+			if version, _, _ = strings.Cut(version, "/"); ok && removed["python/"+version] {
+				stale = append(stale, entry.Name())
+			}
 			break
 		}
 	}
-	return nil
+	return stale
 }
 
 // miseInstalledVersions lists <tool>/<version> directories, skipping alias links.
