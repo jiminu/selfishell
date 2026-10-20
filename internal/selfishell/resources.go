@@ -53,6 +53,7 @@ func ManagedResources(root string) ([]Resource, error) {
 		{Kind: "file", Name: "nvim-lua-plugins-completion", Target: paths.Config + "/nvim/lua/plugins/completion.lua", Source: root + "/config/shared/nvim/lua/plugins/completion.lua"},
 		{Kind: "file", Name: "nvim-after-lsp-lua_ls", Target: paths.Config + "/nvim/after/lsp/lua_ls.lua", Source: root + "/config/shared/nvim/after/lsp/lua_ls.lua"},
 		{Kind: "file", Name: "nvim-after-lsp-pyright", Target: paths.Config + "/nvim/after/lsp/pyright.lua", Source: root + "/config/shared/nvim/after/lsp/pyright.lua"},
+		{Kind: "file", Name: "nvim-after-lsp-ruff", Target: paths.Config + "/nvim/after/lsp/ruff.lua", Source: root + "/config/shared/nvim/after/lsp/ruff.lua"},
 		{Kind: "block", Name: "user-zshrc", Target: home + "/.zshrc", Source: "-"},
 		{Kind: "block", Name: "user-zprofile", Target: home + "/.zprofile", Source: "-"},
 		{Kind: "block", Name: "user-zshenv", Target: home + "/.zshenv", Source: "-"},

@@ -70,3 +70,6 @@ the uv project's virtualenv Python path for its Python tooling.
 Pyright provides type checking, completion, and navigation. Ruff provides
 linting, formatting (`Space c f`), and import organization through code actions
 (`Space c a`), using the project's `pyproject.toml` or `ruff.toml` settings.
+Syntax errors and undefined names come from Pyright alone; Ruff's matching
+reports (`F821`, `F822`) are off in the editor only, so `ruff check` still
+reports them.
