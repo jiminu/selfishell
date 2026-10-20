@@ -14,9 +14,9 @@ assert(target, "mason-lspconfig spec is missing")
 assert(target.ft == nil, "mason-lspconfig plugin loading must not be limited to default LSP filetypes")
 assert(target.event == "VeryLazy", "mason-lspconfig must load on VeryLazy: " .. vim.inspect(target.event))
 
-package.preload["cmp_nvim_lsp"] = function()
+package.preload["blink.cmp"] = function()
   return {
-    default_capabilities = function()
+    get_lsp_capabilities = function()
       return {}
     end,
   }
@@ -33,7 +33,7 @@ end
 
 target.config()
 
-package.preload["cmp_nvim_lsp"] = nil
+package.preload["blink.cmp"] = nil
 package.preload["mason-lspconfig"] = nil
 
 assert(setup_opts, "mason-lspconfig.setup() was not called")

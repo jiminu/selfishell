@@ -65,7 +65,7 @@ end
 
 -- Completion menu behavior
 opt.completeopt = { "menu", "menuone", "noselect" }
--- Also caps nvim-cmp's menu; 0 leaves it unlimited.
+-- Native popups only; blink.cmp's menu takes its height from completion.lua.
 opt.pumheight = 10
 
 vim.diagnostic.config({

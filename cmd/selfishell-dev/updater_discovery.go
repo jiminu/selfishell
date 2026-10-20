@@ -109,7 +109,15 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 		if dependency.Kind != "nvim-plugin" && dependency.Kind != "zsh-plugin" {
 			continue
 		}
-		commit, err := gitCommit(dependency.Source, "HEAD")
+		ref := "HEAD"
+		if releasePinnedPlugins[dependency.Name] {
+			tag, err := latestTag(dependency.Name)
+			if err != nil {
+				return nil, err
+			}
+			ref = "refs/tags/" + tag
+		}
+		commit, err := gitCommit(dependency.Source, ref)
 		if err != nil {
 			return nil, err
 		}
