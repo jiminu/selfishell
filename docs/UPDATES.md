@@ -157,9 +157,12 @@ removed. Record those versions in project configuration and load it with mise
 before updating. See [mise prune](https://mise.jdx.dev/cli/prune.html).
 When cleanup removes a version, the update notes that open shells should run
 `exec zsh`: they keep paths to the removed versions, such as Starship's prompt.
-Virtualenvs also keep the Python that created them. After a Python update,
-rebuild a uv project's `.venv` with `uv sync`, and reinstall a pip-based Mason
-package such as debugpy with `:MasonInstall --force debugpy`.
+Virtualenvs also keep the Python that created them. When cleanup removes a
+Python, the update names any Mason package built on it, such as debugpy, with
+the `:MasonInstall --force` command that rebuilds it. Rebuild a uv project's
+`.venv` with `uv sync`, and reinstall `uv tool` or pipx tools built on that
+Python. Global `npm install -g` packages live inside a Node version and are
+removed with it.
 
 Cleanup is skipped on installation, rollback, `--cli-only`, `--skip-packages`,
 an already-current default update, or incomplete synchronization, including
