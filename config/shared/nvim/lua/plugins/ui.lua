@@ -581,6 +581,22 @@ return {
     config = function(_, opts)
       require("snacks").setup(opts)
       Snacks.indent.enable()
+      -- Snacks skips the size check when the detected path differs from the
+      -- symlink-resolved buffer name (macOS /tmp too); rerun with the resolved
+      -- path. `.*` would replace Snacks' rule. Drop after folke/snacks.nvim#2973.
+      vim.filetype.add({
+        pattern = {
+          [".+"] = function(path, buf)
+            local name = buf and vim.api.nvim_buf_get_name(buf)
+            if not path or not name or path == name or vim.fn.resolve(path) ~= name then
+              return
+            end
+            if vim.filetype.match({ filename = name, buf = buf }) == "bigfile" then
+              return "bigfile"
+            end
+          end,
+        },
+      })
     end,
   }),
 

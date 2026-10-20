@@ -141,11 +141,22 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 	}
 	runDefaultLSPSelection(t, root, nvim)
 	runNeovimGitRemote(t, root, nvim, home+"/.local/share/nvim/lazy")
+	// Neovim resolves symlinks in buffer names but not in the path it detects.
+	if err := os.MkdirAll(home+"/bigfile-real", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(home+"/bigfile-real/big.py", []byte(strings.Repeat("value = 1\n", 200000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(home+"/bigfile-real", home+"/bigfile-link"); err != nil {
+		t.Fatal(err)
+	}
 	for _, probe := range []struct{ name, filename, content, marker string }{
 		{"terraform", "main.tf", "terraform { required_version = \">= 1.0\" }\n", "Neovim developer smoke: OK"},
 		{"python", "main.py", "def nested(value):\n    return {\"items\": [(value,)]}\n", "Python highlighting smoke: OK"},
 		{"rainbow", "main.py", "", "Rainbow-delimiters smoke: OK"},
 		{"bufnewfile", "brand-new.py", "", "BufNewFile indent smoke: OK"},
+		{"bigfile", "bigfile-link/big.py", "", "Bigfile symlink smoke: OK"},
 		{"dap_layout", "debug-layout.txt", "", "DAP layout smoke: OK"},
 		{"dap_focus", "debug-focus.txt", "source fixture\n", "DAP focus smoke: OK"},
 		{"dap_args", "debug-args.txt", "", "DAP args smoke: OK"},
