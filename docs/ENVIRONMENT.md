@@ -35,7 +35,7 @@ after the path.
 The right prompt keeps short-lived command results before the more stable
 environment context. Node and Java show their major version (`node:24`,
 `java:21`). Python uses Starship's built-in module to show its major/minor
-version (`py:3.13`) and, when active, the virtualenv (`py:3.13(myenv)`). Generic
+version (`py:3.14`) and, when active, the virtualenv (`py:3.14(myenv)`). Generic
 `.venv` and `venv` names use their parent directory name. Python appears only
 in detected Python directories or with an active virtualenv.
 Kubernetes is disabled by default. If enabled, it uses file/folder detection
