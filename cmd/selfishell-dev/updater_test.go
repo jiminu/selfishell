@@ -185,6 +185,7 @@ if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 case "$url" in
   */jqlang/jq/releases/latest) printf '{"tag_name":"jq-2.0.0"}\n' ;;
   */zdharma-continuum/zinit/releases/latest) printf '{"tag_name":"v1.2.3"}\n' ;;
+  */saghen/blink.cmp/releases/latest) printf '{"tag_name":"v4.5.6"}\n' ;;
   *) printf '{"tag_name":"v1.2.3"}\n' ;;
 esac
 `
@@ -193,6 +194,7 @@ printf '%s\n' "$*" >>"$GIT_LOG"
 if [[ "${DISCOVERY_FAILURE:-}" == git ]]; then printf 'invalid\tHEAD\n'; exit 0; fi
 case "$*" in
   *zdharma-continuum/zinit.git*) printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v1.2.3\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v1.2.3^{}\n' ;;
+  *saghen/blink.cmp.git*refs/tags/v4.5.6*) printf 'dddddddddddddddddddddddddddddddddddddddd\trefs/tags/v4.5.6\n' ;;
   *) printf 'cccccccccccccccccccccccccccccccccccccccc\tHEAD\n' ;;
 esac
 `
@@ -215,6 +217,7 @@ esac
 	var lines strings.Builder
 	lines.WriteString("git zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh\n")
 	lines.WriteString("nvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n")
+	lines.WriteString("nvim-plugin saghen/blink.cmp " + oldC + " all all https://github.com/saghen/blink.cmp.git - - -\n")
 	lines.WriteString(zshLine("zsh-users/zsh-completions", oldC))
 	for _, platform := range []string{"linux", "macos"} {
 		for _, arch := range []string{"amd64", "arm64"} {
@@ -244,7 +247,7 @@ esac
 	if count := strings.Count(got, " 0c982986710a026635603031674053ca851fc0e3ea760094a34f59b84f7f6da6 .local/bin/mise raw"); count != 4 {
 		t.Fatalf("expected verified checksums for all four downloads, got %d: %s", count, got)
 	}
-	for _, want := range []string{"git zinit v1.2.3 all all https://github.com/zdharma-continuum/zinit.git bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "nvim-plugin folke/lazy.nvim cccccccccccccccccccccccccccccccccccccccc", "zsh-plugin zsh-users/zsh-completions cccccccccccccccccccccccccccccccccccccccc", "download mise 1.2.3 linux amd64 https://github.com/jdx/mise/releases/download/v1.2.3/mise-v1.2.3-linux-x64"} {
+	for _, want := range []string{"git zinit v1.2.3 all all https://github.com/zdharma-continuum/zinit.git bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "nvim-plugin folke/lazy.nvim cccccccccccccccccccccccccccccccccccccccc", "nvim-plugin saghen/blink.cmp dddddddddddddddddddddddddddddddddddddddd", "zsh-plugin zsh-users/zsh-completions cccccccccccccccccccccccccccccccccccccccc", "download mise 1.2.3 linux amd64 https://github.com/jdx/mise/releases/download/v1.2.3/mise-v1.2.3-linux-x64"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %s", want, got)
 		}

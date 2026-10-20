@@ -1,69 +1,39 @@
 local plugin = require("config.plugin_versions").spec
 
 return {
-  plugin("hrsh7th/nvim-cmp", {
-    event = "InsertEnter",
-    dependencies = {
-      plugin("hrsh7th/cmp-nvim-lsp"),
-      plugin("hrsh7th/cmp-buffer"),
-      plugin("hrsh7th/cmp-path"),
-    },
-    config = function()
-      local cmp = require("cmp")
-      local kind_icons = Snacks.picker.config.get().icons.kinds
+  plugin("saghen/blink.cmp", {
+    event = { "InsertEnter", "CmdlineEnter" },
+    opts = function()
+      local kind_icons = {}
+      for kind, icon in pairs(Snacks.picker.config.get().icons.kinds) do
+        kind_icons[kind] = vim.trim(icon)
+      end
 
-      cmp.setup({
-        formatting = {
-          format = function(_, item)
-            item.icon = vim.trim(kind_icons[item.kind] or "")
-            item.icon_hl_group = "CmpItemKind" .. item.kind
-            return item
-          end,
-        },
-
-        snippet = {
-          expand = function(args)
-            vim.snippet.expand(args.body)
-          end,
-        },
-
+      return {
         -- Explicit mappings avoid behavior changes from preset updates.
-        mapping = {
-          ["<C-b>"] = cmp.mapping.scroll_docs(-4),
-          ["<C-f>"] = cmp.mapping.scroll_docs(4),
-          ["<C-Space>"] = cmp.mapping.complete(),
-
+        keymap = {
+          preset = "none",
+          ["<C-b>"] = { "scroll_documentation_up", "fallback" },
+          ["<C-f>"] = { "scroll_documentation_down", "fallback" },
+          ["<C-Space>"] = { "show", "show_documentation", "hide_documentation" },
+          ["<C-e>"] = { "hide", "fallback" },
           -- Enter accepts the first item even without an explicit selection.
-          ["<CR>"] = cmp.mapping.confirm({ select = true }),
-
-          ["<Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
-              cmp.select_next_item()
-            elseif vim.snippet.active({ direction = 1 }) then
-              vim.snippet.jump(1)
-            else
-              fallback()
-            end
-          end, { "i", "s" }),
-
-          ["<S-Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
-              cmp.select_prev_item()
-            elseif vim.snippet.active({ direction = -1 }) then
-              vim.snippet.jump(-1)
-            else
-              fallback()
-            end
-          end, { "i", "s" }),
+          ["<CR>"] = { "select_and_accept", "fallback" },
+          ["<Tab>"] = { "select_next", "snippet_forward", "fallback" },
+          ["<S-Tab>"] = { "select_prev", "snippet_backward", "fallback" },
         },
-
-        sources = cmp.config.sources({
-          { name = "nvim_lsp" },
-        }, {
-          { name = "buffer" },
-          { name = "path" },
-        }),
-      })
+        appearance = { kind_icons = kind_icons },
+        completion = {
+          list = { selection = { preselect = false, auto_insert = true } },
+          menu = { border = "rounded", max_height = 10 },
+          documentation = { auto_show = true, auto_show_delay_ms = 200, window = { border = "rounded" } },
+        },
+        signature = { enabled = true, window = { border = "rounded" } },
+        sources = { default = { "lsp", "path", "buffer" } },
+        -- The Rust matcher adds typo tolerance and frecency but needs a
+        -- per-platform prebuilt binary; the Lua matcher needs nothing extra.
+        fuzzy = { implementation = "lua" },
+      }
     end,
   }),
 }

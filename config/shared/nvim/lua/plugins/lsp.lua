@@ -26,11 +26,11 @@ return {
     dependencies = {
       plugin("mason-org/mason.nvim"),
       plugin("neovim/nvim-lspconfig"),
-      plugin("hrsh7th/cmp-nvim-lsp"),
+      plugin("saghen/blink.cmp"),
     },
     config = function()
       vim.lsp.config("*", {
-        capabilities = require("cmp_nvim_lsp").default_capabilities(),
+        capabilities = require("blink.cmp").get_lsp_capabilities(),
       })
 
       require("mason-lspconfig").setup({
