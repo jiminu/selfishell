@@ -85,8 +85,8 @@ Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
 available as well. Completion offers LSP, path, and buffer items: `Tab` and
 `Shift-Tab` move through them and `Enter` accepts. Accepting a function adds
-its parentheses, a signature window follows the arguments, and `:` commands
-complete as you type. `Space c a` opens code actions and `Space c f` formats the
+its parentheses, a signature window follows the arguments, and `Tab`
+completes `:` commands. `Space c a` opens code actions and `Space c f` formats the
 buffer when an attached server supports formatting. Diagnostics are marked in
 the sign column and underlined; the message appears at the end of the cursor
 line. `]d` and `[d` move between diagnostics, and `Ctrl-w d` opens the one under

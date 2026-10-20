@@ -158,6 +158,7 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		{"python", "main.py", "def nested(value):\n    return {\"items\": [(value,)]}\n", "Python highlighting smoke: OK"},
 		{"rainbow", "main.py", "", "Rainbow-delimiters smoke: OK"},
 		{"bufnewfile", "brand-new.py", "", "BufNewFile indent smoke: OK"},
+		{"completion", "completion.py", "", "Completion smoke: OK"},
 		{"bigfile", "bigfile-link/big.py", "", "Bigfile symlink smoke: OK"},
 		{"dap_layout", "debug-layout.txt", "", "DAP layout smoke: OK"},
 		{"dap_focus", "debug-focus.txt", "source fixture\n", "DAP focus smoke: OK"},
