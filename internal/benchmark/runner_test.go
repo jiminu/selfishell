@@ -298,7 +298,9 @@ func TestIntegrationQueryCancellationCleansDescendants(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { _, e := f.integrations(ctx); done <- e }()
-	deadline := time.After(2 * time.Second)
+	// macOS scans a new executable on first run; under the parallel suite
+	// that alone took up to 2 s.
+	deadline := time.After(10 * time.Second)
 	for {
 		if _, e := os.Stat(startedMarker); e == nil {
 			break
