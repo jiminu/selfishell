@@ -84,7 +84,10 @@ needed to detect it are not available locally.
 Lua, Python, Bash, sh, JSON, YAML, TOML, and Markdown LSP support appears
 when a configured server attaches. Neovim's standard LSP mappings remain
 available as well. `Space c a` opens code actions and `Space c f` formats the
-buffer when an attached server supports formatting. NvimTree underlines files
+buffer when an attached server supports formatting. Diagnostics are marked in
+the sign column and underlined; the message appears at the end of the cursor
+line. `]d` and `[d` move between diagnostics, and `Ctrl-w d` opens the one under
+the cursor in a float. NvimTree underlines files
 with errors or warnings, and their parent directories, in the diagnostic color
 while keeping the Git name color. Only files a server has analyzed, usually
 open ones, are marked.
