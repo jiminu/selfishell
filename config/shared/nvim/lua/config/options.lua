@@ -69,9 +69,12 @@ opt.completeopt = { "menu", "menuone", "noselect" }
 opt.pumheight = 10
 
 vim.diagnostic.config({
+  -- Signs and underlines mark every diagnostic; the message shows on the
+  -- cursor line only.
   virtual_text = {
     prefix = "●",
     spacing = 4,
+    current_line = true,
   },
   signs = true,
   underline = true,
