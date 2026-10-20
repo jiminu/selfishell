@@ -157,6 +157,9 @@ removed. Record those versions in project configuration and load it with mise
 before updating. See [mise prune](https://mise.jdx.dev/cli/prune.html).
 When cleanup removes a version, the update notes that open shells should run
 `exec zsh`: they keep paths to the removed versions, such as Starship's prompt.
+Virtualenvs also keep the Python that created them. After a Python update,
+rebuild a uv project's `.venv` with `uv sync`, and reinstall a pip-based Mason
+package such as debugpy with `:MasonInstall --force debugpy`.
 
 Cleanup is skipped on installation, rollback, `--cli-only`, `--skip-packages`,
 an already-current default update, or incomplete synchronization, including
