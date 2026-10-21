@@ -692,15 +692,10 @@ return {
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
       },
-      excluded_filetypes = {
-        "cmp_docs",
-        "cmp_menu",
-        "prompt",
-        "NvimTree",
-        "lazy",
-        "mason",
-        "help",
-      },
+      -- Plugin windows use scratch buffers; blink.cmp names its windows only
+      -- after opening them, too late for a filetype match on the first open.
+      excluded_buftypes = { "terminal", "nofile" },
+      excluded_filetypes = { "prompt", "help" },
       -- Keep cursor marks disabled to avoid redraws on every cursor move.
       handlers = {
         cursor = false,

@@ -114,9 +114,9 @@ rewrites the approved pins:
 - direct downloads and Git dependencies in `dependencies.conf`, including
   checksums of downloaded mise artifacts; a Zsh plugin commit is also rewritten
   in its `zinit ice ver'…'` line in `config/shared/zsh/completion.zsh` or
-  `interactive.zsh`. Plugins follow their default branch, except blink.cmp,
-  which follows its latest release while `main` carries an unreleased major
-  version;
+  `interactive.zsh`. Plugins follow their default branch, except blink.cmp and
+  nvim-scrollbar, which follow their latest release while `main` carries an
+  unreleased major version;
 - mise tool versions in `config/shared/mise.toml`;
 - default LSP pins in `config/shared/nvim/lua/config/languages.lua`, from the
   published Mason registry and only for the declared servers.
