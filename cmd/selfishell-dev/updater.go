@@ -21,7 +21,7 @@ var downloadChecksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Plugins whose default branch carries an unreleased major version follow
 // their latest release instead of HEAD.
-var releasePinnedPlugins = map[string]bool{"saghen/blink.cmp": true}
+var releasePinnedPlugins = map[string]bool{"saghen/blink.cmp": true, "petertriho/nvim-scrollbar": true}
 
 func runDependencyUpdate(ctx context.Context, root string, args []string, p selfishell.Process) int {
 	flags := flag.NewFlagSet("update-dependencies", flag.ContinueOnError)
