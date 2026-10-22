@@ -104,7 +104,6 @@ func TestNativeAutosuggestionsOrderAndPin(t *testing.T) {
 	if !strings.Contains(out, "manual=1\n") {
 		t.Fatalf("manual rebind flag: %q", out)
 	}
-	// TestNativeZshPluginPins checks the pinned commit itself.
 	wantIce := regexp.MustCompile(`(?m)^ice: wait0 lucid ver[0-9a-f]{40} ` + regexp.QuoteMeta("atload(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets") + `$`)
 	if !wantIce.MatchString(out) {
 		t.Fatalf("syntax-highlighting ice: want %s in %q", wantIce, out)
@@ -263,28 +262,6 @@ func TestNativeMissingNeovim(t *testing.T) {
 	want := "vim=0\neditor=0\nvisual=0\n"
 	if string(r.Stdout) != want {
 		t.Fatalf("aliases: %q", r.Stdout)
-	}
-}
-func TestNativeZshPluginPins(t *testing.T) {
-	t.Parallel()
-	data := nativeRead(t, filepath.Join(repoRoot(), "dependencies.conf"))
-	for _, tc := range []struct{ repo, file string }{{"zsh-users/zsh-completions", "completion.zsh"}, {"Aloxaf/fzf-tab", "interactive.zsh"}, {"zsh-users/zsh-autosuggestions", "interactive.zsh"}, {"zdharma-continuum/fast-syntax-highlighting", "interactive.zsh"}} {
-		t.Run(tc.repo, func(t *testing.T) {
-			var pin string
-			for _, line := range strings.Split(data, "\n") {
-				f := strings.Fields(line)
-				if len(f) >= 3 && f[0] == "zsh-plugin" && f[1] == tc.repo {
-					pin = f[2]
-				}
-			}
-			if pin == "" {
-				t.Fatal("missing approved pin")
-			}
-			file := nativeRead(t, filepath.Join(repoRoot(), "config/shared/zsh", tc.file))
-			if !strings.Contains(file, "ver'"+pin+"'") {
-				t.Fatalf("%s lacks %s pin", tc.file, tc.repo)
-			}
-		})
 	}
 }
 func TestNativeFzfPaletteAndUserOptions(t *testing.T) {

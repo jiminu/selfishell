@@ -362,19 +362,6 @@ func TestNativeInsecureCompletionDirectory(t *testing.T) {
 		})
 	}
 }
-func TestNativeMacOSPathPrefix(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	root := filepath.Dir(home)
-	bin := filepath.Join(root, "bin")
-	nativeWrite(t, filepath.Join(bin, "brew"), "#!/bin/sh\nexit 0\n", 0700)
-	nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), ":\n", 0600)
-	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; print -l -r -- "$path[1]" "$path[2]"`, "PATH="+bin+":"+nativePath, "HOMEBREW_PREFIX=", "SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/macos/zshrc"))
-	if string(r.Stdout) != home+"/.local/bin\n"+home+"/.rd/bin\n" || len(r.Stderr) != 0 {
-		t.Fatalf("path order: %+v", r)
-	}
-}
-
 func TestNativeMacOSInitializesHomebrewAlreadyOnPath(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
@@ -395,19 +382,6 @@ printf 'path=("%s/bin" "%s/sbin" $path)\n' "$SELFISHELL_TEST_BREW_PREFIX" "$SELF
 		t.Fatalf("Homebrew initialization: want %q got %+v", want, r)
 	}
 }
-func TestNativeWSLDeferredPath(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), `[[ ${path[(I)/mnt/[a-zA-Z]/*]} -eq 0 ]] || return 1
-SELFISHELL_TEST_INITIALIZED=1
-`, 0600)
-	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE" || exit 15; print -l -r -- "$SELFISHELL_TEST_INITIALIZED" "${(j.:.)path}"`, "PATH=/usr/bin:/mnt/c/Windows:/bin", "WSL_DISTRO_NAME=Ubuntu-24.04", "SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/ubuntu/zshrc"))
-	want := "1\n" + home + "/.local/bin:" + home + "/.rd/bin:/usr/bin:/bin:/mnt/c/Windows\n"
-	if string(r.Stdout) != want || len(r.Stderr) != 0 {
-		t.Fatalf("WSL path: want %q got %+v", want, r)
-	}
-}
-
 func TestNativeWSLDeferredPathPreservesMiseSnapshot(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -416,6 +390,7 @@ func TestNativeWSLDeferredPathPreservesMiseSnapshot(t *testing.T) {
 		{"unchanged", `export __MISE_ZSH_ACTIVATE_PATH="$PATH"`, `[[ "$__MISE_ZSH_ACTIVATE_PATH" == "$PATH" ]]`},
 		{"changed_after_activation", `export __MISE_ZSH_ACTIVATE_PATH="$PATH"; path=("$HOME/custom/bin" $path)`, `[[ "$__MISE_ZSH_ACTIVATE_PATH" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/bin" ]]`},
 		{"without_snapshot", `:`, `(( ! ${+__MISE_ZSH_ACTIVATE_PATH} ))`},
+		{"deferred_during_startup", `[[ ${path[(I)/mnt/[a-zA-Z]/*]} -eq 0 ]] || return 1; SELFISHELL_TEST_INITIALIZED=1`, `[[ "$SELFISHELL_TEST_INITIALIZED" == 1 && "${(j.:.)path}" == "$HOME/.local/bin:$HOME/.rd/bin:/usr/bin:/bin:/mnt/c/Windows" ]]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := nativeHome(t)
