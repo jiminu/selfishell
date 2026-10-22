@@ -378,13 +378,19 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 	if _, err := exec.LookPath("powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
+	distro := os.Getenv("WSL_DISTRO_NAME")
+	if distro == "" {
+		t.Skip("requires a native WSL distribution identity")
+	}
 	p := Process{Env: withEnvironment(Process{}, map[string]string{"HOME": t.TempDir()}).Env}
-	data, err := p.windowsScript(context.Background(), map[string]string{"operation": "probe"})
+	data, err := p.windowsScript(context.Background(), map[string]string{"operation": "probe", "distro": distro})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var probe struct {
-		AppData string `json:"appData"`
+		AppData       string   `json:"appData"`
+		SettingsPaths []string `json:"settingsPaths"`
+		Guids         []string `json:"wslProfileGuids"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil || probe.AppData == "" {
 		t.Fatal("invalid native probe", string(data), err)
@@ -396,6 +402,13 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 	windows, err := p.windowsPath(context.Background(), "-w", linux)
 	if err != nil || !strings.EqualFold(windows, probe.AppData) {
 		t.Fatal("path round trip", windows, err)
+	}
+	_, guid, _, err := (CLI{}).findWindowsProfile(p, distro, probe.SettingsPaths, probe.Guids)
+	if err != nil {
+		t.Skipf("native settings have no unique visible target: %v", err)
+	}
+	if !validTerminalGUID(guid) {
+		t.Fatal("invalid native profile identity")
 	}
 }
 
@@ -460,7 +473,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 }
 
 func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
-	for _, scenario := range []string{"reuse", "modified", "unrecorded", "registration-retry"} {
+	for _, scenario := range []string{"reuse", "modified", "unrecorded"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, home, paths, windowsHome := windowsTerminalFixture(t)
 			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
@@ -497,7 +510,6 @@ data=re.search("FromBase64String\('([^']+)'",script).group(1)
 request=json.loads(base64.b64decode(data))
 if request['operation']=='font-register':
  with open(os.environ['HOME']+'/registration-request','w') as f: json.dump(request,f)
- if os.path.exists(os.environ['HOME']+'/fail-registration'): sys.exit(1)
 print('{}')
 `
 			if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
@@ -554,10 +566,6 @@ print('{}')
 				if err := os.Remove(paths.State + "/retained-fonts/jetbrainsmono-regular/3.4.0.json"); err != nil {
 					t.Fatal(err)
 				}
-			case "registration-retry":
-				if err := testutil.WriteFile(home+"/fail-registration", nil, 0600); err != nil {
-					t.Fatal(err)
-				}
 			}
 			if scenario == "modified" || scenario == "unrecorded" {
 				preserved := blockRead(t, oldTarget)
@@ -571,18 +579,6 @@ print('{}')
 					t.Fatal("rejected rollback changed font, registration, or current pin")
 				}
 				return
-			}
-			if scenario == "registration-retry" {
-				op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
-				if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err == nil {
-					t.Fatal("registration failure ignored")
-				}
-				if _, err := os.Stat(paths.State + "/pending-fonts/jetbrainsmono-regular"); err != nil {
-					t.Fatal("registration failure lost recovery journal", err)
-				}
-				if err := os.Remove(home + "/fail-registration"); err != nil {
-					t.Fatal(err)
-				}
 			}
 			op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {

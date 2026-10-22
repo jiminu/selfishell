@@ -2,8 +2,6 @@ package selfishell
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -232,34 +230,4 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 		t.Fatal("native fragment directory left behind", err)
 	}
 	blockEqual(t, settings, []byte(terminalSettingsFixture))
-}
-
-func TestWindowsProfileDiscoveryReadOnly(t *testing.T) {
-	if os.Getenv("SELFISHELL_TEST_WSL_INTEROP") != "1" {
-		t.Skip("requires native WSL interoperability")
-	}
-	t.Parallel()
-	distro := os.Getenv("WSL_DISTRO_NAME")
-	if distro == "" {
-		t.Skip("requires a native WSL distribution identity")
-	}
-	p := Process{Env: withEnvironment(Process{}, map[string]string{"HOME": t.TempDir()}).Env}
-	data, err := p.windowsScript(context.Background(), map[string]string{"operation": "probe", "distro": distro})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var probe struct {
-		SettingsPaths []string `json:"settingsPaths"`
-		Guids         []string `json:"wslProfileGuids"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
-		t.Fatal(err)
-	}
-	_, guid, _, err := (CLI{}).findWindowsProfile(p, distro, probe.SettingsPaths, probe.Guids)
-	if err != nil {
-		t.Skipf("native settings have no unique visible target: %v", err)
-	}
-	if !validTerminalGUID(guid) {
-		t.Fatal("invalid native profile identity")
-	}
 }

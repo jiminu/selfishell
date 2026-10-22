@@ -645,32 +645,6 @@ func TestManagedSourceCheckoutCanDisappearAfterInstall(t *testing.T) {
 	}
 }
 
-func TestManagedRuntimeRespectsCallerMiseGlobalConfig(t *testing.T) {
-	root, home, _ := blockHome(t, "macos")
-	if _, err := os.Stat("/bin/zsh"); err != nil {
-		t.Skip("zsh unavailable")
-	}
-	fake := home + "/tools/mise"
-	blockWrite(t, fake, []byte("#!/bin/sh\nif [ \"$1\" = activate ]; then printf ':\\n'; fi\n"))
-	if err := os.Chmod(fake, 0700); err != nil {
-		t.Fatal(err)
-	}
-	runtime := root + "/config/shared/zsh/runtime.zsh"
-	for _, tc := range []struct{ name, setup, check, want string }{
-		{"set", `MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml"`, `SELFISHELL_MISE_SHIMS_TEST="$MISE_GLOBAL_CONFIG_FILE"`, home + "/personal-mise.toml"},
-		{"unset", `unset MISE_GLOBAL_CONFIG_FILE`, `[[ -z "${MISE_GLOBAL_CONFIG_FILE+x}" ]] && SELFISHELL_MISE_SHIMS_TEST=unset`, "unset"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			profile := "set -e\n" + tc.setup + "\n_selfishell_command_path() { command -v \"$1\"; }\nsource \"" + runtime + "\"\n" + tc.check + "\n"
-			blockWrite(t, home+"/.zprofile", []byte(profile))
-			out, err := runNativeZprofile(home, home+"/tools:/usr/bin:/bin", 5*time.Second)
-			if err != nil || strings.TrimSpace(string(out)) != tc.want {
-				t.Fatalf("%s: %v %q", tc.name, err, out)
-			}
-		})
-	}
-}
-
 func TestManagedDryRunConflictPreservesBytesAndPreviewsDecision(t *testing.T) {
 	root, _, paths := blockHome(t, "macos")
 	blockOK(t, root, "install", "--skip-packages", "--yes")

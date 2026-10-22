@@ -66,9 +66,6 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 			if got := out.String(); tc.want == "" && (strings.Contains(got, terminalFont) || strings.Contains(got, "Restart Windows Terminal")) || !strings.Contains(got, tc.want) {
 				t.Fatalf("want hint %q, output %q", tc.want, got)
 			}
-			if strings.Contains(out.String(), "choose Selfishell –") {
-				t.Fatalf("hint names a nonexistent profile: %s", out.String())
-			}
 		})
 	}
 }

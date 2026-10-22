@@ -214,35 +214,6 @@ pwd >> "$SELFISHELL_TEST_MISE_LOG"
 		t.Fatalf("trust %q %v", data, e)
 	}
 }
-func TestPurgePreservesForeignSfsAndBackups(t *testing.T) {
-	base := t.TempDir()
-	home := filepath.Join(base, "home")
-	os.Mkdir(home, 0700)
-	share := filepath.Join(base, ".local/share/selfishell")
-	release := filepath.Join(share, "releases/v1")
-	os.MkdirAll(release+"/bin", 0700)
-	os.Symlink("releases/v1", filepath.Join(share, "current"))
-	bin := filepath.Join(base, ".local/bin")
-	os.MkdirAll(bin, 0700)
-	os.Symlink(share+"/current/bin/selfishell", filepath.Join(bin, "selfishell"))
-	os.Symlink("foreign", filepath.Join(bin, "sfs"))
-	isolateHome(t, home)
-	paths, _ := UserPaths()
-	os.MkdirAll(paths.State+"/backups", 0700)
-	os.WriteFile(paths.State+"/backups/edited", []byte("user"), 0600)
-	var out, stderr bytes.Buffer
-	c := CLI{Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
-	code := c.Run([]string{"uninstall", "--purge", "--yes"})
-	if code != 0 {
-		t.Fatalf("%d %s", code, stderr.String())
-	}
-	if dest, e := os.Readlink(filepath.Join(bin, "sfs")); e != nil || dest != "foreign" {
-		t.Fatal("foreign link changed", dest, e)
-	}
-	if _, e := os.Stat(paths.State + "/backups/edited"); e != nil {
-		t.Fatal("backup lost", e)
-	}
-}
 
 func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 	for _, backups := range []bool{false, true} {

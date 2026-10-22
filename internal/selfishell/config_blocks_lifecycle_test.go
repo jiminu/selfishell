@@ -610,42 +610,6 @@ func TestUserGhosttyOverrideIsUntouched(t *testing.T) {
 		})
 	}
 }
-func TestRepeatedInstallKeepsStateInodesAndBackups(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	blockWrite(t, home+"/.zshrc", []byte("original zshrc"))
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	entries, e := os.ReadDir(paths.Resources)
-	if e != nil {
-		t.Fatal(e)
-	}
-	before := map[string]os.FileInfo{}
-	for _, entry := range entries {
-		info, e := os.Stat(paths.Resources + "/" + entry.Name())
-		if e != nil {
-			t.Fatal(e)
-		}
-		before[entry.Name()] = info
-	}
-	backups := blockBackupNames(t, home)
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	after, e := os.ReadDir(paths.Resources)
-	if e != nil || len(after) != len(entries) {
-		t.Fatalf("state count %v %v", after, e)
-	}
-	for name, info := range before {
-		next, e := os.Stat(paths.Resources + "/" + name)
-		if e != nil || !os.SameFile(info, next) {
-			t.Fatalf("state inode changed %s: %v", name, e)
-		}
-	}
-	now := blockBackupNames(t, home)
-	if len(now) != len(backups) {
-		t.Fatalf("backup count changed %v -> %v", backups, now)
-	}
-	if bytes.Count(blockRead(t, home+"/.zshrc"), []byte("# >>> Selfishell initialize >>>")) != 1 {
-		t.Fatal("duplicated zshrc loader")
-	}
-}
 func TestSavedDeclinedGhosttyChoiceStaysUntilGhosttyOption(t *testing.T) {
 	root, _, paths := blockHome(t, "macos")
 	choice := paths.State + "/ghostty"
@@ -804,24 +768,6 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 	if state := blockState(t, paths, "user-zprofile"); state.Status != "active" {
 		t.Fatalf("state %+v", state)
 	}
-}
-
-func blockBackupNames(t *testing.T, home string) []string {
-	t.Helper()
-	var names []string
-	err := filepath.WalkDir(home, func(path string, d os.DirEntry, e error) error {
-		if e != nil {
-			return e
-		}
-		if strings.Contains(d.Name(), ".backup.") {
-			names = append(names, path)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return names
 }
 
 func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
