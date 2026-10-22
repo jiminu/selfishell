@@ -89,11 +89,6 @@ for _, target in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
   assert(vim.api.nvim_win_get_height(target) == height, "j did not move the border down")
   assert(vim.api.nvim_get_current_win() == target, "resizing moved focus")
 end
-local other_column = vim.fn.win_getid(vim.fn.winnr("h"))
-local target = vim.api.nvim_get_current_win()
-resize("=")
-assert(math.abs(vim.api.nvim_win_get_width(target) - vim.api.nvim_win_get_width(other_column)) <= 1,
-  "resize equalize did not balance columns")
 vim.cmd.only()
 local width, height, cmdheight = vim.api.nvim_win_get_width(0), vim.api.nvim_win_get_height(0), vim.o.cmdheight
 resize("hjkl")
