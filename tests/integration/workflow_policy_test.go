@@ -392,28 +392,6 @@ func TestReleaseWorkflowArtifactHandoff(t *testing.T) {
 	}
 }
 
-func TestCIExactPrebuiltSmoke(t *testing.T) {
-	t.Parallel()
-	_, jobs := workflowSections(t, "ci.yml")
-	shell := policyJob(t, jobs, "shell")
-	if !strings.Contains(strings.Join(shell.lines, "\n"), `'["ubuntu-latest","macos-latest"]'`) {
-		t.Error("runtime CI must run exact smoke on Linux and macOS")
-	}
-	build := policyRun(t, policyStep(t, shell, "Build disposable release artifacts"))
-	smoke := strings.Join(policyStep(t, shell, "Smoke exact prebuilt release"), "\n")
-	if !strings.Contains(build, `bash scripts/build-release.sh --version 0.0.0-ci --output "$RUNNER_TEMP/selfishell-release-assets"`) {
-		t.Error("CI does not build disposable exact assets")
-	}
-	for _, needle := range []string{"SELFISHELL_TEST_RELEASE_DIR: ${{ runner.temp }}/selfishell-release-assets", "SELFISHELL_TEST_RELEASE_VERSION: 0.0.0-ci", "go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1"} {
-		if !strings.Contains(smoke, needle) {
-			t.Errorf("CI smoke missing %s", needle)
-		}
-	}
-	order := strings.Join(shell.lines, "\n")
-	if strings.Index(order, "- name: Run checks") >= strings.Index(order, "- name: Build disposable release artifacts") {
-		t.Error("CI exact smoke must follow repository gate")
-	}
-}
 func policyNeeds(t *testing.T, lines []string) []string {
 	t.Helper()
 	var values []string

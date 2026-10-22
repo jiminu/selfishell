@@ -146,7 +146,7 @@ func TestNativeBootstrapValidatesExecutable(t *testing.T) {
 				}
 				var before []byte
 				if source == "retained" {
-					before = homeSnapshot(t, release)
+					before = mustSnapshot(t, release)
 				}
 				got := f.run(t, "--version", nativeArchiveVersion)
 				if kind == "symlink" {

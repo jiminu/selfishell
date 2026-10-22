@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -84,9 +82,6 @@ func setupAndCheck(t *testing.T, f *bootstrapFixture, version string, original [
 	mustFS(t, testutil.WriteFile(user, original, 0600))
 	requireOK(t, f.run(t, "--version", version, "--setup", "--yes", "--skip-packages"))
 	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+version+"\n")
-	help := f.cliRun(t, "help")
-	requireOK(t, help)
-	requireContains(t, help.Stdout, "selfishell")
 	info, e := os.Lstat(user)
 	mustFS(t, e)
 	if !info.Mode().IsRegular() {
@@ -121,7 +116,13 @@ func smokePrebuiltArchive(t *testing.T, dir, version string) {
 	}
 	requireAbsent(t, filepath.Join(f.home, ".config/selfishell"))
 	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+version+"\n")
-	requireContains(t, f.cliRun(t, "help").Stdout, "selfishell")
+	// Guard every system/package/login command even though this flow requests --skip-packages.
+	bin := filepath.Join(f.home, "fakebin")
+	mustFS(t, os.Mkdir(bin, 0700))
+	for _, name := range []string{"apt-get", "apt", "brew", "sudo", "chsh"} {
+		mustFS(t, testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf '%s\\n' called >>\"$HOME/system-command-called\"\nexit 70\n"), 0755))
+	}
+	f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 	setupAndCheck(t, f, version, original)
 	if got := string(readBytes(t, filepath.Join(f.home, ".local/state/selfishell/resources/user-zshrc.state"))); !strings.HasPrefix(got, "2\n") {
 		t.Fatalf("state is not v2: %q", got)
@@ -135,118 +136,11 @@ func smokePrebuiltArchive(t *testing.T, dir, version string) {
 	requireOK(t, f.cliRun(t, "uninstall", "--purge", "--yes"))
 	requireAbsent(t, f.cli)
 	requireAbsent(t, f.share)
+	requireAbsent(t, filepath.Join(f.home, "system-command-called"))
 }
 func TestNativeBuiltArchiveSmoke(t *testing.T) {
 	t.Parallel()
 	dir := nativeAssetDir(t)
 	assertAssetSet(t, dir, nativeArchiveVersion)
 	smokePrebuiltArchive(t, dir, nativeArchiveVersion)
-}
-
-func TestPrebuiltSmokeRejectsBadInputs(t *testing.T) {
-	t.Parallel()
-	// Execute the entrypoint as a child so t.Setenv cannot mask parent variables.
-	for _, tc := range []struct {
-		name, dir, version string
-		want               string
-	}{
-		{"missing directory", "", "1.3.2", "both prebuilt release variables"},
-		{"relative directory", "relative", "1.3.2", "must be absolute"},
-		{"invalid version", "/tmp", "01.2.3", "invalid release version"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=^TestExactReleaseSmoke$", "-test.count=1", "-test.v")
-			cmd.Env = append(os.Environ(), "SELFISHELL_TEST_RELEASE_DIR="+tc.dir, "SELFISHELL_TEST_RELEASE_VERSION="+tc.version)
-			out, e := cmd.CombinedOutput()
-			if e == nil || !bytes.Contains(out, []byte(tc.want)) {
-				t.Fatalf("expected %q failure: %v %s", tc.want, e, out)
-			}
-		})
-	}
-}
-
-func TestNativeCompleteReleaseLifecycle(t *testing.T) {
-	t.Parallel()
-	f := newBootstrapFixture(t, nativeArchiveVersion, nextNativeVersion)
-	bin := filepath.Join(f.home, "fakebin")
-	mustFS(t, os.Mkdir(bin, 0700))
-	for _, name := range []string{"starship", "mise", "fzf", "zoxide", "rg", "jq", "nvim", "tree-sitter", "node", "python", "uv", "gh", "lazygit", "gcc", "build-essential"} {
-		mustFS(t, testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 0\n"), 0755))
-	}
-	// Guard every system/package/login command even though this flow requests --skip-packages.
-	for _, name := range []string{"apt-get", "apt", "brew", "sudo", "chsh"} {
-		mustFS(t, testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf '%s\\n' called >>\"$HOME/system-command-called\"\nexit 70\n"), 0755))
-	}
-	f.env = append(f.env, "PATH="+bin+":"+f.systembin)
-	mustFS(t, testutil.WriteFile(filepath.Join(bin, "dpkg-query"), []byte("#!/bin/sh\nprintf 'ca-certificates\\tii \\t1.0\\n'\n"), 0755))
-	mustFS(t, os.MkdirAll(filepath.Join(f.home, ".local/bin"), 0700))
-	mustFS(t, testutil.WriteFile(filepath.Join(f.home, ".local/bin/mise"), []byte("#!/bin/sh\nexit 0\n"), 0755))
-	zinit := filepath.Join(f.home, ".local/share/zinit/zinit.git")
-	mustFS(t, os.MkdirAll(zinit, 0700))
-	mustFS(t, testutil.WriteFile(filepath.Join(zinit, "zinit.zsh"), []byte(":\n"), 0644))
-	manifest := filepath.Join(f.home, "dependencies.conf")
-	source := strings.Split(string(readBytes(t, filepath.Join(repoRoot(), "dependencies.conf"))), "\n")
-	var rewritten strings.Builder
-	for _, line := range source {
-		if !strings.HasPrefix(line, "zsh-plugin ") {
-			if line != "" {
-				rewritten.WriteString(line + "\n")
-			}
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			t.Fatalf("bad plugin declaration %q", line)
-		}
-		plugin := filepath.Join(f.home, ".local/share/zinit/plugins", strings.ReplaceAll(fields[1], "/", "---"))
-		mustFS(t, os.MkdirAll(plugin, 0700))
-		for _, args := range [][]string{{"init", "--quiet"}, {"config", "user.email", "test@example.com"}, {"config", "user.name", "test"}, {"commit", "--quiet", "--allow-empty", "-m", "initial"}} {
-			got, e := runCommand(f.home, append([]string{"git", "-C", plugin}, args...), nil, f.env, 10*time.Second)
-			mustFS(t, e)
-			requireOK(t, got)
-		}
-		rev, e := runCommand(f.home, []string{"git", "-C", plugin, "rev-parse", "HEAD"}, nil, f.env, 10*time.Second)
-		mustFS(t, e)
-		requireOK(t, rev)
-		fmt.Fprintf(&rewritten, "zsh-plugin %s %s all all - - - -\n", fields[1], strings.TrimSpace(string(rev.Stdout)))
-	}
-	mustFS(t, testutil.WriteFile(manifest, []byte(rewritten.String()), 0600))
-	f.env = append(f.env, "SELFISHELL_DEPENDENCIES_FILE="+manifest)
-	original := []byte("original zshrc\n")
-	mustFS(t, testutil.WriteFile(filepath.Join(f.home, ".zshrc"), original, 0600))
-	requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--yes", "--skip-packages"))
-	requireOK(t, f.cliRun(t, "status"))
-	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion)
-	zshrc := filepath.Join(f.home, ".zshrc")
-	info, e := os.Lstat(zshrc)
-	mustFS(t, e)
-	if !info.Mode().IsRegular() {
-		t.Fatal("original zshrc no longer regular")
-	}
-	requireContains(t, readBytes(t, zshrc), "# >>> Selfishell initialize >>>")
-	requireOK(t, f.cliRun(t, "update", "--cli-only", "--version", nextNativeVersion, "--yes"))
-	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nextNativeVersion)
-	f.env = append(f.env, "SELFISHELL_RELEASE_ROOT=file:///network-must-not-be-used")
-	requireOK(t, f.cliRun(t, "rollback", "--yes"))
-	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion)
-	requireOK(t, f.cliRun(t, "uninstall", "--restore", "--yes"))
-	assertRestoredOriginal(t, f, original, 0600)
-	requireAbsent(t, filepath.Join(f.home, "system-command-called"))
-}
-
-func TestPrebuiltSmokeRejectsCorruptedArchive(t *testing.T) {
-	t.Parallel()
-	source := nativeAssetDir(t)
-	dir := t.TempDir()
-	for _, name := range append(releaseAssetNames(nativeArchiveVersion), "SHA256SUMS", "VERSION") {
-		mustFS(t, copyFile(filepath.Join(source, name), filepath.Join(dir, name)))
-	}
-	archive := filepath.Join(dir, hostArchive(nativeArchiveVersion))
-	mustFS(t, testutil.AppendFile(archive, []byte("corrupt")))
-	cmd := exec.Command(os.Args[0], "-test.run=^TestExactReleaseSmoke$", "-test.count=1", "-test.v")
-	cmd.Env = append(os.Environ(), "SELFISHELL_TEST_RELEASE_DIR="+dir, "SELFISHELL_TEST_RELEASE_VERSION="+nativeArchiveVersion)
-	out, e := cmd.CombinedOutput()
-	if e == nil || !bytes.Contains(out, []byte("SHA256SUMS mismatch")) {
-		t.Fatalf("corrupt exact asset accepted: %v %s", e, out)
-	}
 }

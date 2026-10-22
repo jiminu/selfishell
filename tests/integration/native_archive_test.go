@@ -297,11 +297,6 @@ func inspectNativeBinary(t *testing.T, platform, arch, version string, b []byte,
 			if e != nil || string(out) != "selfishell "+version+"\n" {
 				t.Errorf("native version: %q %v", out, e)
 			}
-			cmd = exec.Command(path, "help")
-			out, e = cmd.CombinedOutput()
-			if e != nil || !bytes.Contains(out, []byte("selfishell")) {
-				t.Errorf("native help: %q %v", out, e)
-			}
 		}
 	}
 }

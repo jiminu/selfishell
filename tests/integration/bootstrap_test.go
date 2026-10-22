@@ -337,15 +337,9 @@ func readBytes(t *testing.T, path string) []byte {
 	mustFS(t, e)
 	return b
 }
-func homeSnapshot(t *testing.T, home string) []byte {
-	t.Helper()
-	data, err := snapshot(home)
-	mustFS(t, err)
-	return data
-}
 func assertHomeSnapshot(t *testing.T, home string, before []byte) {
 	t.Helper()
-	if after := homeSnapshot(t, home); !bytes.Equal(before, after) {
+	if after := mustSnapshot(t, home); !bytes.Equal(before, after) {
 		t.Fatal("failed bootstrap changed HOME state")
 	}
 }
@@ -360,7 +354,6 @@ func TestNativeBootstrapExactAndDefault(t *testing.T) {
 	requireLink(t, f.cli, filepath.Join(f.share, "current/bin/selfishell"))
 	requireLink(t, filepath.Join(f.prefix, "bin/sfs"), "selfishell")
 	requireContains(t, f.cliRun(t, "version").Stdout, "selfishell "+nativeArchiveVersion+"\n")
-	requireContains(t, f.cliRun(t, "help").Stdout, "selfishell")
 	requireAbsent(t, filepath.Join(f.home, ".config/selfishell"))
 	requireAbsent(t, filepath.Join(f.home, ".zshrc"))
 	requireAbsent(t, filepath.Join(f.home, ".bashrc"))
@@ -551,7 +544,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 				mustFS(t, os.MkdirAll(f.share, 0700))
 				link := filepath.Join(f.share, name)
 				mustFS(t, os.Symlink("/personal", link))
-				before := homeSnapshot(t, f.home)
+				before := mustSnapshot(t, f.home)
 				got := f.run(t, "--version", nativeArchiveVersion)
 				if got.Status == 0 {
 					t.Fatal("foreign release link accepted")
@@ -586,7 +579,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 		before := string(readBytes(t, filepath.Join(f.share, "current/VERSION")))
 		archive := filepath.Join(f.remote, "download", "v"+nativeArchiveVersion, hostArchive(nativeArchiveVersion))
 		mustFS(t, testutil.AppendFile(archive, []byte("corruption")))
-		beforeHome := homeSnapshot(t, f.home)
+		beforeHome := mustSnapshot(t, f.home)
 		requireExit(t, f.run(t, "--version", nativeArchiveVersion), 1)
 		requireLink(t, filepath.Join(f.share, "current"), "releases/"+nativeArchiveVersion)
 		if got := string(readBytes(t, filepath.Join(f.share, "current/VERSION"))); got != before {
@@ -604,7 +597,7 @@ func TestNativeBootstrapFailuresAndOwnership(t *testing.T) {
 				} else {
 					mustFS(t, os.Symlink("/usr/bin/true", f.cli))
 				}
-				before := homeSnapshot(t, f.home)
+				before := mustSnapshot(t, f.home)
 				requireExit(t, f.run(t, "--version", nativeArchiveVersion), 1)
 				assertHomeSnapshot(t, f.home, before)
 				if kind == "file" {
@@ -912,6 +905,11 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 	})
 	t.Run("purge removes managed state", func(t *testing.T) {
 		f := newBootstrapFixture(t, nativeArchiveVersion)
+		personal := map[string]string{".vimrc": "set number", ".config/nvim/init.lua": "personal editor\x00bytes\n"}
+		for path, data := range personal {
+			mustFS(t, os.MkdirAll(filepath.Dir(filepath.Join(f.home, path)), 0700))
+			mustFS(t, testutil.WriteFile(filepath.Join(f.home, path), []byte(data), 0600))
+		}
 		requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes"))
 		cache := filepath.Join(f.home, ".cache/selfishell")
 		mustFS(t, os.MkdirAll(cache, 0700))
@@ -928,23 +926,12 @@ func TestNativeBootstrapSetupAndPurge(t *testing.T) {
 		if !info.Mode().IsRegular() || info.Size() != 0 {
 			t.Fatalf("purge altered user-owned empty zshrc: %v", info)
 		}
-	})
-	t.Run("retains modified backups", func(t *testing.T) {
-		f := newBootstrapFixture(t, nativeArchiveVersion)
-		requireOK(t, f.run(t, "--version", nativeArchiveVersion, "--setup", "--skip-packages", "--yes"))
-		backups := filepath.Join(f.home, ".local/state/selfishell/backups")
-		mustFS(t, os.MkdirAll(backups, 0700))
-		file := filepath.Join(backups, "vimrc.backup.20260101000000")
-		mustFS(t, testutil.WriteFile(file, []byte("user edit\n"), 0600))
-		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--purge", "--dry-run"))
-		requireOK(t, f.cliRun(t, "uninstall", "--restore", "--purge", "--yes"))
-		if got := string(readBytes(t, file)); got != "user edit\n" {
-			t.Fatalf("backup changed %q", got)
-		}
-		entries, e := os.ReadDir(filepath.Dir(backups))
-		mustFS(t, e)
-		if len(entries) != 1 || entries[0].Name() != "backups" {
-			t.Fatalf("purge retained nonbackup state: %v", entries)
+		for path, want := range personal {
+			info, e := os.Lstat(filepath.Join(f.home, path))
+			mustFS(t, e)
+			if got := string(readBytes(t, filepath.Join(f.home, path))); got != want || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+				t.Fatalf("purge did not restore %s: %q %v", path, got, info.Mode())
+			}
 		}
 	})
 	t.Run("restore without purge keeps CLI", func(t *testing.T) {

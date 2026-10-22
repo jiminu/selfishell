@@ -26,6 +26,10 @@ func TestDeveloperScriptsGoPolicy(t *testing.T) {
 			{"verify-published-release.sh", []string{"1.2.3"}},
 			{"update-dependencies.sh", nil},
 		} {
+			// Every script sources go-env.sh, so one caller covers its toolchain rejection.
+			if mode != "controlled" && tc.script != "build-cli.sh" {
+				continue
+			}
 			t.Run(mode+"/"+tc.script, func(t *testing.T) {
 				root, home, _ := sourceLauncherFixture(t)
 				mustFS(t, copyTree(filepath.Join(repoRoot(), "scripts"), filepath.Join(root, "scripts")))

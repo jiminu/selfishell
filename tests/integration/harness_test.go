@@ -392,13 +392,7 @@ func fixtureTools(t *testing.T, root string) string {
 	return tools
 }
 
-func capturePTY(home, executable string, args []string, extraEnv []string) (capture, error) {
-	return capturePTYStreams(home, executable, args, extraEnv, false)
-}
 func capturePTYOutput(home, executable string, args []string, extraEnv []string) (capture, error) {
-	return capturePTYStreams(home, executable, args, extraEnv, true)
-}
-func capturePTYStreams(home, executable string, args []string, extraEnv []string, stdoutPTY bool) (capture, error) {
 	tmp, err := os.MkdirTemp("", "selfishell-pty-")
 	if err != nil {
 		return capture{}, err
@@ -417,17 +411,11 @@ func capturePTYStreams(home, executable string, args []string, extraEnv []string
 	cmd.Stdin = bytes.NewReader(nil)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 500 * time.Millisecond
-	var out bytes.Buffer
-	if stdoutPTY {
-		cmd.Stdout = slave
-		cmd.Stderr = &out
-	} else {
-		cmd.Stdout = &out
-		cmd.Stderr = slave
-	}
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = slave
+	cmd.Stderr = &stderr
 	readDone := make(chan struct{})
-	go func() { io.Copy(&stderr, master); close(readDone) }()
+	go func() { io.Copy(&stdout, master); close(readDone) }()
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
@@ -452,10 +440,7 @@ func capturePTYStreams(home, executable string, args []string, extraEnv []string
 	if ctx.Err() != nil {
 		return capture{}, ctx.Err()
 	}
-	result := capture{Stdout: out.Bytes(), Stderr: stderr.Bytes()}
-	if stdoutPTY {
-		result.Stdout, result.Stderr = stderr.Bytes(), out.Bytes()
-	}
+	result := capture{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
