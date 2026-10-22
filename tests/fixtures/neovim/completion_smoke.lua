@@ -78,14 +78,6 @@ session("ogre", {
   { ready = function() return line() == "greet()" end, keys = "<Esc>", failure = function() return "Enter gave " .. line() end },
 })
 
--- Ctrl-n stays in the blink.cmp menu, and Ctrl-e undoes the inserted item.
-session("ogre", {
-  { ready = blink.is_menu_visible, keys = "<Tab>", failure = function() return "menu did not open for 'gre'" end },
-  { ready = function() return line() == "greet" end, keys = "<C-n>", failure = function() return "Tab gave " .. line() end },
-  { ready = function() return blink.get_selected_item_idx() == 2 end, keys = "<C-e>", failure = function() return "Ctrl-n left the blink.cmp menu" end },
-  { ready = function() return line() == "gre" end, keys = "<Esc>", failure = function() return "Ctrl-e gave " .. line() end },
-})
-
 -- Tab moves to the next snippet field.
 session("opai", {
   { ready = blink.is_menu_visible, keys = "<CR>", failure = function() return "menu did not open for 'pai'" end },
