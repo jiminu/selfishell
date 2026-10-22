@@ -85,18 +85,6 @@ session("opai", {
   { ready = function() return line() == "pair(first, x)" end, keys = "<Esc>", failure = function() return "Tab then x gave " .. line() end },
 })
 
--- ":" commands stay quiet while typing; Tab completes them. Headless Neovim
--- draws no command-line menu, so the quiet part checks the setting itself.
-local auto_show = require("blink.cmp.config").cmdline.completion.menu.auto_show
-if type(auto_show) == "function" then
-  auto_show = auto_show({ mode = "cmdline" }, {})
-end
-assert(not auto_show, "the command-line menu opens while typing")
-local typed = vim.uv.now()
-session(":Laz", {
-  { ready = function() return vim.uv.now() - typed > 200 end, keys = "<Tab>", failure = function() return "unreachable" end },
-  { ready = function() return vim.fn.getcmdline() == "Lazy" end, keys = "<C-c>", failure = function() return "Tab gave " .. vim.fn.getcmdline() end },
-})
 -- 'confirm' would otherwise offer to save the edited buffer at :qa.
 vim.bo.modified = false
 

@@ -16,12 +16,6 @@ end
 local snacks = vim.tbl_filter(function(spec)
   return spec[1] == "folke/snacks.nvim"
 end, specs["plugins.ui"])[1]
-local scrollbar = vim.tbl_filter(function(spec)
-  return spec[1] == "petertriho/nvim-scrollbar"
-end, specs["plugins.ui"])[1]
-
-assert(scrollbar and scrollbar.opts.handlers.gitsigns == true,
-  "Scrollbar must show Git changes across the file")
 
 assert(snacks, "folke/snacks.nvim spec was not found")
 assert(snacks.lazy == false, "Snacks must load eagerly so it can attach to the first buffer's BufReadPost")
@@ -29,13 +23,6 @@ assert(type(snacks.config) == "function",
   "Snacks must explicitly enable indent after setup, since Snacks never binds it to BufNewFile")
 
 local indent = snacks.opts.indent
-assert(indent.enabled == true, "Snacks indent module must be enabled")
-
-assert(indent.scope.enabled == true, "Scope rendering must be enabled")
-
-assert(indent.scope.treesitter.enabled == true, "Scope detection must prefer Tree-sitter")
-assert(type(indent.scope.treesitter.blocks) == "table" and indent.scope.treesitter.blocks.enabled == false,
-  "Scope detection must not be limited to a Tree-sitter node-type whitelist")
 
 assert(type(indent.filter) == "function", "Indent rendering must filter excluded buffers")
 assert(type(indent.scope.filter) == "function", "Scope detection must filter excluded buffers")

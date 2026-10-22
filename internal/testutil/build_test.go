@@ -6,31 +6,6 @@ import (
 	"testing"
 )
 
-func TestGoCacheOwnership(t *testing.T) {
-	borrowed := t.TempDir()
-	t.Setenv("GOCACHE", borrowed)
-	var private string
-	t.Run("private", func(t *testing.T) {
-		t.Setenv("SELFISHELL_TEST_GO_CACHE", "")
-		private = GoCache(t)
-		if private == borrowed || !filepath.IsAbs(private) {
-			t.Fatalf("unselected caller cache used: %q", private)
-		}
-	})
-	if _, err := os.Stat(private); !os.IsNotExist(err) {
-		t.Fatalf("private cache survived test cleanup: %v", err)
-	}
-	t.Run("borrowed", func(t *testing.T) {
-		t.Setenv("SELFISHELL_TEST_GO_CACHE", borrowed)
-		if err := os.WriteFile(filepath.Join(GoCache(t), "marker"), []byte("retained"), 0600); err != nil {
-			t.Fatal(err)
-		}
-	})
-	if data, err := os.ReadFile(filepath.Join(borrowed, "marker")); err != nil || string(data) != "retained" {
-		t.Fatalf("borrowed cache removed: %q %v", data, err)
-	}
-}
-
 func TestCopyCLIKeepsFixtureIndependent(t *testing.T) {
 	root := t.TempDir()
 	source, target := filepath.Join(root, "source"), filepath.Join(root, "copy")

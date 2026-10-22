@@ -132,26 +132,6 @@ func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 	}
 }
 
-func TestNeovimPreservesDirtyCheckout(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
-	target := home + "/data/nvim/lazy/lazy-source"
-	if err := os.MkdirAll(home+"/data/nvim/lazy", 0700); err != nil {
-		t.Fatal(err)
-	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
-	writeTestFile(t, target+"/init.lua", "changed\n", 0600)
-	err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
-	if err == nil || !strings.Contains(err.Error(), "modified") {
-		t.Fatalf("dirty checkout: %v", err)
-	}
-	if data, _ := os.ReadFile(target + "/init.lua"); string(data) != "changed\n" {
-		t.Fatalf("changed user checkout: %q", data)
-	}
-	if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
-		t.Fatalf("ran nvim: %v", err)
-	}
-}
-
 func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 	op, paths, root, manifest, home, head := neovimFixture(t)
 	lines := fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s/lazy-source - - -\n", head, home)

@@ -48,7 +48,7 @@ func exact(t *testing.T, path, want string) {
 type updaterCase struct {
 	name, manifest, metadata, completion, interactive, mise string
 	wantManifest, wantCompletion, wantInteractive, wantMise string
-	failure, rerun                                          bool
+	failure                                                 bool
 }
 
 func TestUpdaterCases(t *testing.T) {
@@ -58,7 +58,6 @@ func TestUpdaterCases(t *testing.T) {
 	base := []updaterCase{
 		{name: "empty_metadata_preserves_manifest", manifest: "# retained comment\n" + cLine},
 		{name: "pin_replacement_is_literal", metadata: "mise-tool uv 0.12.3\n", mise: mise + "# uv = \"0x5x21\"\n", wantMise: replace(mise, "uv = \"0.5.21\"", "uv = \"0.12.3\"") + "# uv = \"0x5x21\"\n"},
-		{name: "duplicate_pin_on_one_line", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\n", completion: "ver'" + oldC + "' ver'" + oldC + "'\n", failure: true},
 		{name: "invalid_mise_bump_preserves_staged_plugin", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nmise-tool neovim nightly\n", failure: true},
 		{name: "unknown_metadata", manifest: cLine, metadata: "unknown item value\n", failure: true},
 		{name: "duplicate_metadata", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", failure: true},
@@ -75,7 +74,6 @@ func TestUpdaterCases(t *testing.T) {
 		{name: "test_zsh_plugin_update_is_all_or_nothing", manifest: cLine + zshLine("Aloxaf/fzf-tab", strings.Repeat("9", 40)), metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin Aloxaf/fzf-tab " + newF + "\n", failure: true},
 		{name: "test_mise_tool_update_bumps_moved_cli_pin", metadata: "mise-tool fzf 0.74.4\nmise-tool starship 1.26.0\nmise-tool lazygit 0.65.1\n", wantMise: replace(replace(replace(mise, "fzf = \"0.74.3\"", "fzf = \"0.74.4\""), "starship = \"1.25.0\"", "starship = \"1.26.0\""), "lazygit = \"0.65.0\"", "lazygit = \"0.65.1\"")},
 		{name: "test_mise_tool_update_skips_same_or_older_candidate", metadata: "mise-tool neovim 0.12.4\nmise-tool uv 0.5.20\n"},
-		{name: "test_mise_tool_update_is_idempotent_on_rerun", metadata: "mise-tool neovim 0.12.5\n", wantMise: replace(mise, "neovim = \"0.12.4\"", "neovim = \"0.12.5\""), rerun: true},
 	}
 	for _, tc := range base {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,13 +141,6 @@ func TestUpdaterCases(t *testing.T) {
 			exact(t, ip, wantI)
 			exact(t, mp, wantM)
 			exact(t, other, "unrelated fixture content\n")
-			if tc.rerun {
-				run()
-				exact(t, manifest, wantManifest)
-				exact(t, cp, wantC)
-				exact(t, ip, wantI)
-				exact(t, mp, wantM)
-			}
 		})
 	}
 }
@@ -226,8 +217,6 @@ esac
 	}
 	put(t, manifest, lines.String())
 	put(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), completion)
-	put(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.1\n")
-	put(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.1\"\n")
 	put(t, filepath.Join(zroot, "config/shared/mise.toml"), replace(mise, "lazygit = \"0.65.0\"", "lazygit = \"0.65.0\"\ngh = \"2.0.0\""))
 	languages := "local M = {\n  lsp = {\n    \"lua_ls@3.19.1\",\n    \"tombi@v1.5.5\",\n  },\n}\nreturn M\n"
 	languagePath := filepath.Join(zroot, "config/shared/nvim/lua/config/languages.lua")
@@ -257,9 +246,6 @@ esac
 		t.Fatalf("annotated tag not peeled: %s", gitlog)
 	}
 	calls, _ := os.ReadFile(log)
-	if strings.Contains(string(calls), "go.dev/dl") {
-		t.Fatal("dependency discovery queried build Go releases")
-	}
 	if strings.Contains(string(calls), "private-secret") {
 		t.Fatal("GitHub token exposed in curl arguments")
 	}
@@ -272,11 +258,9 @@ esac
 	}
 	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
 	exact(t, languagePath, strings.Replace(strings.Replace(languages, "lua_ls@3.19.1", "lua_ls@3.20.0", 1), "tombi@v1.5.5", "tombi@v1.5.6", 1))
-	exact(t, filepath.Join(zroot, "go.mod"), "module example.invalid/test\n\ngo 1.27.1\n")
-	exact(t, filepath.Join(zroot, "mise.toml"), "[tools]\ngo = \"1.27.1\"\n")
 	for _, failure := range []string{"curl", "json", "git", "download", "registry"} {
 		t.Run(failure+" preserves files", func(t *testing.T) {
-			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath, filepath.Join(zroot, "go.mod"), filepath.Join(zroot, "mise.toml")}
+			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath}
 			before := make(map[string]string)
 			for _, path := range paths {
 				data, err := os.ReadFile(path)

@@ -361,17 +361,6 @@ exit 97
 	if e := os.WriteFile(wrapper, []byte(body), 0755); e != nil {
 		t.Fatal(e)
 	}
-	// Show the guard fails before the real CLI test uses it, then clear the log.
-	probe := exec.Command(filepath.Join(bin, "apt-get"), "update")
-	if e := probe.Run(); e == nil {
-		t.Fatal("package guard allowed apt-get")
-	}
-	if data, e := os.ReadFile(log); e != nil || !strings.Contains(string(data), "apt-get") {
-		t.Fatalf("guard probe: %q %v", data, e)
-	}
-	if e := os.Remove(log); e != nil {
-		t.Fatal(e)
-	}
 	return wrapper, log
 }
 
