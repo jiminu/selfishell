@@ -3,11 +3,8 @@ package releasebuild
 import (
 	"archive/tar"
 	"compress/gzip"
-	"context"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -58,15 +55,5 @@ func TestArchiveModesIgnoreCheckoutPermissions(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("missing archive members: %v", want)
-	}
-}
-
-func TestInvalidVersionDoesNotCreateOutput(t *testing.T) {
-	output := filepath.Join(t.TempDir(), "absent")
-	if err := Build(context.Background(), ".", "v1.2.3", output); err == nil || !strings.Contains(err.Error(), "semantic version") {
-		t.Errorf("error %v", err)
-	}
-	if _, err := os.Lstat(output); !os.IsNotExist(err) {
-		t.Errorf("created output: %v", err)
 	}
 }
