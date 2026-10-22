@@ -16,11 +16,13 @@ return {
           ["<C-b>"] = { "scroll_documentation_up", "fallback" },
           ["<C-f>"] = { "scroll_documentation_down", "fallback" },
           ["<C-Space>"] = { "show", "show_documentation", "hide_documentation" },
-          ["<C-e>"] = { "hide", "fallback" },
+          ["<C-e>"] = { "cancel", "fallback" },
           -- Enter accepts the first item even without an explicit selection.
           ["<CR>"] = { "select_and_accept", "fallback" },
           ["<Tab>"] = { "select_next", "snippet_forward", "fallback" },
           ["<S-Tab>"] = { "select_prev", "snippet_backward", "fallback" },
+          ["<C-n>"] = { "select_next", "fallback" },
+          ["<C-p>"] = { "select_prev", "fallback" },
         },
         appearance = { kind_icons = kind_icons },
         completion = {
