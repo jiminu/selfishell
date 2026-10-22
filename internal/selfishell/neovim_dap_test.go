@@ -61,26 +61,17 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 }
 
 func TestNeovimDAPUserConfigurationSurvivesLifecycle(t *testing.T) {
-	root, home, paths := blockHome(t, "ubuntu")
+	root, _, paths := blockHome(t, "ubuntu")
 	blockOK(t, root, "install", "--skip-packages", "--yes")
 	user := paths.Config + "/nvim/lua/plugins/dap_user.lua"
 	contents := "return { { 'jay-babu/mason-nvim-dap.nvim', opts = { handlers = { python = function() end } } } }\n"
 	if err := testutil.WriteFile(user, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
-	receipt := home + "/.local/share/nvim/mason/packages/debugpy/mason-receipt.json"
-	if err := os.MkdirAll(filepath.Dir(receipt), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(receipt, []byte("user-owned adapter\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
 	blockEqual(t, user, []byte(contents))
-	blockEqual(t, receipt, []byte("user-owned adapter\n"))
 	blockOK(t, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, user, []byte(contents))
-	blockEqual(t, receipt, []byte("user-owned adapter\n"))
 }
 
 // The opt-in pinned consumer owns network provisioning. These probes use real

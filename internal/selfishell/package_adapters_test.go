@@ -84,25 +84,45 @@ func (f *packageFixture) skipped(want ...string) {
 	}
 }
 
-func TestAptReinstallsRemovedButNotPurgedPackage(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	if err := f.op.InstallApt(context.Background(), "required", false, "removed", "second"); err != nil {
-		t.Fatal(err)
+func TestPackageAdaptersInstallOnlyMissing(t *testing.T) {
+	apt := func(names ...string) func(*packageFixture) error {
+		return func(f *packageFixture) error {
+			f.apt()
+			return f.op.InstallApt(context.Background(), "required", false, names...)
+		}
 	}
-	if got := f.calls(); !strings.Contains(got, "apt install -y removed\n") || strings.Contains(got, "apt install -y second") {
-		t.Fatal(got)
+	brew := func(requirement, manager string, names ...string) func(*packageFixture) error {
+		return func(f *packageFixture) error {
+			f.brew()
+			return f.op.InstallHomebrew(context.Background(), requirement, manager, false, names...)
+		}
 	}
-}
-
-func TestAptLeavesInstalledAndHeldPackagesQuiet(t *testing.T) {
-	f := newPackageFixture(t)
-	f.apt()
-	if err := f.op.InstallApt(context.Background(), "required", false, "installed", "second", "held"); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(f.calls(), "apt ") || f.out.Len() != 0 || f.err.Len() != 0 {
-		t.Fatalf("calls %q out %q err %q", f.calls(), f.out.String(), f.err.String())
+	for _, tc := range []struct {
+		name    string
+		install func(*packageFixture) error
+		want    string // apt and brew install calls; "" also requires no output
+	}{
+		{"apt removed but not purged", apt("removed", "second"), "apt update\napt install -y removed\n"},
+		{"apt installed and held", apt("installed", "second", "held"), ""},
+		{"Homebrew installed formulae", brew("required", "formula", "first", "second"), ""},
+		{"Homebrew installed casks", brew("optional", "cask", "first", "second"), ""},
+		{"Homebrew missing formula", brew("required", "formula", "installed", "missing"), "brew install missing no_ask=1\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPackageFixture(t)
+			if err := tc.install(f); err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			for _, call := range strings.SplitAfter(f.calls(), "\n") {
+				if strings.HasPrefix(call, "apt ") || strings.HasPrefix(call, "brew install") {
+					got += call
+				}
+			}
+			if got != tc.want || tc.want == "" && (f.out.Len() != 0 || f.err.Len() != 0) {
+				t.Fatalf("calls %q want %q, out %q err %q", got, tc.want, f.out.String(), f.err.String())
+			}
+		})
 	}
 }
 
@@ -203,30 +223,6 @@ func TestPackageAdapterFailuresSkipOptionalAndStopRequired(t *testing.T) {
 				t.Fatalf("message %q calls %q", message, calls)
 			}
 		})
-	}
-}
-
-func TestHomebrewLeavesInstalledFormulaAndCaskQuiet(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	for _, tc := range []struct{ requirement, manager string }{{"required", "formula"}, {"optional", "cask"}} {
-		if err := f.op.InstallHomebrew(context.Background(), tc.requirement, tc.manager, false, "first", "second"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if strings.Contains(f.calls(), "brew install") || f.out.Len() != 0 || f.err.Len() != 0 {
-		t.Fatalf("calls %q out %q err %q", f.calls(), f.out.String(), f.err.String())
-	}
-}
-
-func TestHomebrewInstallsOnlyMissingFormulae(t *testing.T) {
-	f := newPackageFixture(t)
-	f.brew()
-	if err := f.op.InstallHomebrew(context.Background(), "required", "formula", false, "installed", "missing"); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(f.calls(), "brew install missing no_ask=1\n") {
-		t.Fatal(f.calls())
 	}
 }
 

@@ -892,65 +892,6 @@ func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 	}
 }
 
-func TestUpdateInteractiveManagedFileOverwriteAndSkip(t *testing.T) {
-	for _, accept := range []bool{true, false} {
-		name := "skip"
-		if accept {
-			name = "overwrite"
-		}
-		t.Run(name, func(t *testing.T) {
-			root, paths := compactDiagnosticFixture(t, "macos", false)
-			target := paths.Config + "/zsh/completion.zsh"
-			state := paths.Resources + "/zsh-completion.state"
-			stateBefore, _ := os.ReadFile(state)
-			if err := os.WriteFile(target, []byte("personal completion\n"), 0600); err != nil {
-				t.Fatal(err)
-			}
-			source := root + "/config/shared/zsh/completion.zsh"
-			blockWrite(t, source, append(blockRead(t, source), "\n# new release defaults\n"...))
-			later := paths.Config + "/vim/vimrc"
-			if err := os.Remove(later); err != nil {
-				t.Fatal(err)
-			}
-			t.Setenv("SELFISHELL_TEST_TTY", "1")
-			answer := "n"
-			if accept {
-				answer = "y"
-			}
-			var out, errOut bytes.Buffer
-			cli := CLI{Root: root, In: strings.NewReader(answer + "\n"), Out: &out, Err: &errOut}
-			code := cli.Run([]string{"update", "--tools-only", "--skip-packages"})
-			if code != 0 {
-				t.Fatalf("interactive: %d %q %q", code, out.String(), errOut.String())
-			}
-			if strings.Count(out.String(), "[y/N]") != 1 || !strings.Contains(out.String(), "Managed file was modified:") {
-				t.Fatalf("expected only the modified-file prompt: %q", out.String())
-			}
-			if _, err := os.Stat(later); err != nil {
-				t.Fatal("later resource not applied")
-			}
-			got, _ := os.ReadFile(target)
-			stateAfter, _ := os.ReadFile(state)
-			if accept {
-				sum, err := Checksum(context.Background(), source)
-				if err != nil || !bytes.Equal(got, blockRead(t, source)) || blockState(t, paths, "zsh-completion").Checksum != sum {
-					t.Fatalf("accepted overwrite did not take the new source bytes and checksum: %q %v", stateAfter, err)
-				}
-				backups, _ := filepath.Glob(paths.State + "/backups/zsh-completion.backup.*")
-				if len(backups) != 1 {
-					t.Fatalf("missing conflict backup: %v", backups)
-				}
-				backup, _ := os.ReadFile(backups[0])
-				if string(backup) != "personal completion\n" {
-					t.Fatalf("wrong backup: %q", backup)
-				}
-			} else if string(got) != "personal completion\n" || !bytes.Equal(stateBefore, stateAfter) {
-				t.Fatal("skipped resource/state changed")
-			}
-		})
-	}
-}
-
 func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

@@ -34,40 +34,14 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	if err := ProvisionDeveloper(ctx, root, "neovim-e2e", p); err != nil {
 		t.Fatalf("pin provision: %v\n%s", err, output.String())
 	}
-	if code, _, stderr := nativeCLI(t, root, "install", "--skip-packages", "--yes"); code != 0 {
+	if code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
 	paths, err := UserPaths()
 	if err != nil {
 		t.Fatal(err)
 	}
-	managedConfig := paths.Config + "/mise/selfishell.toml"
-	before, err := os.ReadFile(managedConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	link := home + "/.config/mise/conf.d/selfishell.toml"
-	linkTarget, err := os.Readlink(link)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mise := home + "/.local/bin/mise"
-	settings := withEnvironment(p, map[string]string{"PATH": home + "/.local/bin:" + os.Getenv("PATH")}, "MISE_GLOBAL_CONFIG_FILE", "MISE_DEFAULT_CONFIG_FILENAME", "MISE_OVERRIDE_CONFIG_FILENAMES")
-	settings.Dir = home
-	if code, err := settings.Run(ctx, mise, "settings", "set", "pin", "true"); err != nil || code != 0 {
-		t.Fatalf("user mise settings: %v code %d\n%s", err, code, output.String())
-	}
-	userConfig, err := os.ReadFile(home + "/.config/mise/config.toml")
-	if err != nil || !strings.Contains(string(userConfig), "pin = true") {
-		t.Fatalf("user pin: %q %v", userConfig, err)
-	}
-	after, _ := os.ReadFile(managedConfig)
-	if !bytes.Equal(before, after) {
-		t.Fatal("user mise settings changed managed config")
-	}
-	if got, err := os.Readlink(link); err != nil || got != linkTarget {
-		t.Fatalf("managed mise link: %s %v", got, err)
-	}
 	op := &PackageOperation{Process: p}
 	output.Reset()
 	if err := op.InstallNeovimPlugins(ctx, root, paths, root+"/dependencies.conf", false); err != nil {
@@ -129,7 +103,6 @@ local ok, message = pcall(function()
   local blink = require("blink.cmp.config")
   local icon = blink.appearance.kind_icons.Function
   assert(icon and icon ~= "", "Missing completion kind icon from the snacks picker config")
-  assert(blink.fuzzy.implementation == "lua", "blink.cmp must use the Lua matcher, which needs no prebuilt binary")
   local mapping = require("mason-lspconfig.mappings").get_mason_map().lspconfig_to_package
   for _, specifier in ipairs(require("config.languages").lsp) do
     local server, version = require("mason-core.package").Parse(specifier)

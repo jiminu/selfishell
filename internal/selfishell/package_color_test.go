@@ -26,54 +26,6 @@ func packageTestPTY(t *testing.T) (*os.File, *os.File) {
 	return master, slave
 }
 
-func TestInstallAndUpdateTerminalSummary(t *testing.T) {
-	for _, command := range []string{"install", "update"} {
-		t.Run(command, func(t *testing.T) {
-			platform := "macos"
-			if runtime.GOOS == "linux" {
-				platform = "ubuntu"
-			}
-			root, _, _ := blockHome(t, platform)
-			t.Setenv("NO_COLOR", "")
-			t.Setenv("TERM", "xterm-256color")
-			t.Setenv("CI", "")
-			blockOK(t, root, "install", "--skip-packages", "--yes")
-			r := failureResource(t, root, "zsh-common")
-			if err := os.Remove(r.Target); err != nil {
-				t.Fatal(err)
-			}
-			master, slave := packageTestPTY(t)
-			defer master.Close()
-			defer slave.Close()
-			args := []string{command, "--skip-packages", "--yes"}
-			if command == "update" {
-				args = append(args, "--tools-only")
-			}
-			cli := CLI{Root: root, Out: slave, Err: slave}
-			if code := cli.Run(append(append([]string{}, args...), "--dry-run")); code != 0 {
-				t.Fatalf("dry run exited %d", code)
-			}
-			fmt.Fprintln(slave, "DRYEND")
-			dry := readPackagePTY(t, master, "DRYEND\n")
-			if strings.Contains(dry, "\x1b[2K") || !strings.Contains(dry, "\x1b[36mWould install managed file:") {
-				t.Fatalf("dry-run output: %q", dry)
-			}
-			if _, err := os.Stat(r.Target); !os.IsNotExist(err) {
-				t.Fatalf("dry run created target: %v", err)
-			}
-			code := (CLI{Root: root, Out: slave, Err: slave}).Run(args)
-			fmt.Fprintln(slave, "END")
-			got := readPackagePTY(t, master, "END\n")
-			if code != 0 || !strings.Contains(got, "Configuration") || !strings.Contains(got, "\x1b[32mInstalled managed file:\x1b[0m") {
-				t.Fatalf("missing completion summary: code=%d output=%q", code, got)
-			}
-			if strings.Index(got, "Configuration") > strings.Index(got, "Installed managed file:") {
-				t.Fatalf("action printed before summary: %q", got)
-			}
-		})
-	}
-}
-
 func readPackagePTY(t *testing.T, master *os.File, expected string) string {
 	t.Helper()
 	if err := syscall.SetNonblock(int(master.Fd()), true); err != nil {

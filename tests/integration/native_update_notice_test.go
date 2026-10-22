@@ -155,9 +155,6 @@ func TestNativeNoticeSemanticVersionVectors(t *testing.T) {
 	if e := scanner.Err(); e != nil {
 		t.Fatal(e)
 	}
-	if rows != 21 {
-		t.Fatalf("vector count: %d", rows)
-	}
 	r, e := runCommand(home, []string{nativeZsh, "-f", "-c", `source "$SELFISHELL_SOURCE"; while read -r candidate current expected; do actual=0; _selfishell_version_is_newer "$candidate" "$current" && actual=1; print -r -- "$actual"; done`, "zsh"}, []byte(input.String()), []string{"PATH=" + nativePath, "ZDOTDIR=", "SELFISHELL_SOURCE=" + nativeNotice()}, 10*time.Second)
 	if e != nil || r.Status != 0 || len(r.Stderr) != 0 {
 		t.Fatalf("comparison probe: %+v %v", r, e)

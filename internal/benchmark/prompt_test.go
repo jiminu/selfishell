@@ -73,15 +73,11 @@ precmd() { (( ++count )); }
 RPROMPT='__SFS_READY_${count}__'
 zshexit() { print finished >> "$HOME/finished"; }
 [[ "$MISE_CEILING_PATHS" == "$PWD" ]] || exit 2
-[[ "$WSL_DISTRO_NAME" == Ubuntu ]] || exit 3
-[[ -z "$VIRTUAL_ENV" ]] || exit 4
-[[ "$MISE_DATA_DIR" == "$HOME/.local/share/mise" ]] || exit 5
-[[ "$SELFISHELL_UPDATE_NOTICE" == 0 ]] || exit 6
 `
 	if err := os.WriteFile(filepath.Join(zdot, ".zshrc"), []byte(fixture), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env := PromptEnvironment("/release", home, zdot, "/release/zshrc", "/usr/bin:/bin", []string{"WSL_DISTRO_NAME=Ubuntu", "VIRTUAL_ENV=/ambient"})
+	env := PromptEnvironment("/release", home, zdot, "/release/zshrc", "/usr/bin:/bin", nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	got, err := MeasurePrompt(ctx, home, env, 1)

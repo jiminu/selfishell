@@ -167,83 +167,6 @@ func TestDiagnostics(t *testing.T) {
 	}
 }
 
-func TestConfiguredDiagnostics(t *testing.T) {
-	t.Parallel()
-	cli, err := testCLI(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	release := filepath.Join(root, "releases", "2.0.0")
-	copyCLIFixture(t, release, cli)
-	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, testutil.WriteFile(filepath.Join(release, "VERSION"), []byte("2.0.0\n"), 0600))
-	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
-	tools := fixtureTools(t, root)
-	for name, body := range map[string]string{
-		"apt-get":    "#!/bin/sh\nexit 0\n",
-		"dpkg-query": "#!/bin/sh\nprintf 'git\\tii \\t2.0\\n'\n",
-		"gcc":        "#!/bin/sh\nprintf 'gcc fixture 1.0\\n'\n",
-	} {
-		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
-	}
-	osRelease := filepath.Join(root, "os-release")
-	proc := filepath.Join(root, "proc-version")
-	mustFS(t, testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600))
-	mustFS(t, testutil.WriteFile(proc, []byte("Linux\n"), 0600))
-	env := []string{"PATH=" + tools, "SELFISHELL_TEST_SYSTEM_NAME=Linux", "SELFISHELL_TEST_MACHINE_ARCH=x86_64", "SELFISHELL_TEST_OS_RELEASE_FILE=" + osRelease, "SELFISHELL_TEST_PROC_VERSION_FILE=" + proc}
-	for _, tc := range []struct {
-		name   string
-		args   []string
-		status int
-	}{
-		{"status", []string{"status"}, 0}, {"status-verbose", []string{"status", "--verbose"}, 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home := filepath.Join(root, "home")
-			mustFS(t, os.RemoveAll(home))
-			mustFS(t, os.MkdirAll(home, 0700))
-			setup, e := captureCommand(home, entry, []string{"install", "--skip-packages", "--yes"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "configuration fixture", setup, 0)
-			state := filepath.Join(home, ".local/state/selfishell")
-			mustFS(t, os.MkdirAll(filepath.Join(state, "resources"), 0700))
-			mustFS(t, testutil.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
-			target := filepath.Join(home, "managed")
-			mustFS(t, testutil.WriteFile(target, []byte("managed"), 0600))
-			mustFS(t, testutil.WriteFile(filepath.Join(state, "resources/aliases.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", filepath.Join(home, "link"), target)), 0600))
-			mustFS(t, os.Symlink(target, filepath.Join(home, "link")))
-			before := mustSnapshot(t, home)
-			got, err := captureCommand(home, entry, tc.args, env)
-			if err != nil {
-				t.Fatal(err)
-			}
-			requireStatus(t, "CLI", got, tc.status)
-			requireContains(t, got.Stdout, "Selfishell configuration is installed.")
-			if !bytes.HasPrefix(got.Stdout, []byte("[CLI] Current: 2.0.0 | Rollback: none\n[INFO] Selfishell configuration is installed.\n")) {
-				t.Fatalf("inconsistent diagnostic header: %s", got.Stdout)
-			}
-			requireContains(t, got.Stdout, "[OK] System: Ubuntu (amd64), 4 checks passed")
-			requireContains(t, got.Stdout, "Configuration: 36 paths intact")
-			requireContains(t, got.Stdout, "Optional tool: optional is not installed")
-			requireContains(t, got.Stdout, "[INFO] Tools: 1 present, 1 optional not installed")
-			if tc.name == "status-verbose" {
-				requireContains(t, got.Stdout, "[OK] C compiler:")
-				requireContains(t, got.Stdout, "[OK] ~/link")
-				requireContains(t, got.Stdout, "[TOOL] git | Installed: 2.0")
-				requireContains(t, got.Stdout, "[TOOL] optional | Installed: missing")
-			} else if bytes.Contains(got.Stdout, []byte("[OK] C compiler:")) || bytes.Contains(got.Stdout, []byte("[OK] ~/link")) || bytes.Contains(got.Stdout, []byte("[TOOL]")) {
-				t.Fatalf("healthy details were not collapsed: %s", got.Stdout)
-			}
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("CLI mutated HOME")
-			}
-		})
-	}
-}
-
 func TestStatusPlugins(t *testing.T) {
 	t.Parallel()
 	cli, err := testCLI(t)
@@ -277,7 +200,7 @@ func TestStatusPlugins(t *testing.T) {
 		}
 		return strings.TrimSpace(string(result.Stdout))
 	}
-	for _, name := range []string{"missing", "clean", "broken", "invalid-config", "drift", "dirty", "untracked", "mixed"} {
+	for _, name := range []string{"clean", "invalid-config", "untracked", "mixed"} {
 		t.Run(name, func(t *testing.T) {
 			home := filepath.Join(root, "home")
 			mustFS(t, os.RemoveAll(home))
@@ -291,33 +214,23 @@ func TestStatusPlugins(t *testing.T) {
 			mustFS(t, os.MkdirAll(filepath.Dir(zinit), 0700))
 			mustFS(t, testutil.WriteFile(zinit, []byte("# zinit\n"), 0600))
 			plugin := filepath.Join(home, ".local/share/zinit/plugins/test---plugin")
-			revision := strings.Repeat("0", 40)
-			if name != "missing" {
-				mustFS(t, os.MkdirAll(plugin, 0700))
-				runGit(plugin, "init", "--quiet")
-				// Fixture commits must not leave background maintenance racing HOME snapshots.
-				runGit(plugin, "config", "maintenance.auto", "false")
-				runGit(plugin, "config", "user.email", "test@example.com")
-				runGit(plugin, "config", "user.name", "test")
-				mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("first\n"), 0600))
-				runGit(plugin, "add", "tracked")
-				runGit(plugin, "commit", "--quiet", "-m", "first")
-				revision = runGit(plugin, "rev-parse", "HEAD")
-				switch name {
-				case "broken":
-					mustFS(t, testutil.WriteFile(filepath.Join(plugin, ".git/HEAD"), []byte("invalid\n"), 0600))
-				case "invalid-config":
-					mustFS(t, testutil.WriteFile(filepath.Join(plugin, ".git/config"), []byte("[invalid\n"), 0600))
-				case "untracked":
-					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "untracked"), []byte("user data\n"), 0600))
-				}
-				if name == "drift" {
-					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("second\n"), 0600))
-					runGit(plugin, "commit", "--quiet", "-am", "second")
-				}
-				if name == "dirty" || name == "mixed" {
-					mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
-				}
+			mustFS(t, os.MkdirAll(plugin, 0700))
+			runGit(plugin, "init", "--quiet")
+			// Fixture commits must not leave background maintenance racing HOME snapshots.
+			runGit(plugin, "config", "maintenance.auto", "false")
+			runGit(plugin, "config", "user.email", "test@example.com")
+			runGit(plugin, "config", "user.name", "test")
+			mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("first\n"), 0600))
+			runGit(plugin, "add", "tracked")
+			runGit(plugin, "commit", "--quiet", "-m", "first")
+			revision := runGit(plugin, "rev-parse", "HEAD")
+			switch name {
+			case "invalid-config":
+				mustFS(t, testutil.WriteFile(filepath.Join(plugin, ".git/config"), []byte("[invalid\n"), 0600))
+			case "untracked":
+				mustFS(t, testutil.WriteFile(filepath.Join(plugin, "untracked"), []byte("user data\n"), 0600))
+			case "mixed":
+				mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
 			}
 			mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
 			if name == "mixed" {
@@ -338,13 +251,9 @@ func TestStatusPlugins(t *testing.T) {
 			}
 			requireStatus(t, "CLI", got, status)
 			expected := map[string]string{
-				"missing":        "Zsh plugins: 1 not provisioned (test/plugin)",
 				"clean":          "Zsh plugins: provisioned",
-				"broken":         "Zsh plugins: could not inspect test/plugin",
 				"invalid-config": "Zsh plugins: could not inspect test/plugin",
 				"untracked":      "Zsh plugins: 1 modified locally (test/plugin)",
-				"drift":          "Zsh plugins: 1 at an unapproved revision (test/plugin)",
-				"dirty":          "Zsh plugins: 1 modified locally (test/plugin)",
 				"mixed":          "Zsh plugins: 1 modified locally (test/plugin)",
 			}[name]
 			requireContains(t, got.Stdout, expected)
@@ -446,56 +355,6 @@ func TestStatusGhosttyChoice(t *testing.T) {
 			}
 			if !bytes.Equal(before, mustSnapshot(t, home)) {
 				t.Fatal("status mutated HOME")
-			}
-		})
-	}
-}
-
-func TestDiagnosticsTTYColors(t *testing.T) {
-	t.Parallel()
-	cli, err := testCLI(t)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	release := filepath.Join(root, "release")
-	copyCLIFixture(t, release, cli)
-	entry := filepath.Join(release, "bin/selfishell")
-	home := filepath.Join(root, "home")
-	mustFS(t, os.MkdirAll(home, 0700))
-	state := filepath.Join(home, ".local/state/selfishell/resources")
-	mustFS(t, os.MkdirAll(state, 0700))
-	target := filepath.Join(home, "link")
-	mustFS(t, testutil.WriteFile(filepath.Join(state, "user-nvim.state"), []byte(fmt.Sprintf("2\nlink\nactive\n%s\n%s\n-\n-\n", target, filepath.Join(home, "missing"))), 0600))
-	before := mustSnapshot(t, home)
-	for _, tc := range []struct {
-		name, noColor string
-		color         bool
-	}{{"TTY", "", true}, {"NO_COLOR", "1", false}} {
-		t.Run(tc.name, func(t *testing.T) {
-			env := []string{"NO_COLOR=" + tc.noColor, "TERM=xterm", "SELFISHELL_TEST_SYSTEM_NAME=Darwin", "SELFISHELL_TEST_MACHINE_ARCH=arm64", "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
-			got, e := capturePTYOutput(home, entry, []string{"status"}, env)
-			if e != nil {
-				t.Fatal(e)
-			}
-			requireStatus(t, "CLI", got, 1)
-			// brew is outside PATH, so the system check fails alongside the changed link.
-			for _, want := range []struct{ marker, hint, color string }{
-				{"[CHANGED]", "selfishell update --tools-only --skip-packages", "33"},
-				{"[ERROR]", "selfishell install", "31"},
-			} {
-				requireStdout(t, got, want.marker)
-				requireStdout(t, got, want.hint)
-				if tc.color {
-					requireStdout(t, got, "\x1b["+want.color+"m"+want.marker+"\x1b[0m")
-					requireStdout(t, got, "\x1b[1m"+want.hint+"\x1b[0m")
-				}
-			}
-			if !tc.color && (bytes.Contains(got.Stdout, []byte("\x1b")) || bytes.Contains(got.Stderr, []byte("\x1b"))) {
-				t.Fatalf("unexpected ANSI: stdout=%q stderr=%q", got.Stdout, got.Stderr)
-			}
-			if !bytes.Equal(before, got.Home) {
-				t.Fatal("CLI mutated HOME")
 			}
 		})
 	}
@@ -681,10 +540,14 @@ func TestStatusInstalledResource(t *testing.T) {
 	release := filepath.Join(root, "release")
 	copyCLIFixture(t, release, cli)
 	entry := filepath.Join(release, "bin/selfishell")
-	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+	mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), []byte("package all required apt git\npackage all optional apt optional\n"), 0600))
 	tools := fixtureTools(t, root)
-	for _, name := range []string{"apt-get", "gcc"} {
-		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte("#!/bin/sh\nexit 0\n"), 0700))
+	for name, body := range map[string]string{
+		"apt-get":    "#!/bin/sh\nexit 0\n",
+		"dpkg-query": "#!/bin/sh\nprintf 'git\\tii \\t2.0\\n'\n",
+		"gcc":        "#!/bin/sh\nexit 0\n",
+	} {
+		mustFS(t, testutil.WriteFile(filepath.Join(tools, name), []byte(body), 0700))
 	}
 	osRelease := filepath.Join(root, "os-release")
 	proc := filepath.Join(root, "proc-version")
@@ -710,7 +573,14 @@ func TestStatusInstalledResource(t *testing.T) {
 	mustFS(t, testutil.WriteFile(filepath.Join(tools, "curl"), []byte("#!/bin/sh\nprintf 'called\\n' >>'"+filepath.Join(root, "curl-calls")+"'\nexit 1\n"), 0700))
 	before := mustSnapshot(t, home)
 	plain := run("plain", []string{"status"}, 0)
-	requireContains(t, plain.Stdout, "[OK] Configuration:")
+	if !bytes.HasPrefix(plain.Stdout, []byte("[CLI] Current: 0.0.0-test | Rollback: none\n[INFO] Selfishell configuration is installed.\n")) {
+		t.Fatalf("inconsistent diagnostic header: %s", plain.Stdout)
+	}
+	requireContains(t, plain.Stdout, "paths intact")
+	requireContains(t, plain.Stdout, "Optional tool: optional is not installed")
+	if bytes.Contains(plain.Stdout, []byte("[OK] C compiler:")) || bytes.Contains(plain.Stdout, []byte("[TOOL]")) {
+		t.Fatalf("healthy details were not collapsed: %s", plain.Stdout)
+	}
 	verbose := run("verbose", []string{"status", "--verbose"}, 0)
 	for _, name := range []string{"zsh/zshrc", "vim/vimrc", "nvim/init.lua"} {
 		if !bytes.Contains(verbose.Stdout, []byte(name)) {

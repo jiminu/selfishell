@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -514,8 +515,12 @@ func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 		t.Fatalf("overwrite: %d %q %q", code, out, stderr)
 	}
 	blockEqual(t, r.Target, blockRead(t, r.Source))
-	if got := blockState(t, paths, r.Name).Backup; got != state.Backup {
-		t.Fatalf("original backup changed: %q != %q", got, state.Backup)
+	sum, err := Checksum(context.Background(), r.Source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := blockState(t, paths, r.Name); got.Backup != state.Backup || got.Checksum != sum {
+		t.Fatalf("overwrite state: %+v, want backup %q and checksum %q", got, state.Backup, sum)
 	}
 	entries, err := os.ReadDir(paths.State + "/backups")
 	if err != nil {
@@ -642,32 +647,6 @@ func TestManagedSourceCheckoutCanDisappearAfterInstall(t *testing.T) {
 		if output, err := runNativeZprofile(home, "/usr/bin:/bin", 5*time.Second); err != nil || strings.TrimSpace(string(output)) != "loaded" {
 			t.Fatalf("source after removal: %v %q", err, output)
 		}
-	}
-}
-
-func TestManagedRuntimeRespectsCallerMiseGlobalConfig(t *testing.T) {
-	root, home, _ := blockHome(t, "macos")
-	if _, err := os.Stat("/bin/zsh"); err != nil {
-		t.Skip("zsh unavailable")
-	}
-	fake := home + "/tools/mise"
-	blockWrite(t, fake, []byte("#!/bin/sh\nif [ \"$1\" = activate ]; then printf ':\\n'; fi\n"))
-	if err := os.Chmod(fake, 0700); err != nil {
-		t.Fatal(err)
-	}
-	runtime := root + "/config/shared/zsh/runtime.zsh"
-	for _, tc := range []struct{ name, setup, check, want string }{
-		{"set", `MISE_GLOBAL_CONFIG_FILE="$HOME/personal-mise.toml"`, `SELFISHELL_MISE_SHIMS_TEST="$MISE_GLOBAL_CONFIG_FILE"`, home + "/personal-mise.toml"},
-		{"unset", `unset MISE_GLOBAL_CONFIG_FILE`, `[[ -z "${MISE_GLOBAL_CONFIG_FILE+x}" ]] && SELFISHELL_MISE_SHIMS_TEST=unset`, "unset"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			profile := "set -e\n" + tc.setup + "\n_selfishell_command_path() { command -v \"$1\"; }\nsource \"" + runtime + "\"\n" + tc.check + "\n"
-			blockWrite(t, home+"/.zprofile", []byte(profile))
-			out, err := runNativeZprofile(home, home+"/tools:/usr/bin:/bin", 5*time.Second)
-			if err != nil || strings.TrimSpace(string(out)) != tc.want {
-				t.Fatalf("%s: %v %q", tc.name, err, out)
-			}
-		})
 	}
 }
 

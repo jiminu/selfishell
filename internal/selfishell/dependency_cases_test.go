@@ -60,7 +60,7 @@ func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 				op, paths, manifest, home := dependencyFixture(t)
 				target := home + "/.local/bin/tool"
 				state := paths.State + "/dependencies/tool"
-				directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
+				directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", phase == "stage")
 				prior := map[string]string{"file": target, "directory": target + "/leftover"}[shape]
 				if prior != "" {
 					writeTestFile(t, prior, "old", 0755)

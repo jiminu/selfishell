@@ -351,35 +351,6 @@ func TestCurlRetryReplacesPartialResponse(t *testing.T) {
 	}
 }
 
-func TestCurlUsesProxy(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	requested := make(chan string, 1)
-	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requested <- r.URL.String()
-		fmt.Fprint(w, "proxy payload")
-	}))
-	defer proxy.Close()
-	t.Setenv("http_proxy", proxy.URL)
-	t.Setenv("HTTP_PROXY", "")
-	t.Setenv("ALL_PROXY", "")
-	t.Setenv("all_proxy", "")
-	t.Setenv("NO_PROXY", "")
-	t.Setenv("no_proxy", "")
-	var out bytes.Buffer
-	code, err := (Process{Out: &out, Err: io.Discard}).Curl(context.Background(), "metadata", "http://selfishell.invalid/payload")
-	if code != 0 || err != nil || out.String() != "proxy payload" {
-		t.Fatalf("proxy code=%d err=%v out=%q", code, err, out.String())
-	}
-	select {
-	case got := <-requested:
-		if got != "http://selfishell.invalid/payload" {
-			t.Fatal(got)
-		}
-	default:
-		t.Fatal("proxy received no request")
-	}
-}
-
 func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

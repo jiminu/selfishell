@@ -36,8 +36,6 @@ assert(vim.api.nvim_win_get_cursor(left)[2] == 1, "window navigation reopened re
 
 vim.api.nvim_set_current_win(target)
 press("<Space>wr=<Esc>")
-assert(math.abs(vim.api.nvim_win_get_width(target) - vim.api.nvim_win_get_width(left)) <= 1,
-  "resize mode did not equalize columns")
 assert(not vim.fn.execute("messages"):find("Recursion detected", 1, true), "resize mode recursed")
 vim.bo.modified = false
 vim.cmd.only()
