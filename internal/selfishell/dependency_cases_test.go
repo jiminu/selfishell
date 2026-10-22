@@ -67,7 +67,7 @@ func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 					writeTestFile(t, state, "0.9\n", 0600)
 				}
 				op.dependencyFault = func(at string) error {
-					if at == phase && phase != "stage" {
+					if at == phase {
 						return errors.New("forced " + at)
 					}
 					return nil

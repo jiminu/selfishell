@@ -155,11 +155,6 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	if err := makeRawDir(rawParent(target)); err != nil {
 		return err
 	}
-	if o.dependencyFault != nil {
-		if err := o.dependencyFault("stage"); err != nil {
-			return err
-		}
-	}
 	stageDir, err := os.MkdirTemp(rawParent(target), ".selfishell-dependency.*")
 	if err != nil {
 		return err

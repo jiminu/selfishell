@@ -396,10 +396,14 @@ func TestPurgeRefusesForeignCLILinkBeforeMutation(t *testing.T) {
 	share := filepath.Join(base, ".local/share/selfishell")
 	release := filepath.Join(share, "releases/v1")
 	os.MkdirAll(release+"/bin", 0700)
+	os.WriteFile(release+"/bin/selfishell", nil, 0700)
 	os.Symlink("releases/v1", share+"/current")
+	foreign := filepath.Join(base, "foreign/bin/selfishell")
+	os.MkdirAll(filepath.Dir(foreign), 0700)
+	os.WriteFile(foreign, nil, 0700)
 	bin := filepath.Join(base, ".local/bin")
 	os.MkdirAll(bin, 0700)
-	os.Symlink("/foreign/current/bin/selfishell", bin+"/selfishell")
+	os.Symlink(foreign, bin+"/selfishell")
 	isolateHome(t, home)
 	var out, stderr bytes.Buffer
 	c := CLI{Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
