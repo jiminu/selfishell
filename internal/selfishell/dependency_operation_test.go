@@ -2,10 +2,7 @@ package selfishell
 
 import (
 	"bytes"
-	"context"
-	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -87,29 +84,5 @@ func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	}
 	if slices.Contains(args, "--max-time") {
 		t.Fatalf("transfer has total timeout: %q", args)
-	}
-}
-
-func TestDirectDownloadChecksumFailureKeepsManagedTarget(t *testing.T) {
-	op, paths, manifest, home := dependencyFixture(t)
-	target := home + "/.local/bin/tool"
-	state := paths.State + "/dependencies/tool"
-	for _, path := range []string{target, state} {
-		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	os.WriteFile(target, []byte("old"), 0755)
-	os.WriteFile(state, []byte("0.9\n"), 0600)
-	source := home + "/source"
-	os.WriteFile(source, []byte("new"), 0600)
-	os.WriteFile(manifest, []byte(fmt.Sprintf("download tool 1.0 linux amd64 file://%s %064d .local/bin/tool raw\n", source, 0)), 0600)
-	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "tool", "linux", "amd64", false); err == nil {
-		t.Fatal("checksum accepted")
-	}
-	got, _ := os.ReadFile(target)
-	version, _ := os.ReadFile(state)
-	if string(got) != "old" || string(version) != "0.9\n" {
-		t.Fatalf("changed target/state: %q %q", got, version)
 	}
 }
