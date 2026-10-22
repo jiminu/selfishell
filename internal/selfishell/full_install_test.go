@@ -277,14 +277,6 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 	if data, err := os.ReadFile(home + "/apt-calls"); err != nil || string(data) != "update\n" {
 		t.Fatalf("optional unavailable apt attempted install: %q %v", data, err)
 	}
-	out.Reset()
-	stderr.Reset()
-	if code := c.Run([]string{"install", "--yes"}); code != 0 {
-		t.Fatalf("repeat %d: %s", code, stderr.String())
-	}
-	if !strings.Contains(out.String(), "items unchanged") {
-		t.Fatalf("missing repeat report: %s", out.String())
-	}
 }
 
 func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {

@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -514,8 +515,12 @@ func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 		t.Fatalf("overwrite: %d %q %q", code, out, stderr)
 	}
 	blockEqual(t, r.Target, blockRead(t, r.Source))
-	if got := blockState(t, paths, r.Name).Backup; got != state.Backup {
-		t.Fatalf("original backup changed: %q != %q", got, state.Backup)
+	sum, err := Checksum(context.Background(), r.Source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := blockState(t, paths, r.Name); got.Backup != state.Backup || got.Checksum != sum {
+		t.Fatalf("overwrite state: %+v, want backup %q and checksum %q", got, state.Backup, sum)
 	}
 	entries, err := os.ReadDir(paths.State + "/backups")
 	if err != nil {
