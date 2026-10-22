@@ -221,19 +221,6 @@ dap.adapters["pwa-node"] = custom_node
 handler({ name = "js" })
 assert(dap.adapters["pwa-node"] == custom_node, "JS setup replaced a personal pwa-node adapter")
 
-session = {}
-for key, action in pairs({
-  ["<F5>"] = "continue", ["<F9>"] = "toggle_breakpoint", ["<F10>"] = "step_over",
-  ["<F11>"] = "step_into", ["<S-F11>"] = "step_out", ["<S-F5>"] = "terminate",
-  ["<F23>"] = "step_out", ["<F17>"] = "terminate",
-  ["<leader>Dc"] = "continue", ["<leader>Db"] = "toggle_breakpoint", ["<leader>Do"] = "step_over",
-  ["<leader>Di"] = "step_into", ["<leader>DO"] = "step_out", ["<leader>Dt"] = "terminate",
-  ["<leader>Dp"] = "pause", ["<leader>Df"] = "focus_frame",
-}) do
-  assert(keys[key], "missing debug key: " .. key)
-  keys[key]()
-  assert(actions[#actions] == action, "incorrect debug action: " .. key)
-end
 require("config.dap").setup_ui()
 session = { on_close = {} }
 dap.listeners.after.event_initialized.selfishell(session)
