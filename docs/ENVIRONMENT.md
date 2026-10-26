@@ -137,6 +137,12 @@ This also works in nvim-tree and debug panels, using keys that travel through
 ordinary terminal and SSH connections. To set an exact width, use
 `:vertical resize 40` for 40 columns.
 
+On macOS, entering Normal mode, starting Neovim, or returning to it selects the
+last ASCII keyboard layout (such as ABC), so a Korean, Japanese, or Chinese
+input method does not swallow Normal mode commands. Insert mode keeps that
+layout; switch back with your usual input source key. Over SSH, the input
+source is left alone.
+
 When Neovim is available, `vim` resolves to Neovim while `vi` remains the
 system editor. `EDITOR` defaults to `nvim` and `VISUAL` defaults to `EDITOR`,
 so external programs such as Lazygit also use Neovim. Existing nonempty values
