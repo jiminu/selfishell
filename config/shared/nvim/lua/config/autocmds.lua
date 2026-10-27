@@ -102,6 +102,42 @@ vim.api.nvim_create_autocmd("TextYankPost", {
   end,
 })
 
+-- A macOS input method (Korean, Japanese, ...) holds keys while composing, so
+-- Normal mode commands never arrive: select the last ASCII layout (ABC) there.
+-- Over SSH this would switch the remote Mac's input source instead.
+if vim.fn.has("mac") == 1 and jit and not (vim.env.SSH_TTY or vim.env.SSH_CONNECTION) then
+  local ffi = require("ffi")
+  local ok, carbon = pcall(function()
+    ffi.cdef([[
+      typedef struct __TISInputSource *TISInputSourceRef;
+      TISInputSourceRef TISCopyCurrentASCIICapableKeyboardLayoutInputSource(void);
+      int32_t TISSelectInputSource(TISInputSourceRef inputSource);
+      void CFRelease(const void *cf);
+    ]])
+    return ffi.load("/System/Library/Frameworks/Carbon.framework/Carbon")
+  end)
+
+  local function select_ascii_layout()
+    -- Once idle, so a mapping passing through Normal mode keeps the input
+    -- method; headless runs (tests, scripts) never touch it.
+    vim.schedule(function()
+      if vim.api.nvim_get_mode().mode ~= "n" or #vim.api.nvim_list_uis() == 0 then
+        return
+      end
+      local layout = carbon.TISCopyCurrentASCIICapableKeyboardLayoutInputSource()
+      if layout ~= nil then
+        carbon.TISSelectInputSource(layout)
+        carbon.CFRelease(layout)
+      end
+    end)
+  end
+
+  if ok then
+    vim.api.nvim_create_autocmd("ModeChanged", { group = group, pattern = "*:n", callback = select_ascii_layout })
+    vim.api.nvim_create_autocmd({ "FocusGained", "UIEnter" }, { group = group, callback = select_ascii_layout })
+  end
+end
+
 -- Restore the last cursor position when reopening a regular file, but not in
 -- commit or rebase messages, xxd dumps, or diff mode (:h restore-cursor).
 -- Filetype detection runs after init.lua's autocmds, so match it here.
