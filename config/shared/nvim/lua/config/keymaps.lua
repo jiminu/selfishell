@@ -68,6 +68,12 @@ map("n", "<leader>wr", function()
   end
 end, { desc = "Resize windows", silent = true })
 
+-- Wrap stays off so markview keeps table borders; turn it on to read prose.
+map("n", "<leader>uw", "<cmd>setlocal wrap!<CR>", {
+  silent = true,
+  desc = "Toggle line wrap",
+})
+
 -- Buffer management: deferred to call time since Snacks isn't guaranteed to
 -- be loaded yet when this module is evaluated.
 map("n", "<leader>bd", function()
