@@ -154,7 +154,7 @@ Both launch options use the debug UI's Console terminal, so programs using
 enter input. Press `Ctrl+\` then `Ctrl+n` to return to Normal mode before
 using debug shortcuts. Attach keeps the process's existing terminal.
 
-Selfishell's Node 24 can run `.ts`, `.mts` and `.cts` files with erasable type
+Selfishell's Node 26 can run `.ts`, `.mts` and `.cts` files with erasable type
 annotations directly. This does not type-check or apply `tsconfig.json`;
 enums, decorators, JSX/TSX and path aliases may need your project's compiler
 or runtime. For compiled TypeScript, enable source maps in the project build,
