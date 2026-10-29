@@ -89,6 +89,10 @@ func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, 
 	if err := os.MkdirAll(project, 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Node reports the resolved script path; macOS TempDir sits under the /var symlink.
+	if project, err = filepath.EvalSymlinks(project); err != nil {
+		t.Fatal(err)
+	}
 	for name, content := range map[string]string{
 		"cpp/main.cpp": `#include <cstring>
 int main(int argc, char** argv) {
