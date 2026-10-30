@@ -29,7 +29,9 @@ elif command -v mise >/dev/null 2>&1; then
 fi`
 	case "user-zshenv":
 		label = "Selfishell zshenv"
-		body = "skip_global_compinit=1"
+		body = `skip_global_compinit=1
+# Pin emacs before system zshrc binds keys; an inherited EDITOR=nvim selects viins.
+[[ -o interactive ]] && bindkey -e`
 	case "user-ghostty":
 		label = "Selfishell ghostty"
 		body = "config-file = " + config + `/ghostty/config.ghostty

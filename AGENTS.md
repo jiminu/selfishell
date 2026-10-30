@@ -83,8 +83,8 @@ integration uses only:
 
 - bounded blocks at the top of user-owned files: `~/.zshrc` (sources the
   platform entrypoint), `~/.zprofile` (mise shims), `~/.vimrc` (sources the Vim
-  entrypoint), Ubuntu/WSL `~/.zshenv` (`skip_global_compinit=1`; macOS
-  `~/.zshenv` is not managed), and, when Ghostty is chosen on macOS,
+  entrypoint), `~/.zshenv` (`skip_global_compinit=1` and the emacs keymap
+  pin), and, when Ghostty is chosen on macOS,
   `~/.config/ghostty/config.ghostty` (`user.ghostty` is never touched);
 - when chosen on WSL, one recorded Windows Terminal JSON fragment under
   `Fragments/Selfishell` that `updates` the current distribution profile's

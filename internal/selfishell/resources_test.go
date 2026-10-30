@@ -155,11 +155,10 @@ func TestResources(t *testing.T) {
 		ghostty  bool
 		omitted  int
 		zsh      string
-		zshenv   bool
 	}{
-		{"macos", false, 3, "macos", false}, {"macos", true, 1, "macos", false},
-		{"ubuntu", false, 2, "ubuntu", true}, {"ubuntu", true, 2, "ubuntu", true},
-		{"ubuntu-wsl", false, 2, "ubuntu", true},
+		{"macos", false, 2, "macos"}, {"macos", true, 0, "macos"},
+		{"ubuntu", false, 2, "ubuntu"}, {"ubuntu", true, 2, "ubuntu"},
+		{"ubuntu-wsl", false, 2, "ubuntu"},
 	} {
 		resources, err := ResourcesForPlatform("/release", tc.platform, tc.ghostty)
 		if err != nil || len(resources) != len(all)-tc.omitted {
@@ -167,15 +166,6 @@ func TestResources(t *testing.T) {
 		}
 		if resources[0].Source != "/release/config/"+tc.zsh+"/zshrc" {
 			t.Fatal(resources[0])
-		}
-		found := false
-		for _, r := range resources {
-			if r.Name == "user-zshenv" {
-				found = true
-			}
-		}
-		if found != tc.zshenv {
-			t.Fatal("wrong zshenv selection")
 		}
 	}
 	if resources, err := ResourcesForPlatform("/release", "unsupported-linux", false); resources != nil || err == nil {

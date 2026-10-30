@@ -26,8 +26,7 @@ connects them to these locations; paths under `~/.config` follow
 
 | Path | Change | Existing content |
 | --- | --- | --- |
-| `~/.zshrc`, `~/.zprofile`, `~/.vimrc` | Marked block added at the top | Kept below the block |
-| `~/.zshenv` (Ubuntu/WSL only) | Marked block added at the top | Kept below the block |
+| `~/.zshrc`, `~/.zprofile`, `~/.zshenv`, `~/.vimrc` | Marked block added at the top | Kept below the block |
 | `~/.config/ghostty/config.ghostty` (macOS, if Ghostty is chosen) | Marked block added at the top | Kept below the block |
 | `~/.config/nvim` | Link to `~/.config/selfishell/nvim` | Moved to a backup |
 | `~/.config/starship.toml` | Link to `~/.config/selfishell/starship.toml` | Moved to a backup |
@@ -186,10 +185,12 @@ with new releases; see
 [Modified Managed File](TROUBLESHOOTING.md#modified-managed-file) for what
 happens if you edit inside one.
 
-On Ubuntu and Ubuntu on WSL, the `~/.zshenv` block contains only
-`skip_global_compinit=1` so Ubuntu's system-wide Zsh configuration does not
-initialize `compinit` before Selfishell's own. Selfishell does not manage
-`~/.zshenv` on macOS.
+The `~/.zshenv` block sets `skip_global_compinit=1` so Ubuntu's system-wide Zsh
+configuration does not initialize `compinit` before Selfishell's own. It also
+runs `bindkey -e` in interactive shells, before the system `zshrc` binds keys.
+Otherwise Zsh selects vi mode when it inherits an `EDITOR` or `VISUAL`
+containing `vi`, as in shells started under tmux, Herdr, or Neovim. To use vi
+mode, add `bindkey -v` to `~/.zshrc`.
 
 ## Neovim customization
 
@@ -413,11 +414,10 @@ replaced with the approved version. To have Selfishell treat them as external
 instead, delete those three directories after purging. A usable tool or font is
 then preserved, and Selfishell no longer changes its Windows font registration.
 
-Personal content in `~/.zshrc`, `~/.zprofile`, and `~/.vimrc`, and in
-`~/.zshenv` on Ubuntu/WSL, is preserved; uninstall removes only the intact
-marked Selfishell blocks. Packages installed through Apt, Homebrew, or direct
-tool installers are also preserved. Purge does not automatically remove Zinit
-or Neovim plugin checkouts.
+Personal content in `~/.zshrc`, `~/.zprofile`, `~/.zshenv`, and `~/.vimrc` is
+preserved; uninstall removes only the intact marked Selfishell blocks. Packages
+installed through Apt, Homebrew, or direct tool installers are also preserved.
+Purge does not automatically remove Zinit or Neovim plugin checkouts.
 
 ## Platform notes
 

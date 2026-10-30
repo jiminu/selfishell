@@ -85,10 +85,6 @@ func ResourcesForPlatform(root, platform string, ghostty bool) ([]Resource, erro
 			if platform != "macos" || !ghostty {
 				continue
 			}
-		case "user-zshenv":
-			if platform == "macos" {
-				continue
-			}
 		}
 		selected = append(selected, resource)
 	}
