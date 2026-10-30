@@ -73,6 +73,10 @@ map("n", "<leader>uw", "<cmd>setlocal wrap!<CR>", {
   silent = true,
   desc = "Toggle line wrap",
 })
+-- Without a count, move by screen line so wrapped prose is reachable; 5j
+-- still counts real lines.
+map({ "n", "x" }, "j", "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true, desc = "Down" })
+map({ "n", "x" }, "k", "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true, desc = "Up" })
 
 -- Buffer management: deferred to call time since Snacks isn't guaranteed to
 -- be loaded yet when this module is evaluated.
