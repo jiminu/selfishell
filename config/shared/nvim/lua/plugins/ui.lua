@@ -668,7 +668,7 @@ return {
         end, "Diff against previous commit")
 
         map("n", "<leader>ub", gitsigns.toggle_current_line_blame, "Toggle Git blame")
-        map("n", "<leader>uw", gitsigns.toggle_word_diff, "Toggle Git word diff")
+        map("n", "<leader>uW", gitsigns.toggle_word_diff, "Toggle Git word diff")
 
         map({ "o", "x" }, "ih", gitsigns.select_hunk, "Select Git hunk")
       end,
