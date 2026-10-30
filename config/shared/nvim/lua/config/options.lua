@@ -16,6 +16,7 @@ opt.wrap = false
 -- Apply when <leader>uw turns wrap on.
 opt.linebreak = true
 opt.breakindent = true
+opt.smoothscroll = true
 opt.list = true
 opt.listchars = { tab = "  ", nbsp = "␣", extends = "▸", precedes = "◂" }
 opt.scrolloff = 4
