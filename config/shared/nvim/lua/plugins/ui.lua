@@ -211,7 +211,8 @@ return {
     opts = {
       on_attach = function(bufnr)
         require("nvim-tree.api").config.mappings.default_on_attach(bufnr)
-        require("config.keymaps").set_window_navigation({ buffer = bufnr })
+        -- nvim-tree's Info popup; the window navigation in config.keymaps wins.
+        vim.keymap.del("n", "<C-k>", { buffer = bufnr })
       end,
       view = {
         -- Scale with the terminal width instead of nvim-tree's default
