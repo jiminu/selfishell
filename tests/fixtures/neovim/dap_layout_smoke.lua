@@ -19,6 +19,9 @@ local tree = require("nvim-tree.api").tree
 local dap, ui = require("dap"), require("dapui")
 local editor = vim.api.nvim_get_current_win()
 tree.open()
+for _, key in ipairs({ "<C-h>", "<C-j>", "<C-k>", "<C-l>" }) do
+  assert(vim.fn.maparg(key, "n", false, true).buffer ~= 1, "explorer shadows the global " .. key)
+end
 local explorer = tree.winid()
 vim.api.nvim_set_current_win(editor)
 

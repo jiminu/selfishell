@@ -335,13 +335,6 @@ function M.setup_ui()
       open_ui()
     end
   end
-  vim.api.nvim_create_autocmd("FileType", {
-    group = vim.api.nvim_create_augroup("SelfishellDebugWindows", { clear = true }),
-    pattern = { "dapui_*", "dap-repl" },
-    callback = function(event)
-      require("config.keymaps").set_window_navigation({ buffer = event.buf })
-    end,
-  })
 end
 
 return M

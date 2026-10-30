@@ -1,31 +1,20 @@
 local map = vim.keymap.set
-local M = {}
 
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", {
   silent = true,
   desc = "Clear search highlight",
 })
 
--- Window navigation. Plugins with buffer-local mappings can call this after
--- their defaults to preserve the same navigation keys.
-function M.set_window_navigation(options)
-  options = options or {}
-  local mappings = {
-    ["<C-h>"] = { "<C-W>h", "Go to left window" },
-    ["<C-j>"] = { "<C-W>j", "Go to lower window" },
-    ["<C-k>"] = { "<C-W>k", "Go to upper window" },
-    ["<C-l>"] = { "<C-W>l", "Go to right window" },
-  }
-
-  for lhs, mapping in pairs(mappings) do
-    map("n", lhs, mapping[1], vim.tbl_extend("force", {
-      desc = mapping[2],
-      silent = true,
-    }, options))
-  end
+-- Window navigation. Plugin buffers that bind these keys delete their
+-- bindings instead of remapping, so an overridden global mapping still applies.
+for lhs, mapping in pairs({
+  ["<C-h>"] = { "<C-W>h", "Go to left window" },
+  ["<C-j>"] = { "<C-W>j", "Go to lower window" },
+  ["<C-k>"] = { "<C-W>k", "Go to upper window" },
+  ["<C-l>"] = { "<C-W>l", "Go to right window" },
+}) do
+  map("n", lhs, mapping[1], { desc = mapping[2], silent = true })
 end
-
-M.set_window_navigation()
 
 map("n", "<leader>wr", function()
   local function move_border(horizontal, offset)
@@ -120,5 +109,3 @@ vim.api.nvim_create_autocmd("LspAttach", {
     lsp_map("<leader>d", vim.diagnostic.open_float, "Show line diagnostics")
   end,
 })
-
-return M
