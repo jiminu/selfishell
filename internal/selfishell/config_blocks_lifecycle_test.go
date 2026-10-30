@@ -504,10 +504,6 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 					t.Fatalf("%s user type/mode: %v %v", name, info, err)
 				}
 				got := blockRead(t, target)
-				if platform == "macos" && name == ".zshenv" {
-					blockEqual(t, target, original)
-					continue
-				}
 				if !bytes.HasSuffix(got, original) {
 					t.Fatalf("%s original suffix lost: %q", name, got)
 				}
@@ -515,8 +511,11 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 				if bytes.Count(got, []byte(marker)) != 1 {
 					t.Fatalf("%s marker count: %q", name, got)
 				}
-				if name == ".zshenv" && !bytes.Contains(got, []byte("skip_global_compinit=1")) {
-					t.Fatal("zshenv body missing")
+				if name == ".zshenv" {
+					out, e := runNativeZsh(home, "/usr/bin:/bin", 5*time.Second, "-dfic", `source "$HOME/.zshenv" 2>/dev/null; bindkey -lL main`)
+					if e != nil || strings.TrimSpace(string(out)) != "bindkey -A emacs main" {
+						t.Fatalf("inherited EDITOR keymap: %q %v", out, e)
+					}
 				}
 				state := blockState(t, paths, map[string]string{".zshrc": "user-zshrc", ".zprofile": "user-zprofile", ".vimrc": "user-vimrc", ".zshenv": "user-zshenv"}[name])
 				if state.Kind != "block" {
@@ -533,9 +532,6 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 				blockEqual(t, paths.State+"/ghostty", []byte("1\n"))
 				if _, e := os.Lstat(paths.Config + "/../ghostty/user.ghostty"); !os.IsNotExist(e) {
 					t.Fatalf("created user override: %v", e)
-				}
-				if _, e := os.Lstat(paths.Resources + "/user-zshenv.state"); !os.IsNotExist(e) {
-					t.Fatalf("macOS managed zshenv: %v", e)
 				}
 			}
 			// Personal edits before and after the loader must survive dry-run, repeat, sync, and uninstall.
@@ -674,12 +670,16 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 }
 
 func runNativeZprofile(home, path string, timeout time.Duration) ([]byte, error) {
+	return runNativeZsh(home, path, timeout, "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+}
+
+func runNativeZsh(home, path string, timeout time.Duration, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/bin/zsh", "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+	cmd := exec.CommandContext(ctx, "/bin/zsh", args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 500 * time.Millisecond
-	cmd.Env = []string{"HOME=" + home, "PATH=" + path, "TMPDIR=" + home, "MISE_DATA_DIR=" + home + "/mise/data"}
+	cmd.Env = []string{"HOME=" + home, "PATH=" + path, "TMPDIR=" + home, "MISE_DATA_DIR=" + home + "/mise/data", "EDITOR=nvim"}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone

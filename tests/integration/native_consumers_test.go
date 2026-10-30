@@ -111,7 +111,9 @@ func TestNativeMacInstalledArchiveConsumer(t *testing.T) {
 		if info, err := os.Stat(state + "/selfishell"); err != nil || !info.IsDir() {
 			t.Fatalf("XDG state missing: %v", err)
 		}
-		requireAbsent(t, f.home+"/.zshenv")
+		if !bytes.HasPrefix(readBytes(t, f.home+"/.zshenv"), []byte("# >>> Selfishell zshenv >>>\n")) {
+			t.Fatal("zshenv block missing")
+		}
 		err = filepath.WalkDir(f.home, func(path string, d os.DirEntry, e error) error {
 			if e != nil {
 				return e

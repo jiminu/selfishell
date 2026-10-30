@@ -125,8 +125,7 @@ cancellation between reads, and propagate read errors. The regular-file checks
 and no-follow open prevent treating a managed-path symlink as an unchanged file.
 
 Resource declarations have a fixed order. Installation selection chooses
-the platform Zsh entrypoint, the saved macOS Ghostty choice, and Ubuntu/WSL's
-zshenv block. Uninstall must use the complete declaration set, including resources
+the platform Zsh entrypoint and the saved macOS Ghostty choice. Uninstall must use the complete declaration set, including resources
 left from another platform. State collection returns no partial list on an error;
 lifecycle consumers must still validate every managed target before removing any.
 The primitives perform no target removal, backup replacement, or restoration.
