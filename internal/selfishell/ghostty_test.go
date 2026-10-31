@@ -15,6 +15,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGhosttyOverriddenSettings(t *testing.T) {
+	t.Parallel()
 	defaults := []byte(`theme = Dark+
 keybind = global:cmd+grave_accent=toggle_quick_terminal
 keybind = ctrl+shift+k=scroll_page_lines:-5

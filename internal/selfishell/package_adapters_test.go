@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 type packageFixture struct {
@@ -34,7 +36,7 @@ func newPackageFixture(t *testing.T) *packageFixture {
 
 func (f *packageFixture) executable(name, body string) {
 	f.t.Helper()
-	if err := os.WriteFile(filepath.Join(f.bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(filepath.Join(f.bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -85,6 +87,7 @@ func (f *packageFixture) skipped(want ...string) {
 }
 
 func TestPackageAdaptersInstallOnlyMissing(t *testing.T) {
+	t.Parallel()
 	apt := func(names ...string) func(*packageFixture) error {
 		return func(f *packageFixture) error {
 			f.apt()
@@ -109,6 +112,7 @@ func TestPackageAdaptersInstallOnlyMissing(t *testing.T) {
 		{"Homebrew missing formula", brew("required", "formula", "installed", "missing"), "brew install missing no_ask=1\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newPackageFixture(t)
 			if err := tc.install(f); err != nil {
 				t.Fatal(err)
@@ -127,6 +131,7 @@ func TestPackageAdaptersInstallOnlyMissing(t *testing.T) {
 }
 
 func TestAptUsesSudoOnlyAsNonRoot(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ uid, sudoCalls int }{{1000, 2}, {0, 0}} {
 		f := newPackageFixture(t)
 		f.apt()
@@ -142,6 +147,7 @@ func TestAptUsesSudoOnlyAsNonRoot(t *testing.T) {
 }
 
 func TestAptPreservesOnlyProxyEnvironmentThroughSudo(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	f.apt()
 	f.op.Process.Env = append(f.op.Process.Env, "http_proxy=http://user:private@proxy.example:8080", "HTTPS_PROXY=http://secure.example:8443", "no_proxy=localhost,127.0.0.1", "UNRELATED_SECRET=not-for-apt")
@@ -172,6 +178,7 @@ printf '%s\n' "$1" >>"$HOME/apt-proxy-calls"`)
 }
 
 func TestPackageAdapterFailuresSkipOptionalAndStopRequired(t *testing.T) {
+	t.Parallel()
 	apt := func(requirement string, names ...string) func(*PackageOperation) error {
 		return func(o *PackageOperation) error {
 			return o.InstallApt(context.Background(), requirement, false, names...)
@@ -203,6 +210,7 @@ func TestPackageAdapterFailuresSkipOptionalAndStopRequired(t *testing.T) {
 		{"required Homebrew cask failure", brewFailing, brew("required", "cask", "required-tool"), "", "required-tool", "brew install --cask required-tool no_ask=1\n", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newPackageFixture(t)
 			tc.setup(f)
 			err := tc.install(f.op)
@@ -227,6 +235,7 @@ func TestPackageAdapterFailuresSkipOptionalAndStopRequired(t *testing.T) {
 }
 
 func TestPackageAdaptersEmptyAndDryRunDoNotExecute(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	for _, err := range []error{f.op.InstallApt(context.Background(), "required", false), f.op.InstallHomebrew(context.Background(), "optional", "cask", false), f.op.InstallApt(context.Background(), "required", true, "x"), f.op.InstallHomebrew(context.Background(), "required", "formula", true, "x")} {
 		if err != nil {
@@ -242,6 +251,7 @@ func TestPackageAdaptersEmptyAndDryRunDoNotExecute(t *testing.T) {
 }
 
 func TestAptUpdatesOncePerOperationAndRetriesAfterOptionalFailure(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	f.apt()
 	f.flag("fail-update")
@@ -267,6 +277,7 @@ func TestAptUpdatesOncePerOperationAndRetriesAfterOptionalFailure(t *testing.T) 
 }
 
 func TestHomebrewInventoriesOncePerKindPerOperation(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	f.brew()
 	for _, manager := range []string{"formula", "formula", "cask", "cask"} {
@@ -289,6 +300,7 @@ func TestHomebrewInventoriesOncePerKindPerOperation(t *testing.T) {
 }
 
 func TestHomebrewActivatesExistingStandardLocationBeforeInstall(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		requirement string
 		duplicate   bool
@@ -298,12 +310,13 @@ func TestHomebrewActivatesExistingStandardLocationBeforeInstall(t *testing.T) {
 			name += " duplicate PATH"
 		}
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			f := newPackageFixture(t)
 			standard := filepath.Join(t.TempDir(), "bin", "brew")
 			if err := os.MkdirAll(filepath.Dir(standard), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(standard, []byte("#!/bin/sh\nprintf 'activated %s\\n' \"$*\" >>\"$HOME/calls\"\n"), 0700); err != nil {
+			if err := testutil.WriteFile(standard, []byte("#!/bin/sh\nprintf 'activated %s\\n' \"$*\" >>\"$HOME/calls\"\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			f.op.brewLocations = []string{standard}
@@ -322,12 +335,13 @@ func TestHomebrewActivatesExistingStandardLocationBeforeInstall(t *testing.T) {
 }
 
 func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	standard := filepath.Join(t.TempDir(), "bin", "brew")
 	if err := os.MkdirAll(filepath.Dir(standard), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(f.home, "seed-brew"), []byte("#!/bin/sh\nprintf 'activated %s no_ask=%s\\n' \"$*\" \"$HOMEBREW_NO_ASK\" >>\"$HOME/calls\"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(filepath.Join(f.home, "seed-brew"), []byte("#!/bin/sh\nprintf 'activated %s no_ask=%s\\n' \"$*\" \"$HOMEBREW_NO_ASK\" >>\"$HOME/calls\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	f.op.brewLocations = []string{standard}
@@ -342,6 +356,7 @@ func TestHomebrewActivatesStandardLocationAfterBootstrap(t *testing.T) {
 }
 
 func TestHomebrewDiscardsPartialFailedInventory(t *testing.T) {
+	t.Parallel()
 	f := newPackageFixture(t)
 	f.executable("brew", `printf 'brew %s\n' "$*" >>"$HOME/calls"
 case "$1 $2" in 'list --formula') printf 'needed\n'; exit 1;; esac`)
@@ -354,6 +369,7 @@ case "$1 $2" in 'list --formula') printf 'needed\n'; exit 1;; esac`)
 }
 
 func TestPackageAdaptersAlreadyCancelledBeforeMissingTools(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		prepare func(*packageFixture)
@@ -370,6 +386,7 @@ func TestPackageAdaptersAlreadyCancelledBeforeMissingTools(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newPackageFixture(t)
 			tc.prepare(f)
 			ctx, cancel := context.WithCancel(context.Background())

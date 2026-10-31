@@ -82,6 +82,7 @@ func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 }
 
 func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
+	t.Parallel()
 	create := func(path, kind, label string) {
 		switch kind {
 		case "file":
@@ -105,6 +106,7 @@ func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
 	for _, op := range []string{"move", "copy"} {
 		for _, kind := range []string{"file", "symlink", "directory"} {
 			t.Run(op+"/"+kind, func(t *testing.T) {
+				t.Parallel()
 				root := t.TempDir()
 				source, backup := root+"/source", root+"/backup"
 				sourceKind, apply := kind, moveBackupNoReplace

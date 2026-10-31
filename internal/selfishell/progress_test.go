@@ -56,6 +56,7 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 }
 
 func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
+	t.Parallel()
 	var out, stderr bytes.Buffer
 	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
 	ui.compact = true
@@ -69,6 +70,7 @@ func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 }
 
 func TestProgressFailureOutputIsBounded(t *testing.T) {
+	t.Parallel()
 	var out, stderr bytes.Buffer
 	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
 	ui.compact = true

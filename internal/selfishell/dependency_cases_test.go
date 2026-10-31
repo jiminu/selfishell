@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func writeTestFile(t *testing.T, path, value string, mode os.FileMode) {
@@ -20,7 +22,7 @@ func writeTestFile(t *testing.T, path, value string, mode os.FileMode) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(value), mode); err != nil {
+	if err := testutil.WriteFile(path, []byte(value), mode); err != nil {
 		t.Fatal(err)
 	}
 }
