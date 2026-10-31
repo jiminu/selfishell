@@ -65,6 +65,9 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			return err
 		}
 	}
+	if err := o.RemoveLegacyZinit(ctx, paths, dry); err != nil {
+		return err
+	}
 	if platform == "macos" && ghostty {
 		if ghosttyInstalled(o.Process) {
 			// The Homebrew cask stays with Homebrew; only another app is external.
