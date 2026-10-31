@@ -9,6 +9,7 @@ import (
 )
 
 func TestMisePinsMatchPackageMembership(t *testing.T) {
+	t.Parallel()
 	root := testRelease(t)
 	packages, err := ReadPackages(filepath.Join(root, "packages.conf"))
 	if err != nil {
@@ -36,6 +37,7 @@ func TestMisePinsMatchPackageMembership(t *testing.T) {
 }
 
 func TestShippedDependencyRevisionsAreCommits(t *testing.T) {
+	t.Parallel()
 	deps, err := ReadDependencies("../../dependencies.conf")
 	if err != nil {
 		t.Fatal(err)

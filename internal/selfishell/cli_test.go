@@ -9,6 +9,7 @@ import (
 )
 
 func TestCLI(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".git"), nil, 0600); err != nil {
 		t.Fatal(err)
@@ -31,6 +32,7 @@ func TestCLI(t *testing.T) {
 		{[]string{"wat"}, 2, "", "selfishell: Unknown command: wat\nselfishell: Run 'selfishell help' to see available commands.\n"},
 	} {
 		t.Run(strings.Join(tc.args, "/"), func(t *testing.T) {
+			t.Parallel()
 			var out, stderr bytes.Buffer
 			c := CLI{Root: root, Out: &out, Err: &stderr}
 			if code := c.Run(tc.args); code != tc.code || out.String() != tc.out || stderr.String() != tc.err {
@@ -41,6 +43,7 @@ func TestCLI(t *testing.T) {
 }
 
 func TestVersionAndRoot(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
 	if err := os.Mkdir(bin, 0700); err != nil {

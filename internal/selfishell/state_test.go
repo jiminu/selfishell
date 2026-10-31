@@ -17,6 +17,7 @@ func stateFixture() State {
 }
 
 func TestReadState(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := dir + "/file.state"
 	if state, err := ReadState(path); !errors.Is(err, fs.ErrNotExist) || state != (State{}) {
@@ -63,6 +64,7 @@ func TestReadState(t *testing.T) {
 }
 
 func TestStateTransientVersionAndRestoreValidation(t *testing.T) {
+	t.Parallel()
 	path := t.TempDir() + "/resource.state"
 	state := stateFixture()
 	for _, status := range []string{"pending", "restoring", "active"} {
@@ -96,6 +98,7 @@ func TestStateTransientVersionAndRestoreValidation(t *testing.T) {
 }
 
 func TestStatePathTypesAndPermissions(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := dir + "/state"
 	target := dir + "/target"
@@ -153,6 +156,7 @@ func TestStatePathTypesAndPermissions(t *testing.T) {
 }
 
 func TestWriteState(t *testing.T) {
+	t.Parallel()
 	path := t.TempDir() + "/nested/resource.state"
 	state := stateFixture()
 	if err := WriteState(path, state); err != nil {
@@ -228,8 +232,10 @@ func (f failingStateFile) Close() error {
 }
 
 func TestStateWriteFailures(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"create", "write", "short", "sync", "close", "rename"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			path := dir + "/resource.state"
 			state := stateFixture()
@@ -276,6 +282,7 @@ func TestStateWriteFailures(t *testing.T) {
 }
 
 func TestWriteStatePreservesSymlinkParentMeaning(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(dir+"/physical/child", 0700); err != nil {
 		t.Fatal(err)

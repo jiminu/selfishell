@@ -9,6 +9,7 @@ import (
 )
 
 func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
+	t.Parallel()
 	mise, err := exec.LookPath("mise")
 	if err != nil {
 		t.Skip("mise unavailable for cleanup integration")

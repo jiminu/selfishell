@@ -55,6 +55,7 @@ func testArchive(t *testing.T, members ...archiveMember) string {
 }
 
 func TestReleaseArchivePreflightsAllMembers(t *testing.T) {
+	t.Parallel()
 	valid := []archiveMember{{"VERSION", "", tar.TypeReg, "2.0.0\n", 0644}, {"bin/selfishell", "", tar.TypeReg, "#!/bin/sh\n", 0755}, {"bin/sfs", "selfishell", tar.TypeSymlink, "", 0}}
 	for _, bad := range []archiveMember{{"../outside", "", tar.TypeReg, "oops", 0}, {"/absolute", "", tar.TypeReg, "oops", 0}, {"bin/fifo", "", tar.TypeFifo, "", 0}, {"bin/device", "", tar.TypeChar, "", 0}, {"bin/escape", "../../../outside", tar.TypeSymlink, "", 0}, {"bin/dangling", "missing", tar.TypeSymlink, "", 0}, {"bin/cycle", "cycle", tar.TypeSymlink, "", 0}, {"bin/sfs/child", "", tar.TypeReg, "oops", 0}, {"VERSION", "", tar.TypeReg, "duplicate", 0}} {
 		members := append(append([]archiveMember{}, valid...), bad)
@@ -80,6 +81,7 @@ func TestReleaseArchivePreflightsAllMembers(t *testing.T) {
 }
 
 func TestReleaseArchiveAcceptsLinksToImpliedDirectories(t *testing.T) {
+	t.Parallel()
 	archive := testArchive(t,
 		archiveMember{"config/shared/file", "", tar.TypeReg, "managed\n", 0644},
 		archiveMember{"config-link", "config", tar.TypeSymlink, "", 0},
@@ -111,6 +113,7 @@ func TestReleaseArchiveAcceptsLinksToImpliedDirectories(t *testing.T) {
 }
 
 func TestReleaseArchiveAcceptsRepeatedFiniteDirectoryAlias(t *testing.T) {
+	t.Parallel()
 	archive := testArchive(t,
 		archiveMember{"config/shared/file", "", tar.TypeReg, "ok", 0600},
 		archiveMember{"root-link", ".", tar.TypeSymlink, "", 0},

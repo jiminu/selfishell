@@ -10,6 +10,7 @@ import (
 )
 
 func TestDefaultLSPSelection(t *testing.T) {
+	t.Parallel()
 	root := testRelease(t)
 	nvim, ok := standaloneNeovimExecutable(t, root)
 	if !ok {
@@ -38,6 +39,7 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 		{"install-failure", "installer failed", true},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
+			t.Parallel()
 			p := standaloneNeovimProcess(t, nvim)
 			p = withEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_MODE": tc.mode})
 			fixture := t.TempDir() + "/mason.lua"
