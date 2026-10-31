@@ -13,6 +13,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 // ToolResult uses the same status vocabulary as the shell diagnostics.
@@ -20,7 +21,7 @@ type ToolResult struct{ Installed, Source, Approved string }
 
 // ToolInventory caches external package-manager queries for one CLI invocation.
 type ToolInventory struct {
-	windowsFonts                                     *windowsFontStatus
+	windowsFonts                                     *terminal.FontStatus
 	root                                             string
 	paths                                            managed.Paths
 	warnings                                         io.Writer
@@ -354,7 +355,7 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 		}
 		valid := i.validDirect(*dep, target, true, recorded == dep.Version)
 		if valid && dep.Marker == "font" {
-			choice, e := readWindowsTerminalChoice(i.paths)
+			choice, e := terminal.ReadWindowsChoice(i.paths)
 			valid = e == nil && choice != nil && strings.EqualFold(i.windowsFontInventory().Registrations["Selfishell "+dep.Name+" (TrueType)"], choice.AppData+`\Microsoft\Windows\Fonts\Selfishell\`+recorded+`\`+filepath.Base(dep.Target))
 		}
 		if valid {
@@ -443,7 +444,7 @@ func (i *ToolInventory) loadMise() {
 		line, _, _ := strings.Cut(i.miseError.Error(), "\n")
 		if i.warnings != nil {
 			prefix := "selfishell: warning:"
-			if i.env.Get("NO_COLOR") == "" && IsTerminal(i.warnings) {
+			if i.env.Get("NO_COLOR") == "" && terminal.IsTerminal(i.warnings) {
 				prefix = "\x1b[33mselfishell: warning:\x1b[0m"
 			}
 			fmt.Fprintf(i.warnings, "%s %s\n", prefix, line)
@@ -462,10 +463,10 @@ func (i *ToolInventory) loadMise() {
 	}
 }
 
-func (i *ToolInventory) windowsFontInventory() *windowsFontStatus {
+func (i *ToolInventory) windowsFontInventory() *terminal.FontStatus {
 	if i.windowsFonts == nil {
-		i.windowsFonts = &windowsFontStatus{}
-		data, err := runWindowsScript(context.Background(), process.Process{Inherit: i.env}, map[string]string{"operation": "font-status"})
+		i.windowsFonts = &terminal.FontStatus{}
+		data, err := terminal.WindowsScript(context.Background(), process.Process{Inherit: i.env}, map[string]string{"operation": "font-status"})
 		if err == nil {
 			_ = json.Unmarshal(data, i.windowsFonts)
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 // operationProgress owns terminal animation and completed action summaries.
@@ -30,14 +31,14 @@ type progressEvent struct {
 
 func newProgress(out, stderr io.Writer, paths managed.Paths, env process.Environment) *operationProgress {
 	return &operationProgress{out: out, stderr: stderr,
-		compact: IsTerminal(out) && IsTerminal(stderr) && env.Get("TERM") != "dumb" && !progressCI(env),
+		compact: terminal.IsTerminal(out) && terminal.IsTerminal(stderr) && env.Get("TERM") != "dumb" && !progressCI(env),
 		color:   progressColor(out, env),
 		config:  paths.Config, home: env.Get("HOME")}
 }
 
 func progressCI(env process.Environment) bool { return env.Get("CI") != "" && env.Get("CI") != "false" }
 func progressColor(out io.Writer, env process.Environment) bool {
-	return IsTerminal(out) && env.Get("NO_COLOR") == "" && env.Get("TERM") != "dumb" && !progressCI(env)
+	return terminal.IsTerminal(out) && env.Get("NO_COLOR") == "" && env.Get("TERM") != "dumb" && !progressCI(env)
 }
 
 // progressOf returns the spinner a Process carries, or nil. Compare its result,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
@@ -39,7 +40,8 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	}
 	m := lifecycle{c: c, paths: paths, dry: dry}
 	failed := false
-	if err := m.removeWindowsTerminal(true); err != nil {
+	distro := c.Env.Get("WSL_DISTRO_NAME")
+	if err := terminal.RemoveFragment(&m, paths, distro, true); err != nil {
 		c.error(err.Error())
 		failed = true
 	}
@@ -55,7 +57,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	if failed {
 		return fmt.Errorf("Uninstall cancelled because managed resources were changed.")
 	}
-	if err := m.removeWindowsTerminal(false); err != nil {
+	if err := terminal.RemoveFragment(&m, paths, distro, false); err != nil {
 		return fmt.Errorf("Uninstall was incomplete; preserved remaining state for a retry: %w", err)
 	}
 	for i := len(records) - 1; i >= 0; i-- {

@@ -1,4 +1,4 @@
-package selfishell
+package terminal
 
 import "syscall"
 

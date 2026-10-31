@@ -1,4 +1,6 @@
-package selfishell
+// Package terminal detects terminals and owns the Ghostty and Windows Terminal
+// integrations, including the Windows fonts they select.
+package terminal
 
 import (
 	"os"
@@ -18,8 +20,8 @@ func IsTerminal(stream any) bool {
 	return errno == 0
 }
 
-// terminalWidth falls back to 80 columns for plain streams and unset PTY sizes.
-func terminalWidth(stream any) int {
+// Width is the stream's terminal width; it falls back to 80 columns for plain streams and unset PTY sizes.
+func Width(stream any) int {
 	file, ok := stream.(*os.File)
 	if ok {
 		var size struct{ Rows, Columns, X, Y uint16 }

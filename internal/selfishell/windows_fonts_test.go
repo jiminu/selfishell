@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -58,7 +59,7 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 		} else if !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
-		if err := json.NewEncoder(os.Stdout).Encode(windowsFontStatus{Registrations: registrations}); err != nil {
+		if err := json.NewEncoder(os.Stdout).Encode(terminal.FontStatus{Registrations: registrations}); err != nil {
 			t.Fatal(err)
 		}
 		os.Exit(0)

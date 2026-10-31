@@ -11,6 +11,7 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 func (o *PackageOperation) miseCommand(paths managed.Paths) (string, error) {
@@ -93,7 +94,7 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths m
 	}
 	if progressOf(o.Process) != nil {
 		o.report(report.Success, "Synchronized mise tools: %d\n  %s", len(names),
-			strings.ReplaceAll(wrapWords(names, terminalWidth(o.Process.Out)-4), "\n", "\n  "))
+			strings.ReplaceAll(wrapWords(names, terminal.Width(o.Process.Out)-4), "\n", "\n  "))
 	}
 	return nil
 }

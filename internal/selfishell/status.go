@@ -12,6 +12,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 func (c CLI) marker(color, label string) string {
@@ -47,10 +48,10 @@ func diagnosticPackages(root, platform string, env process.Environment) ([]Packa
 	if err != nil {
 		return nil, err
 	}
-	// statusWindowsTerminal reports a malformed choice; diagnose without its fonts.
-	choice, err := readWindowsTerminalChoice(paths)
+	// terminal.WindowsStatus reports a malformed choice; diagnose without its fonts.
+	choice, err := terminal.ReadWindowsChoice(paths)
 	if err != nil {
-		choice = &windowsTerminalChoice{}
+		choice = &terminal.WindowsChoice{}
 	}
 	eligible, err := selectPackages(root, paths, all, platform, choice, env)
 	if err != nil {
@@ -280,7 +281,7 @@ func (c CLI) status(args []string) int {
 			result = 1
 		}
 	}
-	if tracked, profileIntact, profileRecordIssue := c.statusWindowsTerminal(paths, verbose); tracked {
+	if tracked, profileIntact, profileRecordIssue := terminal.WindowsStatus(paths, c.Env.Get("WSL_DISTRO_NAME"), verbose, c.sayDiagnostic); tracked {
 		count++
 		if profileIntact {
 			intact++

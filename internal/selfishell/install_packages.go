@@ -10,12 +10,13 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 // Ghostty draws Nerd Font icons itself; other macOS terminals need this font
 // selected, so the hint appears once, when the cask is first installed. Linux
 // installs no font and hints on first setup where a local terminal draws text.
-const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrainsMonoNL Nerd Font Mono"
+const terminalFontCask = "font-jetbrains-mono-nerd-font"
 
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
@@ -73,7 +74,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths man
 		return err
 	}
 	if platform == "macos" && ghostty {
-		if ghosttyInstalled(o.Process) {
+		if terminal.GhosttyInstalled(o.Process) {
 			// The Homebrew cask stays with Homebrew; only another app is external.
 			casks := map[string]bool{}
 			if !dry && o.brewPath() != "" {
@@ -91,10 +92,10 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths man
 	}
 	switch {
 	case platform == "macos" && slices.Contains(o.installedCasks, terminalFontCask):
-		c.report("Notes", report.Info, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Set your terminal font to %s to show Neovim's icons.", terminal.Font)
 	case hasConfiguredMarker(paths): // Linux hints only before the first setup completes.
 	case platform == "ubuntu-wsl":
-		choice, err := readWindowsTerminalChoice(paths)
+		choice, err := terminal.ReadWindowsChoice(paths)
 		if err != nil {
 			return err
 		}
@@ -102,9 +103,9 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths man
 			c.report("Notes", report.Info, "Restart Windows Terminal and reopen your configured WSL profile.")
 			return nil
 		}
-		c.report("Notes", report.Info, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminal.Font)
 	case platform == "ubuntu" && localDesktop(c.Env):
-		c.report("Notes", report.Info, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Install %s and set it as your terminal font to show Neovim's icons.", terminal.Font)
 	}
 	return nil
 }
