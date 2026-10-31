@@ -1,13 +1,20 @@
 package integration_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/pty"
 )
 
 func interactiveSource() string {
@@ -96,22 +103,88 @@ func TestNativeStarshipInitOnce(t *testing.T) {
 		t.Fatalf("inits: %q", r.Stdout)
 	}
 }
-func TestNativeAutosuggestionsOrderAndPin(t *testing.T) {
+func TestNativePluginLoadOrder(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
-	r := nativeRun(t, home, `_selfishell_command_path() { command -v "$1"; }; _selfishell_zinit_plugin_ready() { return 0; }; zinit() { [[ "$1" == ice ]] && print -r -- "ice: ${(j: :)@[2,-1]}"; [[ "$1" == light ]] && print -r -- "light: $2"; }; source "$SELFISHELL_SOURCE"; print -r -- "manual=$ZSH_AUTOSUGGEST_MANUAL_REBIND"`, "SELFISHELL_SOURCE="+interactiveSource(), "SELFISHELL_COMMON_DIR="+filepath.Join(repoRoot(), "config/shared/zsh"))
-	out := string(r.Stdout)
-	if !strings.Contains(out, "manual=1\n") {
-		t.Fatalf("manual rebind flag: %q", out)
+	bin := fakeExecutable(t, home, "fzf", "printf ':\\n'\n")
+	nativePlugins(t, home, "fzf-tab", "zsh-autosuggestions", "fast-syntax-highlighting")
+	log := filepath.Join(filepath.Dir(home), "plugin-log")
+	r := nativeRun(t, home, `_selfishell_command_path() { command -v "$1"; }; SELFISHELL_ZSH_PLUGINS="$HOME/.local/share/selfishell/zsh-plugins"; source "$SELFISHELL_SOURCE"; print -r -- "manual=$ZSH_AUTOSUGGEST_MANUAL_REBIND handler=$(zle -F)"`, "SELFISHELL_SOURCE="+interactiveSource(), "SELFISHELL_COMMON_DIR="+filepath.Join(repoRoot(), "config/shared/zsh"), "PATH="+bin+":"+nativePath, "SELFISHELL_TEST_PLUGIN_LOG="+log)
+	if !regexp.MustCompile(`^manual=1 handler=zle -F [0-9]+ _selfishell_deferred_plugins\n$`).Match(r.Stdout) {
+		t.Fatalf("deferred registration: %q", r.Stdout)
 	}
-	wantIce := regexp.MustCompile(`(?m)^ice: wait0 lucid ver[0-9a-f]{40} ` + regexp.QuoteMeta("atload(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets") + `$`)
-	if !wantIce.MatchString(out) {
-		t.Fatalf("syntax-highlighting ice: want %s in %q", wantIce, out)
+	// fzf-tab loads synchronously; the deferred pair waits for the line editor.
+	if data, err := os.ReadFile(log); err != nil || string(data) != "fzf-tab\n" {
+		t.Fatalf("sourced plugins: %q %v", data, err)
 	}
-	a := strings.Index(out, "light: zsh-users/zsh-autosuggestions\n")
-	b := strings.Index(out, "light: zdharma-continuum/fast-syntax-highlighting")
-	if a < 0 || b < a {
-		t.Fatalf("light order: %q", out)
+}
+
+// The deferred pair loads once, after zle draws the first prompt and starts
+// reading, so neither plugin delays the prompt.
+func TestNativeDeferredPluginsLoadAfterFirstPrompt(t *testing.T) {
+	t.Parallel()
+	home := nativeHome(t)
+	root := filepath.Dir(home)
+	log := filepath.Join(root, "plugin-log")
+	nativePlugins(t, home, "fast-syntax-highlighting")
+	nativeWrite(t, filepath.Join(home, ".local/share/selfishell/zsh-plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"), `print -r -- zsh-autosuggestions >>"$SELFISHELL_TEST_PLUGIN_LOG"
+_zsh_autosuggest_bind_widgets() { print -r -- bind >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
+`, 0600)
+	nativeWrite(t, filepath.Join(home, ".zshrc"), `source "$SELFISHELL_SOURCE"
+precmd() { print -r -- precmd >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
+zle-line-init() { print -r -- line-init >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
+zle -N zle-line-init
+`, 0600)
+	master, slave, err := pty.Open()
+	mustFS(t, err)
+	defer master.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, nativeZsh, "-i")
+	cmd.Dir = home
+	cmd.Env = withEnv(baseEnv(home, root), "ZDOTDIR="+home, "TERM=xterm", "WSL_DISTRO_NAME=", "SELFISHELL_UPDATE_NOTICE=0", "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_PLUGIN_LOG="+log)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
+	mustFS(t, cmd.Start())
+	slave.Close()
+	var screen bytes.Buffer
+	drained := make(chan struct{})
+	go func() { io.Copy(&screen, master); close(drained) }()
+	defer func() {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		cmd.Wait()
+	}()
+	waitLog := func(line string, count int) {
+		t.Helper()
+		for {
+			data, _ := os.ReadFile(log)
+			if strings.Count(string(data), line+"\n") >= count {
+				return
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("waiting for %s x%d: log %q", line, count, data)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitLog("bind", 1)
+	_, err = master.Write([]byte(":\n"))
+	mustFS(t, err)
+	waitLog("line-init", 2)
+	_, err = master.Write([]byte("exit\n"))
+	mustFS(t, err)
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("shell exit: %v", err)
+	}
+	master.Close()
+	<-drained
+	data, err := os.ReadFile(log)
+	mustFS(t, err)
+	if want := "precmd\nline-init\nzsh-autosuggestions\nfast-syntax-highlighting\nbind\nprecmd\nline-init\n"; string(data) != want {
+		t.Fatalf("load order: got %q want %q", data, want)
+	}
+	if strings.Contains(screen.String(), "_selfishell") || strings.Contains(screen.String(), "zle") {
+		t.Fatalf("shell reported an error: %q", screen.String())
 	}
 }
 func TestNativeShellToolCacheReplacement(t *testing.T) {
@@ -270,11 +343,7 @@ func TestNativeFzfPaletteAndUserOptions(t *testing.T) {
 		t.Run(fmt.Sprintf("opts=%q", userOpts), func(t *testing.T) {
 			home := nativeHome(t)
 			fakeExecutable(t, home, "fzf", "printf ':\\n'")
-			nativeWrite(t, filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh"), `typeset -gA ZINIT
-ZINIT[PLUGINS_DIR]="$HOME/.local/share/zinit/plugins"
-zinit() { :; }
-`, 0600)
-			mustFS(t, os.MkdirAll(filepath.Join(home, ".local/share/zinit/plugins/Aloxaf---fzf-tab/.git"), 0700))
+			nativePlugins(t, home, "fzf-tab")
 			r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; local -a flags; zstyle -a ':fzf-tab:complete:cd:x' fzf-flags flags || exit 10; print -rl -- "opts=$FZF_DEFAULT_OPTS" "type=${(t)FZF_DEFAULT_OPTS}" "cd=${(j: :)flags}"; zstyle -a ':fzf-tab:complete:kill:argument-rest' fzf-flags flags || exit 11; print -r -- "kill=${(j: :)flags}"; local follows; zstyle -s ':fzf-tab:x' use-fzf-default-opts follows && exit 12; print -r -- 'follows=unset'`, "PATH="+filepath.Join(home, "bin")+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon(), "FZF_DEFAULT_OPTS="+userOpts)
 			out := string(r.Stdout)
 			want := userOpts

@@ -19,13 +19,11 @@ const oldC = "1111111111111111111111111111111111111111"
 const newC = "2222222222222222222222222222222222222222"
 const oldF = "3333333333333333333333333333333333333333"
 const newF = "4444444444444444444444444444444444444444"
-const oldA = "5555555555555555555555555555555555555555"
-const completion = "if [[ -s \"$ZINIT_HOME/zinit.zsh\" ]]; then\n  source \"$ZINIT_HOME/zinit.zsh\"\n  zinit ice blockf atpull'zinit creinstall -q .' ver'" + oldC + "'\n  zinit light zsh-users/zsh-completions\nfi\n"
-const interactive = "if (($+functions[zinit])); then\n  if command -v fzf >/dev/null 2>&1; then\n    zinit ice ver'" + oldF + "'\n    zinit light Aloxaf/fzf-tab\n  fi\n  zinit ice wait'0' lucid ver'" + oldA + "'\n  zinit light zsh-users/zsh-autosuggestions\nfi\n"
 const mise = "[tools]\nstarship = \"1.25.0\"\nfzf = \"0.74.3\"\nzoxide = \"0.9.8\"\nripgrep = \"15.1.0\"\neza = \"0.23.4\"\nbat = \"0.26.0\"\njq = \"1.8.1\"\nnode = \"24.18.0\"\npython = \"3.13.14\"\nneovim = \"0.12.4\"\ntree-sitter = \"0.26.11\"\nuv = \"0.5.21\"\nlazygit = \"0.65.0\"\n\n[settings]\nnot_found_auto_install = false\n"
 
-func zshLine(repo, sha string) string {
-	return "zsh-plugin " + repo + " " + sha + " all all https://github.com/" + repo + ".git - - -\n"
+// gitLine is a git record that follows its default branch, pinned by commit.
+func gitLine(name, sha string) string {
+	return "git " + name + " " + sha + " all all https://github.com/test/" + name + ".git " + sha + " .local/share/selfishell/zsh-plugins/" + name + " " + name + ".plugin.zsh\n"
 }
 func replace(s, old, next string) string { return strings.Replace(s, old, next, 1) }
 func put(t *testing.T, path, content string) {
@@ -46,32 +44,29 @@ func exact(t *testing.T, path, want string) {
 }
 
 type updaterCase struct {
-	name, manifest, metadata, completion, interactive, mise string
-	wantManifest, wantCompletion, wantInteractive, wantMise string
-	failure                                                 bool
+	name, manifest, metadata, mise string
+	wantManifest, wantMise         string
+	failure                        bool
 }
 
 func TestUpdaterCases(t *testing.T) {
-	cLine := zshLine("zsh-users/zsh-completions", oldC)
-	fLine := zshLine("Aloxaf/fzf-tab", oldF)
-	aLine := zshLine("zsh-users/zsh-autosuggestions", oldA)
+	cLine := gitLine("zsh-completions", oldC)
+	fLine := gitLine("fzf-tab", oldF)
 	base := []updaterCase{
 		{name: "empty_metadata_preserves_manifest", manifest: "# retained comment\n" + cLine},
 		{name: "pin_replacement_is_literal", metadata: "mise-tool uv 0.12.3\n", mise: mise + "# uv = \"0x5x21\"\n", wantMise: replace(mise, "uv = \"0.5.21\"", "uv = \"0.12.3\"") + "# uv = \"0x5x21\"\n"},
-		{name: "invalid_mise_bump_preserves_staged_plugin", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nmise-tool neovim nightly\n", failure: true},
+		{name: "invalid_mise_bump_preserves_staged_plugin", manifest: cLine, metadata: "git zsh-completions " + newC + " " + newC + "\nmise-tool neovim nightly\n", failure: true},
 		{name: "unknown_metadata", manifest: cLine, metadata: "unknown item value\n", failure: true},
-		{name: "duplicate_metadata", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", failure: true},
+		{name: "duplicate_metadata", manifest: cLine, metadata: "git zsh-completions " + newC + " " + newC + "\ngit zsh-completions " + newC + " " + newC + "\n", failure: true},
 		{name: "short_download_metadata", metadata: "download mise 1.2.3 linux amd64\n", failure: true},
 		{name: "malformed_download_checksum", manifest: "download mise 1.0.0 linux amd64 https://old.invalid/mise oldsum .local/bin/mise raw\n", metadata: "download mise 2.0.0 linux amd64 https://new.invalid/mise not-a-sha256\n", failure: true},
 		{name: "missing_tool_pin", metadata: "mise-tool missing 1.2.3\n", failure: true},
 		{name: "large_numeric_version", metadata: "mise-tool uv 999999999999999999999.1\n", wantMise: replace(mise, "uv = \"0.5.21\"", "uv = \"999999999999999999999.1\"")},
-		{name: "test_updates_only_matching_manifest_fields", manifest: "# type name version platform architecture source checksum target marker\ndownload mise 1.0.0 linux amd64 https://old/mise-amd64 oldsum .local/bin/mise raw\ndownload mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw\ngit zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + cLine, metadata: "download mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888\ngit zinit v0.2.0 " + oldF + "\nnvim-plugin folke/lazy.nvim " + newC + "\nzsh-plugin zsh-users/zsh-completions " + newC + "\n", wantManifest: "# type name version platform architecture source checksum target marker\ndownload mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777 .local/bin/mise raw\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888 .local/bin/mise raw\ngit zinit v0.2.0 all all https://github.com/zdharma-continuum/zinit.git " + oldF + " .local/share/zinit/zinit.git zinit.zsh\nnvim-plugin folke/lazy.nvim " + newC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + zshLine("zsh-users/zsh-completions", newC), wantCompletion: replace(completion, oldC, newC)},
-		{name: "test_rejects_metadata_without_manifest_entry", manifest: "git zinit v0.1.0 all all https://example.invalid/zinit.git - .zinit zinit.zsh\n", metadata: "git missing v1.0.0\n", failure: true},
-		{name: "test_zsh_plugin_update_rewrites_manifest_and_pin_file", manifest: cLine + fLine + aLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin Aloxaf/fzf-tab " + newF + "\n", wantManifest: zshLine("zsh-users/zsh-completions", newC) + zshLine("Aloxaf/fzf-tab", newF) + aLine, wantCompletion: replace(completion, oldC, newC), wantInteractive: replace(interactive, oldF, newF)},
-		{name: "test_zsh_plugin_update_fails_when_manifest_entry_missing", metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\n", failure: true},
-		{name: "test_zsh_plugin_update_rejects_invalid_commit_format", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions NOT-A-VALID-SHA\n", failure: true},
-		{name: "test_zsh_plugin_update_rejects_duplicate_pin_matches", manifest: cLine, metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\n", completion: "zinit ice blockf ver'" + oldC + "'\nzinit light zsh-users/zsh-completions\n# Accidentally duplicated pin comment: ver'" + oldC + "'\n", failure: true},
-		{name: "test_zsh_plugin_update_is_all_or_nothing", manifest: cLine + zshLine("Aloxaf/fzf-tab", strings.Repeat("9", 40)), metadata: "zsh-plugin zsh-users/zsh-completions " + newC + "\nzsh-plugin Aloxaf/fzf-tab " + newF + "\n", failure: true},
+		{name: "test_updates_only_matching_manifest_fields", manifest: "# type name version platform architecture source checksum target marker\ndownload mise 1.0.0 linux amd64 https://old/mise-amd64 oldsum .local/bin/mise raw\ndownload mise 1.0.0 linux arm64 https://old/mise oldmise .local/bin/mise raw\ngit tool v0.1.0 all all https://github.com/test/tool.git - .local/share/tool tool.zsh\nnvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + cLine, metadata: "download mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888\ngit tool v0.2.0 " + oldF + "\nnvim-plugin folke/lazy.nvim " + newC + "\n", wantManifest: "# type name version platform architecture source checksum target marker\ndownload mise 2.0.0 linux amd64 https://new/mise-amd64 7777777777777777777777777777777777777777777777777777777777777777 .local/bin/mise raw\ndownload mise 2.0.0 linux arm64 https://new/mise 8888888888888888888888888888888888888888888888888888888888888888 .local/bin/mise raw\ngit tool v0.2.0 all all https://github.com/test/tool.git " + oldF + " .local/share/tool tool.zsh\nnvim-plugin folke/lazy.nvim " + newC + " all all https://github.com/folke/lazy.nvim.git - - -\n" + cLine},
+		{name: "test_rejects_metadata_without_manifest_entry", manifest: "git tool v0.1.0 all all https://example.invalid/tool.git - .tool tool.zsh\n", metadata: "git missing v1.0.0\n", failure: true},
+		{name: "test_git_update_following_head_rewrites_version_and_checksum", manifest: cLine + fLine, metadata: "git zsh-completions " + newC + " " + newC + "\n", wantManifest: gitLine("zsh-completions", newC) + fLine},
+		{name: "test_git_update_rejects_invalid_commit_format", manifest: cLine, metadata: "git zsh-completions " + newC + " NOT-A-VALID-SHA\n", failure: true},
+		{name: "test_git_update_is_all_or_nothing", manifest: cLine, metadata: "git zsh-completions " + newC + " " + newC + "\ngit fzf-tab " + newF + " " + newF + "\n", failure: true},
 		{name: "test_mise_tool_update_bumps_moved_cli_pin", metadata: "mise-tool fzf 0.74.4\nmise-tool starship 1.26.0\nmise-tool lazygit 0.65.1\n", wantMise: replace(replace(replace(mise, "fzf = \"0.74.3\"", "fzf = \"0.74.4\""), "starship = \"1.25.0\"", "starship = \"1.26.0\""), "lazygit = \"0.65.0\"", "lazygit = \"0.65.1\"")},
 		{name: "test_mise_tool_update_skips_same_or_older_candidate", metadata: "mise-tool neovim 0.12.4\nmise-tool uv 0.5.20\n"},
 	}
@@ -83,39 +78,19 @@ func TestUpdaterCases(t *testing.T) {
 			manifest := filepath.Join(root, "dependencies.conf")
 			metadata := filepath.Join(root, "metadata")
 			zroot := filepath.Join(root, "zsh-root")
-			cp := filepath.Join(zroot, "config/shared/zsh/completion.zsh")
-			ip := filepath.Join(zroot, "config/shared/zsh/interactive.zsh")
 			mp := filepath.Join(zroot, "config/shared/mise.toml")
 			other := filepath.Join(zroot, "config/shared/zsh/other.zsh")
-			originalC := completion
-			if tc.completion != "" {
-				originalC = tc.completion
-			}
-			originalI := interactive
-			if tc.interactive != "" {
-				originalI = tc.interactive
-			}
 			originalM := mise
 			if tc.mise != "" {
 				originalM = tc.mise
 			}
 			put(t, manifest, tc.manifest)
 			put(t, metadata, tc.metadata)
-			put(t, cp, originalC)
-			put(t, ip, originalI)
 			put(t, mp, originalM)
 			put(t, other, "unrelated fixture content\n")
 			wantManifest := tc.manifest
 			if tc.wantManifest != "" {
 				wantManifest = tc.wantManifest
-			}
-			wantC := originalC
-			if tc.wantCompletion != "" {
-				wantC = tc.wantCompletion
-			}
-			wantI := originalI
-			if tc.wantInteractive != "" {
-				wantI = tc.wantInteractive
 			}
 			wantM := originalM
 			if tc.wantMise != "" {
@@ -137,8 +112,6 @@ func TestUpdaterCases(t *testing.T) {
 			}
 			run()
 			exact(t, manifest, wantManifest)
-			exact(t, cp, wantC)
-			exact(t, ip, wantI)
 			exact(t, mp, wantM)
 			exact(t, other, "unrelated fixture content\n")
 		})
@@ -175,7 +148,6 @@ esac
 if [[ "${DISCOVERY_FAILURE:-}" == json ]]; then printf '{bad json'; exit 0; fi
 case "$url" in
   */jqlang/jq/releases/latest) printf '{"tag_name":"jq-2.0.0"}\n' ;;
-  */zdharma-continuum/zinit/releases/latest) printf '{"tag_name":"v1.2.3"}\n' ;;
   */saghen/blink.cmp/releases/latest) printf '{"tag_name":"v4.5.6"}\n' ;;
   *) printf '{"tag_name":"v1.2.3"}\n' ;;
 esac
@@ -184,8 +156,7 @@ esac
 printf '%s\n' "$*" >>"$GIT_LOG"
 if [[ "${DISCOVERY_FAILURE:-}" == git ]]; then printf 'invalid\tHEAD\n'; exit 0; fi
 case "$*" in
-  *zdharma-continuum/zinit.git*) printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v1.2.3\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v1.2.3^{}\n' ;;
-  *saghen/blink.cmp.git*refs/tags/v4.5.6*) printf 'dddddddddddddddddddddddddddddddddddddddd\trefs/tags/v4.5.6\n' ;;
+  *saghen/blink.cmp.git*refs/tags/v4.5.6*) printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v4.5.6\ndddddddddddddddddddddddddddddddddddddddd\trefs/tags/v4.5.6^{}\n' ;;
   *) printf 'cccccccccccccccccccccccccccccccccccccccc\tHEAD\n' ;;
 esac
 `
@@ -206,17 +177,15 @@ esac
 	manifest := filepath.Join(root, "dependencies.conf")
 	zroot := filepath.Join(root, "zsh-root")
 	var lines strings.Builder
-	lines.WriteString("git zinit v0.1.0 all all https://github.com/zdharma-continuum/zinit.git - .local/share/zinit/zinit.git zinit.zsh\n")
 	lines.WriteString("nvim-plugin folke/lazy.nvim " + oldC + " all all https://github.com/folke/lazy.nvim.git - - -\n")
 	lines.WriteString("nvim-plugin saghen/blink.cmp " + oldC + " all all https://github.com/saghen/blink.cmp.git - - -\n")
-	lines.WriteString(zshLine("zsh-users/zsh-completions", oldC))
+	lines.WriteString(gitLine("zsh-completions", oldC))
 	for _, platform := range []string{"linux", "macos"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			lines.WriteString("download mise 0.1.0 " + platform + " " + arch + " https://old.invalid/mise oldsum .local/bin/mise raw\n")
 		}
 	}
 	put(t, manifest, lines.String())
-	put(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), completion)
 	put(t, filepath.Join(zroot, "config/shared/mise.toml"), replace(mise, "lazygit = \"0.65.0\"", "lazygit = \"0.65.0\"\ngh = \"2.0.0\""))
 	languages := "local M = {\n  lsp = {\n    \"lua_ls@3.19.1\",\n    \"tombi@v1.5.5\",\n  },\n}\nreturn M\n"
 	languagePath := filepath.Join(zroot, "config/shared/nvim/lua/config/languages.lua")
@@ -236,13 +205,13 @@ esac
 	if count := strings.Count(got, " 0c982986710a026635603031674053ca851fc0e3ea760094a34f59b84f7f6da6 .local/bin/mise raw"); count != 4 {
 		t.Fatalf("expected verified checksums for all four downloads, got %d: %s", count, got)
 	}
-	for _, want := range []string{"git zinit v1.2.3 all all https://github.com/zdharma-continuum/zinit.git bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "nvim-plugin folke/lazy.nvim cccccccccccccccccccccccccccccccccccccccc", "nvim-plugin saghen/blink.cmp dddddddddddddddddddddddddddddddddddddddd", "zsh-plugin zsh-users/zsh-completions cccccccccccccccccccccccccccccccccccccccc", "download mise 1.2.3 linux amd64 https://github.com/jdx/mise/releases/download/v1.2.3/mise-v1.2.3-linux-x64"} {
+	for _, want := range []string{gitLine("zsh-completions", strings.Repeat("c", 40)), "nvim-plugin folke/lazy.nvim cccccccccccccccccccccccccccccccccccccccc", "nvim-plugin saghen/blink.cmp dddddddddddddddddddddddddddddddddddddddd", "download mise 1.2.3 linux amd64 https://github.com/jdx/mise/releases/download/v1.2.3/mise-v1.2.3-linux-x64"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %s", want, got)
 		}
 	}
 	gitlog, _ := os.ReadFile(filepath.Join(root, "git.log"))
-	if !strings.Contains(string(gitlog), "refs/tags/v1.2.3^{}") {
+	if !strings.Contains(string(gitlog), "refs/tags/v4.5.6^{}") {
 		t.Fatalf("annotated tag not peeled: %s", gitlog)
 	}
 	calls, _ := os.ReadFile(log)
@@ -256,11 +225,10 @@ esac
 	if strings.Contains(string(out), "private-secret") {
 		t.Fatal("secret in diagnostics")
 	}
-	exact(t, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), replace(completion, oldC, strings.Repeat("c", 40)))
 	exact(t, languagePath, strings.Replace(strings.Replace(languages, "lua_ls@3.19.1", "lua_ls@3.20.0", 1), "tombi@v1.5.5", "tombi@v1.5.6", 1))
 	for _, failure := range []string{"curl", "json", "git", "download", "registry"} {
 		t.Run(failure+" preserves files", func(t *testing.T) {
-			paths := []string{manifest, filepath.Join(zroot, "config/shared/zsh/completion.zsh"), filepath.Join(zroot, "config/shared/mise.toml"), languagePath}
+			paths := []string{manifest, filepath.Join(zroot, "config/shared/mise.toml"), languagePath}
 			before := make(map[string]string)
 			for _, path := range paths {
 				data, err := os.ReadFile(path)
@@ -308,11 +276,11 @@ func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
 			root := t.TempDir()
 			manifest := filepath.Join(root, "dependencies.conf")
 			metadata := filepath.Join(root, "metadata")
-			pin := filepath.Join(root, "config/shared/zsh/completion.zsh")
-			original := zshLine("zsh-users/zsh-completions", oldC)
+			pin := filepath.Join(root, "config/shared/mise.toml")
+			original := gitLine("zsh-completions", oldC)
 			put(t, manifest, original)
-			put(t, metadata, "zsh-plugin zsh-users/zsh-completions "+newC+"\n")
-			put(t, pin, completion)
+			put(t, metadata, "git zsh-completions "+newC+" "+newC+"\nmise-tool uv 0.12.3\n")
+			put(t, pin, mise)
 			wantMode := os.FileMode(0640)
 			if err := os.Chmod(manifest, wantMode); err != nil {
 				t.Fatal(err)
@@ -326,11 +294,11 @@ func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
 				}
 				if mode == "symlink" {
 					outside := filepath.Join(t.TempDir(), "user-file")
-					put(t, outside, completion)
+					put(t, outside, mise)
 					if err := os.Symlink(outside, pin); err != nil {
 						t.Fatal(err)
 					}
-					defer exact(t, outside, completion)
+					defer exact(t, outside, mise)
 				} else if mode == "directory" {
 					if err := os.Mkdir(pin, 0700); err != nil {
 						t.Fatal(err)
@@ -346,12 +314,12 @@ func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
 				t.Fatalf("status=%d output=%s", status, output.String())
 			}
 			if success {
-				exact(t, manifest, zshLine("zsh-users/zsh-completions", newC))
-				exact(t, pin, replace(completion, oldC, newC))
+				exact(t, manifest, gitLine("zsh-completions", newC))
+				exact(t, pin, replace(mise, "uv = \"0.5.21\"", "uv = \"0.12.3\""))
 			} else {
 				exact(t, manifest, original)
 				if mode == "canceled" {
-					exact(t, pin, completion)
+					exact(t, pin, mise)
 				}
 			}
 			info, err := os.Stat(manifest)

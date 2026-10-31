@@ -262,28 +262,18 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 	directories := map[string]os.FileInfo{}
 	for _, line := range deps {
 		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[0] != "zsh-plugin" {
+		if len(fields) != 9 || fields[0] != "git" || !strings.HasPrefix(fields[7], ".local/share/selfishell/zsh-plugins/") {
 			continue
 		}
-		target := f.home + "/.local/share/zinit/plugins/" + strings.ReplaceAll(fields[1], "/", "---")
+		target := f.home + "/" + fields[7]
 		head := fullUbuntuCommand(t, f, f.home, 15*time.Second, "git", "-C", target, "rev-parse", "HEAD")
 		requireOK(t, head)
 		if strings.TrimSpace(string(head.Stdout)) != fields[2] || heads[fields[2]] {
 			t.Fatalf("plugin HEAD mismatch or repeated revision: %s %s", fields[1], head.Stdout)
 		}
 		heads[fields[2]] = true
-		meta := target + "/._zinit"
-		if info, err := os.Stat(meta); err != nil || !info.IsDir() {
-			t.Fatalf("plugin metadata %s: %v", target, err)
-		}
-		if got := string(readBytes(t, meta+"/.gitignore")); got != "*\n" {
-			t.Fatalf("plugin ignore %q", got)
-		}
-		for _, name := range []string{"ver", "teleid", "light-mode"} {
-			info, err := os.Stat(meta + "/" + name)
-			if err != nil || !info.Mode().IsRegular() {
-				t.Fatalf("plugin metadata %s: %v", name, err)
-			}
+		if got := string(readBytes(t, f.home+"/.local/state/selfishell/dependencies/"+fields[1])); got != fields[2]+"\n" {
+			t.Fatalf("plugin state %s: %q", fields[1], got)
 		}
 		status := fullUbuntuCommand(t, f, f.home, 15*time.Second, "git", "-C", target, "status", "--porcelain")
 		requireOK(t, status)
@@ -295,7 +285,7 @@ func TestNativeUbuntuInstalledArchiveConsumer(t *testing.T) {
 		directories[target] = info
 	}
 	if len(directories) == 0 {
-		t.Fatal("no declared Zinit plugins checked")
+		t.Fatal("no declared Zsh plugins checked")
 	}
 	requireOK(t, fullUbuntuCommand(t, f, project, 35*time.Minute, f.cli, "install", "--yes"))
 	for path, before := range directories {

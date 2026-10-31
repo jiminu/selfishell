@@ -10,10 +10,12 @@ import (
 // consumers. It does not alter managed configuration or install system packages.
 func ProvisionDeveloper(ctx context.Context, root, mode string, process Process) error {
 	var tools []string
+	direct := []string{"mise"}
 	switch mode {
 	case "mise-only":
 	case "benchmark-shell":
 		tools = []string{"starship", "fzf", "zoxide"}
+		direct = append(direct, "zsh-completions", "fzf-tab", "zsh-autosuggestions", "fast-syntax-highlighting")
 	case "neovim-e2e":
 		tools = []string{"neovim", "tree-sitter", "node"}
 	default:
@@ -29,10 +31,7 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	}
 	o := &PackageOperation{Process: process}
 	manifest := root + "/dependencies.conf"
-	for _, name := range []string{"mise", "zinit"} {
-		if mode != "benchmark-shell" && name == "zinit" {
-			continue
-		}
+	for _, name := range direct {
 		if err := o.InstallDirect(ctx, paths, manifest, "required", name, platform.Name, platform.Arch, false); err != nil {
 			return err
 		}

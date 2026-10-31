@@ -17,7 +17,7 @@ import (
 )
 
 // InstallDirect synchronizes one declared direct package. One operation caches
-// its manifest so zinit and its plugins use the same approved records.
+// its manifest so every package it installs uses the same approved records.
 func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manifest, requirement, name, platform, arch string, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -53,14 +53,6 @@ func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manif
 			return ctx.Err()
 		}
 		return o.optionalFailure(requirement, err.Error(), []string{name})
-	}
-	if name == "zinit" {
-		if err := o.InstallZinitPlugins(ctx, paths, manifest, false); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return o.optionalFailure(requirement, err.Error(), []string{name})
-		}
 	}
 	return nil
 }

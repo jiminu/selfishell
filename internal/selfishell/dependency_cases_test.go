@@ -338,41 +338,61 @@ func installGit(op *PackageOperation, paths Paths, manifest string) error {
 	return op.InstallDirect(context.Background(), paths, manifest, "required", "testgit", "linux", "amd64", false)
 }
 
+// Zsh plugins pin a full commit as the version; tools such as tags pin a ref.
 func TestDirectGitPinAndRepair(t *testing.T) {
-	op, paths, manifest, home, repo, head := directGitFixture(t)
-	target := home + "/data/testgit"
-	if err := installGit(op, paths, manifest); err != nil {
-		t.Fatal(err)
+	for _, pin := range []string{"tag", "commit"} {
+		t.Run(pin, func(t *testing.T) {
+			op, paths, manifest, home, repo, head := directGitFixture(t)
+			version := "v1.0"
+			if pin == "commit" {
+				version = head
+				writeTestFile(t, manifest, fmt.Sprintf("git testgit %s linux amd64 %s %s .local/share/testgit marker\n", head, repo, head), 0600)
+			}
+			dep := Dependency{Kind: "git", Name: "testgit", Version: version, Checksum: head, Marker: "marker"}
+			target := home + "/data/testgit"
+			if err := installGit(op, paths, manifest); err != nil {
+				t.Fatal(err)
+			}
+			if gitCommand(t, target, "rev-parse", "HEAD") != head || gitCommand(t, target, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" || readTestFile(t, paths.State+"/dependencies/testgit") != version+"\n" {
+				t.Fatal("initial pin/state wrong")
+			}
+			op.Process.Out = new(bytes.Buffer)
+			if err := installGit(op, paths, manifest); err != nil || output(op) != "" || op.UnchangedCount != 1 {
+				t.Fatalf("noop: %v %q", err, output(op))
+			}
+			writeTestFile(t, target+"/cache", "untracked", 0600)
+			if err := installGit(op, paths, manifest); err != nil || output(op) != "" {
+				t.Fatalf("untracked file caused repair: %v %q", err, output(op))
+			}
+			writeTestFile(t, target+"/marker", "edited", 0600)
+			if op.validDirect(context.Background(), dep, target, true) {
+				t.Fatal("dirty checkout reported valid")
+			}
+			if err := installGit(op, paths, manifest); err != nil || !strings.Contains(output(op), "Installed approved dependency") || readTestFile(t, target+"/marker") != "marker\n" {
+				t.Fatalf("dirty repair: %v %q", err, output(op))
+			}
+			gitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
+			if op.validDirect(context.Background(), dep, target, true) {
+				t.Fatal("drifted checkout reported valid")
+			}
+			if err := installGit(op, paths, manifest); err != nil || gitCommand(t, target, "rev-parse", "HEAD") != head {
+				t.Fatalf("commit drift not repaired: %v", err)
+			}
+			if pin == "commit" {
+				return
+			}
+			gitCommand(t, repo, "commit", "--quiet", "--allow-empty", "-m", "moved")
+			gitCommand(t, repo, "tag", "-f", "v1.0")
+			if err := os.RemoveAll(target); err != nil {
+				t.Fatal(err)
+			}
+			os.Remove(paths.State + "/dependencies/testgit")
+			if err := installGit(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "no longer points to its approved commit") {
+				t.Fatalf("moved tag accepted: %v", err)
+			}
+			assertNoPath(t, target)
+		})
 	}
-	if gitCommand(t, target, "rev-parse", "HEAD") != head || readTestFile(t, paths.State+"/dependencies/testgit") != "v1.0\n" {
-		t.Fatal("initial pin/state wrong")
-	}
-	op.Process.Out = new(bytes.Buffer)
-	if err := installGit(op, paths, manifest); err != nil || output(op) != "" || op.UnchangedCount != 1 {
-		t.Fatalf("noop: %v %q", err, output(op))
-	}
-	writeTestFile(t, target+"/cache", "untracked", 0600)
-	if err := installGit(op, paths, manifest); err != nil || output(op) != "" {
-		t.Fatalf("untracked file caused repair: %v %q", err, output(op))
-	}
-	writeTestFile(t, target+"/marker", "edited", 0600)
-	if err := installGit(op, paths, manifest); err != nil || !strings.Contains(output(op), "Installed approved dependency") || readTestFile(t, target+"/marker") != "marker\n" {
-		t.Fatalf("dirty repair: %v %q", err, output(op))
-	}
-	gitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
-	if err := installGit(op, paths, manifest); err != nil || gitCommand(t, target, "rev-parse", "HEAD") != head {
-		t.Fatalf("commit drift not repaired: %v", err)
-	}
-	gitCommand(t, repo, "commit", "--quiet", "--allow-empty", "-m", "moved")
-	gitCommand(t, repo, "tag", "-f", "v1.0")
-	if err := os.RemoveAll(target); err != nil {
-		t.Fatal(err)
-	}
-	os.Remove(paths.State + "/dependencies/testgit")
-	if err := installGit(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "no longer points to its approved commit") {
-		t.Fatalf("moved tag accepted: %v", err)
-	}
-	assertNoPath(t, target)
 }
 
 func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {

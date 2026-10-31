@@ -36,8 +36,9 @@ as `unknown` with the inspection error, and diagnosis continues. Inspection
 failures return nonzero even for optional tools; resolve the reported error and
 rerun `selfishell status` before deciding whether to install anything. Executables
 on PATH are classified as external only when the manager is absent or its
-inventory query succeeds. Failed Git inspections are reported separately from
-unapproved plugin revisions, and missing plugins do not hide other plugin issues.
+inventory query succeeds. Zsh plugins are listed as required `direct` tools: a
+recorded checkout with tracked changes, at another commit, or that Git cannot
+inspect is reported as missing, and `update --tools-only` restores it.
 Problem groups include a next step, and paths beneath the current home
 directory use `~`.
 
@@ -124,8 +125,8 @@ top of the file while preserving the file's other content.
 `selfishell install --skip-packages` also repairs it. Uninstall leaves an already absent block and its user file
 alone. Incomplete or duplicated markers must still be resolved before retrying.
 
-Install and update reprovision a Zinit checkout whose tracked files were
-edited. An edited Neovim plugin checkout stops them instead, because lazy.nvim
+Install and update reprovision a Zsh plugin checkout whose tracked files were
+edited or whose commit moved. An edited Neovim plugin checkout stops them instead, because lazy.nvim
 will not check out over local changes: remove that plugin's directory under
 `${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy`, then retry.
 

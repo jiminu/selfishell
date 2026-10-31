@@ -39,20 +39,9 @@ _selfishell_command_path() {
   return 1
 }
 
-# Startup never downloads a plugin, so require a complete checkout: a partial
-# clone then stays quiet instead of failing Zinit. `status` reports it.
-_selfishell_zinit_plugin_ready() {
-  local repository="$1"
-  [[ -n "${ZINIT[PLUGINS_DIR]:-}" ]] || return 1
-  [[ -d "$ZINIT[PLUGINS_DIR]/${repository//\//---}/.git" ]]
-}
-
-# Load Zinit before mise: it prepends $ZPFX/bin, and a PATH change after
-# `mise activate` makes the first prompt rerun a full hook-env.
-ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
-if [[ -s "$ZINIT_HOME/zinit.zsh" ]]; then
-  source "$ZINIT_HOME/zinit.zsh"
-fi
+# `selfishell install` provisions plugin checkouts here; startup only sources
+# them when present and never downloads one. `status` reports missing ones.
+SELFISHELL_ZSH_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/zsh-plugins"
 
 source "$SELFISHELL_COMMON_DIR/runtime.zsh"
 source "$SELFISHELL_COMMON_DIR/history.zsh"

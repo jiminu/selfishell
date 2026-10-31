@@ -19,9 +19,9 @@ import (
 const usage = `Usage: scripts/benchmark.sh [--mode base|full] [--prompt] [--diagnostics]
 
   base  Selfishell's own startup cost, independent of external integrations
-        (mise/starship/zinit/fzf/zoxide are excluded). This is the default.
+        (mise/starship/fzf/zoxide/Zsh plugins are excluded). This is the default.
 
-  full  Installs pinned mise, starship, fzf, zoxide, and zinit with plugins
+  full  Installs pinned mise, starship, fzf, zoxide, and the Zsh plugins
         into an isolated HOME. Does not install Apt/Homebrew packages.
 
   --prompt       Measure first and command-to-prompt latency in a PTY.
@@ -461,13 +461,35 @@ func (f *fixture) integrations(ctx context.Context) (string, error) {
 		}
 		parts = append(parts, name+"="+status)
 	}
-	zinit := "absent"
-	if _, e := os.Stat(filepath.Join(f.data, "zinit/zinit.git/zinit.zsh")); e == nil {
-		zinit = "enabled"
+	provisioned, plugins, err := f.zshPlugins()
+	if err != nil {
+		return "", err
 	}
-	parts = append(parts, "zinit="+zinit)
+	parts = append(parts, fmt.Sprintf("zsh-plugins=%d/%d", provisioned, plugins))
 	return strings.Join(parts, " "), nil
 }
+
+// zshPlugins counts the manifest's Zsh plugin checkouts whose marker exists.
+func (f *fixture) zshPlugins() (provisioned, plugins int, err error) {
+	manifest, err := os.ReadFile(filepath.Join(f.root, "dependencies.conf"))
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, line := range strings.Split(string(manifest), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 9 || fields[0] != "git" || !strings.HasPrefix(fields[7], zshPluginTarget) {
+			continue
+		}
+		plugins++
+		if _, e := os.Stat(filepath.Join(f.data, strings.TrimPrefix(fields[7], ".local/share/"), fields[8])); e == nil {
+			provisioned++
+		}
+	}
+	return provisioned, plugins, nil
+}
+
+const zshPluginTarget = ".local/share/selfishell/zsh-plugins/"
+
 func timedExecute(ctx context.Context, s execSpec) (float64, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, s.name, s.args...)
@@ -600,8 +622,12 @@ func (f *fixture) prepareDiagnosticHome(home string) error {
 	if e := mkdir(filepath.Join(home, ".local/share")); e != nil {
 		return e
 	}
-	if _, e := os.Stat(filepath.Join(f.data, "zinit")); e == nil {
-		if e = os.Symlink(filepath.Join(f.data, "zinit"), filepath.Join(home, ".local/share/zinit")); e != nil {
+	plugins := filepath.Join(f.data, "selfishell/zsh-plugins")
+	if _, e := os.Stat(plugins); e == nil {
+		if e := mkdir(filepath.Join(home, ".local/share/selfishell")); e != nil {
+			return e
+		}
+		if e := os.Symlink(plugins, filepath.Join(home, ".local/share/selfishell/zsh-plugins")); e != nil {
 			return e
 		}
 	}

@@ -75,13 +75,15 @@ func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 		}
 	}
 	callerData := filepath.Join(private, "caller-data")
-	zinit := filepath.Join(callerData, "zinit/zinit.git")
-	if e := os.MkdirAll(zinit, 0755); e != nil {
-		t.Fatal(e)
-	}
-	sentinel := filepath.Join(private, "ambient-zinit-loaded")
-	if e := os.WriteFile(filepath.Join(zinit, "zinit.zsh"), []byte("print loaded >"+sentinel+"\n"), 0644); e != nil {
-		t.Fatal(e)
+	sentinel := filepath.Join(private, "ambient-plugin-loaded")
+	for _, name := range []string{"fzf-tab", "zsh-autosuggestions", "fast-syntax-highlighting"} {
+		plugin := filepath.Join(callerData, "selfishell/zsh-plugins", name)
+		if e := os.MkdirAll(plugin, 0755); e != nil {
+			t.Fatal(e)
+		}
+		if e := os.WriteFile(filepath.Join(plugin, name+".plugin.zsh"), []byte("print loaded >"+sentinel+"\n"), 0644); e != nil {
+			t.Fatal(e)
+		}
 	}
 	profile := filepath.Join(private, "startup.zprof")
 	env := []string{"HOME=" + filepath.Join(private, "outer-home"), "TMPDIR=" + private, "PATH=" + ambient + ":/usr/bin:/bin", "XDG_DATA_HOME=" + callerData, "SELFISHELL_BENCHMARK_ITERATIONS=1", "SELFISHELL_BENCHMARK_ZPROF_FILE=" + profile}
@@ -89,13 +91,13 @@ func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 	if code := Run([]string{"--mode", "base"}, env, root, &out, &err); code != 0 {
 		t.Fatalf("exit %d: %s", code, err.String())
 	}
-	for _, want := range []string{"mode=base", "common-cached", "interactive-cached", "starship=absent fzf=absent zoxide=absent zinit=absent"} {
+	for _, want := range []string{"mode=base", "common-cached", "interactive-cached", "starship=absent fzf=absent zoxide=absent zsh-plugins=0/4"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q in %s", want, out.String())
 		}
 	}
 	if _, e := os.Stat(sentinel); !os.IsNotExist(e) {
-		t.Fatal("ambient Zinit was sourced")
+		t.Fatal("ambient Zsh plugin was sourced")
 	}
 	data, e := os.ReadFile(profile)
 	if e != nil {

@@ -1,14 +1,7 @@
-# Zinit (loaded by common.zsh) contributes additional definitions, but
-# standard completion does not depend on it being installed.
-if (( $+functions[zinit] )); then
-  if _selfishell_zinit_plugin_ready zsh-users/zsh-completions; then
-    # Pinned to the commit recorded for zsh-users/zsh-completions in
-    # dependencies.conf; keep the two in sync.
-    # The provisioned plugin adds its own src directory to fpath. Blocking
-    # that would require a separate completion installation after cloneonly.
-    zinit ice ver'989b23277ab33e8d5e82df6aed936e846db9d8b8'
-    zinit light zsh-users/zsh-completions
-  fi
+# zsh-completions only contributes definitions; standard completion does not
+# depend on any plugin being installed.
+if [[ -d "$SELFISHELL_ZSH_PLUGINS/zsh-completions/src" ]]; then
+  fpath=("$SELFISHELL_ZSH_PLUGINS/zsh-completions/src" ${fpath:#${(b)SELFISHELL_ZSH_PLUGINS}/zsh-completions/src})
 fi
 
 zstyle ':completion:*' matcher-list \
@@ -84,10 +77,6 @@ fi
 unfunction _selfishell_completion_needs_audit _selfishell_completion_files_changed \
   _selfishell_completion_compile
 
-if (( $+functions[zinit] )); then
-  zinit cdreplay -q
-fi
-
 if _selfishell_command_path kubectl >/dev/null; then
   _selfishell_kubectl_completion() {
     local completion_source
@@ -110,9 +99,4 @@ if _selfishell_command_path aws >/dev/null && _selfishell_command_path aws_compl
   autoload -Uz bashcompinit
   bashcompinit
   complete -C aws_completer aws
-fi
-
-if (( $+functions[zinit] )); then
-  autoload -Uz _zinit
-  compdef _zinit zinit
 fi

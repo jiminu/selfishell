@@ -96,7 +96,7 @@ func parseDependencyMetadata(data string) ([][]string, error) {
 		switch fields[0] {
 		case "git":
 			valid = len(fields) == 3 || len(fields) == 4 && pluginCommit.MatchString(fields[3])
-		case "nvim-plugin", "zsh-plugin":
+		case "nvim-plugin":
 			valid = len(fields) == 3 && pluginCommit.MatchString(fields[2])
 		case "download":
 			valid = len(fields) == 7 && downloadChecksum.MatchString(fields[6])
@@ -192,26 +192,6 @@ func updateDependencies(ctx context.Context, p selfishell.Process, manifest, met
 			return fmt.Errorf("dependency metadata did not match manifest entry: %s", dependencyKey(update))
 		}
 		fields := strings.Fields(lines[matched])
-		if update[0] == "zsh-plugin" {
-			file := map[string]string{
-				"zsh-users/zsh-completions":                  "config/shared/zsh/completion.zsh",
-				"Aloxaf/fzf-tab":                             "config/shared/zsh/interactive.zsh",
-				"zsh-users/zsh-autosuggestions":              "config/shared/zsh/interactive.zsh",
-				"zdharma-continuum/fast-syntax-highlighting": "config/shared/zsh/interactive.zsh",
-			}[update[1]]
-			if file == "" || !pluginCommit.MatchString(fields[2]) {
-				return fmt.Errorf("invalid recorded Zsh plugin pin or mapping: %s", update[1])
-			}
-			edit, err := configuration(file)
-			if err != nil {
-				return err
-			}
-			old := "ver'" + fields[2] + "'"
-			if strings.Count(edit.after, old) != 1 {
-				return fmt.Errorf("expected exactly one %s pin in %s", update[1], file)
-			}
-			edit.after = strings.Replace(edit.after, old, "ver'"+update[2]+"'", 1)
-		}
 		previous := strings.Join(fields, " ")
 		fields[2] = update[2]
 		switch update[0] {

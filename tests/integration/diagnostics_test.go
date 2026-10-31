@@ -210,10 +210,7 @@ func TestStatusPlugins(t *testing.T) {
 			requireStatus(t, "configuration fixture", setup, 0)
 			state := filepath.Join(home, ".local/state/selfishell")
 			mustFS(t, testutil.WriteFile(filepath.Join(state, "configured"), []byte("1\n"), 0600))
-			zinit := filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh")
-			mustFS(t, os.MkdirAll(filepath.Dir(zinit), 0700))
-			mustFS(t, testutil.WriteFile(zinit, []byte("# zinit\n"), 0600))
-			plugin := filepath.Join(home, ".local/share/zinit/plugins/test---plugin")
+			plugin := filepath.Join(home, ".local/share/selfishell/zsh-plugins/plugin")
 			mustFS(t, os.MkdirAll(plugin, 0700))
 			runGit(plugin, "init", "--quiet")
 			// Fixture commits must not leave background maintenance racing HOME snapshots.
@@ -232,12 +229,20 @@ func TestStatusPlugins(t *testing.T) {
 			case "mixed":
 				mustFS(t, testutil.WriteFile(filepath.Join(plugin, "tracked"), []byte("changed\n"), 0600))
 			}
-			mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("zsh-plugin test/plugin %s all all - - - -\n", revision)), 0600))
+			// Plugins are git direct packages recorded as installed by Selfishell.
+			record := func(name, revision string) {
+				mustFS(t, testutil.AppendFile(filepath.Join(release, "packages.conf"), []byte("package all required direct "+name+"\n")))
+				mustFS(t, testutil.AppendFile(filepath.Join(release, "dependencies.conf"), []byte(fmt.Sprintf("git %s %s all all - %s .local/share/selfishell/zsh-plugins/%s tracked\n", name, revision, revision, name))))
+				mustFS(t, testutil.WriteFile(filepath.Join(state, "dependencies", name), []byte(revision+"\n"), 0600))
+			}
+			mustFS(t, testutil.WriteFile(filepath.Join(release, "packages.conf"), nil, 0600))
+			mustFS(t, testutil.WriteFile(filepath.Join(release, "dependencies.conf"), nil, 0600))
+			mustFS(t, os.MkdirAll(filepath.Join(state, "dependencies"), 0700))
+			record("plugin", revision)
 			if name == "mixed" {
-				other := filepath.Join(home, ".local/share/zinit/plugins/test---other")
-				runGit(root, "clone", "--quiet", plugin, other)
-				runGit(other, "config", "maintenance.auto", "false")
-				mustFS(t, testutil.AppendFile(filepath.Join(release, "dependencies.conf"), []byte("zsh-plugin test/other "+strings.Repeat("0", 40)+" all all - - - -\n")))
+				runGit(root, "clone", "--quiet", plugin, filepath.Join(home, ".local/share/selfishell/zsh-plugins/other"))
+				runGit(filepath.Join(home, ".local/share/selfishell/zsh-plugins/other"), "config", "maintenance.auto", "false")
+				record("other", strings.Repeat("0", 40))
 			}
 			diagnosticEnv := append(append([]string{}, env...), "GIT_DIR="+root+"/foreign", "GIT_WORK_TREE="+root+"/foreign")
 			before := mustSnapshot(t, home)
@@ -245,20 +250,22 @@ func TestStatusPlugins(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
+			// Untracked files are user data, as in install; tracked changes and a
+			// moved HEAD mean the approved checkout is missing.
 			status := 1
-			if name == "clean" {
+			if name == "clean" || name == "untracked" {
 				status = 0
 			}
 			requireStatus(t, "CLI", got, status)
 			expected := map[string]string{
-				"clean":          "Zsh plugins: provisioned",
-				"invalid-config": "Zsh plugins: could not inspect test/plugin",
-				"untracked":      "Zsh plugins: 1 modified locally (test/plugin)",
-				"mixed":          "Zsh plugins: 1 modified locally (test/plugin)",
+				"clean":          "Tools: 1 present",
+				"invalid-config": "Tool: plugin is missing (direct)",
+				"untracked":      "Tools: 1 present",
+				"mixed":          "Tools: 0 present, 2 required missing",
 			}[name]
 			requireContains(t, got.Stdout, expected)
 			if name == "mixed" {
-				requireContains(t, got.Stdout, "Zsh plugins: 1 at an unapproved revision (test/other)")
+				requireContains(t, got.Stdout, "Tool: other is missing (direct)")
 				if strings.Count(string(got.Stdout), "selfishell update --tools-only") != 1 {
 					t.Fatalf("repeated plugin repair hint: %s", got.Stdout)
 				}
