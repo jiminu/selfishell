@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 const updateHelp = `Usage:
@@ -110,7 +114,7 @@ func (c CLI) confirmRelease(prompt string, yes, dry bool) int {
 	}
 	fmt.Fprint(c.Out, prompt+" [y/N] ")
 	answer, _ := c.readAnswer()
-	if !affirmative(answer) {
+	if !report.Affirmative(answer) {
 		fmt.Fprintln(c.Out, "Cancelled.")
 		return 1
 	}
@@ -172,7 +176,7 @@ func (c CLI) update(args []string) int {
 			if code := c.confirmRelease("Update Selfishell CLI to "+version+"?", o.yes, false); code != 0 {
 				return code
 			}
-			paths, err := userPaths(c.Env.Get)
+			paths, err := managed.UserPaths(c.Env.Get)
 			if err != nil {
 				c.error(err.Error())
 				return 1
@@ -183,7 +187,7 @@ func (c CLI) update(args []string) int {
 			// Keep default signal handling while confirmation reads from the terminal.
 			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}).install(ctx, version)
+			target, err := (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}).install(ctx, version)
 			if err != nil {
 				c.error(err.Error())
 				return 1
@@ -197,9 +201,9 @@ func (c CLI) update(args []string) int {
 				if o.skip {
 					argv = append(argv, "--skip-packages")
 				}
-				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env}).runCLI(ctx, target+"/bin/selfishell", argv...)
+				code, err := (process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}).RunCLI(ctx, target+"/bin/selfishell", argv...)
 				if code != 0 || err != nil {
-					c.report("Tools", reportSuccess, "Activated Selfishell CLI: %s -> %s", active, version)
+					c.report("Tools", report.Success, "Activated Selfishell CLI: %s -> %s", active, version)
 				}
 				if err != nil {
 					c.error(err.Error())
@@ -235,7 +239,7 @@ func (c CLI) completeUpdate() {
 }
 
 func (c CLI) updateTools(o updateOptions) (result int) {
-	paths, err := userPaths(c.Env.Get)
+	paths, err := managed.UserPaths(c.Env.Get)
 	if err != nil {
 		c.error(err.Error())
 		return 1
@@ -304,7 +308,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 	}
-	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}
+	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}
 	if !o.skip {
 		phaseCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, detectPlatform(c.Env).Arch, prepared.ghostty, o.dry)
@@ -321,7 +325,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		operation.reportSkippedOptional()
 	}
 	if o.skip {
-		c.report("Notes", reportWarning, "Skipping package and tool installation.")
+		c.report("Notes", report.Warning, "Skipping package and tool installation.")
 	}
 	if err := c.invocationContext().Err(); err != nil {
 		c.error(err.Error())
@@ -379,7 +383,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		c.completeUpdate()
 	}
 	if !o.dry && prepared.m.unchanged > 0 && c.progress.compact {
-		c.report("Notes", reportInfo, "%d configuration items unchanged.", prepared.m.unchanged)
+		c.report("Notes", report.Info, "%d configuration items unchanged.", prepared.m.unchanged)
 	}
 	return 0
 }

@@ -8,18 +8,21 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := t.TempDir()
 	isolateHome(&env, home)
 	var out, stderr bytes.Buffer
 	state := filepath.Join(home, "state")
-	ui := newProgress(&out, &stderr, Paths{State: state}, env)
+	ui := newProgress(&out, &stderr, managed.Paths{State: state}, env)
 	ui.compact = true
-	p := Process{inherit: env, Out: &out, Err: &stderr, progress: ui}
+	p := process.Process{Inherit: env, Out: &out, Err: &stderr, Progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'; printf 'tool detail\\n' >&2")
 	ui.Pause()
@@ -37,13 +40,13 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 		t.Fatalf("query redirected: %q %d %v", query.String(), code, err)
 	}
 	ui.stage("Interactive installer")
-	p.foreground = true
+	p.Foreground = true
 	p.In = strings.NewReader("answer\n")
 	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'Password: '; read reply; printf 'received %s\\n' \"$reply\"")
 	if code != 0 || err != nil || !strings.Contains(out.String(), "Password: received answer") || ui.stop != nil {
 		t.Fatalf("input hidden: %d %v %q", code, err, out.String())
 	}
-	p.foreground = false
+	p.Foreground = false
 	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
 	if code != 7 || err != nil || !strings.Contains(stderr.String(), "failure detail") || strings.Contains(stderr.String(), "successful tool chatter") {
 		t.Fatalf("failure output: %d %v %q", code, err, stderr.String())
@@ -60,11 +63,11 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
+	ui := newProgress(&out, &stderr, managed.Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
-	op := PackageOperation{Process: Process{Out: &out, Err: &stderr, progress: ui}}
+	op := PackageOperation{Process: process.Process{Out: &out, Err: &stderr, Progress: ui}}
 	_, err := op.runNvim(context.Background(), "", "/bin/sh", "", "-c", "printf 'nvim failed\\n' >&2; exit 1")
 	if err == nil || strings.Count(stderr.String(), "nvim failed") != 1 {
 		t.Fatalf("Neovim error must appear once: %v %q", err, stderr.String())
@@ -74,11 +77,11 @@ func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 func TestProgressFailureOutputIsBounded(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
+	ui := newProgress(&out, &stderr, managed.Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
-	code, err := (Process{Out: &out, Err: &stderr, progress: ui}).Run(context.Background(), "/bin/sh", "-c", "head -c 16384 /dev/zero | tr '\\000' x; printf 'failure detail\\n' >&2; exit 7")
+	code, err := (process.Process{Out: &out, Err: &stderr, Progress: ui}).Run(context.Background(), "/bin/sh", "-c", "head -c 16384 /dev/zero | tr '\\000' x; printf 'failure detail\\n' >&2; exit 7")
 	if code != 7 || err != nil || !strings.HasSuffix(stderr.String(), "failure detail\n") || len(stderr.String()) > 8192 {
 		t.Fatalf("unbounded failure output: %d %v %d %q", code, err, stderr.Len(), stderr.String())
 	}
@@ -86,7 +89,7 @@ func TestProgressFailureOutputIsBounded(t *testing.T) {
 
 func TestConfigurationProgressCancelsBlockedTrust(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	blockWrite(t, home+"/tools/mise", []byte("#!/bin/sh\nexec /bin/sleep 2\n"))

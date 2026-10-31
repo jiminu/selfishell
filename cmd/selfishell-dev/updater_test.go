@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -101,7 +101,7 @@ func TestUpdaterCases(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 				var output bytes.Buffer
-				p := selfishell.Process{Out: &output, Err: &output, Env: []string{"HOME=" + home, "PATH=" + filepath.Join(root, "no-tools")}}
+				p := process.Process{Out: &output, Err: &output, Env: []string{"HOME=" + home, "PATH=" + filepath.Join(root, "no-tools")}}
 				status := runDependencyUpdate(ctx, root, []string{"--manifest", manifest, "--metadata", metadata, "--zsh-root", zroot}, p)
 				if (status != 0) != tc.failure {
 					t.Fatalf("failure=%v status=%d output=%s", tc.failure, status, output.String())
@@ -238,7 +238,7 @@ esac
 				before[path] = string(data)
 			}
 			var output bytes.Buffer
-			p := selfishell.Process{Out: &output, Err: &output, Env: append(append([]string{}, cmd.Env...), "DISCOVERY_FAILURE="+failure)}
+			p := process.Process{Out: &output, Err: &output, Env: append(append([]string{}, cmd.Env...), "DISCOVERY_FAILURE="+failure)}
 			if status := runDependencyUpdate(ctx, root, []string{"--manifest", manifest, "--zsh-root", zroot}, p); status == 0 || strings.Contains(output.String(), "private-secret") {
 				t.Fatalf("discovery failure status=%d output=%s", status, output.String())
 			}
@@ -254,7 +254,7 @@ func TestUpdaterArgumentsBeforeEffects(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			root := t.TempDir()
 			var output bytes.Buffer
-			status := runDependencyUpdate(context.Background(), root, args, selfishell.Process{Out: &output, Err: &output})
+			status := runDependencyUpdate(context.Background(), root, args, process.Process{Out: &output, Err: &output})
 			want := 2
 			if args[0] == "--help" {
 				want = 0
@@ -308,7 +308,7 @@ func TestUpdaterPreflightsTargetsAndCancellation(t *testing.T) {
 				cancel()
 			}
 			var output bytes.Buffer
-			status := runDependencyUpdate(ctx, root, []string{"--metadata", metadata}, selfishell.Process{Out: &output, Err: &output})
+			status := runDependencyUpdate(ctx, root, []string{"--metadata", metadata}, process.Process{Out: &output, Err: &output})
 			success := mode == "success"
 			if (status == 0) != success {
 				t.Fatalf("status=%d output=%s", status, output.String())

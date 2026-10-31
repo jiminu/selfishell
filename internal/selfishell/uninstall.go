@@ -9,12 +9,15 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
 
 func (c CLI) uninstallConfig(restore, purge, dry bool) error {
-	paths, err := userPaths(c.Env.Get)
+	paths, err := managed.UserPaths(c.Env.Get)
 	if err != nil {
 		return err
 	}
@@ -84,14 +87,14 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 
 // managedDirectories lists the directories above declared resources inside
 // paths.Config, children first, then the config, resources and state roots.
-func managedDirectories(resources []Resource, paths Paths) []string {
+func managedDirectories(resources []managed.Resource, paths managed.Paths) []string {
 	seen := map[string]bool{}
 	var dirs []string
 	for _, r := range resources {
 		if !strings.HasPrefix(r.Target, paths.Config+"/") {
 			continue
 		}
-		for dir := rawParent(r.Target); dir != paths.Config && !seen[dir]; dir = rawParent(dir) {
+		for dir := managed.RawParent(r.Target); dir != paths.Config && !seen[dir]; dir = managed.RawParent(dir) {
 			seen[dir] = true
 			dirs = append(dirs, dir)
 		}
@@ -107,7 +110,7 @@ func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error
 	if s.Status == "restoring" {
 		return preflightRestore(s, restore)
 	}
-	info, present, err := exists(s.Target)
+	info, present, err := managed.Exists(s.Target)
 	if err != nil {
 		return err
 	}
@@ -118,7 +121,7 @@ func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error
 			if !info.Mode().IsRegular() {
 				return fmt.Errorf("Managed file path changed type; preserving it: %s", s.Target)
 			}
-			actual, e := Checksum(context.Background(), s.Target)
+			actual, e := managed.Checksum(context.Background(), s.Target)
 			if e != nil {
 				return e
 			}
@@ -150,17 +153,17 @@ func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error
 			if e != nil {
 				return e
 			}
-			view, e := inspectBlock(r.Name, data)
+			view, e := managed.InspectBlock(r.Name, data)
 			if e != nil {
 				return e
 			}
-			if view.status != "absent" && (view.status != "intact" || view.checksum != s.Checksum) {
+			if view.Status != "absent" && (view.Status != "intact" || view.Checksum != s.Checksum) {
 				return blockConflictError(r)
 			}
 		}
 	}
 	if restore && s.Backup != "-" {
-		_, hasBackup, e := exists(s.Backup)
+		_, hasBackup, e := managed.Exists(s.Backup)
 		if e != nil {
 			return e
 		}
@@ -184,29 +187,29 @@ func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
 	if s.Status == "restoring" {
 		return m.finishRestore(r, s)
 	}
-	info, present, err := exists(s.Target)
+	info, present, err := managed.Exists(s.Target)
 	if err != nil {
 		return err
 	}
 	if s.Kind == "block" {
 		if m.dry {
-			m.say(reportPreview, "Would remove Selfishell block: %s", s.Target)
+			m.say(report.Preview, "Would remove Selfishell block: %s", s.Target)
 		} else if present {
 			data, e := os.ReadFile(s.Target)
 			if e != nil {
 				return e
 			}
-			view, e := inspectBlock(r.Name, data)
+			view, e := managed.InspectBlock(r.Name, data)
 			if e != nil {
 				return e
 			}
-			if view.status == "intact" {
+			if view.Status == "intact" {
 				pending := s
 				pending.Status = "pending"
 				if err = m.save(r, pending); err != nil {
 					return err
 				}
-				if err = m.write(s.Target, spliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
+				if err = m.write(s.Target, managed.SpliceBlock(data, view, nil), info.Mode().Perm()); err != nil {
 					return err
 				}
 			}
@@ -214,16 +217,16 @@ func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
 	} else if present {
 		if m.dry {
 			if s.Kind == "link" {
-				m.say(reportPreview, "Would remove managed link: %s", s.Target)
+				m.say(report.Preview, "Would remove managed link: %s", s.Target)
 			} else {
-				m.say(reportPreview, "Would remove managed file: %s", s.Target)
+				m.say(report.Preview, "Would remove managed file: %s", s.Target)
 			}
 		} else if err = os.Remove(s.Target); err != nil {
 			return err
 		}
 	}
 	if restore && s.Backup != "-" {
-		_, backupPresent, e := exists(s.Backup)
+		_, backupPresent, e := managed.Exists(s.Backup)
 		if e != nil {
 			return e
 		}
@@ -231,9 +234,9 @@ func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
 			return missingRestoreBackup(s.Backup)
 		}
 		if m.dry {
-			m.say(reportPreview, "Would restore: %s -> %s", s.Backup, s.Target)
+			m.say(report.Preview, "Would restore: %s -> %s", s.Backup, s.Target)
 		} else {
-			if _, occupied, _ := exists(s.Target); occupied {
+			if _, occupied, _ := managed.Exists(s.Target); occupied {
 				return fmt.Errorf("Restore target is occupied; preserving backup: %s", s.Backup)
 			}
 			// Journal the restore before moving the backup. A retry must never
@@ -246,7 +249,7 @@ func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
 		}
 	}
 	if !restore && s.Backup != "-" {
-		m.say(reportInfo, "Original backup location: %s", s.Backup)
+		m.say(report.Info, "Original backup location: %s", s.Backup)
 	}
 	return m.forgetResource(r)
 }
@@ -255,12 +258,12 @@ func interruptedRestore(target string) error {
 	return fmt.Errorf("An interrupted restore is unfinished for: %s. Run 'selfishell uninstall --restore' before installing again.", target)
 }
 
-func preflightRestore(s State, restore bool) error {
-	_, targetPresent, err := exists(s.Target)
+func preflightRestore(s managed.State, restore bool) error {
+	_, targetPresent, err := managed.Exists(s.Target)
 	if err != nil {
 		return err
 	}
-	_, backupPresent, err := exists(s.Backup)
+	_, backupPresent, err := managed.Exists(s.Backup)
 	if err != nil {
 		return err
 	}
@@ -277,19 +280,19 @@ func preflightRestore(s State, restore bool) error {
 	return nil
 }
 
-func (m *lifecycle) finishRestore(r Resource, s State) error {
+func (m *lifecycle) finishRestore(r managed.Resource, s managed.State) error {
 	if err := preflightRestore(s, true); err != nil {
 		return err
 	}
-	_, backupPresent, err := exists(s.Backup)
+	_, backupPresent, err := managed.Exists(s.Backup)
 	if err != nil {
 		return err
 	}
 	if backupPresent {
 		if m.dry {
-			m.say(reportPreview, "Would restore: %s -> %s", s.Backup, s.Target)
+			m.say(report.Preview, "Would restore: %s -> %s", s.Backup, s.Target)
 		} else {
-			if err = makeRawDir(rawParent(s.Target)); err != nil {
+			if err = managed.MakeRawDir(managed.RawParent(s.Target)); err != nil {
 				return err
 			}
 			if err = moveBackupNoReplace(s.Backup, s.Target); err != nil {
@@ -297,12 +300,12 @@ func (m *lifecycle) finishRestore(r Resource, s State) error {
 			}
 		}
 	} else if m.dry {
-		m.say(reportPreview, "Would clear completed restore record: %s", s.Target)
+		m.say(report.Preview, "Would clear completed restore record: %s", s.Target)
 	}
 	return m.forgetResource(r)
 }
 
-func (m *lifecycle) forgetResource(r Resource) error {
+func (m *lifecycle) forgetResource(r managed.Resource) error {
 	if !m.dry {
 		if m.removeState != nil {
 			return m.removeState(m.statePath(r))
@@ -324,7 +327,7 @@ func preflightPurge(root string) error {
 		return fmt.Errorf("This command requires a versioned Selfishell installation.")
 	}
 	bin := filepath.Dir(filepath.Dir(share)) + "/bin/selfishell"
-	info, present, err := exists(bin)
+	info, present, err := managed.Exists(bin)
 	if err != nil {
 		return err
 	}
@@ -347,7 +350,7 @@ func preflightPurge(root string) error {
 	}
 	return nil
 }
-func purgeFiles(c CLI, paths Paths) error {
+func purgeFiles(c CLI, paths managed.Paths) error {
 	if err := preflightPurge(c.Root); err != nil {
 		return err
 	}
@@ -366,7 +369,7 @@ func purgeFiles(c CLI, paths Paths) error {
 	share := filepath.Dir(filepath.Dir(c.Root))
 	bin := filepath.Dir(filepath.Dir(share)) + "/bin"
 	ownedSfs := false
-	if _, present, e := exists(bin + "/sfs"); e != nil {
+	if _, present, e := managed.Exists(bin + "/sfs"); e != nil {
 		return e
 	} else if present {
 		ownedSfs = isOwnedSfs(bin + "/sfs")
@@ -430,16 +433,16 @@ func purgeFiles(c CLI, paths Paths) error {
 
 func resolvedLinkTarget(link, target string) (string, error) {
 	if !filepath.IsAbs(target) {
-		target = rawParent(link) + "/" + target
+		target = managed.RawParent(link) + "/" + target
 	}
-	parent, err := filepath.EvalSymlinks(rawParent(target))
+	parent, err := filepath.EvalSymlinks(managed.RawParent(target))
 	if err != nil {
 		return "", err
 	}
 	return parent + "/" + filepath.Base(target), nil
 }
 func isOwnedSfs(path string) bool {
-	info, present, e := exists(path)
+	info, present, e := managed.Exists(path)
 	if e != nil || !present || info.Mode()&os.ModeSymlink == 0 {
 		return false
 	}
@@ -454,10 +457,10 @@ func isOwnedSfs(path string) bool {
 	expected, e := resolvedLinkTarget(path, "selfishell")
 	return e == nil && actual == expected
 }
-func purgeDry(c CLI, paths Paths) {
+func purgeDry(c CLI, paths managed.Paths) {
 	share := filepath.Dir(filepath.Dir(c.Root))
 	bin := filepath.Dir(filepath.Dir(share)) + "/bin"
-	if _, present, _ := exists(bin + "/sfs"); present {
+	if _, present, _ := managed.Exists(bin + "/sfs"); present {
 		if isOwnedSfs(bin + "/sfs") {
 			fmt.Fprintf(c.Out, "Would remove Selfishell CLI link: %s\n", bin+"/sfs")
 		} else {
@@ -474,12 +477,12 @@ func purgeDry(c CLI, paths Paths) {
 	}
 }
 
-func backupInventory(paths Paths) (bool, error) {
+func backupInventory(paths managed.Paths) (bool, error) {
 	if _, err := purgeStateDirectory(paths); err != nil {
 		return false, err
 	}
 	path := paths.State + "/backups"
-	info, present, err := exists(path)
+	info, present, err := managed.Exists(path)
 	if err != nil {
 		return false, err
 	}
@@ -501,8 +504,8 @@ func backupInventory(paths Paths) (bool, error) {
 	return len(entries) > 0, nil
 }
 
-func purgeStateDirectory(paths Paths) (os.FileInfo, error) {
-	info, present, err := exists(paths.State)
+func purgeStateDirectory(paths managed.Paths) (os.FileInfo, error) {
+	info, present, err := managed.Exists(paths.State)
 	if err != nil || !present {
 		return nil, err
 	}

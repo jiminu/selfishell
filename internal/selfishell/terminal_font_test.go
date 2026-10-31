@@ -10,12 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestTerminalFontHintAppearsOnce(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	macos := "Set your terminal font to " + terminalFont + " to show Neovim's icons."
 	desktop := "Install " + terminalFont + " and set it as your terminal font to show Neovim's icons."
 	for _, tc := range []struct {
@@ -45,7 +47,7 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 				casks = terminalFontCask
 			}
 			f.executable("brew", fmt.Sprintf(`case "$1 $2" in 'list --cask') printf '%%s\n' %q;; esac`, casks))
-			paths := Paths{State: t.TempDir()}
+			paths := managed.Paths{State: t.TempDir()}
 			if tc.windowsTerminal {
 				choice := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Imported-Dev", AppData: "C:/fixture", AppDataPath: f.home + "/windows", SettingsPath: f.home + "/windows/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
 				data, err := json.Marshal(choice)

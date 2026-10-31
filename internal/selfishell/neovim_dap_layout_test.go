@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -24,7 +25,7 @@ func TestNeovimDAPLayout(t *testing.T) {
 		t.Skip("requires the pinned physical Neovim executable")
 	}
 	p := standaloneNeovimProcess(t, nvim)
-	home := Environment(p.Env).Get("HOME")
+	home := process.Environment(p.Env).Get("HOME")
 	manifest, err := os.ReadFile(root + "/dependencies.conf")
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +52,7 @@ func TestNeovimDAPLayout(t *testing.T) {
 			}
 		}
 	}
-	p = withEnvironment(p, map[string]string{"SELFISHELL_TEST_NVIM_PLUGIN_ROOT": plugins}, "WSL_DISTRO_NAME")
+	p = process.WithEnvironment(p, map[string]string{"SELFISHELL_TEST_NVIM_PLUGIN_ROOT": plugins}, "WSL_DISTRO_NAME")
 	var output bytes.Buffer
 	p.Out, p.Err, p.Dir = &output, &output, home
 	code, err := p.Run(ctx, nvim, "--headless", "-u", "NONE", "-i", "NONE", "--cmd",

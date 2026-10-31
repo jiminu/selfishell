@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
-func neovimFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string, string, string) {
+func neovimFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string, string, string) {
 	t.Helper()
 	op, paths, manifest, home := dependencyFixture(t, env)
 	root := home + "/release"
@@ -40,7 +43,7 @@ case "$*" in *nvim-treesitter*) exit "${PARSER_EXIT:-0}" ;; esac
 
 func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, home, head := neovimFixture(t, &env)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
@@ -93,7 +96,7 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 
 func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"modified", "untracked", "ignored", "non-git", "broken-git", "bootstrap-name"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()
@@ -140,11 +143,11 @@ func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 
 func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, home, head := neovimFixture(t, &env)
 	lines := fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s/lazy-source - - -\n", head, home)
 	var plugins []string
-	for i := range 2*probeLimit + 2 {
+	for i := range 2*process.ProbeLimit + 2 {
 		name := fmt.Sprintf("plugin%02d", i)
 		lines += fmt.Sprintf("nvim-plugin demo/%s %s all all %s/sources/%s - - -\n", name, head, home, name)
 		plugins = append(plugins, home+"/data/nvim/lazy/"+name)
@@ -211,7 +214,7 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 
 func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, true); err != nil {
 		t.Fatal(err)
@@ -232,7 +235,7 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Keep an installed host Neovim from satisfying the missing-binary case.
-	op.Process = withEnvironment(op.Process, map[string]string{"PATH": home + "/bin"})
+	op.Process = process.WithEnvironment(op.Process, map[string]string{"PATH": home + "/bin"})
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err == nil || !strings.Contains(err.Error(), "Could not locate Neovim") {
 		t.Fatalf("missing nvim: %v", err)
 	}
@@ -243,7 +246,7 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 
 func TestNeovimParserFailureWarns(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, _, _ := neovimFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "PARSER_EXIT=1")
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
@@ -256,7 +259,7 @@ func TestNeovimParserFailureWarns(t *testing.T) {
 
 func TestLazyRevisionUpdateReplacesCleanCheckout(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, _, manifest, home, _ := neovimFixture(t, &env)
 	deps, err := ReadDependencies(manifest)
 	if err != nil {
@@ -301,7 +304,7 @@ func TestLazyRestoreFailureIncludesPrimaryActivationError(t *testing.T) {
 
 func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct{ shape, want string }{
 		{"file", "preserving"},
 		{"git_symlink", "preserving"},
@@ -335,7 +338,7 @@ func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
 
 func TestNeovimUsesManagedMiseResolutionAndExec(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := os.MkdirAll(home+"/.local/bin", 0700); err != nil {
 		t.Fatal(err)
@@ -370,7 +373,7 @@ case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "
 
 func TestNeovimMiseResolutionReusesOnlyAnExecutableSuccess(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, _, home, _ := neovimFixture(t, &env)
 	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
 printf '%s\n' "$*" >> "$MISE_LOG"
@@ -403,7 +406,7 @@ printf '%s\n' "$*" >> "$MISE_LOG"
 
 func TestNeovimVerificationFailureSurfacesSyncLog(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	writeTestFile(t, home+"/bin/nvim", "#!/bin/sh\nprintf 'sync diagnostic\\n'\n", 0755)
 	err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)

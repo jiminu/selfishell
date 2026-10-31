@@ -13,9 +13,13 @@ import (
 // private one and run in parallel instead of changing the process environment.
 func TestIntegrationProductReadsInjectedEnvironment(t *testing.T) {
 	t.Parallel()
-	files, err := filepath.Glob("../../internal/selfishell/*.go")
-	if err != nil || len(files) == 0 {
-		t.Fatalf("product sources: %v %v", files, err)
+	var files []string
+	for _, dir := range []string{"selfishell", "process", "managed", "report"} {
+		matches, err := filepath.Glob("../../internal/" + dir + "/*.go")
+		if err != nil || len(matches) == 0 {
+			t.Fatalf("%s sources: %v %v", dir, matches, err)
+		}
+		files = append(files, matches...)
 	}
 	banned := map[string]bool{"os.Getenv": true, "os.LookupEnv": true, "os.Environ": true, "os.Setenv": true, "os.Unsetenv": true, "os.Clearenv": true, "os.ExpandEnv": true, "exec.LookPath": true}
 	fset := token.NewFileSet()
@@ -28,7 +32,7 @@ func TestIntegrationProductReadsInjectedEnvironment(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, decl := range file.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "ProcessEnvironment" && filepath.Base(name) == "environment.go" {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.Name == "HostEnvironment" && filepath.ToSlash(name) == "../../internal/process/environment.go" {
 				continue // the single default-environment constructor
 			}
 			ast.Inspect(decl, func(n ast.Node) bool {

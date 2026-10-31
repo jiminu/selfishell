@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
@@ -14,7 +15,7 @@ func main() {
 	if len(os.Args) >= 3 && os.Args[2] == "update-dependencies" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		p := selfishell.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: os.Environ()}
+		p := process.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: os.Environ()}
 		os.Exit(runDependencyUpdate(ctx, os.Args[1], os.Args[3:], p))
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "curl" {
@@ -29,7 +30,7 @@ func main() {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		p := selfishell.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: os.Environ()}
+		p := process.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: os.Environ()}
 		status, err := p.Curl(ctx, mode, os.Args[3:]...)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "selfishell-dev:", err)
@@ -42,7 +43,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	p := selfishell.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: selfishell.DeveloperToolEnv(os.Args[1], os.Environ())}
+	p := process.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: selfishell.DeveloperToolEnv(os.Args[1], os.Environ())}
 	if err := selfishell.ProvisionDeveloper(ctx, os.Args[1], os.Args[2], p); err != nil {
 		fmt.Fprintln(os.Stderr, "selfishell-dev:", err)
 		os.Exit(1)

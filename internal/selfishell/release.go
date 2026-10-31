@@ -12,11 +12,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 type releaseOperation struct {
 	Root    string
-	Process Process
+	Process process.Process
 	link    func(target, path string) error
 }
 
@@ -94,7 +97,7 @@ func compareNumeric(a, b string) int {
 
 const officialReleaseRoot = "https://github.com/jiminu/selfishell/releases"
 
-func releaseRootURL(env Environment) string {
+func releaseRootURL(env process.Environment) string {
 	if s := env.Get("SELFISHELL_RELEASE_ROOT"); s != "" {
 		return strings.TrimRight(s, "/")
 	}
@@ -118,7 +121,7 @@ func (o releaseOperation) fetch(ctx context.Context, mode, url, destination stri
 }
 
 func (o releaseOperation) latest(ctx context.Context) (string, error) {
-	root := releaseRootURL(o.Process.environment())
+	root := releaseRootURL(o.Process.Environment())
 	dir, err := os.MkdirTemp("", "selfishell-release-metadata.")
 	if err != nil {
 		return "", err
@@ -136,7 +139,7 @@ func (o releaseOperation) latest(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	api := o.Process.environment().Get("SELFISHELL_RELEASE_TAGS_API_URL")
+	api := o.Process.Environment().Get("SELFISHELL_RELEASE_TAGS_API_URL")
 	if root != officialReleaseRoot && api == "" {
 		return "", fmt.Errorf("unable to determine latest Selfishell release")
 	}
@@ -276,7 +279,7 @@ func atomicReleaseLink(target, path string) error {
 	if err := releaseLinkReplaceable(path); err != nil {
 		return err
 	}
-	f, err := createRawTemp(path)
+	f, err := managed.CreateRawTemp(path)
 	if err != nil {
 		return err
 	}
@@ -419,7 +422,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		return "", err
 	}
 	defer os.RemoveAll(download)
-	root := releaseRootURL(o.Process.environment()) + "/download/v" + version
+	root := releaseRootURL(o.Process.Environment()) + "/download/v" + version
 	archive := download + "/" + name
 	checksums := download + "/SHA256SUMS"
 	if err := o.fetch(ctx, "transfer", root+"/"+name, archive); err != nil {

@@ -7,11 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // trustMise keeps the caller's environment, unlike InstallMise's release-scoped process.
-func (c CLI) trustMise(paths Paths) {
-	binary, e := (Process{inherit: c.Env}).lookPath("mise")
+func (c CLI) trustMise(paths managed.Paths) {
+	binary, e := (process.Process{Inherit: c.Env}).LookPath("mise")
 	if e != nil {
 		binary = c.Env.Get("HOME") + "/.local/bin/mise"
 		info, e := os.Stat(binary)
@@ -19,7 +23,7 @@ func (c CLI) trustMise(paths Paths) {
 			return
 		}
 	}
-	trustManagedMiseConfig(c.invocationContext(), Process{Dir: c.Root + "/config/shared", inherit: c.Env}, binary, paths)
+	trustManagedMiseConfig(c.invocationContext(), process.Process{Dir: c.Root + "/config/shared", Inherit: c.Env}, binary, paths)
 }
 func (c CLI) defaultShell(dry, yes bool) {
 	c.progress.Pause()
@@ -45,13 +49,13 @@ func (c CLI) defaultShell(dry, yes bool) {
 		}
 	}
 	if selected == "" {
-		if _, e := (Process{inherit: c.Env}).lookPath("zsh"); e == nil {
-			c.report("Notes", reportWarning, "Zsh is not listed in /etc/shells; the login shell was not changed.")
+		if _, e := (process.Process{Inherit: c.Env}).LookPath("zsh"); e == nil {
+			c.report("Notes", report.Warning, "Zsh is not listed in /etc/shells; the login shell was not changed.")
 		}
 		return
 	}
 	if dry {
-		c.report("Configuration", reportPreview, "Would set login shell to: %s", selected)
+		c.report("Configuration", report.Preview, "Would set login shell to: %s", selected)
 		return
 	}
 	if !yes {
@@ -60,26 +64,26 @@ func (c CLI) defaultShell(dry, yes bool) {
 		}
 		fmt.Fprint(c.Out, "Set login shell to Zsh? [Y/n] ")
 		answer, _ := c.readAnswer()
-		if negative(answer) {
+		if report.Negative(answer) {
 			return
 		}
 	}
 	terminal := c.Env.Default("SELFISHELL_TEST_TERMINAL", "/dev/tty")
 	tty, e := os.Open(terminal)
 	if e != nil {
-		c.report("Notes", reportInfo, "To use Zsh as your login shell, run: chsh -s %s", selected)
+		c.report("Notes", report.Info, "To use Zsh as your login shell, run: chsh -s %s", selected)
 		return
 	}
 	defer tty.Close()
 	var userOut strings.Builder
-	code, e := (Process{Out: &userOut, inherit: c.Env}).Run(context.Background(), "id", "-un")
+	code, e := (process.Process{Out: &userOut, Inherit: c.Env}).Run(context.Background(), "id", "-un")
 	if e != nil || code != 0 {
 		return
 	}
-	code, e = (Process{In: tty, Out: c.Out, Err: c.Err, inherit: c.Env}).Run(context.Background(), "chsh", "-s", selected, strings.TrimSpace(userOut.String()))
+	code, e = (process.Process{In: tty, Out: c.Out, Err: c.Err, Inherit: c.Env}).Run(context.Background(), "chsh", "-s", selected, strings.TrimSpace(userOut.String()))
 	if e == nil && code == 0 {
-		c.report("Configuration", reportSuccess, "Set login shell to: %s", selected)
+		c.report("Configuration", report.Success, "Set login shell to: %s", selected)
 	} else {
-		c.report("Notes", reportWarning, "Could not set login shell to Zsh.")
+		c.report("Notes", report.Warning, "Could not set login shell to Zsh.")
 	}
 }

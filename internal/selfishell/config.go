@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 const installHelp = `Usage:
@@ -89,7 +93,7 @@ func (c CLI) install(args []string) (result int) {
 		}
 		fmt.Fprint(c.Out, "Install Selfishell configuration? [y/N] ")
 		answer, _ := c.readAnswer()
-		if !affirmative(answer) {
+		if !report.Affirmative(answer) {
 			fmt.Fprintln(c.Out, "Cancelled.")
 			return 1
 		}
@@ -122,7 +126,7 @@ func (c CLI) install(args []string) (result int) {
 	}
 	var operation *PackageOperation
 	if !skip {
-		operation = &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}
+		operation = &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}
 		err = func() error {
 			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -182,7 +186,7 @@ func (c CLI) uninstall(args []string) int {
 		}
 		fmt.Fprint(c.Out, prompt)
 		answer, _ := c.readAnswer()
-		if !affirmative(answer) {
+		if !report.Affirmative(answer) {
 			fmt.Fprintln(c.Out, "Cancelled.")
 			return 1
 		}
@@ -193,13 +197,10 @@ func (c CLI) uninstall(args []string) int {
 	}
 	return 0
 }
-func writeAtomic(path string, data []byte, mode os.FileMode) error {
-	return replaceRaw(path, data, mode)
-}
 
 type preparedConfig struct {
-	paths           Paths
-	resources       []Resource
+	paths           managed.Paths
+	resources       []managed.Resource
 	m               lifecycle
 	miseGlobal      string
 	ghostty         bool
@@ -208,13 +209,13 @@ type preparedConfig struct {
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
 func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, enableWindowsTerminal bool) (preparedConfig, error) {
-	paths, err := userPaths(c.Env.Get)
+	paths, err := managed.UserPaths(c.Env.Get)
 	if err != nil {
 		return preparedConfig{}, err
 	}
 	ghostty := false
 	if platform == "macos" {
-		data, e := readStateFile(paths.State + "/ghostty")
+		data, e := managed.ReadFile(paths.State + "/ghostty")
 		if e != nil && !errors.Is(e, os.ErrNotExist) {
 			return preparedConfig{}, fmt.Errorf("could not read Ghostty choice %s: %w", paths.State+"/ghostty", e)
 		}
@@ -226,12 +227,12 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
 				question := "Install Ghostty terminal and managed configuration (recommended)? [Y/n] "
-				if ghosttyInstalled(Process{inherit: c.Env}) {
+				if ghosttyInstalled(process.Process{Inherit: c.Env}) {
 					question = "Use Selfishell configuration for your existing Ghostty terminal (recommended)? [Y/n] "
 				}
 				fmt.Fprint(c.Out, question)
 				answer, _ := c.readAnswer()
-				ghostty = !negative(answer)
+				ghostty = !report.Negative(answer)
 			}
 		}
 	}
@@ -251,7 +252,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	}
 	miseGlobal := c.Env.Default("XDG_CONFIG_HOME", c.Env.Get("HOME")+"/.config") + "/mise/config.toml"
 	if !update {
-		if info, present, e := exists(miseGlobal); e != nil {
+		if info, present, e := managed.Exists(miseGlobal); e != nil {
 			return preparedConfig{}, e
 		} else if present && !(info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
 			return preparedConfig{}, fmt.Errorf("user mise config path is not a regular file or symlink: %s", miseGlobal)
@@ -327,7 +328,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 
 func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *PackageOperation) error {
 	if skip {
-		c.report("Notes", reportWarning, "Skipping package and tool installation.")
+		c.report("Notes", report.Warning, "Skipping package and tool installation.")
 	}
 	if err := c.applyManagedResources(&p); err != nil {
 		return err
@@ -345,7 +346,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 				return err
 			}
 		}
-		if _, present, _ := exists(miseGlobal); present {
+		if _, present, _ := managed.Exists(miseGlobal); present {
 			fmt.Fprintf(c.Out, "user mise config exists; preserving it: %s\n", miseGlobal)
 		} else {
 			fmt.Fprintf(c.Out, "Would create user mise config: %s\n", miseGlobal)
@@ -357,43 +358,43 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		fmt.Fprintln(c.Out, "Dry run complete; no files were changed.")
 		return nil
 	}
-	if _, present, _ := exists(miseGlobal); !present {
-		if err := writeOnce(miseGlobal, nil); err != nil {
+	if _, present, _ := managed.Exists(miseGlobal); !present {
+		if err := managed.WriteOnce(miseGlobal, nil); err != nil {
 			return err
 		}
-		c.report("Configuration", reportSuccess, "Created user mise config: %s", miseGlobal)
+		c.report("Configuration", report.Success, "Created user mise config: %s", miseGlobal)
 	}
 	if !skip {
 		if err := c.installNeovim(operation, paths, dry); err != nil {
 			return err
 		}
 	}
-	if err := writeAtomic(paths.State+"/configured", []byte("1\n"), 0600); err != nil {
+	if err := managed.WriteAtomic(paths.State+"/configured", []byte("1\n"), 0600); err != nil {
 		return err
 	}
 	value := "0\n"
 	if ghostty {
 		value = "1\n"
 	}
-	if err := writeAtomic(paths.State+"/ghostty", []byte(value), 0600); err != nil {
+	if err := managed.WriteAtomic(paths.State+"/ghostty", []byte(value), 0600); err != nil {
 		return err
 	}
 	c.defaultShell(dry, yes)
 	if m.unchanged > 0 {
-		c.report("Notes", reportInfo, "%d items unchanged.", m.unchanged)
+		c.report("Notes", report.Info, "%d items unchanged.", m.unchanged)
 	}
 	c.complete("Selfishell configuration installed.")
 	return nil
 }
 
-func (c CLI) installNeovim(operation *PackageOperation, paths Paths, dry bool) error {
+func (c CLI) installNeovim(operation *PackageOperation, paths managed.Paths, dry bool) error {
 	c.progress.stage("Synchronizing Neovim plugins")
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return operation.InstallNeovimPlugins(ctx, c.Root, paths, c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
 }
-func writeOnce(path string, data []byte) error { return createRawOnce(path, data) }
-func (c CLI) interactive() bool                { return IsTerminal(c.In) || c.Env.Get("SELFISHELL_TEST_TTY") != "" }
+
+func (c CLI) interactive() bool { return IsTerminal(c.In) || c.Env.Get("SELFISHELL_TEST_TTY") != "" }
 func (c CLI) readAnswer() (string, error) {
 	resume := c.progress.prompt()
 	defer resume()
@@ -415,5 +416,3 @@ func (c CLI) readAnswer() (string, error) {
 		}
 	}
 }
-func affirmative(s string) bool { return s == "y" || s == "Y" || s == "yes" || s == "YES" }
-func negative(s string) bool    { return s == "n" || s == "N" || s == "no" || s == "NO" }

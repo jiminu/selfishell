@@ -10,12 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPinnedNeovimConsumer(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	if os.Getenv("SELFISHELL_PINNED_NEOVIM_E2E") != "1" {
 		t.Skip("requires SELFISHELL_PINNED_NEOVIM_E2E=1")
 	}
@@ -32,14 +34,14 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	var output bytes.Buffer
-	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, env)}
+	p := process.Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, env)}
 	if err := ProvisionDeveloper(ctx, root, "neovim-e2e", p); err != nil {
 		t.Fatalf("pin provision: %v\n%s", err, output.String())
 	}
 	if code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
-	paths, err := userPaths(env.Get)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}

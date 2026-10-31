@@ -6,15 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func identicalUserFile(t *testing.T, env *Environment) (string, string, Resource, Paths, []byte) {
+func identicalUserFile(t *testing.T, env *process.Environment) (string, string, managed.Resource, managed.Paths, []byte) {
 	t.Helper()
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(env, home)
-	paths, e := userPaths(env.Get)
+	paths, e := managed.UserPaths(env.Get)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -22,7 +24,7 @@ func identicalUserFile(t *testing.T, env *Environment) (string, string, Resource
 	if e != nil {
 		t.Fatal(e)
 	}
-	var r Resource
+	var r managed.Resource
 	for _, item := range resources {
 		if item.Name == "zsh-history" {
 			r = item
@@ -40,7 +42,7 @@ func identicalUserFile(t *testing.T, env *Environment) (string, string, Resource
 	}
 	return root, home, r, paths, data
 }
-func assertOriginalRestored(t *testing.T, env Environment, root, home string, r Resource, want []byte) {
+func assertOriginalRestored(t *testing.T, env process.Environment, root, home string, r managed.Resource, want []byte) {
 	t.Helper()
 	code, _, stderr := testCLI(&env, root, home, "uninstall", "--restore", "--yes")
 	if code != 0 {
@@ -55,9 +57,9 @@ func assertOriginalRestored(t *testing.T, env Environment, root, home string, r 
 		t.Fatalf("original mode %v %v", info, e)
 	}
 }
-func assertOriginalBackup(t *testing.T, paths Paths, r Resource, want []byte) State {
+func assertOriginalBackup(t *testing.T, paths managed.Paths, r managed.Resource, want []byte) managed.State {
 	t.Helper()
-	state, e := ReadState(paths.Resources + "/" + r.Name + ".state")
+	state, e := managed.ReadState(paths.Resources + "/" + r.Name + ".state")
 	if e != nil || state.Status != "active" || state.Backup == "-" {
 		t.Fatalf("state %+v %v", state, e)
 	}
@@ -77,7 +79,7 @@ func assertOriginalBackup(t *testing.T, paths Paths, r Resource, want []byte) St
 }
 func TestIdenticalExistingFileKeepsOriginalThroughReinstallAndRestore(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, r, paths, original := identicalUserFile(t, &env)
 	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 0 {
@@ -96,14 +98,14 @@ func TestIdenticalExistingFileKeepsOriginalThroughReinstallAndRestore(t *testing
 }
 func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, r, paths, original := identicalUserFile(t, &env)
 	backup := r.Target + ".backup.fixed"
-	checksum, e := checksumBytes(original)
+	checksum, e := managed.ChecksumBytes(original)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{Kind: "file", Status: "pending", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
+	if e = managed.WriteState(paths.Resources+"/"+r.Name+".state", managed.State{Kind: "file", Status: "pending", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
 		t.Fatal(e)
 	}
 	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
@@ -118,14 +120,14 @@ func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
 }
 func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, r, paths, original := identicalUserFile(t, &env)
 	backup := r.Target + ".backup.missing"
-	checksum, e := checksumBytes(original)
+	checksum, e := managed.ChecksumBytes(original)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
+	if e = managed.WriteState(paths.Resources+"/"+r.Name+".state", managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
 		t.Fatal(e)
 	}
 	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")

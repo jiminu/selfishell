@@ -6,6 +6,10 @@ import (
 	"os"
 	"slices"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // Ghostty draws Nerd Font icons itself; other macOS terminals need this font
@@ -15,8 +19,8 @@ const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrai
 
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
-func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
-	selected, err := selectPackages(c.Root, paths, packages, platform, o.windowsTerminal, o.Process.environment())
+func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths managed.Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
+	selected, err := selectPackages(c.Root, paths, packages, platform, o.windowsTerminal, o.Process.Environment())
 	if err != nil {
 		return err
 	}
@@ -79,7 +83,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 				}
 			}
 			if !casks["ghostty"] {
-				o.report(reportInfo, "Ghostty is already installed; preserving the app.")
+				o.report(report.Info, "Ghostty is already installed; preserving the app.")
 				return nil
 			}
 		}
@@ -87,7 +91,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 	}
 	switch {
 	case platform == "macos" && slices.Contains(o.installedCasks, terminalFontCask):
-		c.report("Notes", reportInfo, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Set your terminal font to %s to show Neovim's icons.", terminalFont)
 	case hasConfiguredMarker(paths): // Linux hints only before the first setup completes.
 	case platform == "ubuntu-wsl":
 		choice, err := readWindowsTerminalChoice(paths)
@@ -95,18 +99,18 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			return err
 		}
 		if choice != nil && choice.Enabled {
-			c.report("Notes", reportInfo, "Restart Windows Terminal and reopen your configured WSL profile.")
+			c.report("Notes", report.Info, "Restart Windows Terminal and reopen your configured WSL profile.")
 			return nil
 		}
-		c.report("Notes", reportInfo, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
 	case platform == "ubuntu" && localDesktop(c.Env):
-		c.report("Notes", reportInfo, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
+		c.report("Notes", report.Info, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
 	}
 	return nil
 }
 
 // Over SSH the client's terminal draws the icons, so its font is what matters.
-func localDesktop(env Environment) bool {
+func localDesktop(env process.Environment) bool {
 	return env.Get("SSH_CONNECTION") == "" && (env.Get("DISPLAY") != "" || env.Get("WAYLAND_DISPLAY") != "")
 }
 

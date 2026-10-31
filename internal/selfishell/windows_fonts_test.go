@@ -14,6 +14,7 @@ import (
 	"testing"
 	"unicode/utf16"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -91,7 +92,7 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 
 func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	executable, err := os.Executable()
@@ -118,7 +119,7 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 		if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 			t.Fatal(err)
 		}
-		op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+		op := &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 		return op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 	}
 	if err := install("1"); err != nil {

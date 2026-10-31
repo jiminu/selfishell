@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -27,7 +29,7 @@ const terminalSettingsFixture = `{
 
 func TestWindowsProfileDiscoveryUsesDistroIdentity(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, scenario := range []string{"other-distro-renamed", "modern", "missing", "ambiguous", "current", "hidden", "malformed", "duplicate-face"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -120,7 +122,7 @@ func TestWindowsTerminalOverrides(t *testing.T) {
 
 func TestWindowsTerminalReportsUserOverrides(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, _, settings := existingWindowsProfileFixture(t, &env)
 	out := blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	blockEqual(t, settings, []byte(terminalSettingsFixture))
@@ -134,11 +136,11 @@ func TestWindowsTerminalReportsUserOverrides(t *testing.T) {
 
 func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths, windowsHome := windowsTerminalFixture(t, &env)
 	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
 	foreign := []byte(`{"profiles": []}`)
-	for _, dir := range []string{rawParent(fragment), paths.State} {
+	for _, dir := range []string{managed.RawParent(fragment), paths.State} {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -171,12 +173,12 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	}
 }
 
-func existingWindowsProfileFixture(t *testing.T, env *Environment) (string, string, Paths, string) {
+func existingWindowsProfileFixture(t *testing.T, env *process.Environment) (string, string, managed.Paths, string) {
 	t.Helper()
 	root, home, paths, windowsHome := windowsTerminalFixture(t, env)
 	setEnv(env, "WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
-	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
+	if err := os.MkdirAll(managed.RawParent(settings), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := testutil.WriteFile(settings, []byte(terminalSettingsFixture), 0600); err != nil {
@@ -212,7 +214,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 	}
 	t.Cleanup(func() { os.RemoveAll(scratch) })
 	home := t.TempDir()
-	paths := Paths{State: home + "/state", Resources: home + "/state/resources"}
+	paths := managed.Paths{State: home + "/state", Resources: home + "/state/resources"}
 	settings := scratch + "/settings.json"
 	if err := testutil.WriteFile(settings, []byte(terminalSettingsFixture), 0600); err != nil {
 		t.Fatal(err)
@@ -234,7 +236,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := os.Stat(rawParent(path)); !os.IsNotExist(err) {
+	if _, err := os.Stat(managed.RawParent(path)); !os.IsNotExist(err) {
 		t.Fatal("native fragment directory left behind", err)
 	}
 	blockEqual(t, settings, []byte(terminalSettingsFixture))

@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func dependencyFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string) {
+func dependencyFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string) {
 	t.Helper()
 	home := t.TempDir()
 	setEnv(env, "HOME", home)
@@ -23,17 +25,17 @@ func dependencyFixture(t *testing.T, env *Environment) (*PackageOperation, Paths
 	setEnv(env, "MISE_CACHE_DIR", home+"/mise/cache")
 	setEnv(env, "MISE_CONFIG_DIR", home+"/.config/mise")
 	setEnv(env, "MISE_TRUSTED_CONFIG_PATHS", "")
-	paths, err := userPaths(env.Get)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
 	manifest := home + "/dependencies.conf"
-	return &PackageOperation{Process: Process{inherit: *env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}, paths, manifest, home
+	return &PackageOperation{Process: process.Process{Inherit: *env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}, paths, manifest, home
 }
 
 func TestManagedRawDownloadRestoresChangedBytesAndSkipsUnchangedTransfer(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
 	source := home + "/source"
 	directDownload(t, manifest, source, "1.0", ".local/bin/tool", false)
@@ -63,7 +65,7 @@ func TestManagedRawDownloadRestoresChangedBytesAndSkipsUnchangedTransfer(t *test
 
 func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
 	setEnv(&env, "TMPDIR", t.TempDir())
 	bin := home + "/fake-bin"
@@ -75,7 +77,7 @@ func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	}
 	setEnv(&env, "PATH", bin)
 	setEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
-	op.Process.inherit = env
+	op.Process.Inherit = env
 	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
 	if err := installTool(op, paths, manifest); err != nil {
 		t.Fatal(err)

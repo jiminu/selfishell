@@ -12,10 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func inventoryFixture(t *testing.T, env *Environment) (string, Paths, *bytes.Buffer, string) {
+func inventoryFixture(t *testing.T, env *process.Environment) (string, managed.Paths, *bytes.Buffer, string) {
 	t.Helper()
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
@@ -34,7 +36,7 @@ func inventoryFixture(t *testing.T, env *Environment) (string, Paths, *bytes.Buf
 	if err := testutil.WriteFile(filepath.Join(root, "dependencies.conf"), []byte(""), 0600); err != nil {
 		t.Fatal(err)
 	}
-	paths, err := userPaths(env.Get)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,7 @@ func fixtureFile(t *testing.T, path, content string, mode os.FileMode) {
 		t.Fatal(err)
 	}
 }
-func inventory(t *testing.T, env Environment, root string, paths Paths, warnings *bytes.Buffer) *ToolInventory {
+func inventory(t *testing.T, env process.Environment, root string, paths managed.Paths, warnings *bytes.Buffer) *ToolInventory {
 	t.Helper()
 	inv, err := NewToolInventory(root, paths, warnings, env)
 	if err != nil {
@@ -65,7 +67,7 @@ func wantTool(t *testing.T, got ToolResult, installed, source, approved string) 
 }
 func TestInventoryAptStatusesAndCache(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(bin, "dpkg-query"), "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/dpkg-calls\"\nprintf 'git:amd64\\tii \\t2.43.0\\nvim\\trc \\t9.1\\nmake\\thi \\t4.3\\nless\\tiiR\\t590\\n'\n", 0700)
 	inv := inventory(t, env, root, paths, warnings)
@@ -96,7 +98,7 @@ func TestInventoryAptStatusesAndCache(t *testing.T) {
 
 func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
 		t.Run(manager, func(t *testing.T) {
 			t.Parallel()
@@ -134,7 +136,7 @@ func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
 
 func TestInventorySuccessfulEmptyQueryAllowsMissingAndExternal(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
 		t.Run(manager, func(t *testing.T) {
 			t.Parallel()
@@ -159,7 +161,7 @@ func TestInventorySuccessfulEmptyQueryAllowsMissingAndExternal(t *testing.T) {
 
 func TestInventoryMiseFailureWithoutStderrRetainsExitStatus(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	setEnv(&env, "PATH", bin)
 	fixtureFile(t, bin+"/mise", "#!/bin/sh\nexit 7\n", 0700)
@@ -171,7 +173,7 @@ func TestInventoryMiseFailureWithoutStderrRetainsExitStatus(t *testing.T) {
 
 func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name, response string
 		unknown        bool
@@ -200,7 +202,7 @@ func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
 
 func TestInventoryBrewAliasExecutionFailureIsUnknown(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	setEnv(&env, "PATH", bin)
 	// A successful bulk query followed by a missing executable must not be
@@ -214,7 +216,7 @@ func TestInventoryBrewAliasExecutionFailureIsUnknown(t *testing.T) {
 }
 func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	legacy := "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"
 	for _, tc := range []struct{ name, json, calls string }{
 		{"json", `{"formulae":[{"name":"starship","versions":["1.26.0"]}],"casks":[{"token":"ghostty","versions":["1.3.1"]}]}`, "list --versions --json\n"},
@@ -253,7 +255,7 @@ func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 }
 func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	// sha256 of the fixture binary below, as install records it for raw downloads.
 	sum := sha256.Sum256([]byte("#!/bin/sh\nexit 0\n"))
@@ -304,7 +306,7 @@ func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 }
 func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	setEnv(&env, "PATH", bin)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\npython = \"3.13.14\"\ngh = \"2.100.0\"\n[settings]\nnode = \"ignored\"\n", 0600)
@@ -354,7 +356,7 @@ func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 
 func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') printf '{\"formulae\":[],\"casks\":[]}' ;;\n 'list --versions aliased') printf 'canonical 1.2.3\\n' ;;\nesac\n", 0700)
 	inv := inventory(t, env, root, paths, warnings)
@@ -378,7 +380,7 @@ func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
 }
 func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source checksum .local/bin/mise raw\n", 0600)
 	target := filepath.Join(env.Get("HOME"), ".local/bin/mise")
@@ -416,7 +418,7 @@ func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 }
 func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	target := filepath.Join(env.Get("HOME"), "data", "testgit")
 	fixtureFile(t, filepath.Join(target, "marker"), ":\n", 0600)
@@ -439,7 +441,7 @@ func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 }
 func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nuv = \"0.12.13\"\n", 0600)
 	fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/mise-calls\"\ncat \"$HOME/mise-output\"\n", 0700)
@@ -474,7 +476,7 @@ func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
 
 func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, location := range []string{"installs", "symlink", "shims", "shim-alias", "shim-directory-alias", "shim-parent-alias", "configured-parent-alias", "external-sibling"} {
 		t.Run(location, func(t *testing.T) {
 			t.Parallel()
@@ -561,7 +563,7 @@ func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 }
 func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, location := range []string{"home", "home_alias", "lexical_home_alias"} {
 		t.Run(location, func(t *testing.T) {
 			t.Parallel()
@@ -603,7 +605,7 @@ func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 }
 func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	target := filepath.Join(env.Get("HOME"), "data", "testgit")
 	if err := os.MkdirAll(target, 0700); err != nil {
@@ -722,7 +724,7 @@ func pathSnapshot(t *testing.T, root string) string {
 }
 func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"managed_real_checkout", "external_real_marker", "external_lexical_marker"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -44,20 +46,20 @@ func directDownload(t *testing.T, manifest, source, version, target string, bad 
 	}
 	writeTestFile(t, manifest, fmt.Sprintf("download tool %s linux amd64 file://%s %x %s raw\n", version, source, sum, target), 0600)
 }
-func installTool(op *PackageOperation, paths Paths, manifest string) error {
+func installTool(op *PackageOperation, paths managed.Paths, manifest string) error {
 	return op.InstallDirect(context.Background(), paths, manifest, "required", "tool", "linux", "amd64", false)
 }
 func output(op *PackageOperation) string { return op.Process.Out.(*bytes.Buffer).String() }
 func assertNoPath(t *testing.T, path string) {
 	t.Helper()
-	if ok, err := present(path); err != nil || ok {
+	if ok, err := managed.Present(path); err != nil || ok {
 		t.Fatalf("unexpected path %s: %v", path, err)
 	}
 }
 
 func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"none", "file", "directory"} {
 		for _, phase := range []string{"stage", "activate", "state"} {
 			t.Run(shape+"/"+phase, func(t *testing.T) {
@@ -97,7 +99,7 @@ func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 
 func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct{ name, target, version, old, shape string }{
 		{"data_directory_dependency_targets_follow_xdg_data_home", ".local/share/tool/tool", "1.0", "", ""},
 		{"managed_download_valid_target_is_already_approved", ".local/bin/tool", "1.0", "1.0", "valid"},
@@ -174,7 +176,7 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 
 func TestDirectDownloadExternalTargets(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"valid_symlink", "dangling_symlink", "directory"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()
@@ -222,7 +224,7 @@ func TestDirectDownloadExternalTargets(t *testing.T) {
 
 func TestDirectOptionalFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
 	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", true)
 	if err := op.InstallDirect(context.Background(), paths, manifest, "optional", "tool", "linux", "amd64", false); err != nil {
@@ -236,7 +238,7 @@ func TestDirectOptionalFailure(t *testing.T) {
 
 func TestDirectDryRunReadOnly(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "tool", "linux", "amd64", true); err != nil {
 		t.Fatal(err)
@@ -250,7 +252,7 @@ func TestDirectDryRunReadOnly(t *testing.T) {
 
 func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, _, manifest, home := dependencyFixture(t, &env)
 	// alias/.. resolves to actual/data; a lexical clean would select work/data.
 	writeTestFile(t, home+"/actual/child/.keep", "keep", 0600)
@@ -259,8 +261,8 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 		t.Fatal(err)
 	}
 	setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
-	op.Process.inherit = env
-	paths, err := userPaths(env.Get)
+	op.Process.Inherit = env
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +278,7 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 
 func TestDirectArchiveMemberAndUnsafeEntries(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"valid", "traversal", "symlink", "missing"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -345,7 +347,7 @@ func gitCommand(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
-func directGitFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string, string, string) {
+func directGitFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string, string, string) {
 	t.Helper()
 	op, paths, manifest, home := dependencyFixture(t, env)
 	repo := home + "/repo"
@@ -359,14 +361,14 @@ func directGitFixture(t *testing.T, env *Environment) (*PackageOperation, Paths,
 	writeTestFile(t, manifest, fmt.Sprintf("git testgit v1.0 linux amd64 %s %s .local/share/testgit marker\n", repo, head), 0600)
 	return op, paths, manifest, home, repo, head
 }
-func installGit(op *PackageOperation, paths Paths, manifest string) error {
+func installGit(op *PackageOperation, paths managed.Paths, manifest string) error {
 	return op.InstallDirect(context.Background(), paths, manifest, "required", "testgit", "linux", "amd64", false)
 }
 
 // Zsh plugins pin a full commit as the version; tools such as tags pin a ref.
 func TestDirectGitPinAndRepair(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, pin := range []string{"tag", "commit"} {
 		t.Run(pin, func(t *testing.T) {
 			t.Parallel()
@@ -377,7 +379,7 @@ func TestDirectGitPinAndRepair(t *testing.T) {
 				version = head
 				writeTestFile(t, manifest, fmt.Sprintf("git testgit %s linux amd64 %s %s .local/share/testgit marker\n", head, repo, head), 0600)
 			}
-			dep := Dependency{Kind: "git", Name: "testgit", Version: version, Checksum: head, Marker: "marker"}
+			dep := managed.Dependency{Kind: "git", Name: "testgit", Version: version, Checksum: head, Marker: "marker"}
 			target := home + "/data/testgit"
 			if err := installGit(op, paths, manifest); err != nil {
 				t.Fatal(err)
@@ -426,7 +428,7 @@ func TestDirectGitPinAndRepair(t *testing.T) {
 
 func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"managed_real_checkout", "external_lexical_marker"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()
@@ -439,8 +441,8 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 				t.Fatal(err)
 			}
 			setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
-			op.Process.inherit = env
-			paths, err := userPaths(env.Get)
+			op.Process.Inherit = env
+			paths, err := managed.UserPaths(env.Get)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -483,7 +485,7 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 
 func TestDirectGitBrokenTargetsAndCheckoutFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"missing_marker", "missing_git", "symlink", "checkout_failure", "stale_previous"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()

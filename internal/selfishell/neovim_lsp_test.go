@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestDefaultLSPSelection(t *testing.T) {
@@ -41,12 +43,12 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
 			p := standaloneNeovimProcess(t, nvim)
-			p = withEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_MODE": tc.mode})
+			p = process.WithEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_MODE": tc.mode})
 			fixture := t.TempDir() + "/mason.lua"
 			if err := os.WriteFile(fixture, []byte(defaultLSPFixtureLua), 0600); err != nil {
 				t.Fatal(err)
 			}
-			p = withEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_FIXTURE": fixture})
+			p = process.WithEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_FIXTURE": fixture})
 			var output bytes.Buffer
 			p.Out, p.Err = &output, &output
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

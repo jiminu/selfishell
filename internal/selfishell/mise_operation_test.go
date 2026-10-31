@@ -5,9 +5,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
-func miseFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string) {
+func miseFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string) {
 	t.Helper()
 	op, paths, _, home := dependencyFixture(t, env)
 	root := home + "/release"
@@ -27,7 +30,7 @@ esac
 
 func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node@24.18.0", "python@3.13.14"); err != nil {
 		t.Fatal(err)
@@ -52,7 +55,7 @@ func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
 
 func TestMiseInstallSkipOptionalAndDryRun(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	if err := op.InstallMise(context.Background(), root, paths, "required", true, "node"); err != nil {
 		t.Fatal(err)
@@ -83,7 +86,7 @@ func TestMiseInstallSkipOptionalAndDryRun(t *testing.T) {
 
 func TestMiseInstallFallsBackToManagedBinary(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	if err := os.MkdirAll(home+"/.local/bin", 0700); err != nil {
 		t.Fatal(err)
@@ -102,7 +105,7 @@ func TestMiseInstallFallsBackToManagedBinary(t *testing.T) {
 
 func TestMiseMissing(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	if err := os.Remove(home + "/bin/mise"); err != nil {
 		t.Fatal(err)
@@ -120,7 +123,7 @@ func TestMiseMissing(t *testing.T) {
 
 func TestMiseTrustsExistingManagedConfigLink(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	link := home + "/.config/mise/conf.d/selfishell.toml"
 	writeTestFile(t, link, "[tools]\n", 0600)

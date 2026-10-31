@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"bytes"
@@ -6,13 +6,17 @@ import (
 	"strings"
 )
 
-type blockView struct {
-	status     string
+// BlockView locates one managed block in a file: Status is "absent",
+// "malformed" or "intact", and Checksum covers an intact block.
+type BlockView struct {
+	Status     string
 	start, end int
-	checksum   string
+	Checksum   string
 }
 
-func blockContent(name, config string) ([]byte, error) {
+// BlockContent returns the managed block named name; config is the Selfishell
+// configuration directory a block may reference.
+func BlockContent(name, config string) ([]byte, error) {
 	label, comment, body := "", "#", ""
 	switch name {
 	case "user-zshrc":
@@ -50,10 +54,12 @@ endif`
 	}
 	return []byte(fmt.Sprintf("%s >>> %s >>>\n%s\n%s <<< %s <<<\n", comment, label, body, comment, label)), nil
 }
-func inspectBlock(name string, data []byte) (blockView, error) {
-	content, err := blockContent(name, "")
+
+// InspectBlock finds the named block's markers in data.
+func InspectBlock(name string, data []byte) (BlockView, error) {
+	content, err := BlockContent(name, "")
 	if err != nil {
-		return blockView{}, err
+		return BlockView{}, err
 	}
 	first := bytes.SplitN(content, []byte("\n"), 2)[0]
 	last := bytes.Split(content, []byte("\n"))
@@ -83,10 +89,10 @@ func inspectBlock(name string, data []byte) (blockView, error) {
 		}
 	}
 	if beginCount == 0 && endCount == 0 && related == 0 {
-		return blockView{status: "absent"}, nil
+		return BlockView{Status: "absent"}, nil
 	}
 	if beginCount != 1 || endCount != 1 || related != 2 || finish <= start || finish > len(data) {
-		return blockView{status: "malformed"}, nil
+		return BlockView{Status: "malformed"}, nil
 	}
 	block := data[start:finish]
 	if !bytes.HasSuffix(block, []byte("\n")) {
@@ -94,10 +100,13 @@ func inspectBlock(name string, data []byte) (blockView, error) {
 		// changing the slice boundaries used to preserve surrounding bytes.
 		block = append(bytes.Clone(block), '\n')
 	}
-	checksum, err := checksumBytes(block)
-	return blockView{status: "intact", start: start, end: finish, checksum: checksum}, err
+	checksum, err := ChecksumBytes(block)
+	return BlockView{Status: "intact", start: start, end: finish, Checksum: checksum}, err
 }
-func spliceBlock(data []byte, view blockView, replacement []byte) []byte {
+
+// SpliceBlock replaces the block view located with replacement, keeping the
+// surrounding bytes.
+func SpliceBlock(data []byte, view BlockView, replacement []byte) []byte {
 	result := append([]byte{}, data[:view.start]...)
 	result = append(result, replacement...)
 	return append(result, data[view.end:]...)

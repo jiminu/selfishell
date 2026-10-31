@@ -7,6 +7,10 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // PackageOperation owns state for one tools/configuration synchronization.
@@ -16,13 +20,13 @@ import (
 // Use a fresh value for a new synchronization, including retries and rollback.
 type PackageOperation struct {
 	windowsTerminal                           *windowsTerminalChoice
-	Process                                   Process
+	Process                                   process.Process
 	SkippedOptional                           []string
 	windowsFontsChecked, windowsFontsExternal bool
 	installedCasks                            []string // casks this operation installed
 	UnchangedCount                            int
 	dependencyManifest                        string
-	dependencies                              []Dependency
+	dependencies                              []managed.Dependency
 	dependencyFault                           func(string) error // focused filesystem-failure test seam
 	aptUpdated                                bool
 	brewFormulae, brewCasks                   map[string]bool
@@ -35,7 +39,7 @@ type PackageOperation struct {
 func (o *PackageOperation) warn(message string) {
 	progressOf(o.Process).Pause()
 	if progressOf(o.Process) != nil && progressOf(o.Process).compact {
-		progressOf(o.Process).events = append(progressOf(o.Process).events, progressEvent{"Notes", "Warning: " + message, reportWarning})
+		progressOf(o.Process).events = append(progressOf(o.Process).events, progressEvent{"Notes", "Warning: " + message, report.Warning})
 	}
 	color, reset := o.color(o.Process.Err, "\x1b[33m")
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
@@ -46,7 +50,7 @@ func (o *PackageOperation) reportSkippedOptional() {
 	}
 }
 func (o *PackageOperation) color(stream io.Writer, code string) (string, string) {
-	env := o.Process.environment()
+	env := o.Process.Environment()
 	ci := env.Get("CI")
 	if env.Get("NO_COLOR") != "" || env.Get("TERM") == "dumb" || (ci != "" && ci != "false") || !IsTerminal(stream) {
 		return "", ""
@@ -97,7 +101,7 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 		fmt.Fprintf(o.Process.Out, "%sWould install %s apt packages:%s %s\n", color, requirement, reset, strings.Join(names, " "))
 		return nil
 	}
-	if _, err := o.Process.lookPath("apt-get"); err != nil {
+	if _, err := o.Process.LookPath("apt-get"); err != nil {
 		return o.optionalFailure(requirement, "apt-get is required to install packages.", names)
 	}
 	var missing []string
@@ -123,20 +127,20 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 	}
 	privileged := uid != 0
 	if privileged {
-		if _, err := o.Process.lookPath("sudo"); err != nil {
+		if _, err := o.Process.LookPath("sudo"); err != nil {
 			return o.optionalFailure(requirement, "sudo is required to install apt packages as a non-root user.", missing)
 		}
 	}
 	apt := func(args ...string) error {
 		p := o.Process
-		p.foreground = true
+		p.Foreground = true
 		name := "apt-get"
 		if privileged {
 			// Pass only proxy names to sudo; values (which may contain credentials)
 			// stay in the environment rather than the command line or diagnostics.
 			var proxies []string
 			for _, key := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "ftp_proxy", "FTP_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"} {
-				if p.environment().Get(key) != "" {
+				if p.Environment().Get(key) != "" {
 					proxies = append(proxies, key)
 				}
 			}
@@ -194,7 +198,7 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s apt packages: %s", requirement, strings.Join(available, " ")), available)
 	}
 	if progressOf(o.Process) != nil {
-		o.report(reportSuccess, "Installed apt packages: %s", strings.Join(available, " "))
+		o.report(report.Success, "Installed apt packages: %s", strings.Join(available, " "))
 	}
 	return nil
 }

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 // CLI keeps output and release location explicit for isolated invocation tests.
@@ -18,7 +20,7 @@ type CLI struct {
 	In       io.Reader
 	Out, Err io.Writer
 	Context  context.Context
-	Env      Environment // nil reads the process environment
+	Env      process.Environment // nil reads the process environment
 	progress *operationProgress
 }
 
@@ -32,7 +34,7 @@ func (c CLI) invocationContext() context.Context {
 func (c CLI) latestReleaseVersion() (string, error) {
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env}}).latest(ctx)
+	return (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).latest(ctx)
 }
 
 func (c CLI) error(message string) {

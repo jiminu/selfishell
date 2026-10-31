@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func failureResource(t *testing.T, env Environment, root, name string) Resource {
+func failureResource(t *testing.T, env process.Environment, root, name string) managed.Resource {
 	t.Helper()
 	all, err := ManagedResources(root, env)
 	if err != nil {
@@ -26,12 +28,12 @@ func failureResource(t *testing.T, env Environment, root, name string) Resource 
 		}
 	}
 	t.Fatalf("missing resource %s", name)
-	return Resource{}
+	return managed.Resource{}
 }
 
 func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name         string
 		args         []string
@@ -58,7 +60,7 @@ func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
 			t.Parallel()
 			env := env
 			var root, choice, settings string
-			var paths Paths
+			var paths managed.Paths
 			failure := "vimrc.state"
 			if tc.platform == "ubuntu-wsl" {
 				var home, windowsHome string
@@ -104,7 +106,7 @@ func TestConfigurationFailureRetryPreservesOperationScope(t *testing.T) {
 
 func TestManagedMalformedStateStopsInstallWithoutMutation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, env, root, "vimrc")
@@ -123,7 +125,7 @@ func TestManagedMalformedStateStopsInstallWithoutMutation(t *testing.T) {
 
 func TestManagedMalformedLateStateStopsUninstallBeforeRemoval(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	loader := home + "/.zshrc"
@@ -142,7 +144,7 @@ func TestManagedMalformedLateStateStopsUninstallBeforeRemoval(t *testing.T) {
 
 func TestManagedEditedLoaderMarkerSurvivesBothOperations(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, _ := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	target := home + "/.zshrc"
@@ -158,7 +160,7 @@ func TestManagedEditedLoaderMarkerSurvivesBothOperations(t *testing.T) {
 
 func TestManagedInstallWithoutTerminalRequiresYes(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	code, _, stderr := blockRun(t, env, root, "", "install", "--skip-packages")
 	if code != 2 || !strings.Contains(stderr, "--yes") {
@@ -171,7 +173,7 @@ func TestManagedInstallWithoutTerminalRequiresYes(t *testing.T) {
 
 func TestManagedSameContentReplacedSymlinkIsPreserved(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, env, root, "vimrc")
@@ -208,7 +210,7 @@ func TestManagedSameContentReplacedSymlinkIsPreserved(t *testing.T) {
 
 func TestManagedUninstallDryRunPreviewsBackupWithoutMutation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	target := filepath.Join(home, ".config/starship.toml")
 	blockWrite(t, target, []byte("personal starship\n"))
@@ -229,7 +231,7 @@ func TestManagedUninstallDryRunPreviewsBackupWithoutMutation(t *testing.T) {
 
 func TestManagedInterruptedBlockUninstallExplainsRetry(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name, vimrc string
 		diagnostics []string
@@ -244,7 +246,7 @@ func TestManagedInterruptedBlockUninstallExplainsRetry(t *testing.T) {
 			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			state := blockState(t, paths, "user-vimrc")
 			state.Status = "pending"
-			if err := WriteState(paths.Resources+"/user-vimrc.state", state); err != nil {
+			if err := managed.WriteState(paths.Resources+"/user-vimrc.state", state); err != nil {
 				t.Fatal(err)
 			}
 			blockWrite(t, home+"/.vimrc", []byte(tc.vimrc))
@@ -269,31 +271,31 @@ func TestManagedInterruptedBlockUninstallExplainsRetry(t *testing.T) {
 
 func TestManagedPendingLoaderAndFileRecoverExactBytes(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	loader := failureResource(t, env, root, "user-zshrc")
 	file := failureResource(t, env, root, "zsh-common")
 	user := []byte("original zshrc\n")
 	blockWrite(t, loader.Target, user)
-	content, err := blockContent(loader.Name, paths.Config)
+	content, err := managed.BlockContent(loader.Name, paths.Config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := checksumBytes(content)
+	sum, err := managed.ChecksumBytes(content)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteState(paths.Resources+"/user-zshrc.state", State{Kind: "block", Status: "pending", Target: loader.Target, Reference: "selfishell-zsh-loader-v1", Backup: "-", Checksum: sum}); err != nil {
+	if err := managed.WriteState(paths.Resources+"/user-zshrc.state", managed.State{Kind: "block", Status: "pending", Target: loader.Target, Reference: "selfishell-zsh-loader-v1", Backup: "-", Checksum: sum}); err != nil {
 		t.Fatal(err)
 	}
 	blockWrite(t, file.Target, []byte("preexisting managed path"))
 	backup := file.Target + ".backup.interrupted"
 	source := blockRead(t, file.Source)
-	sum, err = checksumBytes(source)
+	sum, err = managed.ChecksumBytes(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteState(paths.Resources+"/zsh-common.state", State{Kind: "file", Status: "pending", Target: file.Target, Reference: "-", Backup: backup, Checksum: sum}); err != nil {
+	if err := managed.WriteState(paths.Resources+"/zsh-common.state", managed.State{Kind: "file", Status: "pending", Target: file.Target, Reference: "-", Backup: backup, Checksum: sum}); err != nil {
 		t.Fatal(err)
 	}
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
@@ -316,7 +318,7 @@ func TestManagedPendingLoaderAndFileRecoverExactBytes(t *testing.T) {
 
 func TestManagedMiseGlobalExistingTypesAndDirectoryPreflight(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"file", "dangling-link", "directory"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -379,7 +381,7 @@ func TestManagedMiseGlobalExistingTypesAndDirectoryPreflight(t *testing.T) {
 
 func TestManagedCacheOnlyInvalidatedByGeneratorChange(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	copyRoot := home + "/release"
 	if err := os.Mkdir(copyRoot, 0700); err != nil {
@@ -470,7 +472,7 @@ func copyTree(source, target string) error {
 
 func TestManagedUninstallGhosttyOrderAtRemovalFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	if os.Geteuid() == 0 {
 		t.Skip("directory permission failure requires an unprivileged process")
 	}
@@ -503,7 +505,7 @@ func TestManagedUninstallGhosttyOrderAtRemovalFailure(t *testing.T) {
 
 func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	r := failureResource(t, env, root, "vimrc")
 	original := []byte("original before install\n")
@@ -547,7 +549,7 @@ func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 		t.Fatalf("overwrite: %d %q %q", code, out, stderr)
 	}
 	blockEqual(t, r.Target, blockRead(t, r.Source))
-	sum, err := Checksum(context.Background(), r.Source)
+	sum, err := managed.Checksum(context.Background(), r.Source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +571,7 @@ func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 
 func TestManagedReplacedLinkPreflightPreventsEarlierFileRepair(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, env, root, "user-starship")
@@ -597,7 +599,7 @@ func TestManagedReplacedLinkPreflightPreventsEarlierFileRepair(t *testing.T) {
 
 func TestManagedLinkCreateFailureRollbackAndRetry(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	r := failureResource(t, env, root, "user-starship")
 	original := []byte("preexisting user starship config\n")
@@ -623,7 +625,7 @@ func TestManagedLinkCreateFailureRollbackAndRetry(t *testing.T) {
 
 func TestManagedMissingActiveLinkFailureStaysPendingAndRetries(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, env, root, "user-starship")
@@ -655,7 +657,7 @@ func TestManagedMissingActiveLinkFailureStaysPendingAndRetries(t *testing.T) {
 
 func TestManagedSourceCheckoutCanDisappearAfterInstall(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	copyRoot := home + "/release"
 	if err := os.Mkdir(copyRoot, 0700); err != nil {
@@ -692,7 +694,7 @@ func TestManagedSourceCheckoutCanDisappearAfterInstall(t *testing.T) {
 
 func TestManagedDryRunConflictPreservesBytesAndPreviewsDecision(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	r := failureResource(t, env, root, "vimrc")
@@ -713,7 +715,7 @@ func TestManagedDryRunConflictPreservesBytesAndPreviewsDecision(t *testing.T) {
 
 func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	r := failureResource(t, env, root, "vimrc")
 	original := []byte("original existing file\n")
@@ -744,7 +746,7 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 
 func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, backup := range []bool{false, true} {
 		for _, outcome := range []string{"write-failed", "write-completed", "user-edited", "overwrite-failed"} {
 			name := fmt.Sprintf("backup=%t/%s", backup, outcome)
@@ -773,7 +775,7 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 				m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, yes: true, actions: map[string]string{r.Name: "overwrite"},
 					atomicWrite: func(path string, data []byte, mode os.FileMode) error {
 						if outcome == "write-completed" {
-							if err := writeAtomic(path, data, mode); err != nil {
+							if err := managed.WriteAtomic(path, data, mode); err != nil {
 								return err
 							}
 						}
@@ -825,7 +827,7 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 
 func TestRestoreStateRemovalFailureCanRetryUninstall(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"file", "directory", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -874,7 +876,7 @@ func TestRestoreStateRemovalFailureCanRetryUninstall(t *testing.T) {
 
 func TestInterruptedRestorePreflightAndRetry(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, situation := range []string{"before-move", "occupied", "both-missing", "after-move-user-edit"} {
 		t.Run(situation, func(t *testing.T) {
 			t.Parallel()
@@ -890,7 +892,7 @@ func TestInterruptedRestorePreflightAndRetry(t *testing.T) {
 			}
 			state.Status = "restoring"
 			statePath := paths.Resources + "/" + r.Name + ".state"
-			if err := WriteState(statePath, state); err != nil {
+			if err := managed.WriteState(statePath, state); err != nil {
 				t.Fatal(err)
 			}
 			switch situation {
@@ -958,7 +960,7 @@ func TestInterruptedRestorePreflightAndRetry(t *testing.T) {
 
 func TestUninstallReportsRetainedOriginalBackup(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	r := failureResource(t, env, root, "user-starship")
 	original := []byte("personal starship config\n")
@@ -974,7 +976,7 @@ func TestUninstallReportsRetainedOriginalBackup(t *testing.T) {
 
 func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, existing := range []bool{false, true} {
 		name := "absent-target"
 		if existing {
@@ -1015,7 +1017,7 @@ func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
 
 func TestManagedBlockRemovalFailureKeepsStateForRetry(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, point := range []string{"write", "state-removal"} {
 		t.Run(point, func(t *testing.T) {
 			t.Parallel()
@@ -1052,7 +1054,7 @@ func TestManagedBlockRemovalFailureKeepsStateForRetry(t *testing.T) {
 
 func TestManagedFinalMarkerWriteFailureHasNoSuccess(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, marker := range []string{"configured", "ghostty"} {
 		t.Run(marker, func(t *testing.T) {
 			t.Parallel()

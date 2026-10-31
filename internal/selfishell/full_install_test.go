@@ -8,12 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	const required = "package ubuntu required apt fixture-unavailable\n"
 	const unpinned = "package ubuntu required apt fixture-apt\npackage all required mise absent\n"
 	for _, tc := range []struct {
@@ -70,7 +72,7 @@ func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
 
 func TestFullInstallPreflightsMiseTargetBeforePackageCommands(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home := testRelease(t), t.TempDir()
 	bin := t.TempDir()
 	for name, body := range map[string]string{
@@ -101,7 +103,7 @@ func TestFullInstallPreflightsMiseTargetBeforePackageCommands(t *testing.T) {
 
 func TestFullInstallDryRunAndCancellationDoNotMutate(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home := testRelease(t), t.TempDir()
 	isolateHome(&env, home)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
@@ -132,7 +134,7 @@ func TestFullInstallDryRunAndCancellationDoNotMutate(t *testing.T) {
 
 func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, fixture := testRelease(t), t.TempDir(), t.TempDir()
 	bin := fixture + "/bin"
 	listed := fixture + "/listed/zsh"
@@ -234,7 +236,7 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 
 func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	_, _, root, manifest, home, _ := neovimFixture(t, &env)
 	original := []byte("alias own='yes'\r\n")
 	if err := testutil.WriteFile(home+"/.zshrc", original, 0600); err != nil {
@@ -299,7 +301,7 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 
 func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name, command, platform, choice string
 		explicit, want                  bool
@@ -375,7 +377,7 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 
 func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	_, _, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := os.RemoveAll(root + "/config"); err != nil {
 		t.Fatal(err)
@@ -395,7 +397,7 @@ func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
 	setEnv(&env, "PATH", home+"/bin:/usr/bin:/bin")
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	setEnv(&env, "SHELL", "/bin/zsh")
-	paths, err := userPaths(env.Get)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +416,7 @@ func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
 
 func TestFullInstallUnsupportedPlatformLeavesHomeUntouched(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home := testRelease(t), t.TempDir()
 	isolateHome(&env, home)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")

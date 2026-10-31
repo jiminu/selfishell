@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func (c CLI) marker(color, label string) string {
@@ -35,12 +38,12 @@ func (c CLI) diagnosticError(err error) int {
 	return 1
 }
 
-func diagnosticPackages(root, platform string, env Environment) ([]Package, error) {
+func diagnosticPackages(root, platform string, env process.Environment) ([]Package, error) {
 	all, err := ReadPackages(filepath.Join(root, "packages.conf"))
 	if err != nil {
 		return nil, err
 	}
-	paths, err := userPaths(env.Get)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +116,7 @@ func (c CLI) diagnosticHeader() {
 
 // hasConfiguredMarker reports completed setup for diagnostics; only a regular
 // file counts, so a replaced marker path is not mistaken for setup.
-func hasConfiguredMarker(paths Paths) bool {
+func hasConfiguredMarker(paths managed.Paths) bool {
 	info, err := os.Stat(paths.State + "/configured")
 	return err == nil && info.Mode().IsRegular()
 }
@@ -132,7 +135,7 @@ func (c CLI) status(args []string) int {
 			return 2
 		}
 	}
-	paths, err := userPaths(c.Env.Get)
+	paths, err := managed.UserPaths(c.Env.Get)
 	if err != nil {
 		return c.diagnosticError(err)
 	}
@@ -161,7 +164,7 @@ func (c CLI) status(args []string) int {
 	if configured && platformSupported(platform.Name) {
 		ghostty := false
 		if platform.Name == "macos" {
-			choice, e := readStateFile(paths.State + "/ghostty")
+			choice, e := managed.ReadFile(paths.State + "/ghostty")
 			// Install and update reject this choice; status keeps diagnosing.
 			if e != nil && !errors.Is(e, fs.ErrNotExist) {
 				count++
@@ -204,7 +207,7 @@ func (c CLI) status(args []string) int {
 	names = append(names, extra...)
 	for _, name := range names {
 		statePath := paths.Resources + "/" + name + ".state"
-		state, e := ReadState(statePath)
+		state, e := managed.ReadState(statePath)
 		if errors.Is(e, fs.ErrNotExist) {
 			if expected[name] {
 				count++
@@ -241,7 +244,7 @@ func (c CLI) status(args []string) int {
 				result = 1
 			}
 		case "file":
-			checksum, e := Checksum(context.Background(), state.Target)
+			checksum, e := managed.Checksum(context.Background(), state.Target)
 			if e == nil && checksum == state.Checksum {
 				intact++
 				if verbose {
@@ -261,10 +264,10 @@ func (c CLI) status(args []string) int {
 				continue
 			}
 			suffix := state.Target + " (" + label + ")"
-			data, e := readStateFile(state.Target)
+			data, e := managed.ReadFile(state.Target)
 			if e == nil {
-				view, ve := inspectBlock(name, data)
-				if ve == nil && view.status == "intact" && view.checksum == state.Checksum {
+				view, ve := managed.InspectBlock(name, data)
+				if ve == nil && view.Status == "intact" && view.Checksum == state.Checksum {
 					intact++
 					if verbose {
 						c.sayDiagnostic("32", "OK", suffix)

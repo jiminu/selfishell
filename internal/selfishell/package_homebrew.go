@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 func (o *PackageOperation) brewPath() string {
-	if path, err := o.Process.lookPath("brew"); err == nil {
+	if path, err := o.Process.LookPath("brew"); err == nil {
 		return path
 	}
 	return ""
@@ -28,8 +31,8 @@ func (o *PackageOperation) activateBrew() bool {
 			continue
 		}
 		bin := filepath.Dir(candidate)
-		old := o.Process.environment().Get("PATH")
-		o.Process = withEnvironment(o.Process, map[string]string{"PATH": bin + string(os.PathListSeparator) + old})
+		old := o.Process.Environment().Get("PATH")
+		o.Process = process.WithEnvironment(o.Process, map[string]string{"PATH": bin + string(os.PathListSeparator) + old})
 		return true
 	}
 	return false
@@ -56,7 +59,7 @@ func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 		return fmt.Errorf("Homebrew installer download exited with status %d", code)
 	}
 	p = o.Process
-	p.foreground = true
+	p.Foreground = true
 	if code, err := p.Run(ctx, "/bin/bash", "-c", script.String()); err != nil || code != 0 {
 		return fmt.Errorf("Homebrew installer failed (exit %d): %v", code, err)
 	}
@@ -156,8 +159,8 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 	}
 	args = append(args, missing...)
 	p := o.Process
-	p.Env = append(p.environment().List(), "HOMEBREW_NO_ASK=1")
-	p.foreground = manager == "cask"
+	p.Env = append(p.Environment().List(), "HOMEBREW_NO_ASK=1")
+	p.Foreground = manager == "cask"
 	code, err := p.Run(ctx, "brew", args...)
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -176,7 +179,7 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 		o.installedCasks = append(o.installedCasks, missing...)
 	}
 	if progressOf(o.Process) != nil {
-		o.report(reportSuccess, "Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
+		o.report(report.Success, "Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
 	}
 	return nil
 }

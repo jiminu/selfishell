@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // MasonInstall waits for every installer in headless mode and exits nonzero on
@@ -44,12 +47,12 @@ end)
 if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 `
 
-func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths Paths, dryRun bool) error {
+func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if dryRun {
-		o.report(reportPreview, "Would update default Neovim LSP servers to this release's approved versions.")
+		o.report(report.Preview, "Would update default Neovim LSP servers to this release's approved versions.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
@@ -64,6 +67,6 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
 		return fmt.Errorf("could not update default Neovim LSP servers: %w", err)
 	}
-	o.report(reportSuccess, "Neovim LSP servers: approved versions")
+	o.report(report.Success, "Neovim LSP servers: approved versions")
 	return nil
 }

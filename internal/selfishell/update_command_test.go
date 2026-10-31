@@ -13,10 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func isolatedUpdateHome(t *testing.T, env *Environment) string {
+func isolatedUpdateHome(t *testing.T, env *process.Environment) string {
 	t.Helper()
 	home := t.TempDir()
 	// A temporary Linux HOME must never inherit the host Windows profile.
@@ -37,7 +38,7 @@ func isolatedUpdateHome(t *testing.T, env *Environment) string {
 	return home
 }
 
-func isolateMiseForHome(t *testing.T, env *Environment, home string) {
+func isolateMiseForHome(t *testing.T, env *process.Environment, home string) {
 	t.Helper()
 	for name, path := range map[string]string{
 		"XDG_CONFIG_HOME": "/.config", "XDG_DATA_HOME": "/.local/share",
@@ -49,7 +50,7 @@ func isolateMiseForHome(t *testing.T, env *Environment, home string) {
 	}
 }
 
-func commandResult(env Environment, root string, args ...string) (int, string, string) {
+func commandResult(env process.Environment, root string, args ...string) (int, string, string) {
 	var out, err bytes.Buffer
 	c := CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &err}
 	code := c.Run(args)
@@ -86,7 +87,7 @@ func retainedRollbackRelease(t *testing.T, releases string) {
 
 func TestUpdateAndRollbackArguments(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := isolatedUpdateHome(t, &env)
 	for _, tc := range []struct {
 		args []string
@@ -119,7 +120,7 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 
 func TestUpdateContinuationRejectsUnreadableConfiguredMarker(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	path := home + "/.local/state/selfishell/configured"
@@ -134,7 +135,7 @@ func TestUpdateContinuationRejectsUnreadableConfiguredMarker(t *testing.T) {
 
 func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, content := range []string{"", "invalid-marker\n"} {
 		t.Run("bytes-"+strconv.Itoa(len(content)), func(t *testing.T) {
 			t.Parallel()
@@ -158,7 +159,7 @@ func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
 
 func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, share, releases := releaseFixture(t, &env)
 	home, root := env.Get("HOME"), op.Root
 	isolateMiseForHome(t, &env, home)
@@ -203,7 +204,7 @@ func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 
 func TestRollbackToActiveAbsoluteLinkPreservesLinkIdentity(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, share, _ := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
 	if err := os.Remove(share + "/current"); err != nil {
@@ -227,7 +228,7 @@ func TestRollbackToActiveAbsoluteLinkPreservesLinkIdentity(t *testing.T) {
 
 func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, share, _ := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
 	root := op.Root
@@ -262,7 +263,7 @@ func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 
 func TestUpdateDryRunLabelsCurrentToolsPreview(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, _ := updateCleanupFixture(t, &env, false, false)
 	code, out, stderr := commandResult(env, root, "update", "--version", "2.0.0", "--dry-run", "--yes")
 	if code != 0 || !strings.Contains(out, "Would update Selfishell CLI to 2.0.0") || !strings.Contains(out, "Tools and configuration preview uses the running release (1.0.0)") {
@@ -275,7 +276,7 @@ func TestUpdateDryRunLabelsCurrentToolsPreview(t *testing.T) {
 
 func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, share, _ := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
 	dir := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
@@ -329,7 +330,7 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 
 func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name, path, value, version, want string
 	}{
@@ -384,7 +385,7 @@ func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 
 func TestRollbackRestoresPreviousWhenCurrentActivationFails(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, share, releases := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
 	retainedRollbackRelease(t, releases)
@@ -415,7 +416,7 @@ func TestRollbackRestoresPreviousWhenCurrentActivationFails(t *testing.T) {
 
 func TestToolsOnlySkipPackagesAppliesConfigurationWithoutInstallFinalization(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
@@ -460,7 +461,7 @@ func TestToolsOnlySkipPackagesAppliesConfigurationWithoutInstallFinalization(t *
 
 func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
@@ -509,7 +510,7 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 
 func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := t.TempDir()
 	copy := exec.Command("cp", "-R", testRelease(t)+"/config", root+"/config")
@@ -586,7 +587,7 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 
 func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
@@ -621,7 +622,7 @@ func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
 
 func TestToolsOnlyCancelledBeforeConfigurationHasNoEffects(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
@@ -644,7 +645,7 @@ func TestToolsOnlyCancelledBeforeConfigurationHasNoEffects(t *testing.T) {
 	}
 }
 
-func updateCleanupFixture(t *testing.T, env *Environment, optional, failPrune bool) (string, string, string) {
+func updateCleanupFixture(t *testing.T, env *process.Environment, optional, failPrune bool) (string, string, string) {
 	t.Helper()
 	_, paths, initialRoot, manifest, home, _ := neovimFixture(t, env)
 	share := home + "/.local/share/selfishell"
@@ -733,7 +734,7 @@ esac
 
 func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	const plugin = "/data/nvim/lazy/lazy-source"
 	nvim := func(script string, replace bool) func(*testing.T, string) {
 		return func(t *testing.T, home string) {
@@ -837,7 +838,7 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 
 func TestUpdateModesSkipLSP(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, args := range [][]string{
 		{"--cli-only", "--version", "1.0.0"},
 		{"--version", "1.0.0"},
@@ -864,7 +865,7 @@ func TestUpdateModesSkipLSP(t *testing.T) {
 
 func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct{ name, platform, target, kind string }{
 		{"zshenv-link", "ubuntu", ".zshenv", "link"},
 		{"ghostty-link", "macos", ".config/ghostty/config.ghostty", "link"},
@@ -942,7 +943,7 @@ func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 
 func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		name        string
 		interactive bool

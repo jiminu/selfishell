@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 var releaseVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$`)
@@ -30,7 +34,7 @@ func ValidReleaseVersion(version string) bool {
 // ValidRetainedRelease authorizes a previous release for cleanup or rollback.
 // A missing previous link returns empty version and directory without error.
 func ValidRetainedRelease(root string) (string, string, error) {
-	rawReleases := rawParent(root)
+	rawReleases := managed.RawParent(root)
 	current, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return "", "", err
@@ -60,7 +64,7 @@ func ValidRetainedRelease(root string) (string, string, error) {
 
 // PruneMise scopes cleanup to the current platform's declared tools. Callers
 // decide whether a returned cleanup failure is warning-only.
-func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Paths, packages []Package, platform string, dryRun bool) error {
+func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths managed.Paths, packages []Package, platform string, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -69,7 +73,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return nil
 	}
 	if dryRun {
-		o.report(reportPreview, "Would prune unused mise versions for: %s (keeping current and tracked project versions, not rollback-only versions).", strings.Join(tools, " "))
+		o.report(report.Preview, "Would prune unused mise versions for: %s (keeping current and tracked project versions, not rollback-only versions).", strings.Join(tools, " "))
 		return nil
 	}
 	if len(o.SkippedOptional) != 0 {
@@ -93,12 +97,12 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return fmt.Errorf("invalid current mise config: %s", config)
 	}
 	base := o.miseProcess(root, true)
-	trusted := base.environment().Get("MISE_TRUSTED_CONFIG_PATHS")
+	trusted := base.Environment().Get("MISE_TRUSTED_CONFIG_PATHS")
 	if trusted != "" {
 		trusted += ":"
 	}
-	base = withEnvironment(base, map[string]string{"MISE_TRUSTED_CONFIG_PATHS": trusted + root + "/config/shared"})
-	if base.environment().Get("MISE_IGNORED_CONFIG_PATHS") != "" {
+	base = process.WithEnvironment(base, map[string]string{"MISE_TRUSTED_CONFIG_PATHS": trusted + root + "/config/shared"})
+	if base.Environment().Get("MISE_IGNORED_CONFIG_PATHS") != "" {
 		return fmt.Errorf("ignored_config_paths can exclude retained versions")
 	}
 	shared := root + "/config/shared"
@@ -128,7 +132,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 			if strings.ContainsAny(previousConfig, ":*?[{") {
 				return fmt.Errorf("unsafe previous mise configuration path: %s", previousConfig)
 			}
-			base = withEnvironment(base, map[string]string{"MISE_IGNORED_CONFIG_PATHS": previousConfig})
+			base = process.WithEnvironment(base, map[string]string{"MISE_IGNORED_CONFIG_PATHS": previousConfig})
 		}
 	}
 	if _, err := o.miseOutput(ctx, base, mise, "-C", shared, "config", "ls"); err != nil {
@@ -149,11 +153,11 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if !found {
 		return fmt.Errorf("current mise config is not tracked: %s", config)
 	}
-	data := base.environment().Get("MISE_DATA_DIR")
+	data := base.Environment().Get("MISE_DATA_DIR")
 	if data == "" {
-		data = base.environment().Get("XDG_DATA_HOME")
+		data = base.Environment().Get("XDG_DATA_HOME")
 		if data == "" {
-			data = base.environment().Get("HOME") + "/.local/share"
+			data = base.Environment().Get("HOME") + "/.local/share"
 		}
 		data += "/mise"
 	}
@@ -170,7 +174,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return fmt.Errorf("mise prune exited %d", code)
 	}
 	if progressOf(o.Process) != nil {
-		o.report(reportSuccess, "Cleaned up unused mise versions.")
+		o.report(report.Success, "Cleaned up unused mise versions.")
 	}
 	after := miseInstalledVersions(installs)
 	removed := map[string]bool{}
@@ -183,9 +187,9 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		// Open shells keep absolute paths, such as Starship's init, to removed versions.
 		o.note("Run 'exec zsh' in open shells to reload updated tools.")
 	}
-	dataHome := base.environment().Get("XDG_DATA_HOME")
+	dataHome := base.Environment().Get("XDG_DATA_HOME")
 	if dataHome == "" {
-		dataHome = base.environment().Get("HOME") + "/.local/share"
+		dataHome = base.Environment().Get("HOME") + "/.local/share"
 	}
 	if stale := masonPackagesOnRemovedPython(dataHome+"/nvim/mason/packages", installs, removed); len(stale) != 0 {
 		o.note("Run ':MasonInstall --force %s' in Neovim: its virtualenv used a removed Python.", strings.Join(stale, " "))

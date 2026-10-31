@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,11 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // InstallDirect synchronizes one declared direct package. One operation caches
 // its manifest so every package it installs uses the same approved records.
-func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manifest, requirement, name, platform, arch string, dryRun bool) error {
+func (o *PackageOperation) InstallDirect(ctx context.Context, paths managed.Paths, manifest, requirement, name, platform, arch string, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -26,14 +29,14 @@ func (o *PackageOperation) InstallDirect(ctx context.Context, paths Paths, manif
 		return err
 	}
 	if dryRun {
-		o.report(reportPreview, "Would sync %s direct package: %s", requirement, name)
+		o.report(report.Preview, "Would sync %s direct package: %s", requirement, name)
 		return nil
 	}
 	if err := o.loadDependencies(manifest); err != nil {
 		return err
 	}
 	depPlatform := dependencyPlatform(platform)
-	var dep *Dependency
+	var dep *managed.Dependency
 	for i := range o.dependencies {
 		d := &o.dependencies[i]
 		if d.Name == name && (d.Platform == "all" || d.Platform == depPlatform) && (d.Arch == "all" || d.Arch == arch) && (d.Kind == "download" || d.Kind == "git") {
@@ -69,7 +72,7 @@ func (o *PackageOperation) loadDependencies(manifest string) error {
 	return nil
 }
 
-func dependencyTarget(dep Dependency, paths Paths, env Environment) (string, error) {
+func dependencyTarget(dep managed.Dependency, paths managed.Paths, env process.Environment) (string, error) {
 	if !filepath.IsLocal(dep.Target) || dep.Target == "." || strings.HasPrefix(dep.Target, "-") {
 		return "", fmt.Errorf("invalid dependency target: %s", dep.Target)
 	}
@@ -92,22 +95,11 @@ func dependencyTarget(dep Dependency, paths Paths, env Environment) (string, err
 	return env.Get("HOME") + "/" + dep.Target, nil
 }
 
-func present(path string) (bool, error) {
-	_, err := os.Lstat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
-func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, dep Dependency) error {
+func (o *PackageOperation) installDependency(ctx context.Context, paths managed.Paths, dep managed.Dependency) error {
 	if dep.Name == "." || filepath.Base(dep.Name) != dep.Name {
 		return fmt.Errorf("invalid dependency name: %s", dep.Name)
 	}
-	target, err := dependencyTarget(dep, paths, o.Process.environment())
+	target, err := dependencyTarget(dep, paths, o.Process.Environment())
 	if err != nil {
 		return err
 	}
@@ -128,13 +120,13 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 		return nil
 	}
 	if !owned {
-		exists, err := present(target)
+		exists, err := managed.Present(target)
 		if err != nil {
 			return err
 		}
 		if exists {
 			if o.validDirect(ctx, dep, target, false) {
-				o.report(reportInfo, "Externally installed; preserving: %s", target)
+				o.report(report.Info, "Externally installed; preserving: %s", target)
 				return nil
 			}
 			return fmt.Errorf("An existing %s is not a usable %s installation; leaving it in place.", target, dep.Name)
@@ -144,10 +136,10 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 		return err
 	}
 	// Staging on the destination filesystem makes final rename atomic.
-	if err := makeRawDir(rawParent(target)); err != nil {
+	if err := managed.MakeRawDir(managed.RawParent(target)); err != nil {
 		return err
 	}
-	stageDir, err := os.MkdirTemp(rawParent(target), ".selfishell-dependency.*")
+	stageDir, err := os.MkdirTemp(managed.RawParent(target), ".selfishell-dependency.*")
 	if err != nil {
 		return err
 	}
@@ -167,23 +159,23 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	old, moved, err := moveAside(target)
+	old, moved, err := managed.MoveAside(target)
 	if err != nil {
 		return err
 	}
 	if o.dependencyFault != nil {
 		if err := o.dependencyFault("activate"); err != nil {
 			if moved {
-				if restoreErr := restoreEmpty(old, target); restoreErr != nil {
+				if restoreErr := managed.RestoreEmpty(old, target); restoreErr != nil {
 					return fmt.Errorf("%v; restore: %w", err, restoreErr)
 				}
 			}
 			return err
 		}
 	}
-	if occupied, err := present(target); err != nil || occupied {
+	if occupied, err := managed.Present(target); err != nil || occupied {
 		if moved {
-			if restoreErr := restoreEmpty(old, target); restoreErr != nil {
+			if restoreErr := managed.RestoreEmpty(old, target); restoreErr != nil {
 				return fmt.Errorf("target occupied before activation: %s; restore: %w", target, restoreErr)
 			}
 		}
@@ -194,7 +186,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	}
 	if err := os.Rename(stage, target); err != nil {
 		if moved {
-			if restoreErr := restoreEmpty(old, target); restoreErr != nil {
+			if restoreErr := managed.RestoreEmpty(old, target); restoreErr != nil {
 				return fmt.Errorf("%v; restore: %w", err, restoreErr)
 			}
 		}
@@ -208,7 +200,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 		err = o.dependencyFault("state")
 	}
 	if err == nil {
-		err = writeAtomic(state, []byte(dep.Version+"\n"), 0600)
+		err = managed.WriteAtomic(state, []byte(dep.Version+"\n"), 0600)
 	}
 	if err != nil {
 		// Remove only the inode this transaction installed. A concurrent replacement
@@ -217,7 +209,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 			os.RemoveAll(target)
 		}
 		if moved {
-			if restoreErr := restoreEmpty(old, target); restoreErr != nil {
+			if restoreErr := managed.RestoreEmpty(old, target); restoreErr != nil {
 				return fmt.Errorf("%v; restore: %w", err, restoreErr)
 			}
 		}
@@ -230,51 +222,11 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	if owned && oldVersion != dep.Version {
 		verb = "Updated"
 	}
-	o.report(reportSuccess, "%s approved dependency: %s %s", verb, dep.Name, dep.Version)
+	o.report(report.Success, "%s approved dependency: %s %s", verb, dep.Name, dep.Version)
 	return nil
 }
 
-func siblingName(target, suffix string) (string, error) {
-	for i := 0; i < 20; i++ {
-		var salt [8]byte
-		if _, err := rand.Read(salt[:]); err != nil {
-			return "", err
-		}
-		name := target + suffix + hex.EncodeToString(salt[:])
-		if exists, err := present(name); err != nil {
-			return "", err
-		} else if !exists {
-			return name, nil
-		}
-	}
-	return "", fmt.Errorf("no unused sibling for %s", target)
-}
-func moveAside(target string) (string, bool, error) {
-	exists, err := present(target)
-	if err != nil || !exists {
-		return "", false, err
-	}
-	old, err := siblingName(target, ".previous.")
-	if err != nil {
-		return "", false, err
-	}
-	if err := os.Rename(target, old); err != nil {
-		return "", false, err
-	}
-	return old, true, nil
-}
-func restoreEmpty(old, target string) error {
-	exists, err := present(target)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("cannot restore over occupied target: %s", target)
-	}
-	return os.Rename(old, target)
-}
-
-func (o *PackageOperation) stageDownload(ctx context.Context, dep Dependency, stage string) error {
+func (o *PackageOperation) stageDownload(ctx context.Context, dep managed.Dependency, stage string) error {
 	archive := stage + ".archive"
 	code, err := o.Process.Curl(ctx, "transfer", dep.Source, "-o", archive)
 	if err != nil {
@@ -367,7 +319,7 @@ func (o *PackageOperation) commandOutput(ctx context.Context, name string, args 
 	}
 	return strings.TrimSpace(out.String()), nil
 }
-func (o *PackageOperation) stageGit(ctx context.Context, dep Dependency, stage string) error {
+func (o *PackageOperation) stageGit(ctx context.Context, dep managed.Dependency, stage string) error {
 	if _, err := o.commandOutput(ctx, "git", "clone", "--quiet", "--", dep.Source, stage); err != nil {
 		return err
 	}
@@ -392,7 +344,7 @@ func (o *PackageOperation) stageGit(ctx context.Context, dep Dependency, stage s
 
 // directDownloadIntact is shared by install and diagnostics: a recorded raw
 // download must still match its approved SHA-256, not merely be executable.
-func directDownloadIntact(dep Dependency, target string, info os.FileInfo, owned bool) bool {
+func directDownloadIntact(dep managed.Dependency, target string, info os.FileInfo, owned bool) bool {
 	if !info.Mode().IsRegular() || (dep.Marker != "font" && info.Mode()&0111 == 0) {
 		return false
 	}
@@ -411,7 +363,7 @@ func directDownloadIntact(dep Dependency, target string, info os.FileInfo, owned
 
 // directGitMarkerPresent requires the approved marker inside the checkout. The
 // raw join keeps symlink/.. components that filepath.Join would clean.
-func directGitMarkerPresent(dep Dependency, target string, info os.FileInfo) bool {
+func directGitMarkerPresent(dep managed.Dependency, target string, info os.FileInfo) bool {
 	if !info.IsDir() || !filepath.IsLocal(dep.Marker) {
 		return false
 	}
@@ -419,7 +371,7 @@ func directGitMarkerPresent(dep Dependency, target string, info os.FileInfo) boo
 	return err == nil
 }
 
-func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, target string, owned bool) bool {
+func (o *PackageOperation) validDirect(ctx context.Context, dep managed.Dependency, target string, owned bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
 		return false

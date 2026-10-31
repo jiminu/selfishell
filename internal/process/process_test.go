@@ -1,0 +1,305 @@
+package process
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
+)
+
+// A real child executable verifies argv, streams, environment, cwd and signals.
+func TestProcessChild(t *testing.T) {
+	if os.Getenv("SELFISHELL_GO_PROCESS_CHILD") != "1" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	args = args[1:]
+	switch args[0] {
+	case "echo":
+		input, _ := io.ReadAll(os.Stdin)
+		dir, _ := os.Getwd()
+		fmt.Fprintf(os.Stdout, "%q\n%s\n%s\n%s", args[1:], input, dir, os.Getenv("HTTPS_PROXY"))
+		fmt.Fprint(os.Stderr, "child error\n")
+		os.Exit(23)
+	case "signal":
+		syscall.Kill(os.Getpid(), syscall.SIGTERM)
+		time.Sleep(time.Second)
+	case "wait":
+		fmt.Fprintln(os.Stdout, "ready")
+		time.Sleep(time.Hour)
+	case "graceful":
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, syscall.SIGTERM)
+		fmt.Fprintln(os.Stdout, "ready")
+		<-stop
+		fmt.Fprintln(os.Stdout, "cleaned up")
+	case "ignore":
+		signal.Ignore(syscall.SIGTERM)
+		fmt.Fprintln(os.Stdout, "ready")
+		time.Sleep(time.Hour)
+	}
+	os.Exit(0)
+}
+
+func TestProcess(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
+	setEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	var out, stderr bytes.Buffer
+	p := Process{Inherit: env, In: strings.NewReader("stdin\x00bytes"), Out: &out, Err: &stderr, Dir: dir}
+	args := []string{"-test.run=^TestProcessChild$", "--", "echo", "a b", "$(touch SHOULD_NOT_EXIST)", "", "a'\"b"}
+	code, err := p.Run(context.Background(), executable, args...)
+	want := fmt.Sprintf("%q\nstdin\x00bytes\n%s\nhttp://proxy.example:8443", args[3:], dir)
+	if err != nil || code != 23 || out.String() != want || stderr.String() != "child error\n" {
+		t.Fatalf("code=%d err=%v out=%q stderr=%q", code, err, out.String(), stderr.String())
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Fatal("shell argument was executed")
+	}
+	code, err = p.Run(context.Background(), executable, "-test.run=^TestProcessChild$", "--", "signal")
+	if err != nil || code != 143 {
+		t.Fatalf("signal code=%d err=%v", code, err)
+	}
+	code, err = p.Run(context.Background(), dir+"/missing")
+	if code != 127 || err == nil {
+		t.Fatalf("missing code=%d err=%v", code, err)
+	}
+	if err := testutil.WriteFile(dir+"/not-executable", nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, err = p.Run(context.Background(), dir+"/not-executable")
+	if code != 126 || err == nil {
+		t.Fatalf("permission code=%d err=%v", code, err)
+	}
+}
+
+func TestProcessCancellation(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	for _, mode := range []string{"wait", "graceful", "ignore"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			env := env
+			setEnv(&env, "HOME", t.TempDir())
+			setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
+			executable, _ := os.Executable()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			read, write, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer read.Close()
+			defer write.Close()
+			done := make(chan error, 1)
+			go func() {
+				code, err := (Process{Inherit: env, Out: write, Err: io.Discard}).Run(ctx, executable, "-test.run=^TestProcessChild$", "--", mode)
+				if code != 130 || !errors.Is(err, context.Canceled) {
+					done <- fmt.Errorf("code=%d err=%v", code, err)
+				} else {
+					done <- nil
+				}
+			}()
+			if err := read.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			data := make([]byte, 6)
+			if _, err := io.ReadFull(read, data); err != nil {
+				t.Fatal(err)
+			}
+			started := time.Now()
+			cancel()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("cancelled command still running")
+			}
+			write.Close()
+			tail, err := io.ReadAll(read)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "graceful" && string(tail) != "cleaned up\n" {
+				t.Fatalf("child was not allowed to clean up: %q", tail)
+			}
+			if mode == "ignore" && time.Since(started) < 900*time.Millisecond {
+				t.Fatal("child was killed before the shutdown grace period")
+			}
+		})
+	}
+}
+
+func TestChildProcessEnvironment(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	speed := func(curlLimit, curlTime, gitLimit string) map[string]string {
+		return map[string]string{"SELFISHELL_CURL_LOW_SPEED_LIMIT": curlLimit, "SELFISHELL_CURL_LOW_SPEED_TIME": curlTime, "GIT_HTTP_LOW_SPEED_LIMIT": gitLimit, "GIT_HTTP_LOW_SPEED_TIME": ""}
+	}
+	speedVars := []string{"GIT_HTTP_LOW_SPEED_LIMIT", "GIT_HTTP_LOW_SPEED_TIME"}
+	for _, tc := range []struct {
+		name    string
+		inherit map[string]string // set in this process; the child inherits a nil Env
+		env     []string
+		dir     bool
+		vars    []string
+		want    string // DIR stands for the child's Dir
+	}{
+		{"inherited prompt", map[string]string{"GIT_TERMINAL_PROMPT": "1"}, nil, false, []string{"GIT_TERMINAL_PROMPT"}, "0"},
+		{"explicit prompt", nil, []string{"GIT_TERMINAL_PROMPT=1"}, false, []string{"GIT_TERMINAL_PROMPT"}, "0"},
+		{"default speed", speed("", "", ""), nil, false, speedVars, "1024|30"},
+		{"configured speed", speed("256", "120", ""), nil, false, speedVars, "256|120"},
+		{"caller speed override", speed("256", "120", "5"), nil, false, speedVars, "5|120"},
+		{"invalid curl speed policy", speed("0", "120", ""), nil, false, speedVars, "|"},
+		{"inherited PWD follows Dir", nil, nil, true, []string{"PWD"}, "DIR"},
+		{"explicit PWD", nil, []string{"PWD=/preserved"}, true, []string{"PWD"}, "/preserved"},
+		{"repository selectors", nil, []string{"GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index", "GIT_HTTP_LOW_SPEED_LIMIT=12"}, false, []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_HTTP_LOW_SPEED_LIMIT"}, "|||12"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := env
+			setEnv(&env, "HOME", t.TempDir())
+			for key, value := range tc.inherit {
+				setEnv(&env, key, value)
+			}
+			dir := ""
+			if tc.dir {
+				dir = t.TempDir()
+			}
+			var out bytes.Buffer
+			code, err := (Process{Out: &out, Env: tc.env, Inherit: env, Dir: dir}).Run(context.Background(), "/usr/bin/env")
+			child := Environment(strings.Split(out.String(), "\n"))
+			var got []string
+			for _, key := range tc.vars {
+				got = append(got, child.Get(key))
+			}
+			if want := strings.ReplaceAll(tc.want, "DIR", dir); err != nil || code != 0 || strings.Join(got, "|") != want {
+				t.Fatalf("code=%d err=%v got %q want %q", code, err, strings.Join(got, "|"), want)
+			}
+		})
+	}
+}
+
+func TestCurl(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	setEnv(&env, "HOME", t.TempDir())
+	root := t.TempDir()
+	file := root + "/file with spaces"
+	if err := testutil.WriteFile(file, []byte("download\x00bytes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	p := Process{Inherit: env, Out: &out, Err: &stderr}
+	code, err := p.Curl(context.Background(), "transfer", (&url.URL{Scheme: "file", Path: file}).String())
+	if code != 0 || err != nil || out.String() != "download\x00bytes" {
+		t.Fatalf("code=%d err=%v out=%q stderr=%q", code, err, out.String(), stderr.String())
+	}
+	setEnv(&env, "PATH", root) // Invalid policy must be rejected before looking for curl.
+	p.Inherit = env
+	for _, value := range []string{"0", "-1", "x", " 1"} {
+		setEnv(&env, "SELFISHELL_CURL_CONNECT_TIMEOUT", value)
+		p.Inherit = env
+		code, err = p.Curl(context.Background(), "metadata", "https://example.invalid")
+		if code != 2 || err == nil || !strings.Contains(err.Error(), "positive integers") {
+			t.Fatalf("policy %q: code=%d err=%v", value, code, err)
+		}
+	}
+}
+
+// A retry after a partial response must replace it, not append to it.
+func TestCurlRetryReplacesPartialResponse(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	setEnv(&env, "HOME", t.TempDir())
+	for _, name := range []string{"http_proxy", "HTTP_PROXY", "ALL_PROXY", "all_proxy"} {
+		setEnv(&env, name, "")
+	}
+	setEnv(&env, "SELFISHELL_CURL_METADATA_MAX_TIME", "1")
+	body := "1.4.1\n"
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+		if requests.Add(1) == 1 {
+			io.WriteString(w, body[:3])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		io.WriteString(w, body)
+	}))
+	defer server.Close()
+	var out bytes.Buffer
+	code, err := (Process{Inherit: env, Out: &out, Err: io.Discard}).Curl(context.Background(), "metadata", server.URL+"/VERSION")
+	if code != 0 || err != nil || out.String() != body || requests.Load() != 2 {
+		t.Fatalf("code=%d err=%v out=%q requests=%d", code, err, out.String(), requests.Load())
+	}
+}
+
+func TestProcessSkipsRelativePATHEntries(t *testing.T) {
+	t.Parallel()
+	var env Environment
+	home := t.TempDir()
+	setEnv(&env, "HOME", home)
+	project := t.TempDir()
+	safe := t.TempDir()
+	if err := testutil.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(filepath.Join(safe, "git"), []byte("#!/bin/sh\nprintf safe\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	workdir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(workdir, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setEnv(&env, "PATH", rel+":"+safe)
+	var out bytes.Buffer
+	p := Process{Dir: project, Out: &out, Env: []string{"HOME=" + home, "PATH=" + rel + ":" + safe}}
+	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
+		t.Fatalf("PATH lookup: code=%d err=%v output=%q", code, err, out.String())
+	}
+	out.Reset()
+	if code, err := (Process{Inherit: env, Dir: project, Out: &out}).Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
+		t.Fatalf("inherited PATH lookup: code=%d err=%v output=%q", code, err, out.String())
+	}
+	out.Reset()
+	if code, err := p.Run(context.Background(), "./git"); err != nil || code != 0 || out.String() != "unsafe" {
+		t.Fatalf("explicit relative command: code=%d err=%v output=%q", code, err, out.String())
+	}
+}
+
+// setEnv changes only the test's own environment, so tests can run in parallel.
+func setEnv(e *Environment, key, value string) {
+	*e = e.With(map[string]string{key: value})
+}

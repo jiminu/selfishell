@@ -21,12 +21,14 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
 	setEnv(&env, "SELFISHELL_TEST_TTY", "1")
 	ghostty := filepath.Join(home, "tools/ghostty")
@@ -72,7 +74,7 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	if root := os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT"); root != "" {
 		os.Exit((CLI{Root: root, Out: os.Stdout, Err: os.Stderr}).Run(strings.Fields(os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS"))))
 	}
-	var env Environment
+	var env process.Environment
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +154,7 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	}
 }
 
-func windowsTerminalFixture(t *testing.T, env *Environment) (string, string, Paths, string) {
+func windowsTerminalFixture(t *testing.T, env *process.Environment) (string, string, managed.Paths, string) {
 	t.Helper()
 	root, home, paths := blockHome(t, env, "ubuntu")
 	setEnv(env, "WSL_DISTRO_NAME", "Ubuntu-24.04")
@@ -163,7 +165,7 @@ func windowsTerminalFixture(t *testing.T, env *Environment) (string, string, Pat
 	windowsHome := home + "/windows-localappdata"
 	setEnv(env, "WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
-	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
+	if err := os.MkdirAll(managed.RawParent(settings), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
@@ -188,7 +190,7 @@ esac
 
 func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths, windowsHome := windowsTerminalFixture(t, &env)
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
@@ -244,7 +246,7 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	}
 	blockOK(t, env, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, settings, original)
-	for _, path := range []string{rawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
+	for _, path := range []string{managed.RawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("terminal state left after uninstall: %s: %v", path, err)
 		}
@@ -253,7 +255,7 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 
 func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 	out := blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal", "--dry-run")
 	if !strings.Contains(out, "Windows Terminal") {
@@ -276,7 +278,7 @@ func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
 
 func TestWindowsFontPinnedInstallRecoveryAndExternalPreservation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
@@ -294,7 +296,7 @@ func TestWindowsFontPinnedInstallRecoveryAndExternalPreservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
-	op := &PackageOperation{Process: Process{inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
+	op := &PackageOperation{Process: process.Process{Inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +345,7 @@ printf '%s\n' '{"fontInstalled":true}'
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	op = &PackageOperation{Process: Process{inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
+	op = &PackageOperation{Process: process.Process{Inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +356,7 @@ printf '%s\n' '{"fontInstalled":true}'
 
 func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
@@ -368,7 +370,7 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+	op := &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 	err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 	if err == nil || !strings.Contains(err.Error(), "Checksum mismatch") {
 		t.Fatal("bad checksum accepted", err)
@@ -379,7 +381,7 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
-	op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+	op = &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "optional", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +403,7 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 	if distro == "" {
 		t.Skip("requires a native WSL distribution identity")
 	}
-	p := Process{Env: withEnvironment(Process{}, map[string]string{"HOME": t.TempDir()}).Env}
+	p := process.Process{Env: process.WithEnvironment(process.Process{}, map[string]string{"HOME": t.TempDir()}).Env}
 	data, err := runWindowsScript(context.Background(), p, map[string]string{"operation": "probe", "distro": distro})
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +435,7 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 
 func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	payload := []byte("approved-font")
@@ -444,7 +446,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	}
 	setEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", manifest)
 	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
-	if err := os.MkdirAll(rawParent(target), 0700); err != nil {
+	if err := os.MkdirAll(managed.RawParent(target), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := testutil.WriteFile(target, payload, 0600); err != nil {
@@ -495,7 +497,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 
 func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, scenario := range []string{"reuse", "modified", "unrecorded"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -518,7 +520,7 @@ func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
 				}
 			}
 			writeManifest("3.4.0", payload)
-			op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+			op := &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal(err)
 			}
@@ -548,7 +550,7 @@ print('{}')
 				t.Fatal(err)
 			}
 			writeManifest("3.4.1", payload)
-			op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+			op = &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal(err)
 			}
@@ -595,7 +597,7 @@ print('{}')
 			if scenario == "modified" || scenario == "unrecorded" {
 				preserved := blockRead(t, oldTarget)
 				registration := blockRead(t, home+"/registration-request")
-				op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+				op = &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 				err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 				if err == nil || !strings.Contains(err.Error(), "preserving") {
 					t.Fatal("unsafe retained path accepted", err)
@@ -605,7 +607,7 @@ print('{}')
 				}
 				return
 			}
-			op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
+			op = &PackageOperation{Process: process.Process{Inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal("return to retained pin", err)
 			}
@@ -631,7 +633,7 @@ print('{}')
 
 func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, paths, _ := windowsTerminalFixture(t, &env)
 	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	before := blockRead(t, paths.State+"/windows-terminal.json")
@@ -646,7 +648,7 @@ func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
 
 func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, scenario := range []string{"reimport", "stale-stub", "ambiguous", "clone-install", "clone-uninstall"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -664,7 +666,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 					return strings.Join(list, ",")
 				}
 				wsl := windowsHome + "/Microsoft/Windows Terminal/Fragments/Microsoft.WSL/wsl.json"
-				if err := os.MkdirAll(rawParent(wsl), 0700); err != nil {
+				if err := os.MkdirAll(managed.RawParent(wsl), 0700); err != nil {
 					t.Fatal(err)
 				}
 				probe := string(blockRead(t, home+"/tools/powershell.exe"))
@@ -771,7 +773,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(scratch) })
-	paths := Paths{State: home + "/state", Data: home + "/data/selfishell"}
+	paths := managed.Paths{State: home + "/state", Data: home + "/data/selfishell"}
 	if err := os.MkdirAll(paths.State+"/dependencies", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -784,7 +786,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dep Dependency
+	var dep managed.Dependency
 	for _, d := range deps {
 		if d.Name == "jetbrainsmono-regular" {
 			dep = d
@@ -810,7 +812,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(rawParent(oldTarget), 0700); err != nil {
+	if err := os.MkdirAll(managed.RawParent(oldTarget), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := testutil.WriteFile(oldTarget, payload, 0600); err != nil {
@@ -819,7 +821,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err := testutil.WriteFile(paths.State+"/dependencies/"+dep.Name, []byte(dep.Version+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	windowsPath, err := convertWindowsPath(ctx, Process{}, "-w", oldTarget)
+	windowsPath, err := convertWindowsPath(ctx, process.Process{}, "-w", oldTarget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +850,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 		binary.LittleEndian.PutUint16(raw[i*2:], word)
 	}
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", base64.StdEncoding.EncodeToString(raw))
-	cmd.Env = withEnvironment(Process{}, map[string]string{"HOME": home}).Env
+	cmd.Env = process.WithEnvironment(process.Process{}, map[string]string{"HOME": home}).Env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -888,7 +890,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 	if err := testutil.WriteFile(tools+"/powershell.exe", []byte("#!/bin/sh\nprintf '{}\n'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard, Env: withEnvironment(Process{}, map[string]string{"HOME": home, "PATH": tools + ":" + os.Getenv("PATH")}).Env}}
+	op := &PackageOperation{Process: process.Process{Out: io.Discard, Err: io.Discard, Env: process.WithEnvironment(process.Process{}, map[string]string{"HOME": home, "PATH": tools + ":" + os.Getenv("PATH")}).Env}}
 	if err := op.InstallDirect(ctx, paths, manifest, "required", dep.Name, "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -918,7 +920,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 
 func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	outer := t.TempDir()
 	setEnv(&env, "WSL_DISTRO_NAME", "Inherited-Real-Distro")
 	home := isolatedUpdateHome(t, &env)
@@ -951,7 +953,7 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 
 func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, scenario := range []string{"declined", "enabled", "absent", "in-memory", "malformed"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
@@ -996,7 +998,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 			}
 			var out strings.Builder
 			c := CLI{Env: env, Root: root, Out: &out, Err: io.Discard}
-			op := &PackageOperation{Process: Process{inherit: env, Out: &out, Err: io.Discard}}
+			op := &PackageOperation{Process: process.Process{Inherit: env, Out: &out, Err: io.Discard}}
 			if scenario == "in-memory" {
 				op.windowsTerminal = &windowsTerminalChoice{Enabled: true}
 			}
@@ -1039,7 +1041,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 
 func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, command := range []string{"install", "update", "uninstall"} {
 		t.Run(command, func(t *testing.T) {
 			t.Parallel()

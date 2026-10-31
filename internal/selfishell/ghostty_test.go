@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 // Ghostty detection must not see the developer's /Applications.
@@ -24,7 +27,7 @@ font-feature = -calt, -liga, -dlig
 font-codepoint-map = U+AC00-U+D7AF=Apple SD Gothic Neo
 cursor-style = block
 `)
-	block, err := blockContent("user-ghostty", "/managed")
+	block, err := managed.BlockContent("user-ghostty", "/managed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +54,7 @@ window-decoration = false
 
 func TestInstallNotesOverriddenGhosttySettings(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "macos")
 	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
 	if err := os.MkdirAll(filepath.Dir(entrypoint), 0700); err != nil {

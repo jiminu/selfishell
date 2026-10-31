@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"bytes"
