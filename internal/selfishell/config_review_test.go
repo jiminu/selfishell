@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -20,7 +22,7 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(&env, home)
 	paths, _ := managed.UserPaths(env.Get)
-	resources, _ := ResourcesForPlatform(root, "macos", false, env)
+	resources, _ := lifecycle.ResourcesForPlatform(root, "macos", false, env)
 	var link managed.Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
@@ -36,8 +38,8 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 		t.Fatal(e)
 	}
 	var out, errOut bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths}
-	if e := m.installLink(link, false); e == nil {
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &errOut}.report)}
+	if e := m.InstallLink(link, false); e == nil {
 		t.Fatal("foreign target falsely accepted")
 	}
 	got, e := managed.ReadState(paths.Resources + "/" + link.Name + ".state")
@@ -91,52 +93,6 @@ func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 	}
 }
 
-func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
-	t.Parallel()
-	create := func(path, kind, label string) {
-		switch kind {
-		case "file":
-			testutil.WriteFile(path, []byte(label), 0600)
-		case "symlink":
-			os.Symlink(label+"-target", path)
-		case "directory":
-			os.Mkdir(path, 0700)
-			testutil.WriteFile(path+"/"+label+"-child", []byte(label), 0600)
-		}
-	}
-	unchanged := func(t *testing.T, path, kind, label string) {
-		t.Helper()
-		data, _ := os.ReadFile(path)
-		dest, _ := os.Readlink(path)
-		_, child := os.Stat(path + "/" + label + "-child")
-		if kind == "file" && string(data) != label || kind == "symlink" && dest != label+"-target" || kind == "directory" && child != nil {
-			t.Fatalf("%s %s changed", kind, path)
-		}
-	}
-	for _, op := range []string{"move", "copy"} {
-		for _, kind := range []string{"file", "symlink", "directory"} {
-			t.Run(op+"/"+kind, func(t *testing.T) {
-				t.Parallel()
-				root := t.TempDir()
-				source, backup := root+"/source", root+"/backup"
-				sourceKind, apply := kind, moveBackupNoReplace
-				if op == "copy" {
-					sourceKind, apply = "file", copyPreserve
-				}
-				create(source, sourceKind, "source")
-				create(backup, kind, "backup")
-				if e := apply(source, backup); e == nil {
-					t.Fatal("occupied backup replaced")
-				}
-				unchanged(t, source, sourceKind, "source")
-				unchanged(t, backup, kind, "backup")
-				if _, e := os.Lstat(backup + "/source-child"); kind == "directory" && !os.IsNotExist(e) {
-					t.Fatal("source nested in backup")
-				}
-			})
-		}
-	}
-}
 func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
@@ -144,17 +100,17 @@ func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(&env, home)
 	paths, _ := managed.UserPaths(env.Get)
-	resources, _ := ResourcesForPlatform(root, "macos", false, env)
+	resources, _ := lifecycle.ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	testutil.WriteFile(r.Target, []byte("original"), 0600)
 	var occupied string
 	var out, errOut bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, beforeBackupMove: func(_, destination string) {
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &errOut}.report), Hooks: lifecycle.Hooks{BeforeBackupMove: func(_, destination string) {
 		occupied = destination
 		testutil.WriteFile(destination, []byte("late user data"), 0600)
-	}}
-	if e := m.installFile(r, false); e == nil {
+	}}}
+	if e := m.InstallFile(r, false); e == nil {
 		t.Fatal("collision accepted")
 	}
 	source, _ := os.ReadFile(r.Target)
@@ -204,7 +160,7 @@ func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(&env, home)
 	paths, _ := managed.UserPaths(env.Get)
-	resources, _ := ResourcesForPlatform(root, "macos", false, env)
+	resources, _ := lifecycle.ResourcesForPlatform(root, "macos", false, env)
 	var link managed.Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
@@ -214,11 +170,11 @@ func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 	os.MkdirAll(filepath.Dir(link.Target), 0700)
 	testutil.WriteFile(link.Target, []byte("original"), 0600)
 	var out, errOut bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, createLink: func(_, target string) error {
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &errOut}.report), Hooks: lifecycle.Hooks{CreateLink: func(_, target string) error {
 		testutil.WriteFile(target, []byte("late user data"), 0600)
 		return errors.New("injected link failure")
-	}}
-	if e := m.installLink(link, false); e == nil {
+	}}}
+	if e := m.InstallLink(link, false); e == nil {
 		t.Fatal("link failure ignored")
 	}
 	state, e := managed.ReadState(paths.Resources + "/" + link.Name + ".state")

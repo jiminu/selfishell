@@ -9,6 +9,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
@@ -26,11 +27,11 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 	old := home + "/selfishell/releases/1.0.0"
 	project := home + "/project with spaces"
 	for _, item := range []struct{ dir, version, pin string }{{root, "2.0.0", "24.18.0"}, {old, "1.0.0", "24.13.0"}} {
-		writeTestFile(t, item.dir+"/VERSION", item.version+"\n", 0600)
-		writeTestFile(t, item.dir+"/bin/selfishell", "#!/bin/sh\n", 0755)
-		writeTestFile(t, item.dir+"/config/shared/mise.toml", "[tools]\nnode = \""+item.pin+"\"\n", 0600)
+		testutil.WriteTestFile(t, item.dir+"/VERSION", item.version+"\n", 0600)
+		testutil.WriteTestFile(t, item.dir+"/bin/selfishell", "#!/bin/sh\n", 0755)
+		testutil.WriteTestFile(t, item.dir+"/config/shared/mise.toml", "[tools]\nnode = \""+item.pin+"\"\n", 0600)
 	}
-	writeTestFile(t, project+"/mise.toml", "[tools]\nnode = \"22.0.0\"\n", 0600)
+	testutil.WriteTestFile(t, project+"/mise.toml", "[tools]\nnode = \"22.0.0\"\n", 0600)
 	if err := os.Symlink("releases/1.0.0", home+"/selfishell/previous"); err != nil {
 		t.Fatal(err)
 	}
@@ -46,9 +47,9 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 	op := &PackageOperation{Process: process.Process{Out: &out, Err: &stderr, Env: env, Dir: project}}
 	paths := managed.Paths{Config: home + "/.config/selfishell", State: home + "/.local/state/selfishell", Data: home + "/.local/share/selfishell", Cache: home + "/.cache/selfishell"}
 	for _, version := range []string{"20.0.0", "22.0.0", "24.13.0", "24.18.0"} {
-		writeTestFile(t, home+"/.local/share/mise/installs/node/"+version+"/bin/node", "#!/bin/sh\nexit 0\n", 0755)
+		testutil.WriteTestFile(t, home+"/.local/share/mise/installs/node/"+version+"/bin/node", "#!/bin/sh\nexit 0\n", 0755)
 	}
-	writeTestFile(t, home+"/.local/share/mise/installs/go/1.20.0/bin/go", "#!/bin/sh\nexit 0\n", 0755)
+	testutil.WriteTestFile(t, home+"/.local/share/mise/installs/go/1.20.0/bin/go", "#!/bin/sh\nexit 0\n", 0755)
 	projectTrack := exec.Command(mise, "-C", project, "config", "ls")
 	projectTrack.Env = env
 	if output, err := projectTrack.CombinedOutput(); err != nil {
@@ -90,8 +91,8 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 	if link, _ := os.Readlink(home + "/selfishell/previous"); link != "releases/1.0.0" {
 		t.Fatalf("rollback link changed: %s", link)
 	}
-	writeTestFile(t, home+"/.local/share/mise/installs/node/24.13.0/bin/node", "#!/bin/sh\nexit 0\n", 0755)
-	writeTestFile(t, project+"/mise.toml", "[tools]\nnode = [\"22.0.0\", \"24.13.0\"]\n", 0600)
+	testutil.WriteTestFile(t, home+"/.local/share/mise/installs/node/24.13.0/bin/node", "#!/bin/sh\nexit 0\n", 0755)
+	testutil.WriteTestFile(t, project+"/mise.toml", "[tools]\nnode = [\"22.0.0\", \"24.13.0\"]\n", 0600)
 	if err := op.PruneMise(context.Background(), rootAlias, paths, packages, "ubuntu-wsl", false); err != nil {
 		t.Fatal(err)
 	}

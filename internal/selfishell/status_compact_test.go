@@ -9,6 +9,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
@@ -19,7 +20,7 @@ func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 			t.Parallel()
 			env := env
 			root, paths, warnings, bin := inventoryFixture(t, &env)
-			setEnv(&env, "PATH", bin)
+			testutil.SetEnv(&env, "PATH", bin)
 			fixtureFile(t, bin+"/dpkg-query", "#!/bin/sh\nprintf 'database locked\\n' >&2\nexit 2\n", 0700)
 			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"present\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
 			var out bytes.Buffer
@@ -49,11 +50,11 @@ func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	repo := t.TempDir()
-	gitCommand(t, repo, "init", "--quiet")
+	testutil.GitCommand(t, repo, "init", "--quiet")
 	fixtureFile(t, repo+"/p.plugin.zsh", ":\n", 0600)
-	gitCommand(t, repo, "add", "p.plugin.zsh")
-	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
-	sha := gitCommand(t, repo, "rev-parse", "HEAD")
+	testutil.GitCommand(t, repo, "add", "p.plugin.zsh")
+	testutil.GitCommand(t, repo, "commit", "--quiet", "-m", "initial")
+	sha := testutil.GitCommand(t, repo, "rev-parse", "HEAD")
 	data := env.Get("XDG_DATA_HOME") + "/selfishell/zsh-plugins/"
 	var manifest strings.Builder
 	var packages []Package
@@ -61,11 +62,11 @@ func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 		fmt.Fprintf(&manifest, "git %s %s all all %s %s .local/share/selfishell/zsh-plugins/%s p.plugin.zsh\n", name, sha, repo, sha, name)
 		packages = append(packages, Package{Name: name, Manager: "direct", Requirement: "required"})
 		if name != "absent" {
-			gitCommand(t, repo, "clone", "--quiet", repo, data+name)
+			testutil.GitCommand(t, repo, "clone", "--quiet", repo, data+name)
 			fixtureFile(t, paths.State+"/dependencies/"+name, sha+"\n", 0600)
 		}
 	}
-	gitCommand(t, data+"drifted", "commit", "--quiet", "--allow-empty", "-m", "drift")
+	testutil.GitCommand(t, data+"drifted", "commit", "--quiet", "--allow-empty", "-m", "drift")
 	fixtureFile(t, data+"dirty/p.plugin.zsh", "changed\n", 0600)
 	fixtureFile(t, root+"/dependencies.conf", manifest.String(), 0600)
 	var out bytes.Buffer

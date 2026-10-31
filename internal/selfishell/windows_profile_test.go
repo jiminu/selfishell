@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -37,7 +39,7 @@ func TestWindowsProfileDiscoveryUsesDistroIdentity(t *testing.T) {
 			env := env
 			root, home, paths, settings := existingWindowsProfileFixture(t, &env)
 			data := `{"profiles":{"list":[{"guid":"{2c4de342-38b7-51cf-b940-2309a097f518}","source":"Windows.Terminal.Wsl","name":"Renamed shell"}]}}`
-			setEnv(&env, "WSL_DISTRO_NAME", "Ubuntu")
+			testutil.SetEnv(&env, "WSL_DISTRO_NAME", "Ubuntu")
 			modern := `{"guid":"{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}","source":"Microsoft.WSL","name":"Renamed modern shell"}`
 			if scenario == "modern" || scenario == "ambiguous" || scenario == "current" {
 				probe := `#!/bin/sh
@@ -54,7 +56,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			}
 			switch scenario {
 			case "current":
-				setEnv(&env, "WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
+				testutil.SetEnv(&env, "WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
 			case "missing":
 				data = `{"profiles":{"list":[]}}`
 			case "hidden":
@@ -150,7 +152,7 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 func existingWindowsProfileFixture(t *testing.T, env *process.Environment) (string, string, managed.Paths, string) {
 	t.Helper()
 	root, home, paths, windowsHome := windowsTerminalFixture(t, env)
-	setEnv(env, "WT_PROFILE_ID", "")
+	testutil.SetEnv(env, "WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	if err := os.MkdirAll(managed.RawParent(settings), 0700); err != nil {
 		t.Fatal(err)
@@ -194,7 +196,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	choice := &terminal.WindowsChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
-	m := lifecycle{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Out: io.Discard, Err: io.Discard}.report), Yes: true}
 	for _, preflight := range []bool{true, false} {
 		if err := terminal.InstallFragment(&m, paths, choice, preflight); err != nil {
 			t.Fatal(err)

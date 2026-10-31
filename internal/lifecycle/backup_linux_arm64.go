@@ -1,5 +1,5 @@
 //go:build linux && arm64
 
-package selfishell
+package lifecycle
 
 const renameat2Trap = 276

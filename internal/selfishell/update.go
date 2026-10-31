@@ -349,7 +349,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	}
 	if !o.dry {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths, c.Env)
-		prepared.m.c.progress = c.progress
+		prepared.m.Reporter, prepared.m.Ask = report.ReportFunc(c.report), c.askModified
 		defer c.progress.finish()
 	}
 	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}
@@ -426,8 +426,8 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	} else {
 		c.completeUpdate()
 	}
-	if !o.dry && prepared.m.unchanged > 0 && c.progress.compact {
-		c.report("Notes", report.Info, "%d configuration items unchanged.", prepared.m.unchanged)
+	if !o.dry && prepared.m.UnchangedCount > 0 && c.progress.compact {
+		c.report("Notes", report.Info, "%d configuration items unchanged.", prepared.m.UnchangedCount)
 	}
 	return 0
 }

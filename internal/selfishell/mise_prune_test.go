@@ -18,15 +18,15 @@ func pruneFixture(t *testing.T, env *process.Environment) (*PackageOperation, ma
 	root := home + "/selfishell/releases/2.0.0"
 	for _, version := range []string{"1.0.0", "2.0.0"} {
 		dir := home + "/selfishell/releases/" + version
-		writeTestFile(t, dir+"/VERSION", version+"\n", 0600)
-		writeTestFile(t, dir+"/bin/selfishell", "#!/bin/sh\n", 0755)
-		writeTestFile(t, dir+"/config/shared/mise.toml", "[tools]\nnode = \"24.18.0\"\n", 0600)
+		testutil.WriteTestFile(t, dir+"/VERSION", version+"\n", 0600)
+		testutil.WriteTestFile(t, dir+"/bin/selfishell", "#!/bin/sh\n", 0755)
+		testutil.WriteTestFile(t, dir+"/config/shared/mise.toml", "[tools]\nnode = \"24.18.0\"\n", 0600)
 	}
 	if err := os.Symlink("releases/1.0.0", home+"/selfishell/previous"); err != nil {
 		t.Fatal(err)
 	}
 	bin := home + "/bin"
-	writeTestFile(t, bin+"/mise", `#!/bin/sh
+	testutil.WriteTestFile(t, bin+"/mise", `#!/bin/sh
 printf '%s|%s|%s|%s|%s\n' "$PWD" "$MISE_OFFLINE" "$MISE_GLOBAL_CONFIG_FILE" "$MISE_IGNORED_CONFIG_PATHS" "$*" >> "$MISE_LOG"
 case "$*" in
   *'settings get ignored_config_paths'*) printf '%s\n' "${IGNORED_RESULT:-[]}" ;;
@@ -62,7 +62,7 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 		t.Fatalf("changed previous: %s", got)
 	}
 	installs := process.Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/node"
-	writeTestFile(t, installs+"/24.18.0/bin/node", "", 0755)
+	testutil.WriteTestFile(t, installs+"/24.18.0/bin/node", "", 0755)
 	if err := os.Symlink("24.18.0", installs+"/latest"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +81,9 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 		dataHome = home + "/.local/share"
 	}
 	mason := dataHome + "/nvim/mason/packages"
-	writeTestFile(t, python+"/3.14.8/bin/python3", "", 0755)
+	testutil.WriteTestFile(t, python+"/3.14.8/bin/python3", "", 0755)
 	for name, base := range map[string]string{"debugpy": python + "/3.14.8/bin", "current": python + "/3.14.9/bin", "homebrew": "/opt/homebrew/opt/python@3.14/bin"} {
-		writeTestFile(t, mason+"/"+name+"/venv/pyvenv.cfg", "home = "+base+"\nversion = 3.14\n", 0600)
+		testutil.WriteTestFile(t, mason+"/"+name+"/venv/pyvenv.cfg", "home = "+base+"\nversion = 3.14\n", 0600)
 	}
 	op.Process = process.WithEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": python + "/3.14.8"})
 	op.Process.Out = &bytes.Buffer{}

@@ -10,31 +10,32 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func neovimFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string, string, string) {
 	t.Helper()
 	op, paths, manifest, home := dependencyFixture(t, env)
 	root := home + "/release"
-	writeTestFile(t, root+"/config/shared/mise.toml", "[tools]\n", 0600)
+	testutil.WriteTestFile(t, root+"/config/shared/mise.toml", "[tools]\n", 0600)
 	repo := home + "/lazy-source"
 	if err := os.MkdirAll(repo, 0700); err != nil {
 		t.Fatal(err)
 	}
-	gitCommand(t, repo, "init", "--quiet")
-	writeTestFile(t, repo+"/init.lua", "return true\n", 0600)
-	gitCommand(t, repo, "add", ".")
-	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
-	head := gitCommand(t, repo, "rev-parse", "HEAD")
-	writeTestFile(t, manifest, fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s - - -\nnvim-plugin demo/one %s all all %s - - -\n", head, repo, head, repo), 0600)
+	testutil.GitCommand(t, repo, "init", "--quiet")
+	testutil.WriteTestFile(t, repo+"/init.lua", "return true\n", 0600)
+	testutil.GitCommand(t, repo, "add", ".")
+	testutil.GitCommand(t, repo, "commit", "--quiet", "-m", "initial")
+	head := testutil.GitCommand(t, repo, "rev-parse", "HEAD")
+	testutil.WriteTestFile(t, manifest, fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s - - -\nnvim-plugin demo/one %s all all %s - - -\n", head, repo, head, repo), 0600)
 	bin := home + "/bin"
-	writeTestFile(t, bin+"/nvim", `#!/bin/sh
+	testutil.WriteTestFile(t, bin+"/nvim", `#!/bin/sh
 printf '%s\n' "$*" >> "$NVIM_LOG"
 case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "$LAZY_SOURCE" "$XDG_DATA_HOME/nvim/lazy/lazy-source" ;; esac
 case "$*" in *nvim-treesitter*) exit "${PARSER_EXIT:-0}" ;; esac
 `, 0755)
-	setEnv(env, "NVIM_LOG", home+"/nvim.log")
-	setEnv(env, "LAZY_SOURCE", repo)
+	testutil.SetEnv(env, "NVIM_LOG", home+"/nvim.log")
+	testutil.SetEnv(env, "LAZY_SOURCE", repo)
 	op.Process.Env = append(env.List(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH="+bin+":/usr/bin:/bin", "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+repo)
 	return op, paths, root, manifest, home, head
 }
@@ -47,7 +48,7 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, checkout := range []string{home + "/data/selfishell/nvim/lazy/lazy.nvim", home + "/data/nvim/lazy/lazy-source"} {
-		if got := gitCommand(t, checkout, "rev-parse", "HEAD"); got != head {
+		if got := testutil.GitCommand(t, checkout, "rev-parse", "HEAD"); got != head {
 			t.Fatalf("%s: %s", checkout, got)
 		}
 	}
@@ -58,7 +59,7 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 	if strings.Count(string(data), "\n") != 2 {
 		t.Fatalf("unexpected Neovim call count: %s", data)
 	}
-	if origin := gitCommand(t, home+"/data/selfishell/nvim/lazy/lazy.nvim", "remote", "get-url", "origin"); origin != home+"/lazy-source" {
+	if origin := testutil.GitCommand(t, home+"/data/selfishell/nvim/lazy/lazy.nvim", "remote", "get-url", "origin"); origin != home+"/lazy-source" {
 		t.Fatalf("lazy cloned unapproved source: %s", origin)
 	}
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
@@ -69,8 +70,8 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 		t.Fatalf("unnecessary sync: %s", data)
 	}
 	// lazy.nvim does not clean its legacy readme cache, files, or symlinks.
-	writeTestFile(t, home+"/data/nvim/lazy/readme/personal.txt", "keep", 0600)
-	writeTestFile(t, home+"/data/nvim/lazy/personal.txt", "keep", 0600)
+	testutil.WriteTestFile(t, home+"/data/nvim/lazy/readme/personal.txt", "keep", 0600)
+	testutil.WriteTestFile(t, home+"/data/nvim/lazy/personal.txt", "keep", 0600)
 	if err := os.Symlink(home+"/lazy-source", home+"/data/nvim/lazy/local-plugin"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,8 +82,8 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 	if strings.Count(string(data), "Lazy! sync") != 1 {
 		t.Fatalf("ignored cleanup entries triggered sync: %s", data)
 	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", home+"/data/nvim/lazy/removed-plugin")
-	writeTestFile(t, home+"/data/nvim/lazy/removed-plugin/doc/tags", "generated\n", 0600)
+	testutil.GitCommand(t, home, "clone", "-q", home+"/lazy-source", home+"/data/nvim/lazy/removed-plugin")
+	testutil.WriteTestFile(t, home+"/data/nvim/lazy/removed-plugin/doc/tags", "generated\n", 0600)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
@@ -108,13 +109,13 @@ func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 			want := "preserving it"
 			switch shape {
 			case "modified", "untracked", "ignored":
-				gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
+				testutil.GitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
 				if shape == "modified" {
 					userFile = target + "/init.lua"
 				} else if shape == "ignored" {
-					writeTestFile(t, target+"/.gitignore", "personal.txt\n", 0600)
-					gitCommand(t, target, "add", ".gitignore")
-					gitCommand(t, target, "commit", "-qm", "ignore personal file")
+					testutil.WriteTestFile(t, target+"/.gitignore", "personal.txt\n", 0600)
+					testutil.GitCommand(t, target, "add", ".gitignore")
+					testutil.GitCommand(t, target, "commit", "-qm", "ignore personal file")
 				}
 			case "broken-git":
 				if err := os.MkdirAll(target+"/.git", 0700); err != nil {
@@ -122,13 +123,13 @@ func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 				}
 				want = "Could not inspect Neovim plugin checkout"
 			}
-			writeTestFile(t, userFile, "keep personal data\n", 0600)
+			testutil.WriteTestFile(t, userFile, "keep personal data\n", 0600)
 			for range 2 {
 				err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
 				if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), target) {
 					t.Fatalf("unsafe plugin path: %v", err)
 				}
-				if got := readTestFile(t, userFile); got != "keep personal data\n" {
+				if got := testutil.ReadTestFile(t, userFile); got != "keep personal data\n" {
 					t.Fatalf("personal data changed: %q", got)
 				}
 				if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
@@ -149,9 +150,9 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 		name := fmt.Sprintf("plugin%02d", i)
 		lines += fmt.Sprintf("nvim-plugin demo/%s %s all all %s/sources/%s - - -\n", name, head, home, name)
 		plugins = append(plugins, home+"/data/nvim/lazy/"+name)
-		gitCommand(t, home, "clone", "-q", home+"/lazy-source", plugins[i])
+		testutil.GitCommand(t, home, "clone", "-q", home+"/lazy-source", plugins[i])
 	}
-	writeTestFile(t, manifest, lines, 0600)
+	testutil.WriteTestFile(t, manifest, lines, 0600)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
@@ -159,20 +160,20 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Earlier failures win regardless of which concurrent check finishes first.
-	writeTestFile(t, plugins[3]+"/init.lua", "dirty 3\n", 0600)
+	testutil.WriteTestFile(t, plugins[3]+"/init.lua", "dirty 3\n", 0600)
 	if err := os.RemoveAll(plugins[6] + "/.git"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(plugins[6]+"/.git", 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeTestFile(t, plugins[9]+"/init.lua", "dirty 9\n", 0600)
+	testutil.WriteTestFile(t, plugins[9]+"/init.lua", "dirty 9\n", 0600)
 	if err := os.RemoveAll(plugins[12]); err != nil {
 		t.Fatal(err)
 	}
-	writeTestFile(t, plugins[12], "user data", 0600)
+	testutil.WriteTestFile(t, plugins[12], "user data", 0600)
 	lazy := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	writeTestFile(t, lazy+"/user-file", "keep", 0600)
+	testutil.WriteTestFile(t, lazy+"/user-file", "keep", 0600)
 	stdin := strings.NewReader("terminal input")
 	op.Process.In = stdin
 	for _, step := range []struct {
@@ -184,9 +185,9 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 				t.Fatal("lazy.nvim user file lost")
 			}
 		}},
-		{"Neovim plugin checkout was modified; preserving it: " + plugins[3] + ".", func() { gitCommand(t, plugins[3], "checkout", "--", ".") }},
+		{"Neovim plugin checkout was modified; preserving it: " + plugins[3] + ".", func() { testutil.GitCommand(t, plugins[3], "checkout", "--", ".") }},
 		{"Could not inspect Neovim plugin checkout: " + plugins[6] + ":", func() { os.RemoveAll(plugins[6]) }},
-		{"Neovim plugin checkout was modified; preserving it: " + plugins[9] + ".", func() { gitCommand(t, plugins[9], "checkout", "--", ".") }},
+		{"Neovim plugin checkout was modified; preserving it: " + plugins[9] + ".", func() { testutil.GitCommand(t, plugins[9], "checkout", "--", ".") }},
 		{"Neovim plugin path is not an approved Git checkout; preserving it: " + plugins[12], nil},
 	} {
 		for range 3 {
@@ -202,7 +203,7 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 	if _, err := os.Stat(home + "/nvim.log"); !os.IsNotExist(err) {
 		t.Fatalf("ran nvim despite a failed check: %v", err)
 	}
-	if got := readTestFile(t, plugins[12]); got != "user data" {
+	if got := testutil.ReadTestFile(t, plugins[12]); got != "user data" {
 		t.Fatalf("preserved path changed: %q", got)
 	}
 	if stdin.Len() != len("terminal input") {
@@ -262,13 +263,13 @@ func TestNeovimUsesManagedMiseResolutionAndExec(t *testing.T) {
 	if err := os.MkdirAll(home+"/.local/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
+	testutil.WriteTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
 printf '%s|%s|%s|%s\n' "$PWD" "$MISE_GLOBAL_CONFIG_FILE" "$(printf '%s' "$*" | tr '\n' ' ')" "$HOME" >> "$MISE_LOG"
 if [ "$3" = which ]; then printf '%s\n' "$MANAGED_NVIM"; exit 0; fi
 if [ "$3" = exec ]; then shift 4; "$@"; exit; fi
 `, 0755)
 	managedNvim := home + "/managed/nvim"
-	writeTestFile(t, managedNvim, `#!/bin/sh
+	testutil.WriteTestFile(t, managedNvim, `#!/bin/sh
 printf '%s\n' "$*" >> "$NVIM_LOG"
 case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "$LAZY_SOURCE" "$XDG_DATA_HOME/nvim/lazy/lazy-source" ;; esac
 `, 0755)
@@ -294,13 +295,13 @@ func TestNeovimMiseResolutionReusesOnlyAnExecutableSuccess(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	op, paths, root, _, home, _ := neovimFixture(t, &env)
-	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
+	testutil.WriteTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
 printf '%s\n' "$*" >> "$MISE_LOG"
 [ "$3" = which ] && [ -f "$HOME/which-ok" ] && printf '%s\n' "$MANAGED_NVIM"
 [ -f "$HOME/which-ok" ]
 `, 0755)
 	managed := home + "/managed/nvim"
-	writeTestFile(t, managed, "#!/bin/sh\n", 0755)
+	testutil.WriteTestFile(t, managed, "#!/bin/sh\n", 0755)
 	op.Process.Env = append(op.Process.Env, "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managed)
 	resolve := func(want string, calls int) {
 		t.Helper()
@@ -308,13 +309,13 @@ printf '%s\n' "$*" >> "$MISE_LOG"
 		if err != nil || nvim != want {
 			t.Fatalf("resolved %q %v, want %q", nvim, err, want)
 		}
-		if got := strings.Count(readTestFile(t, home+"/mise.log"), "which nvim"); got != calls {
+		if got := strings.Count(testutil.ReadTestFile(t, home+"/mise.log"), "which nvim"); got != calls {
 			t.Fatalf("which calls %d, want %d", got, calls)
 		}
 	}
 	resolve(home+"/bin/nvim", 1)
 	resolve(home+"/bin/nvim", 2) // a failed resolution is retried
-	writeTestFile(t, home+"/which-ok", "", 0600)
+	testutil.WriteTestFile(t, home+"/which-ok", "", 0600)
 	resolve(managed, 3)
 	resolve(managed, 3)
 	if err := os.Remove(managed); err != nil {
@@ -327,7 +328,7 @@ func TestNeovimVerificationFailureSurfacesSyncLog(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
-	writeTestFile(t, home+"/bin/nvim", "#!/bin/sh\nprintf 'sync diagnostic\\n'\n", 0755)
+	testutil.WriteTestFile(t, home+"/bin/nvim", "#!/bin/sh\nprintf 'sync diagnostic\\n'\n", 0755)
 	err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
 	if err == nil || !strings.Contains(err.Error(), "missing after sync") {
 		t.Fatalf("verification: %v", err)

@@ -1,4 +1,8 @@
-package selfishell
+// Package lifecycle installs, updates and removes Selfishell's managed files,
+// links and blocks. It owns their invariants: pending state before a change,
+// atomic writes, backups that are never overwritten and restores that never
+// replace an occupied target.
+package lifecycle
 
 import (
 	"context"
@@ -12,61 +16,71 @@ import (
 	"github.com/jiminu/selfishell/internal/report"
 )
 
-type lifecycle struct {
-	c                CLI
-	paths            managed.Paths
-	dry, yes         bool
-	unchanged        int
-	actions          map[string]string
-	removeState      func(string) error
-	beforeBackupMove func(string, string)
-	createLink       func(string, string) error
-	atomicWrite      func(string, []byte, os.FileMode) error
+// Operation installs and removes managed resources and owns their pending
+// state, backups and restores. Reporter receives its notes. Ask prompts about a
+// modified resource and returns false when nobody can answer; a nil Ask cannot.
+// Dry previews without writing, Yes keeps modified resources instead of asking,
+// and UnchangedCount counts resources already in their managed state.
+type Operation struct {
+	Paths          managed.Paths
+	Reporter       report.Reporter
+	Ask            func(question string) (answer string, ok bool)
+	Dry, Yes       bool
+	UnchangedCount int
+	Hooks          Hooks
+	actions        map[string]string // overwrite or skip, asked once per resource
 }
 
-func (m *lifecycle) write(path string, data []byte, mode os.FileMode) error {
-	if m.atomicWrite != nil {
-		return m.atomicWrite(path, data, mode)
+// Hooks exist for failure tests and are nil in production.
+type Hooks struct {
+	CreateLink       func(oldname, newname string) error
+	AtomicWrite      func(path string, data []byte, mode os.FileMode) error
+	BeforeBackupMove func(target, backup string)
+	RemoveState      func(path string) error
+}
+
+// Write replaces path atomically.
+func (m *Operation) Write(path string, data []byte, mode os.FileMode) error {
+	if m.Hooks.AtomicWrite != nil {
+		return m.Hooks.AtomicWrite(path, data, mode)
 	}
 	return managed.WriteAtomic(path, data, mode)
 }
 
-// Report, DryRun, Unchanged, Backup, ResolveModified and Write let the
-// Windows Terminal fragment code drive this lifecycle (terminal.Lifecycle).
-func (m *lifecycle) Report(section string, tone report.Tone, format string, args ...any) {
-	m.c.report(section, tone, format, args...)
+// Report forwards a note to Reporter.
+func (m *Operation) Report(section string, tone report.Tone, format string, args ...any) {
+	m.Reporter.Report(section, tone, format, args...)
 }
-func (m *lifecycle) DryRun() bool                       { return m.dry }
-func (m *lifecycle) Unchanged()                         { m.unchanged++ }
-func (m *lifecycle) Backup(base string) (string, error) { return m.backup(base) }
-func (m *lifecycle) ResolveModified(r managed.Resource, kind, question string, preflight bool) (bool, error) {
-	return m.resolveModified(r, kind, question, preflight)
-}
-func (m *lifecycle) Write(path string, data []byte, mode os.FileMode) error {
-	return m.write(path, data, mode)
-}
+
+// DryRun reports whether the lifecycle only previews.
+func (m *Operation) DryRun() bool { return m.Dry }
+
+// Unchanged counts one resource already in its managed state.
+func (m *Operation) Unchanged() { m.UnchangedCount++ }
 
 func blockConflictError(r managed.Resource) error {
 	return fmt.Errorf("Cannot manage the Selfishell %s block in: %s\nselfishell: Preserving the file. Remove conflicting Selfishell markers and retry.", r.Name, r.Target)
 }
 
-func (m *lifecycle) statePath(r managed.Resource) string {
-	return m.paths.Resources + "/" + r.Name + ".state"
+func (m *Operation) statePath(r managed.Resource) string {
+	return m.Paths.Resources + "/" + r.Name + ".state"
 }
-func (m *lifecycle) state(r managed.Resource) (managed.State, bool, error) {
+func (m *Operation) state(r managed.Resource) (managed.State, bool, error) {
 	s, e := managed.ReadState(m.statePath(r))
 	if errors.Is(e, fs.ErrNotExist) {
 		return managed.State{}, false, nil
 	}
 	return s, e == nil, e
 }
-func (m *lifecycle) save(r managed.Resource, s managed.State) error {
+func (m *Operation) save(r managed.Resource, s managed.State) error {
 	return managed.WriteState(m.statePath(r), s)
 }
-func (m *lifecycle) say(tone report.Tone, format string, args ...any) {
-	m.c.report("Configuration", tone, format, args...)
+func (m *Operation) say(tone report.Tone, format string, args ...any) {
+	m.Reporter.Report("Configuration", tone, format, args...)
 }
-func (m *lifecycle) backup(path string) (string, error) {
+
+// Backup returns the first unused timestamped backup name for path.
+func (m *Operation) Backup(path string) (string, error) {
 	base := path + ".backup." + time.Now().Format("20060102150405")
 	candidate := base
 	for n := 1; ; n++ {
@@ -80,18 +94,22 @@ func (m *lifecycle) backup(path string) (string, error) {
 		candidate = fmt.Sprintf("%s.%d", base, n)
 	}
 }
-func (m *lifecycle) installResource(r managed.Resource, preflight bool) error {
+
+// InstallResource installs or updates r by kind; preflight only checks it.
+func (m *Operation) InstallResource(r managed.Resource, preflight bool) error {
 	switch r.Kind {
 	case "file":
-		return m.installFile(r, preflight)
+		return m.InstallFile(r, preflight)
 	case "link":
-		return m.installLink(r, preflight)
+		return m.InstallLink(r, preflight)
 	case "block":
-		return m.installBlock(r, preflight)
+		return m.InstallBlock(r, preflight)
 	}
 	return fmt.Errorf("invalid resource kind: %s", r.Kind)
 }
-func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
+
+// InstallFile copies r.Source to r.Target, backing up a user file first.
+func (m *Operation) InstallFile(r managed.Resource, preflight bool) error {
 	source, err := os.ReadFile(r.Source)
 	if err != nil {
 		return err
@@ -121,7 +139,7 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 	if has {
 		backup = s.Backup
 	} else if present {
-		backup, err = m.backup(r.Target)
+		backup, err = m.Backup(r.Target)
 		if err != nil {
 			return err
 		}
@@ -143,14 +161,14 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 	}
 	if has && current != "" && current != s.Checksum && current != sourceChecksum {
 		if s.Status == "active" || backup == "-" || backupPresent {
-			if m.dry {
+			if m.Dry {
 				if !preflight {
 					m.say(report.Warning, "Conflict: modified managed file: %s", r.Target)
 					m.say(report.Preview, "Would require an overwrite or skip decision.")
 				}
 				return nil
 			}
-			if overwrite, err := m.resolveModified(r, "file", "Overwrite with default config?", preflight); err != nil || !overwrite {
+			if overwrite, err := m.ResolveModified(r, "file", "Overwrite with default config?", preflight); err != nil || !overwrite {
 				return err
 			}
 		}
@@ -159,12 +177,12 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 		return nil
 	}
 	if current == sourceChecksum && !preserveOriginal {
-		if !m.dry {
+		if !m.Dry {
 			if err = m.save(r, managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: sourceChecksum}); err != nil {
 				return err
 			}
 		}
-		m.unchanged++
+		m.UnchangedCount++
 		return nil
 	}
 	active := has && s.Status == "active" && present
@@ -172,7 +190,7 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 	if active {
 		verb = "Updated"
 	}
-	if m.dry {
+	if m.Dry {
 		m.say(report.Preview, "Would %s managed file: %s", map[bool]string{true: "update", false: "install"}[active], r.Target)
 		return nil
 	}
@@ -190,15 +208,15 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 			if err = managed.MakeRawDir(managed.RawParent(backup)); err != nil {
 				return err
 			}
-			if m.beforeBackupMove != nil {
-				m.beforeBackupMove(r.Target, backup)
+			if m.Hooks.BeforeBackupMove != nil {
+				m.Hooks.BeforeBackupMove(r.Target, backup)
 			}
 			if err = moveBackupNoReplace(r.Target, backup); err != nil {
 				return err
 			}
 		}
 	}
-	if err = m.write(r.Target, source, 0644); err != nil {
+	if err = m.Write(r.Target, source, 0644); err != nil {
 		return err
 	}
 	if err = m.save(r, managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: sourceChecksum}); err != nil {
@@ -208,21 +226,26 @@ func (m *lifecycle) installFile(r managed.Resource, preflight bool) error {
 	return nil
 }
 
-// resolveModified asks once per resource whether to overwrite a locally
+// ResolveModified asks once per resource whether to overwrite a locally
 // modified managed file or block, backing it up first. False leaves it as is.
-func (m *lifecycle) resolveModified(r managed.Resource, kind, question string, preflight bool) (bool, error) {
+func (m *Operation) ResolveModified(r managed.Resource, kind, question string, preflight bool) (bool, error) {
 	action := m.actions[r.Name]
 	if action == "" {
-		if m.yes || !m.c.interactive() {
+		var answer string
+		ok := !m.Yes && m.Ask != nil
+		if ok {
+			answer, ok = m.Ask(fmt.Sprintf("Managed %s was modified: %s. %s [y/N] ", kind, r.Target, question))
+		}
+		if !ok {
 			return false, fmt.Errorf("Managed %s was modified; preserving it: %s", kind, r.Target)
 		}
-		m.c.progress.Pause()
-		fmt.Fprintf(m.c.Out, "Managed %s was modified: %s. %s [y/N] ", kind, r.Target, question)
-		answer, _ := m.c.readAnswer()
 		if report.Affirmative(answer) {
 			action = "overwrite"
 		} else {
 			action = "skip"
+		}
+		if m.actions == nil {
+			m.actions = map[string]string{}
 		}
 		m.actions[r.Name] = action
 	}
@@ -233,7 +256,7 @@ func (m *lifecycle) resolveModified(r managed.Resource, kind, question string, p
 		m.say(report.Warning, "Skipped modified managed %s: %s", kind, r.Target)
 		return false, nil
 	}
-	conflict, err := m.backup(m.paths.State + "/backups/" + r.Name)
+	conflict, err := m.Backup(m.Paths.State + "/backups/" + r.Name)
 	if err != nil {
 		return false, err
 	}
@@ -255,7 +278,9 @@ func copyPreserve(source, target string) error {
 	}
 	return managed.CreateRawExclusive(target, data, i.Mode().Perm())
 }
-func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
+
+// InstallLink links r.Target to r.Source, backing up a user path first.
+func (m *Operation) InstallLink(r managed.Resource, preflight bool) error {
 	s, has, err := m.state(r)
 	if err != nil {
 		return fmt.Errorf("Managed resource state is malformed: %s", m.statePath(r))
@@ -274,7 +299,7 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 	if has {
 		backup = s.Backup
 	} else if present {
-		backup, err = m.backup(r.Target)
+		backup, err = m.Backup(r.Target)
 		if err != nil {
 			return err
 		}
@@ -283,7 +308,7 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 		dest, _ := os.Readlink(r.Target)
 		if dest == r.Source {
 			if !preflight {
-				if !m.dry {
+				if !m.Dry {
 					info, present, err = managed.Exists(r.Target)
 					if err != nil {
 						return err
@@ -299,7 +324,7 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 						return err
 					}
 				}
-				m.unchanged++
+				m.UnchangedCount++
 			}
 			return nil
 		}
@@ -310,7 +335,7 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 	if preflight {
 		return nil
 	}
-	if m.dry {
+	if m.Dry {
 		m.say(report.Preview, "Would link: %s -> %s", r.Target, r.Source)
 		return nil
 	}
@@ -324,8 +349,8 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 	if backup != "-" && present {
 		_, b, _ := managed.Exists(backup)
 		if !b {
-			if m.beforeBackupMove != nil {
-				m.beforeBackupMove(r.Target, backup)
+			if m.Hooks.BeforeBackupMove != nil {
+				m.Hooks.BeforeBackupMove(r.Target, backup)
 			}
 			if err = moveBackupNoReplace(r.Target, backup); err != nil {
 				return err
@@ -335,14 +360,14 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 	}
 	_, present, _ = managed.Exists(r.Target)
 	if !present {
-		create := m.createLink
+		create := m.Hooks.CreateLink
 		if create == nil {
 			create = os.Symlink
 		}
 		if err = create(r.Source, r.Target); err != nil {
 			if moved {
 				if restoreErr := moveBackupNoReplace(backup, r.Target); restoreErr == nil {
-					remove := m.removeState
+					remove := m.Hooks.RemoveState
 					if remove == nil {
 						remove = os.Remove
 					}
@@ -371,8 +396,10 @@ func (m *lifecycle) installLink(r managed.Resource, preflight bool) error {
 	m.say(report.Success, "Linked: %s -> %s", r.Target, r.Source)
 	return nil
 }
-func (m *lifecycle) installBlock(r managed.Resource, preflight bool) error {
-	content, err := managed.BlockContent(r.Name, m.paths.Config)
+
+// InstallBlock adds or updates the Selfishell block in r.Target.
+func (m *Operation) InstallBlock(r managed.Resource, preflight bool) error {
+	content, err := managed.BlockContent(r.Name, m.Paths.Config)
 	if err != nil {
 		return err
 	}
@@ -413,23 +440,23 @@ func (m *lifecycle) installBlock(r managed.Resource, preflight bool) error {
 	}
 	if has && view.Status == "intact" && view.Checksum == expected {
 		if !preflight {
-			if !m.dry {
+			if !m.Dry {
 				if err = m.save(r, managed.State{Kind: "block", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: expected}); err != nil {
 					return err
 				}
 			}
-			m.unchanged++
+			m.UnchangedCount++
 		}
 		return nil
 	}
 	if has && view.Status == "intact" && view.Checksum != s.Checksum {
-		if m.dry {
+		if m.Dry {
 			if !preflight {
 				m.say(report.Preview, "Would preserve modified managed block: %s", r.Target)
 			}
 			return nil
 		}
-		if overwrite, err := m.resolveModified(r, "block", "Overwrite the Selfishell block?", preflight); err != nil || !overwrite {
+		if overwrite, err := m.ResolveModified(r, "block", "Overwrite the Selfishell block?", preflight); err != nil || !overwrite {
 			return err
 		}
 	}
@@ -440,7 +467,7 @@ func (m *lifecycle) installBlock(r managed.Resource, preflight bool) error {
 		return nil
 	}
 	if view.Status == "intact" {
-		if m.dry {
+		if m.Dry {
 			m.say(report.Preview, "Would update Selfishell block: %s", r.Target)
 			return nil
 		}
@@ -449,7 +476,7 @@ func (m *lifecycle) installBlock(r managed.Resource, preflight bool) error {
 		}
 		data = managed.SpliceBlock(data, view, content)
 	} else {
-		if m.dry {
+		if m.Dry {
 			m.say(report.Preview, "Would add Selfishell block: %s", r.Target)
 			return nil
 		}
@@ -462,7 +489,7 @@ func (m *lifecycle) installBlock(r managed.Resource, preflight bool) error {
 	if present {
 		mode = info.Mode().Perm()
 	}
-	if err = m.write(r.Target, data, mode); err != nil {
+	if err = m.Write(r.Target, data, mode); err != nil {
 		return err
 	}
 	if err = m.save(r, managed.State{Kind: "block", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: expected}); err != nil {

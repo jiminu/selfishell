@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
@@ -20,7 +21,7 @@ func identicalUserFile(t *testing.T, env *process.Environment) (string, string, 
 	if e != nil {
 		t.Fatal(e)
 	}
-	resources, e := ResourcesForPlatform(root, "macos", false, *env)
+	resources, e := lifecycle.ResourcesForPlatform(root, "macos", false, *env)
 	if e != nil {
 		t.Fatal(e)
 	}

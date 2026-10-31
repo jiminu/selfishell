@@ -31,7 +31,7 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 	t.Parallel()
 	var env process.Environment
 	root, home, paths := blockHome(t, &env, "macos")
-	setEnv(&env, "SELFISHELL_TEST_TTY", "1")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_TTY", "1")
 	ghostty := filepath.Join(home, "tools/ghostty")
 	if err := testutil.WriteFile(ghostty, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 		t.Fatal(err)
 	}
 	apps := t.TempDir()
-	setEnv(&env, "SELFISHELL_TEST_APPLICATIONS_DIR", apps)
+	testutil.SetEnv(&env, "SELFISHELL_TEST_APPLICATIONS_DIR", apps)
 	if err := os.MkdirAll(apps+"/Ghostty.app/Contents/MacOS", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -175,13 +175,13 @@ func readFragmentRecord(paths managed.Paths) (*struct{ Path string }, error) {
 func windowsTerminalFixture(t *testing.T, env *process.Environment) (string, string, managed.Paths, string) {
 	t.Helper()
 	root, home, paths := blockHome(t, env, "ubuntu")
-	setEnv(env, "WSL_DISTRO_NAME", "Ubuntu-24.04")
-	setEnv(env, "SELFISHELL_TEST_TTY", "1")
+	testutil.SetEnv(env, "WSL_DISTRO_NAME", "Ubuntu-24.04")
+	testutil.SetEnv(env, "SELFISHELL_TEST_TTY", "1")
 	if err := testutil.WriteFile(env.Get("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux microsoft WSL2\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	windowsHome := home + "/windows-localappdata"
-	setEnv(env, "WT_PROFILE_ID", "")
+	testutil.SetEnv(env, "WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	if err := os.MkdirAll(managed.RawParent(settings), 0700); err != nil {
 		t.Fatal(err)
@@ -419,7 +419,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", manifest)
+	testutil.SetEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", manifest)
 	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
 	if err := os.MkdirAll(managed.RawParent(target), 0700); err != nil {
 		t.Fatal(err)
@@ -705,7 +705,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 				return
 			}
 			// A clone carries the original's state; its fragment stays the original's.
-			setEnv(&env, "WSL_DISTRO_NAME", "Ubuntu-dev")
+			testutil.SetEnv(&env, "WSL_DISTRO_NAME", "Ubuntu-dev")
 			clone := "{6c092f7d-70db-5725-abaa-0fbf5adcce1f}" // legacy profile GUID of Ubuntu-dev
 			if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"},{"guid":"`+clone+`","name":"Ubuntu-dev","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
 				t.Fatal(err)
@@ -897,7 +897,7 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	outer := t.TempDir()
-	setEnv(&env, "WSL_DISTRO_NAME", "Inherited-Real-Distro")
+	testutil.SetEnv(&env, "WSL_DISTRO_NAME", "Inherited-Real-Distro")
 	home := isolatedUpdateHome(t, &env)
 	tools := outer + "/tools"
 	if err := os.Mkdir(tools, 0700); err != nil {
@@ -907,16 +907,16 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	if err := testutil.WriteFile(tools+"/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(&env, "PATH", tools)
-	setEnv(&env, "SHELL", "/bin/zsh")
-	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	testutil.SetEnv(&env, "PATH", tools)
+	testutil.SetEnv(&env, "SHELL", "/bin/zsh")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	for name, data := range map[string]string{"os-release": "ID=ubuntu\n", "proc-version": "Microsoft WSL2\n"} {
 		if err := testutil.WriteFile(home+"/"+name, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	setEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
-	setEnv(&env, "SELFISHELL_TEST_PROC_VERSION_FILE", home+"/proc-version")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_PROC_VERSION_FILE", home+"/proc-version")
 	code, _, stderr := commandResult(env, testRelease(t), "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatal("isolated setup failed", stderr)

@@ -8,22 +8,23 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func miseFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string) {
 	t.Helper()
 	op, paths, _, home := dependencyFixture(t, env)
 	root := home + "/release"
-	writeTestFile(t, root+"/config/shared/mise.toml", "[tools]\nnode = \"24.18.0\"\n", 0600)
+	testutil.WriteTestFile(t, root+"/config/shared/mise.toml", "[tools]\nnode = \"24.18.0\"\n", 0600)
 	bin := home + "/bin"
-	writeTestFile(t, bin+"/mise", `#!/bin/sh
+	testutil.WriteTestFile(t, bin+"/mise", `#!/bin/sh
 printf '%s|%s|%s|%s|%s\n' "$PWD" "$MISE_GLOBAL_CONFIG_FILE" "${MISE_OFFLINE-unset}" "$MISE_TRUSTED_CONFIG_PATHS" "$*" >> "$MISE_LOG"
 case "$*" in
   *'install --dry-run-code'*) exit "${DRY_CODE_EXIT:-1}" ;;
   *'install '* ) exit "${INSTALL_EXIT:-0}" ;;
 esac
 `, 0755)
-	setEnv(env, "MISE_LOG", home+"/mise.log")
+	testutil.SetEnv(env, "MISE_LOG", home+"/mise.log")
 	op.Process.Env = append(env.List(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
 	return op, paths, root, home
 }
@@ -126,7 +127,7 @@ func TestMiseTrustsExistingManagedConfigLink(t *testing.T) {
 	var env process.Environment
 	op, paths, root, home := miseFixture(t, &env)
 	link := home + "/.config/mise/conf.d/selfishell.toml"
-	writeTestFile(t, link, "[tools]\n", 0600)
+	testutil.WriteTestFile(t, link, "[tools]\n", 0600)
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node"); err != nil {
 		t.Fatal(err)
 	}

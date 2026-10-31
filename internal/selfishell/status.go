@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/release"
@@ -158,7 +159,7 @@ func (c CLI) status(args []string) int {
 		}
 	}
 	result, installHinted := c.statusSystem(platform, configured, verbose)
-	resources, err := ManagedResources(c.Root, c.Env)
+	resources, err := lifecycle.ManagedResources(c.Root, c.Env)
 	if err != nil {
 		return c.diagnosticError(err)
 	}
@@ -176,7 +177,7 @@ func (c CLI) status(args []string) int {
 			}
 			ghostty = e == nil && string(choice) == "1\n"
 		}
-		selected, e := ResourcesForPlatform(c.Root, platform.Name, ghostty, c.Env)
+		selected, e := lifecycle.ResourcesForPlatform(c.Root, platform.Name, ghostty, c.Env)
 		if e != nil {
 			return c.diagnosticError(e)
 		}

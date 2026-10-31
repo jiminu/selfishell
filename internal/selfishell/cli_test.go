@@ -94,9 +94,9 @@ func TestVersionAndRoot(t *testing.T) {
 func TestVersionAvailableCLI(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
-	setEnv(&env, "HOME", t.TempDir())
+	testutil.SetEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
-	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
+	testutil.SetEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
 	os.MkdirAll(root+"/latest/download", 0700)
 	testutil.WriteFile(root+"/latest/download/VERSION", []byte("1.2.3\n"), 0600)
 	var out, stderr bytes.Buffer

@@ -1,6 +1,6 @@
 //go:build darwin
 
-package selfishell
+package lifecycle
 
 import (
 	"syscall"

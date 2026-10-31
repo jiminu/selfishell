@@ -5,22 +5,25 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func testCLI(env *process.Environment, root, home string, args ...string) (int, string, string) {
 	isolateHome(env, home)
-	setEnv(env, "XDG_CONFIG_HOME", "")
-	setEnv(env, "XDG_STATE_HOME", "")
-	setEnv(env, "XDG_CACHE_HOME", "")
-	setEnv(env, "XDG_DATA_HOME", "")
-	setEnv(env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	setEnv(env, "SHELL", "/bin/zsh")
+	testutil.SetEnv(env, "XDG_CONFIG_HOME", "")
+	testutil.SetEnv(env, "XDG_STATE_HOME", "")
+	testutil.SetEnv(env, "XDG_CACHE_HOME", "")
+	testutil.SetEnv(env, "XDG_DATA_HOME", "")
+	testutil.SetEnv(env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	testutil.SetEnv(env, "SHELL", "/bin/zsh")
 	var out, err bytes.Buffer
 	code := (CLI{Env: *env, Root: root, In: strings.NewReader(""), Out: &out, Err: &err}).Run(args)
 	return code, out.String(), err.String()
@@ -30,21 +33,21 @@ func TestInvalidPackageNameHasUsageStatusAtPublicConsumers(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	root, home, bin := t.TempDir(), t.TempDir(), t.TempDir()
-	setEnv(&env, "TMPDIR", t.TempDir())
+	testutil.SetEnv(&env, "TMPDIR", t.TempDir())
 	for _, name := range []string{"apt-get", "apt-cache", "dpkg-query", "sudo", "brew", "curl", "git", "mise", "chsh"} {
 		if err := testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	setEnv(&env, "PATH", bin)
-	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	setEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
-	setEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
+	testutil.SetEnv(&env, "PATH", bin)
+	testutil.SetEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
 	if err := testutil.WriteFile(filepath.Join(root, "os-release"), []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
-		setEnv(&env, name, filepath.Join(home, "mise", name))
+		testutil.SetEnv(&env, name, filepath.Join(home, "mise", name))
 	}
 	if err := os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700); err != nil {
 		t.Fatal(err)
@@ -209,8 +212,8 @@ func TestMiseTrustAndDryRun(t *testing.T) {
 printf "%s\n" "$*" >> "$SELFISHELL_TEST_MISE_LOG"
 pwd >> "$SELFISHELL_TEST_MISE_LOG"
 `), 0700)
-	setEnv(&env, "PATH", tools+":/usr/bin:/bin")
-	setEnv(&env, "SELFISHELL_TEST_MISE_LOG", log)
+	testutil.SetEnv(&env, "PATH", tools+":/usr/bin:/bin")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_MISE_LOG", log)
 	code, _, err := testCLI(&env, root, home, "install", "--skip-packages", "--dry-run")
 	if code != 0 {
 		t.Fatal(err)
@@ -247,7 +250,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 			}
 			share := paths.Data
 			release := share + "/releases/1.0"
-			writeTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
+			testutil.WriteTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
 			if err := os.Symlink("releases/1.0", share+"/current"); err != nil {
 				t.Fatal(err)
 			}
@@ -263,7 +266,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 				t.Fatal(err)
 			}
 			target := home + "/.local/bin/tool"
-			installed := readTestFile(t, target)
+			installed := testutil.ReadTestFile(t, target)
 			retained := map[string]string{
 				"dependencies/tool":                               "1.0\n",
 				"dependencies/jetbrainsmono-regular":              "3.4.1\n",
@@ -274,10 +277,10 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 				retained["backups/edited"] = "user backup\n"
 			}
 			for path, contents := range retained {
-				writeTestFile(t, paths.State+"/"+path, contents, 0600)
+				testutil.WriteTestFile(t, paths.State+"/"+path, contents, 0600)
 			}
-			writeTestFile(t, paths.State+"/configured", "1\n", 0600)
-			writeTestFile(t, paths.State+"/old-state", "remove this\n", 0600)
+			testutil.WriteTestFile(t, paths.State+"/configured", "1\n", 0600)
+			testutil.WriteTestFile(t, paths.State+"/old-state", "remove this\n", 0600)
 			var out, stderr bytes.Buffer
 			c := CLI{Env: env, Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
 			for _, dry := range []bool{true, false} {
@@ -288,11 +291,11 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 				if code := c.Run(args); code != 0 {
 					t.Fatalf("purge (dry=%v): %d %s", dry, code, stderr.String())
 				}
-				if got := readTestFile(t, target); got != installed {
+				if got := testutil.ReadTestFile(t, target); got != installed {
 					t.Fatalf("purge changed retained tool: %q", got)
 				}
 				for path, contents := range retained {
-					if got := readTestFile(t, paths.State+"/"+path); got != contents {
+					if got := testutil.ReadTestFile(t, paths.State+"/"+path); got != contents {
 						t.Fatalf("purge changed retained ownership or backup %s: %q", path, got)
 					}
 				}
@@ -300,7 +303,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 					if _, err := os.Lstat(cli); err != nil {
 						t.Fatal("dry run removed CLI", err)
 					}
-					if got := readTestFile(t, paths.State+"/configured"); got != "1\n" {
+					if got := testutil.ReadTestFile(t, paths.State+"/configured"); got != "1\n" {
 						t.Fatal("dry run changed setup marker")
 					}
 				}
@@ -313,10 +316,10 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 			if err := installTool(operation, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
-			if got := readTestFile(t, paths.State+"/dependencies/tool"); got != "2.0\n" {
+			if got := testutil.ReadTestFile(t, paths.State+"/dependencies/tool"); got != "2.0\n" {
 				t.Fatalf("reinstall did not synchronize retained tool: %q", got)
 			}
-			if got := readTestFile(t, target); !strings.Contains(got, "echo 2.0") {
+			if got := testutil.ReadTestFile(t, target); !strings.Contains(got, "echo 2.0") {
 				t.Fatalf("reinstall left old executable: %q", got)
 			}
 			if !strings.Contains(output(operation), "Updated approved dependency: tool 2.0") {
@@ -340,7 +343,7 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 				t.Fatal(err)
 			}
 			release := paths.Data + "/releases/1.0"
-			writeTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
+			testutil.WriteTestFile(t, release+"/bin/selfishell", "fixture CLI\n", 0700)
 			if err := os.Symlink("releases/1.0", paths.Data+"/current"); err != nil {
 				t.Fatal(err)
 			}
@@ -351,7 +354,7 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 			if err := os.Symlink(paths.Data+"/current/bin/selfishell", cli); err != nil {
 				t.Fatal(err)
 			}
-			writeTestFile(t, paths.State+"/original", "initial state\n", 0600)
+			testutil.WriteTestFile(t, paths.State+"/original", "initial state\n", 0600)
 			// The root is replaced before Run, so this covers the preflight checks,
 			// not purgeFiles' later recheck for a change during purge.
 			if _, err := backupInventory(paths); err != nil {
@@ -361,13 +364,13 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 				t.Fatal(err)
 			}
 			personal := home + "/personal-data"
-			writeTestFile(t, personal+"/personal.txt", "user data\n", 0600)
+			testutil.WriteTestFile(t, personal+"/personal.txt", "user data\n", 0600)
 			if kind == "symlink" {
 				if err := os.Symlink(personal, paths.State); err != nil {
 					t.Fatal(err)
 				}
 			} else {
-				writeTestFile(t, paths.State, "user state file\n", 0600)
+				testutil.WriteTestFile(t, paths.State, "user state file\n", 0600)
 			}
 			var out, stderr bytes.Buffer
 			c := CLI{Env: env, Root: release, In: strings.NewReader(""), Out: &out, Err: &stderr}
@@ -382,13 +385,13 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 			if _, err := os.Lstat(cli); err != nil {
 				t.Fatal("removed CLI before state preflight", err)
 			}
-			if got := readTestFile(t, personal+"/personal.txt"); got != "user data\n" {
+			if got := testutil.ReadTestFile(t, personal+"/personal.txt"); got != "user data\n" {
 				t.Fatal("changed symlink destination", got)
 			}
-			if got := readTestFile(t, paths.State+".held/original"); got != "initial state\n" {
+			if got := testutil.ReadTestFile(t, paths.State+".held/original"); got != "initial state\n" {
 				t.Fatal("changed original state", got)
 			}
-			if kind == "file" && readTestFile(t, paths.State) != "user state file\n" {
+			if kind == "file" && testutil.ReadTestFile(t, paths.State) != "user state file\n" {
 				t.Fatal("changed replaced state file")
 			}
 		})
@@ -402,7 +405,7 @@ func TestDependencyManifestOverrideIsValidatedBeforeMutation(t *testing.T) {
 	home := t.TempDir()
 	override := filepath.Join(t.TempDir(), "dependencies.conf")
 	testutil.WriteFile(override, []byte("unknown dependency record\n"), 0600)
-	setEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", override)
+	testutil.SetEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", override)
 	code, _, err := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 1 || !strings.Contains(err, "invalid manifest record") {
 		t.Fatalf("%d %s", code, err)
@@ -443,10 +446,10 @@ func TestPurgeRefusesForeignCLILinkBeforeMutation(t *testing.T) {
 
 func isolateHome(env *process.Environment, home string) {
 	// WSL integration fixtures opt in explicitly with a fake Windows environment.
-	setEnv(env, "WSL_DISTRO_NAME", "")
-	setEnv(env, "HOME", home)
+	testutil.SetEnv(env, "WSL_DISTRO_NAME", "")
+	testutil.SetEnv(env, "HOME", home)
 	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
-		setEnv(env, name, "")
+		testutil.SetEnv(env, name, "")
 	}
 }
 func TestNewUserMiseFileIsPrivate(t *testing.T) {
@@ -500,7 +503,7 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(&env, home)
 	paths, _ := managed.UserPaths(env.Get)
-	resources, _ := ResourcesForPlatform(root, "macos", false, env)
+	resources, _ := lifecycle.ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	testutil.WriteFile(r.Target, []byte("managed"), 0600)
@@ -508,13 +511,13 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	state := managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: checksum}
 	managed.WriteState(paths.Resources+"/"+r.Name+".state", state)
 	var out, stderr bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &stderr}, paths: paths}
-	record := ResourceState{Resource: r, State: state}
-	if e := m.preflightUninstall(record, false); e != nil {
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &stderr}.report)}
+	record := lifecycle.ResourceState{Resource: r, State: state}
+	if e := m.PreflightUninstall(record, false); e != nil {
 		t.Fatal(e)
 	}
 	testutil.WriteFile(r.Target, []byte("user edit"), 0600)
-	if e := m.removeResource(record, false); e == nil {
+	if e := m.RemoveResource(record, false); e == nil {
 		t.Fatal("removed edited file")
 	}
 	data, e := os.ReadFile(r.Target)
@@ -554,5 +557,33 @@ func TestPurgeRechecksCLILinkBeforeRemoval(t *testing.T) {
 	data, e := os.ReadFile(link)
 	if e != nil || string(data) != "personal" {
 		t.Fatalf("user path lost: %q %v", data, e)
+	}
+}
+
+func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
+	t.Parallel()
+	var env process.Environment
+	home := t.TempDir()
+	testutil.SetEnv(&env, "HOME", home)
+	testutil.SetEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
+	testutil.SetEnv(&env, "XDG_STATE_HOME", home+"/state")
+	paths, err := managed.UserPaths(env.Get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources, err := lifecycle.ManagedResources("/release", env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := managedDirectories(resources, paths)
+	if !slices.Contains(got, paths.Config+"/nvim") || !slices.Contains(got, paths.State) {
+		t.Fatalf("directories: %q", got)
+	}
+	for i, dir := range got {
+		for _, earlier := range got[:i] {
+			if strings.HasPrefix(dir, earlier+"/") {
+				t.Fatalf("%s is removed before its child %s", earlier, dir)
+			}
+		}
 	}
 }
