@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
 )
 
@@ -55,7 +56,7 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 			defer cancel()
 			code, err := p.Run(ctx, nvim, "--headless", "-u", "NONE", "-i", "NONE",
 				"--cmd", "set runtimepath^="+root+"/config/shared/nvim",
-				"+lua dofile(vim.env.SELFISHELL_LSP_TEST_FIXTURE)", "+lua "+defaultLSPUpdateLua, "+qa")
+				"+lua dofile(vim.env.SELFISHELL_LSP_TEST_FIXTURE)", "+lua "+neovim.LSPUpdateScript, "+qa")
 			if err != nil || (code != 0) != tc.failed || !strings.Contains(output.String(), tc.want) {
 				t.Fatalf("code=%d err=%v output=%s", code, err, output.String())
 			}

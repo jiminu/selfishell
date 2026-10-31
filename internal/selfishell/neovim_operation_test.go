@@ -304,7 +304,7 @@ printf '%s\n' "$*" >> "$MISE_LOG"
 	op.Process.Env = append(op.Process.Env, "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managed)
 	resolve := func(want string, calls int) {
 		t.Helper()
-		nvim, _, err := op.neovim().locate(context.Background(), root, paths)
+		nvim, _, err := op.neovim().Locate(context.Background(), root, paths)
 		if err != nil || nvim != want {
 			t.Fatalf("resolved %q %v, want %q", nvim, err, want)
 		}

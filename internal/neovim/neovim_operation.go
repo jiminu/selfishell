@@ -1,4 +1,6 @@
-package selfishell
+// Package neovim synchronizes the pinned Neovim plugins, the lazy.nvim
+// bootstrap checkout and the default LSP servers.
+package neovim
 
 import (
 	"bytes"
@@ -16,21 +18,22 @@ import (
 	"github.com/jiminu/selfishell/internal/report"
 )
 
-// neovimOperation synchronizes the pinned Neovim plugins and LSP servers.
+// Operation synchronizes the pinned Neovim plugins and LSP servers.
 // Process.Progress, when set, is the active spinner: a nil spinner must be
-// stored as a nil interface. Mise and MiseProcess resolve the release's mise,
-// and Cache keeps the last mise resolution of nvim across operations.
-type neovimOperation struct {
+// stored as a nil interface. Report and Warn render its notes. Mise and
+// MiseProcess resolve the release's mise, and Cache keeps the last mise
+// resolution of nvim across operations.
+type Operation struct {
 	Process     process.Process
 	Report      report.Reporter
 	Warn        func(message string)
 	Mise        func(paths managed.Paths) (string, error)
 	MiseProcess func(root string) process.Process
-	Cache       *nvimCache
+	Cache       *Cache
 }
 
-// nvimCache holds the last successful "mise which nvim" and its mise/root.
-type nvimCache struct{ path, key string }
+// Cache holds the last successful "mise which nvim" and its mise/root.
+type Cache struct{ path, key string }
 
 var gitHashPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 
@@ -40,7 +43,9 @@ func gitRepositoryProcess(base process.Process) process.Process {
 	return p
 }
 
-func gitHead(ctx context.Context, base process.Process, dir string) (string, error) {
+// GitHead returns a checkout's HEAD commit from its .git files, else from git
+// scoped to that repository.
+func GitHead(ctx context.Context, base process.Process, dir string) (string, error) {
 	git := dir + "/.git"
 	data, err := os.ReadFile(git + "/HEAD")
 	if err == nil {
@@ -108,7 +113,9 @@ func gitChanges(ctx context.Context, base process.Process, dir string, excludeTa
 	return strings.TrimSpace(out.String()), nil
 }
 
-func nvimPluginPath(paths managed.Paths, dep managed.Dependency) (string, error) {
+// PluginPath is where lazy.nvim keeps dep's checkout; lazy.nvim itself lives
+// under Selfishell's data directory.
+func PluginPath(paths managed.Paths, dep managed.Dependency) (string, error) {
 	data := strings.TrimSuffix(paths.Data, "/selfishell")
 	if dep.Name == "folke/lazy.nvim" {
 		return paths.Data + "/nvim/lazy/lazy.nvim", nil
@@ -120,9 +127,9 @@ func nvimPluginPath(paths managed.Paths, dep managed.Dependency) (string, error)
 	return data + "/nvim/lazy/" + name, nil
 }
 
-// locate resolves Neovim through the release's mise, then PATH, then
+// Locate resolves Neovim through the release's mise, then PATH, then
 // ~/.local/bin/nvim, and returns the mise it used, if any.
-func (o neovimOperation) locate(ctx context.Context, root string, paths managed.Paths) (string, string, error) {
+func (o Operation) Locate(ctx context.Context, root string, paths managed.Paths) (string, string, error) {
 	mise, _ := o.Mise(paths)
 	if mise != "" {
 		resolved, err := o.miseWhichNvim(ctx, root, mise)
@@ -146,15 +153,15 @@ func (o neovimOperation) locate(ctx context.Context, root string, paths managed.
 
 // miseWhichNvim reuses this operation's last resolution only while it is
 // still an executable file; a failed resolution is never reused.
-func (o neovimOperation) miseWhichNvim(ctx context.Context, root, mise string) (string, error) {
+func (o Operation) miseWhichNvim(ctx context.Context, root, mise string) (string, error) {
 	key := mise + "\x00" + root
 	if o.Cache.path != "" && o.Cache.key == key && executableFile(o.Cache.path) {
 		return o.Cache.path, nil
 	}
 	resolved, err := outputOf(ctx, o.MiseProcess(root), mise, "-C", root+"/config/shared", "which", "nvim")
-	*o.Cache = nvimCache{}
+	*o.Cache = Cache{}
 	if err == nil && executableFile(resolved) {
-		*o.Cache = nvimCache{resolved, key}
+		*o.Cache = Cache{resolved, key}
 	}
 	return resolved, err
 }
@@ -178,8 +185,8 @@ func executableFile(path string) bool {
 	return err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0
 }
 
-// run runs nvim, through mise when set, and prints its log on failure.
-func (o neovimOperation) run(ctx context.Context, root, nvim, mise string, args ...string) (string, error) {
+// Run runs nvim, through mise when set, and prints its log on failure.
+func (o Operation) Run(ctx context.Context, root, nvim, mise string, args ...string) (string, error) {
 	p := o.Process
 	name := nvim
 	if mise != "" {
@@ -243,11 +250,11 @@ func pluginPathError(path string) error {
 }
 
 // installLazy uses inspected, when non-nil, as the checkout's dirty check.
-func (o neovimOperation) installLazy(ctx context.Context, paths managed.Paths, dep managed.Dependency, inspected *gitStatus) error {
+func (o Operation) installLazy(ctx context.Context, paths managed.Paths, dep managed.Dependency, inspected *gitStatus) error {
 	if !gitHashPattern.MatchString(dep.Version) {
 		return fmt.Errorf("Invalid approved lazy.nvim revision: %s", dep.Version)
 	}
-	target, _ := nvimPluginPath(paths, dep)
+	target, _ := PluginPath(paths, dep)
 	previously := false
 	if exists, err := managed.Present(target); err != nil && !errors.Is(err, syscall.ENOTDIR) {
 		return err
@@ -272,7 +279,7 @@ func (o neovimOperation) installLazy(ctx context.Context, paths managed.Paths, d
 		if changes != "" {
 			return fmt.Errorf("lazy.nvim checkout was modified; preserving it: %s", target)
 		}
-		head, err := gitHead(ctx, o.Process, target)
+		head, err := GitHead(ctx, o.Process, target)
 		if err != nil {
 			return err
 		}
@@ -299,7 +306,7 @@ func (o neovimOperation) installLazy(ctx context.Context, paths managed.Paths, d
 	if _, err := outputOf(ctx, o.Process, "git", "-C", stage, "checkout", "--quiet", "--detach", dep.Version); err != nil {
 		return err
 	}
-	if head, err := gitHead(ctx, o.Process, stage); err != nil || head != dep.Version {
+	if head, err := GitHead(ctx, o.Process, stage); err != nil || head != dep.Version {
 		return fmt.Errorf("lazy.nvim revision does not match approved pin: %s", dep.Version)
 	}
 	old, moved, err := managed.MoveAside(target)
@@ -341,9 +348,9 @@ func restoreLazyOnFailure(old, target string, primary error) error {
 	return primary
 }
 
-// installPlugins syncs the declared plugin pins and parser updates with the
+// InstallPlugins syncs the declared plugin pins and parser updates with the
 // release environment; dependencies may be nil for a dry run.
-func (o neovimOperation) installPlugins(ctx context.Context, root string, paths managed.Paths, dependencies []managed.Dependency, dryRun bool) error {
+func (o Operation) InstallPlugins(ctx context.Context, root string, paths managed.Paths, dependencies []managed.Dependency, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -368,7 +375,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 	if lazy == nil {
 		return fmt.Errorf("No approved lazy.nvim revision is declared.")
 	}
-	nvim, mise, err := o.locate(ctx, root, paths)
+	nvim, mise, err := o.Locate(ctx, root, paths)
 	if err != nil {
 		return err
 	}
@@ -384,7 +391,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 	var checks []pluginCheck
 	var invalid error
 	for _, dep := range deps {
-		path, err := nvimPluginPath(paths, dep)
+		path, err := PluginPath(paths, dep)
 		if err != nil {
 			invalid = err
 			break
@@ -399,7 +406,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 		info, err := os.Stat(path + "/.git")
 		checks = append(checks, pluginCheck{path: path, version: dep.Version, git: err == nil && info.IsDir()})
 	}
-	lazyPath, _ := nvimPluginPath(paths, *lazy)
+	lazyPath, _ := PluginPath(paths, *lazy)
 	var lazyStatus *gitStatus
 	if gitCheckout(lazyPath) {
 		lazyStatus = &gitStatus{}
@@ -431,7 +438,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 		if check.status.changes != "" {
 			return fmt.Errorf("Neovim plugin checkout was modified; preserving it: %s. Remove it, then retry to restore the approved revision.", check.path)
 		}
-		head, err := gitHead(ctx, o.Process, check.path)
+		head, err := GitHead(ctx, o.Process, check.path)
 		if err != nil || head != check.version {
 			synced = false
 		}
@@ -468,7 +475,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 		synced = false
 	}
 	if !synced {
-		syncLog, err := o.run(ctx, root, nvim, mise, "--headless", `+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end`, "+qa")
+		syncLog, err := o.Run(ctx, root, nvim, mise, "--headless", `+lua local ok, message = pcall(vim.cmd, "Lazy! sync"); if not ok then vim.api.nvim_err_writeln(message); vim.cmd("cquit") end`, "+qa")
 		if err != nil {
 			return fmt.Errorf("Could not install Neovim plugins: %w", err)
 		}
@@ -482,7 +489,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 			return err
 		}
 		for _, dep := range deps {
-			path, err := nvimPluginPath(paths, dep)
+			path, err := PluginPath(paths, dep)
 			if err != nil {
 				return err
 			}
@@ -490,7 +497,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 			if err != nil || !git.IsDir() {
 				return verificationError(fmt.Errorf("Neovim plugin checkout is missing after sync: %s", dep.Name))
 			}
-			head, err := gitHead(ctx, o.Process, path)
+			head, err := GitHead(ctx, o.Process, path)
 			if err != nil {
 				return verificationError(fmt.Errorf("Could not inspect Neovim plugin after sync: %s: %w", dep.Name, err))
 			}
@@ -502,7 +509,7 @@ func (o neovimOperation) installPlugins(ctx context.Context, root string, paths 
 	if !synced && o.Process.Progress != nil {
 		o.Report.Report("Tools", report.Success, "Synchronized Neovim plugins: approved revisions")
 	}
-	if _, err := o.run(ctx, root, nvim, mise, "--headless", `+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end`, "+qa"); err != nil {
+	if _, err := o.Run(ctx, root, nvim, mise, "--headless", `+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end`, "+qa"); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

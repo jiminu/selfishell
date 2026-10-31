@@ -1,4 +1,4 @@
-package selfishell
+package neovim
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 
 // lazyFixture is a committed lazy.nvim source, the pin naming it, and an
 // operation that reports into its Out buffer.
-func lazyFixture(t *testing.T) (neovimOperation, managed.Paths, string, managed.Dependency) {
+func lazyFixture(t *testing.T) (Operation, managed.Paths, string, managed.Dependency) {
 	t.Helper()
 	home := t.TempDir()
 	var env process.Environment
@@ -38,7 +38,7 @@ func lazyFixture(t *testing.T) (neovimOperation, managed.Paths, string, managed.
 	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
 	head := gitCommand(t, repo, "rev-parse", "HEAD")
 	out := new(bytes.Buffer)
-	op := neovimOperation{
+	op := Operation{
 		Process: process.Process{Inherit: env, Out: out, Err: new(bytes.Buffer)},
 		Report: report.ReportFunc(func(_ string, _ report.Tone, format string, args ...any) {
 			fmt.Fprintf(out, format+"\n", args...)

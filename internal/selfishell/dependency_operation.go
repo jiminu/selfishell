@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/terminal"
@@ -391,7 +392,7 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep managed.Dependen
 			return false
 		}
 		if dep.Checksum != "-" {
-			head, err := gitHead(ctx, o.Process, target)
+			head, err := neovim.GitHead(ctx, o.Process, target)
 			if err != nil || head != dep.Checksum {
 				return false
 			}

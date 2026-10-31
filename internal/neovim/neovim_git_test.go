@@ -1,4 +1,4 @@
-package selfishell
+package neovim
 
 import (
 	"bytes"
@@ -38,7 +38,7 @@ func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 		if fixture.packed != "" {
 			writeTestFile(t, dir+"/.git/packed-refs", fixture.packed, 0600)
 		}
-		if got, err := gitHead(context.Background(), p, dir); err != nil || got != sha {
+		if got, err := GitHead(context.Background(), p, dir); err != nil || got != sha {
 			t.Fatalf("%s: %s %v", fixture.name, got, err)
 		}
 	}
@@ -53,7 +53,7 @@ func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 	want := gitCommand(t, repo, "rev-parse", "HEAD")
 	worktree := home + "/worktree"
 	gitCommand(t, repo, "worktree", "add", "-q", "--detach", worktree)
-	if got, err := gitHead(context.Background(), p, worktree); err != nil || got != want {
+	if got, err := GitHead(context.Background(), p, worktree); err != nil || got != want {
 		t.Fatalf("worktree fallback: %s %v", got, err)
 	}
 }
@@ -81,7 +81,7 @@ func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
 		if child.malformed {
 			writeTestFile(t, dir+"/.git", "gitdir: missing-metadata\n", 0600)
 		}
-		got, err := gitHead(context.Background(), p, dir)
+		got, err := GitHead(context.Background(), p, dir)
 		if err == nil || got == parentHead {
 			t.Fatalf("%s child read parent HEAD: %q, err=%v", child.name, got, err)
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/terminal"
@@ -32,7 +33,7 @@ type PackageOperation struct {
 	aptUpdated                                bool
 	brewFormulae, brewCasks                   map[string]bool
 	brewFormulaeReady, brewCasksReady         bool
-	nvim                                      nvimCache
+	nvim                                      neovim.Cache
 	uid                                       func() int // package-private test seam; nil uses os.Geteuid.
 	brewLocations                             []string   // package-private test seam; nil uses standard macOS locations.
 }
@@ -46,13 +47,13 @@ func (o *PackageOperation) warn(message string) {
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
 }
 
-// neovim stores a nil spinner as a nil interface, the form neovimOperation tests.
-func (o *PackageOperation) neovim() neovimOperation {
+// neovim stores a nil spinner as a nil interface, the form neovim.Operation tests.
+func (o *PackageOperation) neovim() neovim.Operation {
 	p := o.Process
 	if progress, ok := p.Progress.(*operationProgress); ok && progress == nil {
 		p.Progress = nil
 	}
-	return neovimOperation{
+	return neovim.Operation{
 		Process:     p,
 		Report:      report.ReportFunc(o.reportIn),
 		Warn:        o.warn,
@@ -69,11 +70,11 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			return err
 		}
 	}
-	return o.neovim().installPlugins(ctx, root, paths, o.dependencies, dryRun)
+	return o.neovim().InstallPlugins(ctx, root, paths, o.dependencies, dryRun)
 }
 
 func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
-	return o.neovim().updateLSP(ctx, root, paths, dryRun)
+	return o.neovim().UpdateLSP(ctx, root, paths, dryRun)
 }
 
 func (o *PackageOperation) reportSkippedOptional() {

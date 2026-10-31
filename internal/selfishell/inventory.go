@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/terminal"
 )
@@ -151,7 +152,7 @@ func runInventory(dir string, env process.Environment, name string, args ...stri
 func inventoryGitHead(dir string, env process.Environment) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return gitHead(ctx, process.Process{Inherit: env}, dir)
+	return neovim.GitHead(ctx, process.Process{Inherit: env}, dir)
 }
 
 func runInventoryContext(ctx context.Context, dir string, env process.Environment, name string, args ...string) (string, string, bool) {
