@@ -125,6 +125,9 @@ these caches before installation; unrelated managed configuration changes leave
 them intact. Startup compares the resolved executable path and file identity
 using Zsh's built-in stat module, so replacing a tool or rolling back to an older
 binary regenerates its initialization even when its timestamp is preserved.
+The Starship key also covers the active `starship.toml` identity, or its
+absence: generation folds the continuation prompt into the cache as a literal,
+so warm startup does not run Starship for `PROMPT2`.
 The identity comment and syntax-checked initialization are activated together by
 an atomic rename. Failed generation retains the previous cache and retries on
 the next startup. Older caches without an identity comment regenerate once.

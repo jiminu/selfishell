@@ -165,6 +165,72 @@ printf 'print old\n'
 		})
 	}
 }
+func TestNativeStarshipContinuationCache(t *testing.T) {
+	t.Parallel()
+	body := `case "$*" in
+"init zsh") printf 'called\n' >>"$HOME/generations"; printf '%s\n' "$SELFISHELL_TEST_INIT" ;;
+"prompt --continuation") printf 'called\n' >>"$HOME/continuations"; style=
+  { read -r style <"${STARSHIP_CONFIG:-$HOME/.config/starship.toml}"; } 2>/dev/null
+  printf '%%{\033[90m%%}%s>%s%%{\033[0m%%} ' "$STARSHIP_SHELL" "$style" ;;
+*) exit 1 ;;
+esac
+`
+	calls := func(t *testing.T, path string) int {
+		t.Helper()
+		b, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return 0
+		}
+		mustFS(t, err)
+		return strings.Count(string(b), "called\n")
+	}
+	t.Run("folded", func(t *testing.T) {
+		home := nativeHome(t)
+		starship := filepath.Join(fakeExecutable(t, home, "starship", body), "starship")
+		init := "export STARSHIP_SHELL=\"zsh\"\nPROMPT='$('" + starship + "' prompt)'\nPROMPT2=\"$(" + starship + " prompt --continuation)\""
+		cache := filepath.Join(home, ".cache/selfishell/starship-init.zsh")
+		run := func(config, style string, generations int) {
+			t.Helper()
+			r := interactiveRun(t, home, `print -r -- "$PROMPT2"`, "SELFISHELL_TEST_INIT="+init, "STARSHIP_CONFIG="+config)
+			if want := "%{\x1b[90m%}zsh>" + style + "%{\x1b[0m%} \n"; string(r.Stdout) != want {
+				t.Fatalf("PROMPT2 %q want %q", r.Stdout, want)
+			}
+			if g, c := calls(t, filepath.Join(home, "generations")), calls(t, filepath.Join(home, "continuations")); g != generations || c != generations {
+				t.Fatalf("generations %d continuations %d want %d", g, c, generations)
+			}
+			lines := strings.Split(strings.TrimSuffix(nativeRead(t, cache), "\n"), "\n")
+			if last := lines[len(lines)-1]; !strings.HasPrefix(last, "PROMPT2=") || strings.Contains(last, "$(") {
+				t.Fatalf("cached PROMPT2 line %q", last)
+			}
+		}
+		run("", "", 1)
+		run("", "", 1)
+		nativeWrite(t, filepath.Join(home, ".config/starship.toml"), "one\n", 0600)
+		run("", "one", 2)
+		run("", "one", 2)
+		nativeWrite(t, filepath.Join(home, ".config/starship.toml"), "three\n", 0600)
+		run("", "three", 3)
+		other := filepath.Join(home, "other.toml")
+		nativeWrite(t, other, "two\n", 0600)
+		run(other, "two", 4)
+		run(other, "two", 4)
+	})
+	t.Run("unchanged-init", func(t *testing.T) {
+		home := nativeHome(t)
+		fakeExecutable(t, home, "starship", body)
+		init := "export STARSHIP_SHELL=\"zsh\"\nPROMPT2='> '"
+		r := interactiveRun(t, home, `print -r -- "$PROMPT2"`, "SELFISHELL_TEST_INIT="+init)
+		if string(r.Stdout) != "> \n" {
+			t.Fatalf("PROMPT2 %q", r.Stdout)
+		}
+		if _, cached, _ := strings.Cut(nativeRead(t, filepath.Join(home, ".cache/selfishell/starship-init.zsh")), "\n"); cached != init+"\n" {
+			t.Fatalf("cache %q want %q", cached, init+"\n")
+		}
+		if c := calls(t, filepath.Join(home, "continuations")); c != 0 {
+			t.Fatalf("continuations %d", c)
+		}
+	})
+}
 func TestNativeFzfCacheGeneration(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"success", "nonzero-exit", "empty-output", "invalid-syntax"} {
