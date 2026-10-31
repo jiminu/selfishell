@@ -75,9 +75,6 @@ func TestStateTransientVersionAndRestoreValidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		version := "3\n"
-		if status == "active" {
-			version = "2\n"
-		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
