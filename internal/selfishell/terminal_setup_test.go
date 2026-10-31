@@ -92,6 +92,8 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 			if err := testutil.WriteFile(target, []byte("0\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
+			// Each parallel subtest owns its error; the outer one is shared.
+			var err error
 			switch kind {
 			case "directory":
 				err = os.Mkdir(choice, 0700)
