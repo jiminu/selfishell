@@ -391,7 +391,7 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep managed.Dependen
 			return false
 		}
 		if dep.Checksum != "-" {
-			head, err := o.gitHead(ctx, target)
+			head, err := gitHead(ctx, o.Process, target)
 			if err != nil || head != dep.Checksum {
 				return false
 			}

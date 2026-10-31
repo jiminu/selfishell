@@ -151,7 +151,7 @@ func runInventory(dir string, env process.Environment, name string, args ...stri
 func inventoryGitHead(dir string, env process.Environment) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return (&PackageOperation{Process: process.Process{Inherit: env}}).gitHead(ctx, dir)
+	return gitHead(ctx, process.Process{Inherit: env}, dir)
 }
 
 func runInventoryContext(ctx context.Context, dir string, env process.Environment, name string, args ...string) (string, string, bool) {

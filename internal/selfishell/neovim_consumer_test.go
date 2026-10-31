@@ -63,7 +63,7 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		actual, err := op.gitHead(ctx, path)
+		actual, err := gitHead(ctx, op.Process, path)
 		if err != nil || actual != dep.Version {
 			t.Fatalf("plugin %s HEAD %s want %s: %v", dep.Name, actual, dep.Version, err)
 		}
@@ -97,11 +97,11 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 			t.Fatalf("current LSP was reinstalled: %s %v", receipt, err)
 		}
 	}
-	nvim, _, err := op.nvimCommand(ctx, root, paths)
+	nvim, _, err := op.neovim().locate(ctx, root, paths)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := op.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+`
+	if _, err := op.neovim().run(ctx, root, nvim, mise, "--headless", "+lua "+`
 local ok, message = pcall(function()
   require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim", "blink.cmp" } })
   local blink = require("blink.cmp.config")

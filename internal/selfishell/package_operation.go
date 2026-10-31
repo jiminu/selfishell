@@ -32,7 +32,7 @@ type PackageOperation struct {
 	aptUpdated                                bool
 	brewFormulae, brewCasks                   map[string]bool
 	brewFormulaeReady, brewCasksReady         bool
-	miseNvim, miseNvimKey                     string     // last successful "mise which nvim" and its mise/root
+	nvim                                      nvimCache
 	uid                                       func() int // package-private test seam; nil uses os.Geteuid.
 	brewLocations                             []string   // package-private test seam; nil uses standard macOS locations.
 }
@@ -45,6 +45,37 @@ func (o *PackageOperation) warn(message string) {
 	color, reset := o.color(o.Process.Err, "\x1b[33m")
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
 }
+
+// neovim stores a nil spinner as a nil interface, the form neovimOperation tests.
+func (o *PackageOperation) neovim() neovimOperation {
+	p := o.Process
+	if progress, ok := p.Progress.(*operationProgress); ok && progress == nil {
+		p.Progress = nil
+	}
+	return neovimOperation{
+		Process:     p,
+		Report:      report.ReportFunc(o.reportIn),
+		Warn:        o.warn,
+		Mise:        o.miseCommand,
+		MiseProcess: func(root string) process.Process { return o.miseProcess(root, false) },
+		Cache:       &o.nvim,
+	}
+}
+
+// InstallNeovimPlugins syncs declared pins and parser updates with the release environment.
+func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string, paths managed.Paths, manifest string, dryRun bool) error {
+	if ctx.Err() == nil && !dryRun {
+		if err := o.loadDependencies(manifest); err != nil {
+			return err
+		}
+	}
+	return o.neovim().installPlugins(ctx, root, paths, o.dependencies, dryRun)
+}
+
+func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
+	return o.neovim().updateLSP(ctx, root, paths, dryRun)
+}
+
 func (o *PackageOperation) reportSkippedOptional() {
 	if len(o.SkippedOptional) != 0 {
 		o.warn("Skipped optional packages: " + strings.Join(o.SkippedOptional, " "))

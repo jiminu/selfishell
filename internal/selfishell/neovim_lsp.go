@@ -47,26 +47,27 @@ end)
 if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 `
 
-func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
+// updateLSP installs this release's approved default LSP server versions.
+func (o neovimOperation) updateLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if dryRun {
-		o.report(report.Preview, "Would update default Neovim LSP servers to this release's approved versions.")
+		o.Report.Report("Tools", report.Preview, "Would update default Neovim LSP servers to this release's approved versions.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	nvim, mise, err := o.nvimCommand(ctx, root, paths)
+	nvim, mise, err := o.locate(ctx, root, paths)
 	if err != nil {
 		return err
 	}
-	if progressOf(o.Process) == nil {
+	if o.Process.Progress == nil {
 		fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers to approved versions...")
 	}
-	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
+	if _, err := o.run(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
 		return fmt.Errorf("could not update default Neovim LSP servers: %w", err)
 	}
-	o.report(report.Success, "Neovim LSP servers: approved versions")
+	o.Report.Report("Tools", report.Success, "Neovim LSP servers: approved versions")
 	return nil
 }
