@@ -5,31 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
 )
-
-var releaseVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$`)
-
-func ValidReleaseVersion(version string) bool {
-	if !releaseVersionPattern.MatchString(version) {
-		return false
-	}
-	_, prerelease, found := strings.Cut(version, "-")
-	if !found {
-		return true
-	}
-	for _, id := range strings.Split(prerelease, ".") {
-		if len(id) > 1 && id[0] == '0' && strings.Trim(id, "0123456789") == "" {
-			return false
-		}
-	}
-	return true
-}
 
 // ValidRetainedRelease authorizes a previous release for cleanup or rollback.
 // A missing previous link returns empty version and directory without error.

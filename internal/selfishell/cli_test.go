@@ -2,10 +2,14 @@ package selfishell
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestCLI(t *testing.T) {
@@ -84,5 +88,26 @@ func TestVersionAndRoot(t *testing.T) {
 		if c.Run([]string{"version"}) != 0 || out.String() != want {
 			t.Fatalf("got %q, want %q", out.String(), want)
 		}
+	}
+}
+
+func TestVersionAvailableCLI(t *testing.T) {
+	t.Parallel()
+	var env process.Environment
+	setEnv(&env, "HOME", t.TempDir())
+	root := t.TempDir()
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
+	os.MkdirAll(root+"/latest/download", 0700)
+	testutil.WriteFile(root+"/latest/download/VERSION", []byte("1.2.3\n"), 0600)
+	var out, stderr bytes.Buffer
+	c := CLI{Env: env, Root: root, Out: &out, Err: &stderr}
+	if code := c.Run([]string{"version", "--available"}); code != 0 || out.String() != "1.2.3\n" {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), stderr.String())
+	}
+	testutil.WriteFile(root+"/latest/download/VERSION", []byte("unsafe\n"), 0600)
+	out.Reset()
+	stderr.Reset()
+	if code := c.Run([]string{"version", "--available"}); code != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "Unable to determine the latest Selfishell release") {
+		t.Fatal(fmt.Sprintf("code %d, stdout %q, stderr %q", code, out.String(), stderr.String()))
 	}
 }

@@ -232,7 +232,7 @@ func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 	op, share, _ := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
 	root := op.Root
-	remote := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	remote := publishReleaseFixture(t, &env, "2.0.0", testutil.ArchiveMember{Name: "VERSION", Body: "2.0.0\n", Mode: 0644}, testutil.ArchiveMember{Name: "bin/selfishell", Body: "#!/bin/sh\n", Mode: 0755})
 	if err := os.MkdirAll(filepath.Dir(filepath.Dir(remote))+"/latest/download", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -279,14 +279,14 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	var env process.Environment
 	op, share, _ := releaseFixture(t, &env)
 	isolateMiseForHome(t, &env, env.Get("HOME"))
-	dir := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	dir := publishReleaseFixture(t, &env, "2.0.0", testutil.ArchiveMember{Name: "VERSION", Body: "2.0.0\n", Mode: 0644}, testutil.ArchiveMember{Name: "bin/selfishell", Body: "#!/bin/sh\n", Mode: 0755})
 	remote := filepath.Dir(filepath.Dir(dir))
 	older := remote + "/download/v1.0.0"
 	if err := os.MkdirAll(older, 0700); err != nil {
 		t.Fatal(err)
 	}
 	name, _ := releaseArchiveName("1.0.0")
-	archive := testArchive(t, archiveMember{"VERSION", "", 0, "1.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	archive := testutil.Archive(t, testutil.ArchiveMember{Name: "VERSION", Body: "1.0.0\n", Mode: 0644}, testutil.ArchiveMember{Name: "bin/selfishell", Body: "#!/bin/sh\n", Mode: 0755})
 	data, err := os.ReadFile(archive)
 	if err != nil {
 		t.Fatal(err)
@@ -380,6 +380,44 @@ func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 				t.Fatalf("rollback changed release links:\n%s\n%s", before, after)
 			}
 		})
+	}
+}
+
+func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
+	t.Parallel()
+	var env process.Environment
+	op, share, releases := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
+	publishReleaseFixture(t, &env, "2.0.0", testutil.ArchiveMember{Name: "VERSION", Body: "2.0.0\n", Mode: 0644}, testutil.ArchiveMember{Name: "bin/selfishell", Body: "#!/bin/sh\n", Mode: 0755})
+	op.Process.Inherit = env
+	if err := os.Chmod(share, 0500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(share, 0700)
+	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+		t.Fatal("reported activation success without write access")
+	}
+	current, _ := os.Readlink(share + "/current")
+	if current != "releases/1.0.0" {
+		t.Fatalf("current changed: %s", current)
+	}
+	if _, err := os.Stat(releases + "/2.0.0/bin/selfishell"); err != nil {
+		t.Fatalf("promoted release cannot be reused: %v", err)
+	}
+	code, out, stderr := commandResult(env, op.Root, "update", "--cli-only", "--version", "2.0.0", "--yes")
+	if code == 0 || strings.Contains(out, "Selfishell updated") || stderr == "" {
+		t.Fatalf("CLI claimed failed activation: code %d, stdout %q, stderr %q", code, out, stderr)
+	}
+	if err := os.Chmod(share, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
+		t.Fatalf("activation retry: %v", err)
+	}
+	current, _ = os.Readlink(share + "/current")
+	previous, _ := os.Readlink(share + "/previous")
+	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
+		t.Fatalf("retry links: %q, %q", current, previous)
 	}
 }
 

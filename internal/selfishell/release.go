@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -21,6 +22,24 @@ type releaseOperation struct {
 	Root    string
 	Process process.Process
 	link    func(target, path string) error
+}
+
+var releaseVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$`)
+
+func ValidReleaseVersion(version string) bool {
+	if !releaseVersionPattern.MatchString(version) {
+		return false
+	}
+	_, prerelease, found := strings.Cut(version, "-")
+	if !found {
+		return true
+	}
+	for _, id := range strings.Split(prerelease, ".") {
+		if len(id) > 1 && id[0] == '0' && strings.Trim(id, "0123456789") == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // compareReleaseVersions follows SemVer precedence for accepted release versions.
@@ -521,7 +540,9 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 				restoreErr = os.Remove(l.previous)
 			}
 			if restoreErr != nil && o.Process.Err != nil {
-				progressOf(o.Process).Pause()
+				if o.Process.Progress != nil {
+					o.Process.Progress.Pause()
+				}
 				fmt.Fprintln(o.Process.Err, "selfishell: warning: Failed to restore the previous release link: "+restoreErr.Error())
 			}
 		}

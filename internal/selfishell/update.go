@@ -1,6 +1,7 @@
 package selfishell
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -116,6 +117,48 @@ func (c CLI) confirmRelease(prompt string, yes, dry bool) int {
 	answer, _ := c.readAnswer()
 	if !report.Affirmative(answer) {
 		fmt.Fprintln(c.Out, "Cancelled.")
+		return 1
+	}
+	return 0
+}
+
+const rollbackHelp = "Usage: selfishell rollback [VERSION] [--yes]\n"
+
+func (c CLI) rollback(args []string) int {
+	requested, yes := "", false
+	for _, arg := range args {
+		switch {
+		case arg == "--yes":
+			yes = true
+		case arg == "help" || arg == "--help" || arg == "-h":
+			fmt.Fprint(c.Out, rollbackHelp)
+			return 0
+		case strings.HasPrefix(arg, "-"):
+			c.error("Unknown rollback option: " + arg)
+			return 2
+		case requested != "":
+			c.error("rollback accepts only one version")
+			return 2
+		default:
+			requested = strings.TrimPrefix(arg, "v")
+			if !ValidReleaseVersion(requested) {
+				c.error("Invalid semantic version: " + arg)
+				return 2
+			}
+		}
+	}
+	code := 0
+	err := (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).rollback(requested, func(version string) error {
+		if code = c.confirmRelease("Roll back Selfishell CLI to "+version+"?", yes, false); code != 0 {
+			return errors.New("rollback not confirmed")
+		}
+		return nil
+	})
+	if code != 0 {
+		return code
+	}
+	if err != nil {
+		c.error(err.Error())
 		return 1
 	}
 	return 0
