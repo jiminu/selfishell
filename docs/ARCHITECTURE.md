@@ -49,11 +49,18 @@ The Go code is layered, and imports point only downward:
    - `internal/managed` owns Selfishell's paths, the state format, checksums,
      raw-path writes, managed blocks and the `Resource`/`Dependency` records.
      `UserPaths` takes a lookup function, so it does not import `process`.
-   - `internal/report` holds report tones and yes/no answer parsing.
-2. `internal/selfishell` keeps the CLI, the configuration lifecycle,
+   - `internal/report` holds report tones, the `Reporter` interface and yes/no
+     answer parsing.
+2. Subsystem packages import only the foundation:
+   - `internal/terminal` detects terminals and owns the Ghostty settings check
+     and the Windows Terminal profile, fragment and font integration. The core
+     drives it through `terminal.Setup` (with a `report.Reporter` and a
+     prompt) and `terminal.Lifecycle`, and keeps the Windows font package
+     adapter.
+3. `internal/selfishell` keeps the CLI, the configuration lifecycle,
    install/update/status/uninstall, package adapters, inventory, Neovim and
-   releases. It imports the foundation packages; they never import it.
-3. Commands under `cmd/` import only the packages they use.
+   releases. It imports the packages above; they never import it.
+4. Commands under `cmd/` import only the packages they use.
 
 New code goes in the lowest layer whose dependencies it needs. A foundation
 package that would need the core is a sign the code belongs in the core, or that
