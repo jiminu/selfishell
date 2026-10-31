@@ -158,26 +158,12 @@ func (o Operation) miseWhichNvim(ctx context.Context, root, mise string) (string
 	if o.Cache.path != "" && o.Cache.key == key && executableFile(o.Cache.path) {
 		return o.Cache.path, nil
 	}
-	resolved, err := outputOf(ctx, o.MiseProcess(root), mise, "-C", root+"/config/shared", "which", "nvim")
+	resolved, err := process.Output(ctx, o.MiseProcess(root), mise, "-C", root+"/config/shared", "which", "nvim")
 	*o.Cache = Cache{}
 	if err == nil && executableFile(resolved) {
 		*o.Cache = Cache{resolved, key}
 	}
 	return resolved, err
-}
-
-// outputOf runs a captured child and returns its trimmed stdout.
-func outputOf(ctx context.Context, p process.Process, name string, args ...string) (string, error) {
-	var out, stderr bytes.Buffer
-	p.Out, p.Err = &out, &stderr
-	code, err := p.Run(ctx, name, args...)
-	if err != nil {
-		return "", err
-	}
-	if code != 0 {
-		return "", fmt.Errorf("%s exited %d: %s", name, code, strings.TrimSpace(stderr.String()))
-	}
-	return strings.TrimSpace(out.String()), nil
 }
 
 func executableFile(path string) bool {
@@ -300,10 +286,10 @@ func (o Operation) installLazy(ctx context.Context, paths managed.Paths, dep man
 			o.Warn(fmt.Sprintf("Could not clean up lazy.nvim staging path %s: %v", stage, err))
 		}
 	}()
-	if _, err := outputOf(ctx, o.Process, "git", "clone", "--quiet", "--filter=blob:none", "--", dep.Source, stage); err != nil {
+	if _, err := process.Output(ctx, o.Process, "git", "clone", "--quiet", "--filter=blob:none", "--", dep.Source, stage); err != nil {
 		return err
 	}
-	if _, err := outputOf(ctx, o.Process, "git", "-C", stage, "checkout", "--quiet", "--detach", dep.Version); err != nil {
+	if _, err := process.Output(ctx, o.Process, "git", "-C", stage, "checkout", "--quiet", "--detach", dep.Version); err != nil {
 		return err
 	}
 	if head, err := GitHead(ctx, o.Process, stage); err != nil || head != dep.Version {
@@ -465,7 +451,7 @@ func (o Operation) InstallPlugins(ctx context.Context, root string, paths manage
 		// Cleanup removes the whole checkout, including ignored and untracked
 		// files that ordinary pin updates deliberately leave untouched. Lazy's
 		// helptags generates doc/tags in nearly every checkout.
-		changes, err := outputOf(ctx, probe, "git", "-C", path, "status", "--porcelain", "--untracked-files=all", "--ignored", "--", ":(exclude)doc/tags")
+		changes, err := process.Output(ctx, probe, "git", "-C", path, "status", "--porcelain", "--untracked-files=all", "--ignored", "--", ":(exclude)doc/tags")
 		if err != nil {
 			return fmt.Errorf("Could not inspect Neovim plugin checkout: %s: %w", path, err)
 		}
