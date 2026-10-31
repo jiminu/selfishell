@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
@@ -670,7 +669,7 @@ func TestManagedSourceCheckoutCanDisappearAfterInstall(t *testing.T) {
 	}
 	if _, err := os.Stat("/bin/zsh"); err == nil {
 		blockWrite(t, home+"/.zprofile", []byte("set -e\nsource \"$HOME/.zshrc\"\nSELFISHELL_MISE_SHIMS_TEST=loaded\n"))
-		if output, err := runNativeZprofile(home, "/usr/bin:/bin", 5*time.Second); err != nil || strings.TrimSpace(string(output)) != "loaded" {
+		if output, err := runNativeZprofile(home, "/usr/bin:/bin"); err != nil || strings.TrimSpace(string(output)) != "loaded" {
 			t.Fatalf("source after removal: %v %q", err, output)
 		}
 	}

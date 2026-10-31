@@ -549,7 +549,7 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 					t.Fatalf("%s marker count: %q", name, got)
 				}
 				if name == ".zshenv" {
-					out, e := runNativeZsh(home, "/usr/bin:/bin", 5*time.Second, "-dfic", `source "$HOME/.zshenv" 2>/dev/null; bindkey -lL main`)
+					out, e := runNativeZsh(home, "/usr/bin:/bin", "-dfic", `source "$HOME/.zshenv" 2>/dev/null; bindkey -lL main`)
 					if e != nil || strings.TrimSpace(string(out)) != "bindkey -A emacs main" {
 						t.Fatalf("inherited EDITOR keymap: %q %v", out, e)
 					}
@@ -705,7 +705,7 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 			if kind == "path" {
 				path = bin + ":" + path
 			}
-			out, e := runNativeZprofile(home, path, 5*time.Second)
+			out, e := runNativeZprofile(home, path)
 			if e != nil || strings.TrimSpace(string(out)) != "loaded" {
 				t.Fatalf("mise activation: %q %v", out, e)
 			}
@@ -716,12 +716,16 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 	}
 }
 
-func runNativeZprofile(home, path string, timeout time.Duration) ([]byte, error) {
-	return runNativeZsh(home, path, timeout, "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
+func runNativeZprofile(home, path string) ([]byte, error) {
+	return runNativeZsh(home, path, "-dfc", `source "$HOME/.zprofile"; print "${SELFISHELL_MISE_SHIMS_TEST-}"`)
 }
 
-func runNativeZsh(home, path string, timeout time.Duration, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+// nativeZshTimeout covers a native zsh probe while the package's parallel
+// tests load the runner; five seconds once timed out on macOS CI.
+const nativeZshTimeout = 20 * time.Second
+
+func runNativeZsh(home, path string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), nativeZshTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/zsh", args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
