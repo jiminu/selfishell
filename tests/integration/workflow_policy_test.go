@@ -790,6 +790,88 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	}
 }
 
+// The race job reuses the gate's pinned Go setup, read-only token and runtime
+// gate; the gate's coverage profile reaches a workflow artifact.
+func TestCIGoRaceAndCoverage(t *testing.T) {
+	t.Parallel()
+	raw, jobs := workflowSections(t, "ci.yml")
+	if !strings.Contains(raw, "\npermissions:\n  contents: read\n\n") {
+		t.Fatal("CI must default to read-only permissions")
+	}
+	shell, race := policyJob(t, jobs, "shell"), policyJob(t, jobs, "go-race")
+	// Only the cache key may differ, so race builds never replace the gate's cache.
+	cacheKey := []string{"          # A second hashed file gives race builds their own cache key.", "          cache-dependency-path: |", "            go.mod", "            scripts/check-go.sh"}
+	setup := policyStep(t, race, "Set up pinned Go toolchain")
+	at := slices.Index(setup, cacheKey[0])
+	if at < 0 || len(setup) < at+len(cacheKey) || !slices.Equal(setup[at:at+len(cacheKey)], cacheKey) {
+		t.Fatalf("race setup-go lacks its own cache key: %q", setup)
+	}
+	setup = slices.Concat(setup[:at], setup[at+len(cacheKey):])
+	if !slices.Equal(policyStep(t, shell, "Check out repository"), policyStep(t, race, "Check out repository")) || !slices.Equal(policyStep(t, shell, "Set up pinned Go toolchain"), setup) {
+		t.Error("race checkout or setup-go differs from the shell job beyond the cache key")
+	}
+	for _, line := range race.lines {
+		if strings.HasPrefix(line, "    permissions:") || strings.HasPrefix(line, "    strategy:") {
+			t.Errorf("race job must inherit read-only permissions and stay off the matrix: %q", line)
+		}
+	}
+	if needs := policyNeeds(t, race.lines); !slices.Equal(needs, []string{"changes"}) || policyField(t, race.lines, "    ", "if") != "needs.changes.outputs.runtime != 'false'" || policyField(t, race.lines, "    ", "runs-on") != "ubuntu-latest" {
+		t.Errorf("race job graph: needs=%v", needs)
+	}
+	if run := strings.Join(policyStep(t, race, "Run Go checks with the race detector"), "\n"); !strings.Contains(run, `run: SELFISHELL_GO_RACE=1 SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check-go.sh`) {
+		t.Errorf("race run: %q", run)
+	}
+	profile := "${{ runner.temp }}/selfishell-coverage.out"
+	gate := strings.Join(policyStep(t, shell, "Run checks"), "\n")
+	upload := strings.Join(policyStep(t, shell, "Upload Go coverage profile"), "\n")
+	for _, needle := range []string{"SELFISHELL_GO_COVERPROFILE: " + profile, "bash scripts/check.sh", "actions/upload-artifact@", "path: " + profile, "if-no-files-found: error"} {
+		if !strings.Contains(gate+"\n"+upload, needle) {
+			t.Errorf("coverage steps lack %q", needle)
+		}
+	}
+}
+
+// The shell job skips the Lua check without nvim, so the Neovim job must fail
+// rather than skip when the pinned nvim is missing.
+func TestCILuaCheckUsesPinnedNeovim(t *testing.T) {
+	t.Parallel()
+	_, jobs := workflowSections(t, "ci.yml")
+	block := policyRun(t, policyStep(t, policyJob(t, jobs, "neovim-developer-e2e"), "Check Lua syntax with pinned Neovim"))
+	for _, present := range []bool{true, false} {
+		t.Run(fmt.Sprintf("nvim=%t", present), func(t *testing.T) {
+			home := t.TempDir()
+			mise, neovim, log := filepath.Join(home, "mise"), filepath.Join(home, "neovim"), filepath.Join(home, "log")
+			policyWrite(t, mise, "#!/bin/sh\ncase \"$1\" in install) printf '%s %s\\n' \"$*\" \"$MISE_GLOBAL_CONFIG_FILE\" >>\"$LOG\" ;; where) printf '%s\\n' \"$FAKE_NEOVIM\" ;; *) exit 2 ;; esac\n")
+			files := []string{mise}
+			if present {
+				policyWrite(t, filepath.Join(neovim, "bin/nvim"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$LOG\"\n")
+				files = append(files, filepath.Join(neovim, "bin/nvim"))
+			}
+			for _, file := range files {
+				if err := os.Chmod(file, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env := append(policyEnv(home), "RUNNER_TEMP="+home, "GITHUB_WORKSPACE="+repoRoot(), "PINNED_MISE="+mise, "FAKE_NEOVIM="+neovim, "LOG="+log)
+			got, err := runCommandIn(home, repoRoot(), []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 10*time.Second)
+			data, _ := os.ReadFile(log)
+			calls := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if calls[0] != "install neovim "+filepath.Join(repoRoot(), "config/shared/mise.toml") {
+				t.Fatalf("mise calls: %q", data)
+			}
+			if !present {
+				if err != nil || got.Status == 0 || len(calls) != 1 {
+					t.Fatalf("missing nvim: status=%d err=%v log=%q", got.Status, err, data)
+				}
+				return
+			}
+			if err != nil || got.Status != 0 || len(calls) != 2 || !strings.HasPrefix(calls[1], "--clean --headless -l scripts/check-lua.lua ") || !strings.Contains(calls[1], " config/shared/nvim/init.lua") || !strings.Contains(string(got.Stdout), " Lua files with nvim") {
+				t.Fatalf("Lua check: status=%d err=%v log=%q stdout=%s stderr=%s", got.Status, err, data, got.Stdout, got.Stderr)
+			}
+		})
+	}
+}
+
 func TestReleaseWorkflowMainAncestryAndImmutableGuard(t *testing.T) {
 	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")

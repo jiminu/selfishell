@@ -32,8 +32,11 @@ archive builds. Publication follows the [release procedure](docs/RELEASING.md#pu
 
 ## Tests and repository gate
 
-`bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, then runs
-Go format, vet, tests and four target builds through `scripts/check-go.sh`.
+`bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, parses the
+Neovim Lua through `scripts/check-lua.sh`, then runs Go format, vet, tests and
+four target builds through `scripts/check-go.sh`. The Lua parse uses `nvim` (or
+`luac`) from PATH and prints a skip line without either; CI runs it in the Neovim
+job with the pinned `nvim`.
 Go owns maintained setup, process execution, assertions and cleanup. Native
 Zsh/Lua probes cover their runtime APIs; small child-process fixtures inject
 external failures.
@@ -72,11 +75,19 @@ selects an absolute compiler-cache path instead: the repository gate uses
 `.build/test-go-cache` in the checkout so repeated runs reuse fixture builds, and
 CI passes its restored cache to the gate and native archive E2E fixtures. CI's
 pinned `setup-go` action keys its cache from `go.mod`; no `go.sum` is required.
+The race job also hashes `scripts/check-go.sh`, so its race builds use a
+separate cache key from the gate's.
 The Neovim E2E setup also retains that compiler cache when switching to its
 temporary home. The test process leaves the caller-owned cache in place. Test
 homes, XDG paths and mise state remain private, and the reproducibility check
 still uses a fresh cache. Package and tool downloads are not shared between
 test homes.
+
+`SELFISHELL_GO_RACE=1 bash scripts/check-go.sh` runs the whole test step with
+`-race` and `CGO_ENABLED=1`, so it needs a C compiler; builds, vet and gofmt keep
+the normal `CGO_ENABLED=0` policy. CI runs it in a separate Ubuntu job.
+CI's gate also sets `SELFISHELL_GO_COVERPROFILE` to an absolute file path, logs
+per-package and total coverage, and uploads the profile as a workflow artifact.
 
 ## Verification coverage
 
@@ -84,7 +95,8 @@ CI runs on GitHub-hosted `ubuntu-latest` (AMD64) and `macos-latest` (ARM64)
 runners. For runtime changes and release tags it runs the repository gate and
 an exact prebuilt-archive install on both hosts, a full installation from the
 Linux/AMD64 archive in an `ubuntu:24.04` container, the macOS/ARM64 archive's
-configuration lifecycle, and the pinned Neovim developer lifecycle on Ubuntu.
+configuration lifecycle, the pinned Neovim developer lifecycle, and the Go
+tests under the race detector on Ubuntu.
 The release builder produces four archive formats; only the host's native
 archive executes in each job.
 

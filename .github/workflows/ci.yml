@@ -91,7 +91,16 @@ jobs:
         run: brew install shellcheck shfmt
 
       - name: Run checks
+        env:
+          SELFISHELL_GO_COVERPROFILE: ${{ runner.temp }}/selfishell-coverage.out
         run: SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check.sh
+
+      - name: Upload Go coverage profile
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: go-coverage-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selfishell-coverage.out
+          if-no-files-found: error
 
       - name: Build disposable release artifacts
         run: |
@@ -104,6 +113,36 @@ jobs:
         run: |
           printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
           go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1
+
+  go-race:
+    name: Go tests with the race detector
+    needs: changes
+    # Same rule as the macOS gate leg: skip only when no runtime file changed.
+    if: needs.changes.outputs.runtime != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          # A second hashed file gives race builds their own cache key.
+          cache-dependency-path: |
+            go.mod
+            scripts/check-go.sh
+
+      - name: Install Zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Run Go checks with the race detector
+        run: SELFISHELL_GO_RACE=1 SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check-go.sh
 
   ubuntu-container-e2e:
     name: Ubuntu 24.04 native archive full install E2E
@@ -197,6 +236,18 @@ jobs:
           mkdir -p "$HOME"
           GOCACHE="$go_cache" go run ./cmd/selfishell-dev "$GITHUB_WORKSPACE" mise-only
           printf 'PINNED_MISE=%s\n' "$HOME/.local/bin/mise" >>"$GITHUB_ENV"
+
+      - name: Check Lua syntax with pinned Neovim
+        run: |
+          # The shell job has no nvim and skips this check; install only the pinned one.
+          export HOME="$RUNNER_TEMP/selfishell-lua-home"
+          export MISE_GLOBAL_CONFIG_FILE="$GITHUB_WORKSPACE/config/shared/mise.toml"
+          export MISE_TRUSTED_CONFIG_PATHS="$GITHUB_WORKSPACE/config/shared"
+          mkdir -p "$HOME"
+          "$PINNED_MISE" install neovim
+          neovim_bin="$("$PINNED_MISE" where neovim)/bin"
+          test -x "$neovim_bin/nvim"
+          PATH="$neovim_bin:$PATH" bash scripts/check-lua.sh
 
       - name: Verify Go cleanup with pinned mise
         run: PATH="$(dirname "$PINNED_MISE"):$PATH" go test ./internal/selfishell -run '^TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly$' -count=1 -v

@@ -43,5 +43,8 @@ printf '%s\0' "${bash_files[@]}" | xargs -0 -n 4 -P 4 shellcheck -x
 printf 'Checking shell formatting\n'
 shfmt -d -i 2 -ci "${bash_files[@]}"
 
+printf 'Checking Lua syntax\n'
+bash scripts/check-lua.sh
+
 printf 'Checking Go engine\n'
 bash scripts/check-go.sh
