@@ -57,9 +57,13 @@ The Go code is layered, and imports point only downward:
      drives it through `terminal.Setup` (with a `report.Reporter` and a
      prompt) and `terminal.Lifecycle`, and keeps the Windows font package
      adapter.
+   - `internal/release` finds, downloads, verifies and activates CLI releases
+     and rolls them back in the versioned install layout. The core drives it
+     through `release.Operation`, passing `Rollback` a confirmation function,
+     and keeps the command arguments, prompts and exit codes.
 3. `internal/selfishell` keeps the CLI, the configuration lifecycle,
-   install/update/status/uninstall, package adapters, inventory, Neovim and
-   releases. It imports the packages above; they never import it.
+   install/update/status/uninstall, package adapters, inventory and Neovim. It
+   imports the packages above; they never import it.
 4. Commands under `cmd/` import only the packages they use.
 
 New code goes in the lowest layer whose dependencies it needs. A foundation
