@@ -30,6 +30,11 @@ compiler settings and
 [local release artifacts](docs/RELEASING.md#optional-local-artifact-check) for
 archive builds. Publication follows the [release procedure](docs/RELEASING.md#publish).
 
+`.git-blame-ignore-revs` lists commits that only moved code between packages.
+Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so `git blame`
+skips them; GitHub's blame view reads the file automatically. Package layering
+is described in [Go packages](docs/ARCHITECTURE.md#go-packages).
+
 ## Tests and repository gate
 
 `bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, parses the
@@ -52,8 +57,9 @@ environment with `t.Setenv`. Give each test its own temporary HOME and pass
 child environments explicitly. Write fixture files with `testutil.WriteFile` or
 `testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
 cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
-Product code in `internal/selfishell` reads the environment only through the
-injected `Environment` (another source check), so its tests pass a private
+Product code in `internal/selfishell`, `internal/process`, `internal/managed`
+and `internal/report` reads the environment only through the injected
+`process.Environment` (another source check), so its tests pass a private
 environment instead of calling `t.Setenv`.
 
 Keep command parsing and shared failure cases focused; do not repeat basic

@@ -1,0 +1,3 @@
+# Commits that only moved code between Go packages. See CONTRIBUTING.md.
+# refactor: extract the process, managed and report foundation packages
+7742f60a517c40bc88808dad5c22c8d131a77cd7
