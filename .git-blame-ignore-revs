@@ -7,3 +7,5 @@
 745c29c41dc3f4ce9f155d0ee4eb9f200572631e
 # refactor: extract the Neovim synchronization into internal/neovim
 025a6a7a7a4a2d131225b2ae4bc34f89ff5a7941
+# refactor: extract the managed-file lifecycle into internal/lifecycle
+00d2f6bb372c99506c566ac86d08f252f084ade7
