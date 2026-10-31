@@ -325,10 +325,11 @@ func TestNativeMacOSInitializesHomebrewAlreadyOnPath(t *testing.T) {
 [ "$*" = 'shellenv zsh' ] || exit 1
 printf 'export HOMEBREW_PREFIX="%s"\n' "$SELFISHELL_TEST_BREW_PREFIX"
 printf 'path=("%s/bin" "%s/sbin" $path)\n' "$SELFISHELL_TEST_BREW_PREFIX" "$SELFISHELL_TEST_BREW_PREFIX"
+printf 'fpath[1,0]="%s/share/zsh/site-functions"\n' "$SELFISHELL_TEST_BREW_PREFIX"
 `, 0700)
 	nativeWrite(t, filepath.Join(bin, "git"), "#!/bin/sh\nexit 0\n", 0700)
 	nativeWrite(t, filepath.Join(home, ".config/selfishell/zsh/common.zsh"), ":\n", 0600)
-	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; source "$SELFISHELL_SOURCE"; print -rl -- "$HOMEBREW_PREFIX" "$(command -v git)" "$path[1]" "$path[2]"; unique_path=("${(@u)path}"); (( ${#path} == ${#unique_path} )) || exit 21`,
+	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; source "$SELFISHELL_SOURCE"; print -rl -- "$HOMEBREW_PREFIX" "$(command -v git)" "$path[1]" "$path[2]"; unique_path=("${(@u)path}"); (( ${#path} == ${#unique_path} )) || exit 21; unique_fpath=("${(@u)fpath}"); (( ${#fpath} == ${#unique_fpath} )) || exit 22`,
 		"PATH="+nativePath+":"+bin, "HOMEBREW_PREFIX=", "SELFISHELL_TEST_BREW_PREFIX="+prefix,
 		"SELFISHELL_SOURCE="+filepath.Join(repoRoot(), "config/macos/zshrc"))
 	want := prefix + "\n" + filepath.Join(bin, "git") + "\n" + home + "/.local/bin\n" + home + "/.rd/bin\n"
