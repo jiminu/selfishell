@@ -148,11 +148,11 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		members := []archiveMember{
-			{"VERSION", "", 0, "2.0.0\n", 0644},
-			{"bin/selfishell", "", 0, string(binary), 0755},
-			{"packages.conf", "", 0, "package ubuntu required apt demo\n", 0644},
-			{"dependencies.conf", "", 0, "", 0644},
+		members := []testutil.ArchiveMember{
+			{Name: "VERSION", Body: "2.0.0\n", Mode: 0644},
+			{Name: "bin/selfishell", Body: string(binary), Mode: 0755},
+			{Name: "packages.conf", Body: "package ubuntu required apt demo\n", Mode: 0644},
+			{Name: "dependencies.conf", Mode: 0644},
 		}
 		if err := filepath.WalkDir(source+"/config", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() {
@@ -160,7 +160,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 			}
 			data, err := os.ReadFile(path)
 			if err == nil {
-				members = append(members, archiveMember{strings.TrimPrefix(path, source+"/"), "", 0, string(data), 0644})
+				members = append(members, testutil.ArchiveMember{Name: strings.TrimPrefix(path, source+"/"), Body: string(data), Mode: 0644})
 			}
 			return err
 		}); err != nil {
@@ -172,7 +172,10 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 			t.Run(sig.String(), func(t *testing.T) {
 				marker := home + "/child-started"
 				_ = os.Remove(marker)
-				if err := atomicReleaseLink("releases/1.0.0", share+"/current"); err != nil {
+				if err := os.Remove(share + "/current"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
 					t.Fatal(err)
 				}
 				cmd, output, done := run(t, []string{"update", "--version", "2.0.0", "--yes"}, false)

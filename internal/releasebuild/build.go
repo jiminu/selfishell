@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/release"
 )
 
 var targets = []struct{ platform, goos, arch string }{
@@ -26,7 +26,7 @@ var targets = []struct{ platform, goos, arch string }{
 // Build creates the four release archives, checksums, and VERSION in output.
 // Relative output paths are resolved against root; an empty output uses root/dist.
 func Build(ctx context.Context, root, version, output string) error {
-	if !selfishell.ValidReleaseVersion(version) {
+	if !release.ValidVersion(version) {
 		return fmt.Errorf("a valid semantic version is required")
 	}
 	var err error

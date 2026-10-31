@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/release"
 )
 
 // CLI keeps output and release location explicit for isolated invocation tests.
@@ -34,7 +35,7 @@ func (c CLI) invocationContext() context.Context {
 func (c CLI) latestReleaseVersion() (string, error) {
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).latest(ctx)
+	return (release.Operation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).Latest(ctx)
 }
 
 func (c CLI) error(message string) {

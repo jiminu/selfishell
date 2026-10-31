@@ -3,3 +3,5 @@
 7742f60a517c40bc88808dad5c22c8d131a77cd7
 # refactor: extract the terminal and Windows integration into internal/terminal
 85951525b3805553534cbf0d4efbac92b2ae6479
+# refactor: extract the release lifecycle into internal/release
+745c29c41dc3f4ce9f155d0ee4eb9f200572631e

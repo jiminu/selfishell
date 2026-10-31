@@ -1,4 +1,4 @@
-package selfishell
+package release
 
 import (
 	"archive/tar"

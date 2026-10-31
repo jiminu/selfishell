@@ -57,8 +57,8 @@ environment with `t.Setenv`. Give each test its own temporary HOME and pass
 child environments explicitly. Write fixture files with `testutil.WriteFile` or
 `testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
 cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
-Product code in `internal/selfishell`, `internal/terminal`, `internal/process`,
-`internal/managed` and `internal/report` reads the environment only through
+Product code in `internal/selfishell`, `internal/release`, `internal/terminal`,
+`internal/process`, `internal/managed` and `internal/report` reads the environment only through
 the injected `process.Environment` (another source check), so its tests pass a
 private environment instead of calling `t.Setenv`.
 

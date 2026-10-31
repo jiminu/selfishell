@@ -12,6 +12,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/terminal"
 )
 
@@ -100,7 +101,7 @@ func rollbackStatusVersion(root string) string {
 	if err != nil {
 		return "invalid"
 	}
-	version, err := retainedRelease(releases, link)
+	version, err := release.Retained(releases, link)
 	if err != nil {
 		return "invalid"
 	}

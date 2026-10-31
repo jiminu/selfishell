@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/releasebuild"
-	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
 const usage = "Usage: scripts/build-release.sh --version VERSION [--output OUTPUT_DIR]"
@@ -38,7 +38,7 @@ func main() {
 		}
 		args = args[2:]
 	}
-	if !selfishell.ValidReleaseVersion(version) {
+	if !release.ValidVersion(version) {
 		fmt.Fprintln(os.Stderr, "A valid semantic version is required.")
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
