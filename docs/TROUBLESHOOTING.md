@@ -129,6 +129,14 @@ edited. An edited Neovim plugin checkout stops them instead, because lazy.nvim
 will not check out over local changes: remove that plugin's directory under
 `${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy`, then retry.
 
+## Stale Shell Tool Initialization
+
+Interactive startup caches fzf, zoxide, and Starship initialization under
+`${XDG_CACHE_HOME:-$HOME/.cache}/selfishell` and regenerates it when the tool,
+or for Starship its configuration file, changes. If a prompt or key binding
+still looks out of date, remove that tool's `*-init.zsh` file there and open a
+new shell. See [Startup caches](PERFORMANCE.md#startup-caches).
+
 ## Failed CLI Update
 
 A failed download or checksum validation leaves `current` unchanged. After a

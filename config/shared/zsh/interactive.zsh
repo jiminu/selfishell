@@ -6,13 +6,23 @@ SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
 # Compare executable identity, not cache age: rollbacks can restore an older
 # mtime. Keep the key in the cache itself so it activates with the validated code.
 # The generators below consume the key set by this check, without another stat.
+# Extra arguments are input files whose identity joins the key; a missing one
+# keys as "absent".
 _selfishell_zsh_cache_current() {
-  local target="$1" binary="${2:A}" header
+  local target="$1" binary="${2:A}" header input
   local -A info
   _selfishell_zsh_cache_key=""
   zmodload -F zsh/stat b:zstat 2>/dev/null || return 1
   zstat -H info -- "$binary" 2>/dev/null || return 1
   _selfishell_zsh_cache_key="# selfishell-tool ${(q)binary} $info[device] $info[inode] $info[size] $info[mtime] $info[ctime]"
+  for input in "${@[3,-1]}"; do
+    input="${input:A}"
+    if zstat -H info -- "$input" 2>/dev/null; then
+      _selfishell_zsh_cache_key+=" ${(q)input} $info[device] $info[inode] $info[size] $info[mtime] $info[ctime]"
+    else
+      _selfishell_zsh_cache_key+=" ${(q)input} absent"
+    fi
+  done
   [[ -s "$target" ]] && IFS= read -r header <"$target" &&
     [[ "$header" == "$_selfishell_zsh_cache_key" ]]
 }
@@ -63,6 +73,27 @@ _selfishell_fzf_init() {
 
 _selfishell_generate_fzf_cache() {
   _selfishell_generate_zsh_cache "$1" _selfishell_fzf_init
+}
+
+# Starship's init ends by forking itself for PROMPT2 on every startup. The
+# continuation prompt depends only on the binary and starship.toml, both in the
+# cache key, so fold it in as a literal. Any other init shape is kept as is.
+_selfishell_starship_init() {
+  local init value prefix='PROMPT2="$(' suffix=' prompt --continuation)"'
+  local -a lines
+  local -i i match=0 count=0
+
+  init="$(command starship init zsh)" || return 1
+  lines=("${(@f)init}")
+  for (( i = 1; i <= $#lines; i++ )); do
+    [[ "$lines[i]" == "$prefix"*"$suffix" ]] && { match=i; (( ++count )); }
+  done
+  if (( count == 1 )) && value="$(STARSHIP_SHELL=zsh command starship prompt --continuation)"; then
+    lines[match]="PROMPT2=${(q)value}"
+    print -r -- "${(F)lines}"
+  else
+    print -r -- "$init"
+  fi
 }
 
 if _selfishell_zoxide_bin="$(command -v zoxide)"; then
@@ -192,8 +223,9 @@ fi
 # Sourcing starship's init twice makes its keymap wrapper call itself.
 if (( ! $+functions[prompt_starship_precmd] )) && _selfishell_starship_bin="$(command -v starship)"; then
   _selfishell_starship_cache="$SELFISHELL_CACHE_DIR/starship-init.zsh"
-  if ! _selfishell_zsh_cache_current "$_selfishell_starship_cache" "$_selfishell_starship_bin"; then
-    _selfishell_generate_zsh_cache "$_selfishell_starship_cache" starship init zsh
+  if ! _selfishell_zsh_cache_current "$_selfishell_starship_cache" "$_selfishell_starship_bin" \
+    "${STARSHIP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml}"; then
+    _selfishell_generate_zsh_cache "$_selfishell_starship_cache" _selfishell_starship_init
   fi
   [[ -s "$_selfishell_starship_cache" ]] && source "$_selfishell_starship_cache"
   unset _selfishell_starship_cache
