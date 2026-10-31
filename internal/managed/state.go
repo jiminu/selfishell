@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"syscall"
 )
 
+// ErrMalformedState marks a state record or managed file that cannot be trusted.
 var ErrMalformedState = errors.New("malformed managed state")
 
 // State retains the six payload fields of Bash's seven-line v2 record.
@@ -55,7 +56,7 @@ func (s State) validate() error {
 // ReadState distinguishes a missing record (fs.ErrNotExist), an invalid record
 // (ErrMalformedState), and I/O errors. No partially parsed state escapes.
 func ReadState(path string) (State, error) {
-	data, err := readStateFile(path)
+	data, err := ReadFile(path)
 	if err != nil {
 		return State{}, err
 	}
@@ -85,7 +86,9 @@ func checkStatePath(path string) error {
 	return nil
 }
 
-func readStateFile(path string) ([]byte, error) {
+// ReadFile reads a regular file without following a final symlink or blocking
+// on a FIFO; other file types are ErrMalformedState.
+func ReadFile(path string) ([]byte, error) {
 	if err := checkStatePath(path); err != nil {
 		return nil, err
 	}
@@ -128,7 +131,7 @@ func writeState(path string, state State, create func(string, string) (stateFile
 		return fmt.Errorf("%w: %s", err, path)
 	}
 	data := []byte(strings.Join(state.fields(), "\n") + "\n")
-	current, err := readStateFile(path)
+	current, err := ReadFile(path)
 	if err == nil && bytes.Equal(current, data) {
 		return nil
 	}

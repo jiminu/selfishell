@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"bytes"
@@ -76,7 +76,10 @@ func TestStateTransientVersionAndRestoreValidation(t *testing.T) {
 		if status == "active" {
 			version = "2\n"
 		}
-		data := blockRead(t, path)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !bytes.HasPrefix(data, []byte(version)) || bytes.Count(data, []byte("\n")) != 7 {
 			t.Fatalf("%s record: %q", status, data)
 		}

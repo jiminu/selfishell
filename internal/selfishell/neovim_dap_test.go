@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -24,7 +26,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 		t.Skip("requires the pinned physical Neovim executable")
 	}
 	p := standaloneNeovimProcess(t, nvim)
-	home := Environment(p.Env).Get("HOME")
+	home := process.Environment(p.Env).Get("HOME")
 	config := home + "/.config/nvim"
 	if err := os.MkdirAll(config, 0700); err != nil {
 		t.Fatal(err)
@@ -45,8 +47,8 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	p = withEnvironment(p, map[string]string{
-		"PATH":                         home + "/bin:" + Environment(p.Env).Get("PATH"),
+	p = process.WithEnvironment(p, map[string]string{
+		"PATH":                         home + "/bin:" + process.Environment(p.Env).Get("PATH"),
 		"SELFISHELL_NVIM_TEST_FIXTURE": root + "/tests/fixtures/neovim/dap_setup.lua",
 	}, "WSL_DISTRO_NAME", "VIRTUAL_ENV", "CONDA_PREFIX")
 	p.Dir = home + "/project"
@@ -62,7 +64,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 
 func TestNeovimDAPUserConfigurationSurvivesLifecycle(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, _, paths := blockHome(t, &env, "ubuntu")
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	user := paths.Config + "/nvim/lua/plugins/dap_user.lua"
@@ -78,7 +80,7 @@ func TestNeovimDAPUserConfigurationSurvivesLifecycle(t *testing.T) {
 
 // The opt-in pinned consumer owns network provisioning. These probes use real
 // plugin commits and real adapters; all language projects and installs are private.
-func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, p Process, op *PackageOperation, paths Paths, nvim, mise string) {
+func runNeovimDAPConsumer(t *testing.T, ctx context.Context, root, home string, p process.Process, op *PackageOperation, paths managed.Paths, nvim, mise string) {
 	t.Helper()
 	pins, err := approvedMisePins(root+"/config/shared/mise.toml", []string{"python"})
 	if err != nil {
@@ -133,7 +135,7 @@ int main(int argc, char** argv) {
 	run := func(fixture string) {
 		t.Helper()
 		var output bytes.Buffer
-		command := withEnvironment(p, map[string]string{
+		command := process.WithEnvironment(p, map[string]string{
 			"SELFISHELL_DAP_PROJECT":         project,
 			"SELFISHELL_NVIM_TEST_FIXTURE":   root + "/tests/fixtures/neovim/" + fixture,
 			"SELFISHELL_NODE_INSPECTOR_PORT": inspectorPort,
@@ -182,7 +184,7 @@ int main(int argc, char** argv) {
 		t.Fatal(err)
 	}
 	attached := exec.CommandContext(ctx, node, "--inspect-brk=127.0.0.1:0", project+"/attach.cjs")
-	attached.Env, attached.Dir = p.environment(), project
+	attached.Env, attached.Dir = p.Environment(), project
 	stderr, err := attached.StderrPipe()
 	if err != nil {
 		t.Fatal(err)

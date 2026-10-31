@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -30,7 +31,7 @@ func newPackageFixture(t *testing.T) *packageFixture {
 		}
 	}
 	env := []string{"HOME=" + f.home, "XDG_CONFIG_HOME=" + filepath.Join(root, "config"), "XDG_DATA_HOME=" + filepath.Join(root, "data"), "XDG_STATE_HOME=" + filepath.Join(root, "state"), "XDG_CACHE_HOME=" + filepath.Join(root, "cache"), "PATH=" + f.bin}
-	f.op = &PackageOperation{Process: Process{Out: &f.out, Err: &f.err, Env: env}, brewLocations: []string{}}
+	f.op = &PackageOperation{Process: process.Process{Out: &f.out, Err: &f.err, Env: env}, brewLocations: []string{}}
 	return f
 }
 

@@ -7,33 +7,35 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func dependencyFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string) {
+func dependencyFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string) {
 	t.Helper()
 	home := t.TempDir()
-	env.set("HOME", home)
-	env.set("XDG_CONFIG_HOME", home+"/.config")
-	env.set("XDG_DATA_HOME", home+"/data")
-	env.set("XDG_STATE_HOME", home+"/state")
-	env.set("XDG_CACHE_HOME", home+"/cache")
-	env.set("MISE_DATA_DIR", home+"/mise/data")
-	env.set("MISE_STATE_DIR", home+"/mise/state")
-	env.set("MISE_CACHE_DIR", home+"/mise/cache")
-	env.set("MISE_CONFIG_DIR", home+"/.config/mise")
-	env.set("MISE_TRUSTED_CONFIG_PATHS", "")
-	paths, err := userPaths(*env)
+	setEnv(env, "HOME", home)
+	setEnv(env, "XDG_CONFIG_HOME", home+"/.config")
+	setEnv(env, "XDG_DATA_HOME", home+"/data")
+	setEnv(env, "XDG_STATE_HOME", home+"/state")
+	setEnv(env, "XDG_CACHE_HOME", home+"/cache")
+	setEnv(env, "MISE_DATA_DIR", home+"/mise/data")
+	setEnv(env, "MISE_STATE_DIR", home+"/mise/state")
+	setEnv(env, "MISE_CACHE_DIR", home+"/mise/cache")
+	setEnv(env, "MISE_CONFIG_DIR", home+"/.config/mise")
+	setEnv(env, "MISE_TRUSTED_CONFIG_PATHS", "")
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
 	manifest := home + "/dependencies.conf"
-	return &PackageOperation{Process: Process{inherit: *env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}, paths, manifest, home
+	return &PackageOperation{Process: process.Process{Inherit: *env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}, paths, manifest, home
 }
 
 func TestManagedRawDownloadRestoresChangedBytesAndSkipsUnchangedTransfer(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
 	source := home + "/source"
 	directDownload(t, manifest, source, "1.0", ".local/bin/tool", false)
@@ -63,9 +65,9 @@ func TestManagedRawDownloadRestoresChangedBytesAndSkipsUnchangedTransfer(t *test
 
 func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, manifest, home := dependencyFixture(t, &env)
-	env.set("TMPDIR", t.TempDir())
+	setEnv(&env, "TMPDIR", t.TempDir())
 	bin := home + "/fake-bin"
 	if err := os.Mkdir(bin, 0700); err != nil {
 		t.Fatal(err)
@@ -73,9 +75,9 @@ func TestDirectDownloadPassesProxyAndTransferPolicy(t *testing.T) {
 	if err := testutil.WriteFile(bin+"/curl", []byte("#!/bin/sh\nprintf '%s' \"$HTTPS_PROXY\" >\"$HOME/proxy-observed\"\nprintf '%s\\n' \"$@\" >\"$HOME/curl-arguments\"\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	env.set("PATH", bin)
-	env.set("HTTPS_PROXY", "http://proxy.example:8443")
-	op.Process.inherit = env
+	setEnv(&env, "PATH", bin)
+	setEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
+	op.Process.Inherit = env
 	directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", false)
 	if err := installTool(op, paths, manifest); err != nil {
 		t.Fatal(err)

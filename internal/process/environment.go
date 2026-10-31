@@ -1,4 +1,4 @@
-package selfishell
+package process
 
 import (
 	"os"
@@ -11,12 +11,12 @@ import (
 // own so they need not change the shared process environment.
 type Environment []string
 
-// ProcessEnvironment is the only reader of the real process environment.
-func ProcessEnvironment() Environment { return os.Environ() }
+// HostEnvironment is the only reader of the real process environment.
+func HostEnvironment() Environment { return os.Environ() }
 
 func (e Environment) entries() []string {
 	if e == nil {
-		return ProcessEnvironment()
+		return HostEnvironment()
 	}
 	return e
 }
@@ -32,6 +32,7 @@ func (e Environment) Lookup(name string) (string, bool) {
 	return value, found
 }
 
+// Get returns name's value, or "" when it is unset.
 func (e Environment) Get(name string) string {
 	value, _ := e.Lookup(name)
 	return value
@@ -69,4 +70,19 @@ func (e Environment) With(set map[string]string, unset ...string) Environment {
 		out = append(out, key+"="+value)
 	}
 	return out
+}
+
+// Environment copies the child's environment: Env, or else Inherit.
+func (p Process) Environment() Environment {
+	if p.Env != nil {
+		return Environment(p.Env).List()
+	}
+	return p.Inherit.List()
+}
+
+// WithEnvironment returns a copy of p whose child environment has set applied
+// and unset removed.
+func WithEnvironment(p Process, set map[string]string, unset ...string) Process {
+	p.Env = p.Environment().With(set, unset...)
+	return p
 }

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -29,12 +30,12 @@ func TestNeovimGitRemote(t *testing.T) {
 
 func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 	t.Helper()
-	p := withEnvironment(standaloneNeovimProcess(t, nvim), map[string]string{
+	p := process.WithEnvironment(standaloneNeovimProcess(t, nvim), map[string]string{
 		"SELFISHELL_NVIM_CONFIG":           root + "/config/shared/nvim",
 		"SELFISHELL_TEST_NVIM_PLUGIN_ROOT": pluginRoot,
 		"GIT_CONFIG_NOSYSTEM":              "1", "GIT_CONFIG_GLOBAL": "/dev/null",
 	}, "WSL_DISTRO_NAME", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
-	home, err := filepath.EvalSymlinks(Environment(p.Env).Get("HOME"))
+	home, err := filepath.EvalSymlinks(process.Environment(p.Env).Get("HOME"))
 	if err != nil {
 		t.Fatal(err)
 	}

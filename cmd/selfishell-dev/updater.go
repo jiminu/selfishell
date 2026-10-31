@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/selfishell"
 )
 
@@ -23,7 +24,7 @@ var downloadChecksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // their latest release instead of HEAD.
 var releasePinnedPlugins = map[string]bool{"saghen/blink.cmp": true, "petertriho/nvim-scrollbar": true}
 
-func runDependencyUpdate(ctx context.Context, root string, args []string, p selfishell.Process) int {
+func runDependencyUpdate(ctx context.Context, root string, args []string, p process.Process) int {
 	flags := flag.NewFlagSet("update-dependencies", flag.ContinueOnError)
 	flags.SetOutput(p.Err)
 	manifest := flags.String("manifest", filepath.Join(root, "dependencies.conf"), "dependency manifest")
@@ -118,7 +119,7 @@ func parseDependencyMetadata(data string) ([][]string, error) {
 	return updates, nil
 }
 
-func updateDependencies(ctx context.Context, p selfishell.Process, manifest, metadata, root string) error {
+func updateDependencies(ctx context.Context, p process.Process, manifest, metadata, root string) error {
 	manifestEdit, err := readDependencyEdit(manifest)
 	if err != nil {
 		return err

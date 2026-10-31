@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 type windowsFontStatus struct {
@@ -24,7 +27,7 @@ type retainedWindowsFont struct {
 
 // Windows fonts are optional direct packages. Like other packages, installed
 // fonts remain available to other applications after configuration uninstall.
-func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, dep Dependency) error {
+func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed.Paths, dep managed.Dependency) error {
 	if dep.Name == "." || filepath.Base(dep.Name) != dep.Name {
 		return fmt.Errorf("invalid font dependency name: %s", dep.Name)
 	}
@@ -35,7 +38,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 				continue
 			}
 			for _, file := range []string{paths.State + "/dependencies/" + d.Name, paths.State + "/pending-fonts/" + d.Name} {
-				if _, err := readStateFile(file); err == nil {
+				if _, err := managed.ReadFile(file); err == nil {
 					owned = true
 				} else if !errors.Is(err, os.ErrNotExist) {
 					return err
@@ -43,7 +46,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 			}
 		}
 		if !owned {
-			data, err := o.Process.windowsScript(ctx, map[string]string{"operation": "font-status"})
+			data, err := runWindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
 			if err != nil {
 				return err
 			}
@@ -58,10 +61,10 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		o.windowsFontsChecked = true
 	}
 	if o.windowsFontsExternal {
-		o.report(reportInfo, "Externally installed; preserving Windows font: %s", terminalFont)
+		o.report(report.Info, "Externally installed; preserving Windows font: %s", terminalFont)
 		return nil
 	}
-	target, err := dependencyTarget(dep, paths, o.Process.environment())
+	target, err := dependencyTarget(dep, paths, o.Process.Environment())
 	if err != nil {
 		return err
 	}
@@ -83,7 +86,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		AlternatePreviousPath string `json:"alternatePreviousPath,omitempty"`
 	}
 	var pending pendingFont
-	data, err := readStateFile(journal)
+	data, err := managed.ReadFile(journal)
 	hasPending := err == nil
 	if hasPending {
 		if json.Unmarshal(data, &pending) != nil || pending.Version == "" || len(pending.Checksum) != 64 {
@@ -91,16 +94,16 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		}
 		previous := dep
 		previous.Version = pending.Version
-		expected, err := dependencyTarget(previous, paths, o.Process.environment())
+		expected, err := dependencyTarget(previous, paths, o.Process.Environment())
 		if err != nil || expected != pending.Target {
 			return fmt.Errorf("invalid pending Windows font target: %s", journal)
 		}
-		if _, err := readStateFile(state); errors.Is(err, os.ErrNotExist) {
+		if _, err := managed.ReadFile(state); errors.Is(err, os.ErrNotExist) {
 			if contents, err := os.ReadFile(pending.Target); err == nil {
 				if info, err := os.Lstat(pending.Target); err != nil || !info.Mode().IsRegular() || fmt.Sprintf("%x", sha256.Sum256(contents)) != pending.Checksum {
 					return fmt.Errorf("interrupted Windows font was modified: %s", pending.Target)
 				}
-				if err := writeAtomic(state, []byte(pending.Version+"\n"), 0600); err != nil {
+				if err := managed.WriteAtomic(state, []byte(pending.Version+"\n"), 0600); err != nil {
 					return err
 				}
 			} else if !errors.Is(err, os.ErrNotExist) {
@@ -112,7 +115,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	data, err = readStateFile(state)
+	data, err = managed.ReadFile(state)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -132,22 +135,22 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if oldVersion != "" && oldVersion != dep.Version {
 		previous := dep
 		previous.Version = oldVersion
-		oldTarget, err := dependencyTarget(previous, paths, o.Process.environment())
+		oldTarget, err := dependencyTarget(previous, paths, o.Process.Environment())
 		if err != nil {
 			return err
 		}
-		oldPath, err := o.Process.windowsPath(ctx, "-w", oldTarget)
+		oldPath, err := convertWindowsPath(ctx, o.Process, "-w", oldTarget)
 		if err != nil {
 			return err
 		}
 		approve(oldPath)
 		// Reuse only a recorded, intact old pin. Never replace a retained file:
 		// Windows applications may still have it loaded.
-		if exists, err := present(target); err != nil {
+		if exists, err := managed.Present(target); err != nil {
 			return err
 		} else if exists {
 			record := paths.State + "/retained-fonts/" + dep.Name + "/" + dep.Version + ".json"
-			data, err := readStateFile(record)
+			data, err := managed.ReadFile(record)
 			if err == nil {
 				var retained retainedWindowsFont
 				if json.Unmarshal(data, &retained) != nil || retained.Target != target || retained.Checksum != dep.Checksum || !o.validDirect(ctx, dep, target, true) {
@@ -162,13 +165,13 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		}
 		// Preserve the current marker's ownership evidence before changing it.
 		// This also handles installations made before per-version records existed.
-		if contents, err := readStateFile(oldTarget); err == nil {
+		if contents, err := managed.ReadFile(oldTarget); err == nil {
 			retained := retainedWindowsFont{Target: oldTarget, Checksum: fmt.Sprintf("%x", sha256.Sum256(contents))}
 			data, err := json.Marshal(retained)
 			if err != nil {
 				return err
 			}
-			if err := writeAtomic(paths.State+"/retained-fonts/"+dep.Name+"/"+oldVersion+".json", data, 0600); err != nil {
+			if err := managed.WriteAtomic(paths.State+"/retained-fonts/"+dep.Name+"/"+oldVersion+".json", data, 0600); err != nil {
 				return err
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
@@ -179,18 +182,18 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if err != nil {
 		return err
 	}
-	if err := writeAtomic(journal, data, 0600); err != nil {
+	if err := managed.WriteAtomic(journal, data, 0600); err != nil {
 		return err
 	}
 	if reuse {
-		if err := writeAtomic(state, []byte(dep.Version+"\n"), 0600); err != nil {
+		if err := managed.WriteAtomic(state, []byte(dep.Version+"\n"), 0600); err != nil {
 			return err
 		}
 		o.UnchangedCount++
 	} else if err := o.installDependency(ctx, paths, dep); err != nil {
 		return err
 	}
-	windowsPath, err := o.Process.windowsPath(ctx, "-w", target)
+	windowsPath, err := convertWindowsPath(ctx, o.Process, "-w", target)
 	if err != nil {
 		return err
 	}
@@ -200,7 +203,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		// on Windows' bounded command line. Only its current registry value
 		// can be needed by the registration ownership guard.
 		registeredPreviousPaths = nil
-		data, err := o.Process.windowsScript(ctx, map[string]string{"operation": "font-status"})
+		data, err := runWindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
 		if err != nil {
 			return err
 		}
@@ -216,7 +219,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 			}
 		}
 	}
-	_, err = o.Process.windowsScript(ctx, map[string]any{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPaths": registeredPreviousPaths})
+	_, err = runWindowsScript(ctx, o.Process, map[string]any{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPaths": registeredPreviousPaths})
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/pty"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 func packageTestPTY(t *testing.T) (*os.File, *os.File) {
@@ -53,24 +56,24 @@ func readPackagePTY(t *testing.T, master *os.File, expected string) string {
 
 func TestProgressTerminalFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	isolateHome(&env, t.TempDir())
-	env.set("TERM", "xterm-256color")
-	env.set("CI", "")
-	env.set("NO_COLOR", "1")
+	setEnv(&env, "TERM", "xterm-256color")
+	setEnv(&env, "CI", "")
+	setEnv(&env, "NO_COLOR", "1")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
-	ui := newProgress(slave, slave, Paths{}, env)
-	defer ui.pause()
+	ui := newProgress(slave, slave, managed.Paths{}, env)
+	defer ui.Pause()
 	c := CLI{Env: env, Out: slave, Err: slave, progress: ui}
-	p := Process{inherit: env, Out: slave, Err: slave, progress: ui}
+	p := process.Process{Inherit: env, Out: slave, Err: slave, Progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'")
 	if code != 0 || err != nil {
 		t.Fatalf("successful tool: %d %v", code, err)
 	}
-	c.report("Tools", reportSuccess, "Installed example tool")
+	c.report("Tools", report.Success, "Installed example tool")
 	code, err = p.Run(context.Background(), "/bin/sh", "-c", "printf 'failure detail\\n' >&2; exit 7")
 	if code != 7 || err != nil {
 		t.Fatalf("failed tool: %d %v", code, err)
@@ -92,7 +95,7 @@ func TestProgressTerminalFailure(t *testing.T) {
 func TestConfigurationPromptInterrupt(t *testing.T) {
 	t.Parallel()
 	if root := os.Getenv("SELFISHELL_TEST_PROMPT_ROOT"); root != "" {
-		env := ProcessEnvironment() // the parent's fixture environment
+		env := process.HostEnvironment() // the parent's fixture environment
 		c := CLI{Env: env, Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 		prepared, err := c.prepareConfig(detectPlatform(env).Name, false, false, true, false, false)
 		if err != nil {
@@ -110,7 +113,7 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 		t.Fatal("configuration continued after interrupt")
 	}
 
-	var env Environment
+	var env process.Environment
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -121,9 +124,9 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 	}
 	root, _, _ := blockHome(t, &env, platform)
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
-	env.set("SELFISHELL_TEST_PROMPT_ROOT", root)
-	env.set("TERM", "xterm-256color")
-	env.set("CI", "")
+	setEnv(&env, "SELFISHELL_TEST_PROMPT_ROOT", root)
+	setEnv(&env, "TERM", "xterm-256color")
+	setEnv(&env, "CI", "")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()

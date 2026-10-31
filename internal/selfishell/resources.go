@@ -5,23 +5,25 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
-// Resource order matches the Bash declaration table: internal defaults first,
-// user-facing entrypoints last. Uninstall must retain the all-platform set.
-type Resource struct{ Kind, Name, Target, Source string }
-
-func ManagedResources(root string, env Environment) ([]Resource, error) {
+// ManagedResources returns every declared resource. Their order matches the Bash
+// declaration table: internal defaults first, user-facing entrypoints last.
+// Uninstall must retain the all-platform set.
+func ManagedResources(root string, env process.Environment) ([]managed.Resource, error) {
 	if root == "" {
 		return nil, fmt.Errorf("release root must be set")
 	}
-	paths, err := userPaths(env)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		return nil, err
 	}
 	home := env.Get("HOME")
 	configHome := env.Default("XDG_CONFIG_HOME", home+"/.config")
-	return []Resource{
+	return []managed.Resource{
 		{Kind: "file", Name: "zshrc-config", Target: paths.Config + "/zsh/zshrc", Source: root + "/config/macos/zshrc"},
 		{Kind: "file", Name: "zsh-runtime", Target: paths.Config + "/zsh/runtime.zsh", Source: root + "/config/shared/zsh/runtime.zsh"},
 		{Kind: "file", Name: "zsh-history", Target: paths.Config + "/zsh/history.zsh", Source: root + "/config/shared/zsh/history.zsh"},
@@ -65,7 +67,7 @@ func ManagedResources(root string, env Environment) ([]Resource, error) {
 
 // ResourcesForPlatform selects installation resources only. It must not be
 // used to filter uninstall: another platform's recorded resources still count.
-func ResourcesForPlatform(root, platform string, ghostty bool, env Environment) ([]Resource, error) {
+func ResourcesForPlatform(root, platform string, ghostty bool, env process.Environment) ([]managed.Resource, error) {
 	if !platformSupported(platform) {
 		return nil, fmt.Errorf("managed installation is unavailable on %s", platform)
 	}
@@ -73,7 +75,7 @@ func ResourcesForPlatform(root, platform string, ghostty bool, env Environment) 
 	if err != nil {
 		return nil, err
 	}
-	selected := make([]Resource, 0, len(all))
+	selected := make([]managed.Resource, 0, len(all))
 	for _, resource := range all {
 		switch resource.Name {
 		case "zshrc-config":
@@ -91,14 +93,14 @@ func ResourcesForPlatform(root, platform string, ghostty bool, env Environment) 
 }
 
 type ResourceState struct {
-	Resource Resource
-	State    State
+	Resource managed.Resource
+	State    managed.State
 }
 
 // LoadResourceStates collects the complete declared set before a caller can
 // begin preflight/removal. Any failure discards the entire list. This does not
 // inspect managed targets or make them safe to remove; lifecycle preflight does.
-func LoadResourceStates(directory string, resources []Resource) ([]ResourceState, error) {
+func LoadResourceStates(directory string, resources []managed.Resource) ([]ResourceState, error) {
 	if len(resources) == 0 {
 		return nil, fmt.Errorf("managed resource declaration is empty")
 	}
@@ -118,7 +120,7 @@ func LoadResourceStates(directory string, resources []Resource) ([]ResourceState
 			return nil, fmt.Errorf("incomplete managed resource: %s", name)
 		}
 		seen[name] = true
-		state, err := ReadState(directory + "/" + name + ".state")
+		state, err := managed.ReadState(directory + "/" + name + ".state")
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}

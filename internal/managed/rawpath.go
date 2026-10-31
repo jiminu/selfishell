@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"crypto/rand"
@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// rawParent and makeRawDir retain symlink/.. traversal from HOME and XDG values.
-func rawParent(path string) string {
+// RawParent returns the directory part of path without cleaning it. RawParent
+// and MakeRawDir retain symlink/.. traversal from HOME and XDG values.
+func RawParent(path string) string {
 	at := strings.LastIndexByte(path, '/')
 	if at < 0 {
 		return "."
@@ -19,7 +20,9 @@ func rawParent(path string) string {
 	}
 	return path[:at]
 }
-func makeRawDir(path string) error {
+
+// MakeRawDir creates each missing directory of path, keeping its spelling.
+func MakeRawDir(path string) error {
 	current := ""
 	if strings.HasPrefix(path, "/") {
 		current = "/"
@@ -50,7 +53,9 @@ func makeRawDir(path string) error {
 	}
 	return nil
 }
-func createRawTemp(target string) (*os.File, error) {
+
+// CreateRawTemp creates a private, exclusive temporary sibling of target.
+func CreateRawTemp(target string) (*os.File, error) {
 	for attempt := 0; attempt < 20; attempt++ {
 		var salt [8]byte
 		if _, err := rand.Read(salt[:]); err != nil {
@@ -68,12 +73,12 @@ func createRawTemp(target string) (*os.File, error) {
 
 // writeRaw stages data in a temporary sibling that publish renames or links
 // into place; the temporary name is always removed. A nil mode keeps
-// createRawTemp's 0600.
+// CreateRawTemp's 0600.
 func writeRaw(path string, data []byte, mode *os.FileMode, publish func(temp string) error) error {
-	if err := makeRawDir(rawParent(path)); err != nil {
+	if err := MakeRawDir(RawParent(path)); err != nil {
 		return err
 	}
-	f, err := createRawTemp(path)
+	f, err := CreateRawTemp(path)
 	if err != nil {
 		return err
 	}
@@ -107,6 +112,15 @@ func createRawOnce(path string, data []byte) error {
 	})
 }
 
-func createRawExclusive(path string, data []byte, mode os.FileMode) error {
+// CreateRawExclusive writes path with mode only if it does not exist yet.
+func CreateRawExclusive(path string, data []byte, mode os.FileMode) error {
 	return writeRaw(path, data, &mode, func(temp string) error { return os.Link(temp, path) })
 }
+
+// WriteAtomic replaces path with data and mode through a renamed temporary file.
+func WriteAtomic(path string, data []byte, mode os.FileMode) error {
+	return replaceRaw(path, data, mode)
+}
+
+// WriteOnce creates path with data unless it exists, even concurrently.
+func WriteOnce(path string, data []byte) error { return createRawOnce(path, data) }

@@ -3,14 +3,18 @@ package selfishell
 import (
 	"os"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // The app can be installed directly, outside Homebrew's cask inventory.
-func ghosttyInstalled(p Process) bool {
-	if _, err := p.lookPath("ghostty"); err == nil {
+func ghosttyInstalled(p process.Process) bool {
+	if _, err := p.LookPath("ghostty"); err == nil {
 		return true
 	}
-	env := p.environment()
+	env := p.Environment()
 	for _, base := range []string{env.Default("SELFISHELL_TEST_APPLICATIONS_DIR", "/Applications"), env.Get("HOME") + "/Applications"} {
 		info, err := os.Stat(base + "/Ghostty.app/Contents/MacOS/ghostty")
 		if err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
@@ -57,7 +61,7 @@ func ghosttyRepeatableFont(key string) bool {
 }
 
 func ghosttySettings(data []byte, visit func(key, value string)) {
-	block, _ := blockContent("user-ghostty", "")
+	block, _ := managed.BlockContent("user-ghostty", "")
 	markers := strings.Split(strings.TrimSuffix(string(block), "\n"), "\n")
 	begin, end := markers[0], markers[len(markers)-1]
 	inBlock := false
@@ -91,7 +95,7 @@ func ghosttyTrigger(binding string) string {
 	return trigger
 }
 
-func (c CLI) noteGhosttyOverrides(resources []Resource) {
+func (c CLI) noteGhosttyOverrides(resources []managed.Resource) {
 	var defaults, entrypoint string
 	for _, r := range resources {
 		switch r.Name {
@@ -101,7 +105,7 @@ func (c CLI) noteGhosttyOverrides(resources []Resource) {
 			entrypoint = r.Target
 		}
 	}
-	managed, err := os.ReadFile(defaults)
+	defaultsData, err := os.ReadFile(defaults)
 	if err != nil {
 		return
 	}
@@ -109,7 +113,7 @@ func (c CLI) noteGhosttyOverrides(resources []Resource) {
 	if err != nil {
 		return
 	}
-	if found := ghosttyOverridden(managed, user); len(found) > 0 {
-		c.report("Notes", reportWarning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
+	if found := ghosttyOverridden(defaultsData, user); len(found) > 0 {
+		c.report("Notes", report.Warning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
 	}
 }

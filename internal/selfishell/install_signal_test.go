@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -32,7 +33,7 @@ func (b *signalBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); retur
 func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 	t.Parallel()
 	source, fixture, home := testRelease(t), t.TempDir(), t.TempDir()
-	var env Environment
+	var env process.Environment
 	isolateHome(&env, home)
 	share := fixture + "/selfishell"
 	release := share + "/releases/1.0.0"
@@ -216,7 +217,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 
 func TestRealReleaseSignalHandlingIsScoped(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	fixture, home := t.TempDir(), t.TempDir()
 	isolateHome(&env, home)
 	share := fixture + "/selfishell"
@@ -350,7 +351,7 @@ func buildNativeTestCLI(t *testing.T, source, home, target string) {
 	}
 	build := exec.Command("go", "build", "-o", target, "./cmd/selfishell")
 	build.Dir = source
-	build.Env = withEnvironment(Process{Env: os.Environ()}, map[string]string{
+	build.Env = process.WithEnvironment(process.Process{Env: os.Environ()}, map[string]string{
 		"HOME": home, "GOTOOLCHAIN": "local", "GOCACHE": testutil.GoCache(t), "GOMODCACHE": home + "/go/pkg/mod", "GOPROXY": "off",
 	}).Env
 	if output, err := build.CombinedOutput(); err != nil {

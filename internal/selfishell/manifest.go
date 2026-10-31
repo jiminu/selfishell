@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 type Package struct{ Platform, Requirement, Manager, Name string }
-type Dependency struct{ Kind, Name, Version, Platform, Arch, Source, Checksum, Target, Marker string }
 
 type invalidPackageNameError string
 
@@ -73,10 +75,10 @@ func ReadPackages(path string) ([]Package, error) {
 	}
 	return packages, nil
 }
-func ReadDependencies(path string) ([]Dependency, error) {
-	var dependencies []Dependency
+func ReadDependencies(path string) ([]managed.Dependency, error) {
+	var dependencies []managed.Dependency
 	err := parseManifest(path, 9, func(f []string) error {
-		d := Dependency{f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]}
+		d := managed.Dependency{Kind: f[0], Name: f[1], Version: f[2], Platform: f[3], Arch: f[4], Source: f[5], Checksum: f[6], Target: f[7], Marker: f[8]}
 		if d.Kind != "download" && d.Kind != "git" && d.Kind != "nvim-plugin" {
 			return fmt.Errorf("Unknown dependency manifest record: %s", d.Kind)
 		}
@@ -101,8 +103,8 @@ func ReadDependencies(path string) ([]Dependency, error) {
 // selectPackages applies the same platform and saved-choice rules to setup and
 // diagnostics. Only font downloads require Windows Terminal opt-in; other WSL
 // packages remain available independently of that choice.
-func selectPackages(root string, paths Paths, packages []Package, platform string, choice *windowsTerminalChoice, env Environment) ([]Package, error) {
-	var dependencies []Dependency
+func selectPackages(root string, paths managed.Paths, packages []Package, platform string, choice *windowsTerminalChoice, env process.Environment) ([]Package, error) {
+	var dependencies []managed.Dependency
 	selected := make([]Package, 0, len(packages))
 	for _, p := range packages {
 		if !packageMatches(p, platform) {

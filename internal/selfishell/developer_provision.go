@@ -3,11 +3,14 @@ package selfishell
 import (
 	"context"
 	"fmt"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 // ProvisionDeveloper installs the fixed tool subsets needed by development
 // consumers. It does not alter managed configuration or install system packages.
-func ProvisionDeveloper(ctx context.Context, root, mode string, process Process) error {
+func ProvisionDeveloper(ctx context.Context, root, mode string, p process.Process) error {
 	var tools []string
 	direct := []string{"mise"}
 	switch mode {
@@ -20,8 +23,8 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	default:
 		return fmt.Errorf("unknown developer provisioning mode: %s", mode)
 	}
-	env := process.environment()
-	paths, err := userPaths(env)
+	env := p.Environment()
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		return err
 	}
@@ -29,7 +32,7 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	if !platformSupported(platform.Name) {
 		return fmt.Errorf("unsupported developer platform: %s", platform.Name)
 	}
-	o := &PackageOperation{Process: process}
+	o := &PackageOperation{Process: p}
 	manifest := root + "/dependencies.conf"
 	for _, name := range direct {
 		if err := o.InstallDirect(ctx, paths, manifest, "required", name, platform.Name, platform.Arch, false); err != nil {
@@ -47,7 +50,7 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 }
 
 // DeveloperToolEnv retains an isolated HOME while selecting its pinned mise bin.
-func DeveloperToolEnv(root string, env Environment) []string {
+func DeveloperToolEnv(root string, env process.Environment) []string {
 	home := env.Get("HOME")
 	return env.With(map[string]string{
 		"PATH":                      home + "/.local/bin:" + env.Get("PATH"),

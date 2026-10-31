@@ -7,11 +7,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestRemoveLegacyZinit(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, shape := range []string{"owned", "dry_run", "unknown_plugin", "polaris_content", "polaris_manual_link", "missing_state", "symlink", "removal_failure"} {
 		t.Run(shape, func(t *testing.T) {
 			t.Parallel()

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // Releases before direct Zsh plugins installed Zinit with exactly these plugins.
@@ -20,13 +23,13 @@ var legacyZinitPlugins = map[string]bool{
 // Entries Zinit itself creates in its home directory; anything else is user data.
 var legacyZinitEntries = map[string]bool{"zinit.git": true, "plugins": true, "polaris": true, "completions": true, "snippets": true, "services": true}
 
-func legacyZinitDir(paths Paths) string {
+func legacyZinitDir(paths managed.Paths) string {
 	return strings.TrimSuffix(paths.Data, "/selfishell") + "/zinit"
 }
 
 // legacyZinitRemovable reports whether dir (present: it exists) is a Zinit
 // checkout Selfishell installed and nobody extended. It never follows links.
-func legacyZinitRemovable(paths Paths) (present, removable bool, err error) {
+func legacyZinitRemovable(paths managed.Paths) (present, removable bool, err error) {
 	dir := legacyZinitDir(paths)
 	info, err := os.Lstat(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -109,7 +112,7 @@ func onlyZinitPolarisDefaults(path, relative string) (bool, error) {
 
 // RemoveLegacyZinit deletes a Selfishell-installed Zinit checkout once direct
 // plugins replace it. A failure only warns, so the next run retries.
-func (o *PackageOperation) RemoveLegacyZinit(ctx context.Context, paths Paths, dry bool) error {
+func (o *PackageOperation) RemoveLegacyZinit(ctx context.Context, paths managed.Paths, dry bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -133,7 +136,7 @@ func (o *PackageOperation) RemoveLegacyZinit(ctx context.Context, paths Paths, d
 		return nil
 	}
 	if dry {
-		o.report(reportPreview, "Would remove the legacy Zinit checkout: %s", dir)
+		o.report(report.Preview, "Would remove the legacy Zinit checkout: %s", dir)
 		return nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -155,13 +158,13 @@ func (o *PackageOperation) RemoveLegacyZinit(ctx context.Context, paths Paths, d
 		o.warn(fmt.Sprintf("Could not remove the legacy Zinit checkout %s: %v", dir, err))
 		return nil
 	}
-	o.report(reportSuccess, "Removed the legacy Zinit checkout: %s", dir)
+	o.report(report.Success, "Removed the legacy Zinit checkout: %s", dir)
 	return nil
 }
 
 // legacyZinitNote points at a Zinit checkout that install keeps because it may
 // be in use; a removable one needs no note, since the next update deletes it.
-func (c CLI) legacyZinitNote(paths Paths) {
+func (c CLI) legacyZinitNote(paths managed.Paths) {
 	if present, removable, _ := legacyZinitRemovable(paths); present && !removable {
 		c.sayDiagnostic("36", "INFO", "Legacy Zinit checkout remains: "+legacyZinitDir(paths)+"; delete it by hand if you do not use Zinit directly.")
 	}

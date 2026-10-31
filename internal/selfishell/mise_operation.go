@@ -7,26 +7,17 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
-// environment copies the child's environment: Env, or else the inherited one.
-func (p Process) environment() Environment {
-	if p.Env != nil {
-		return Environment(p.Env).List()
-	}
-	return p.inherit.List()
-}
-
-func withEnvironment(p Process, set map[string]string, unset ...string) Process {
-	p.Env = p.environment().With(set, unset...)
-	return p
-}
-
-func (o *PackageOperation) miseCommand(paths Paths) (string, error) {
-	if path, err := o.Process.lookPath("mise"); err == nil {
+func (o *PackageOperation) miseCommand(paths managed.Paths) (string, error) {
+	if path, err := o.Process.LookPath("mise"); err == nil {
 		return path, nil
 	}
-	home := o.Process.environment().Get("HOME")
+	home := o.Process.Environment().Get("HOME")
 	if home == "" {
 		return "", fmt.Errorf("HOME must be set")
 	}
@@ -37,20 +28,20 @@ func (o *PackageOperation) miseCommand(paths Paths) (string, error) {
 	return "", fmt.Errorf("mise is unavailable")
 }
 
-func (o *PackageOperation) miseProcess(root string, offline bool) Process {
+func (o *PackageOperation) miseProcess(root string, offline bool) process.Process {
 	shared := root + "/config/shared"
 	set := map[string]string{"MISE_GLOBAL_CONFIG_FILE": shared + "/mise.toml"}
 	if offline {
 		set["MISE_OFFLINE"] = "1"
 	}
-	p := withEnvironment(o.Process, set, "MISE_OFFLINE")
+	p := process.WithEnvironment(o.Process, set, "MISE_OFFLINE")
 	p.Dir = shared
 	return p
 }
 
 // trustManagedMiseConfig trusts the managed conf.d entry when it is a file or
 // link. Callers choose the mise binary and the child's environment.
-func trustManagedMiseConfig(ctx context.Context, p Process, mise string, paths Paths) {
+func trustManagedMiseConfig(ctx context.Context, p process.Process, mise string, paths managed.Paths) {
 	link := strings.TrimSuffix(paths.Config, "/selfishell") + "/mise/conf.d/selfishell.toml"
 	if info, err := os.Lstat(link); err == nil && (info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0) {
 		_, _ = p.Run(ctx, mise, "trust", link)
@@ -58,7 +49,7 @@ func trustManagedMiseConfig(ctx context.Context, p Process, mise string, paths P
 }
 
 // InstallMise synchronizes one required or optional group against release pins.
-func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths Paths, requirement string, dryRun bool, names ...string) error {
+func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths managed.Paths, requirement string, dryRun bool, names ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -69,7 +60,7 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 		return err
 	}
 	if dryRun {
-		o.report(reportPreview, "Would sync %s mise tools: %s", requirement, strings.Join(names, " "))
+		o.report(report.Preview, "Would sync %s mise tools: %s", requirement, strings.Join(names, " "))
 		return nil
 	}
 	mise, err := o.miseCommand(paths)
@@ -100,14 +91,14 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 	if err != nil || code != 0 {
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s mise tools: %s", requirement, strings.Join(names, " ")), names)
 	}
-	if o.Process.progress != nil {
-		o.report(reportSuccess, "Synchronized mise tools: %d\n  %s", len(names),
+	if progressOf(o.Process) != nil {
+		o.report(report.Success, "Synchronized mise tools: %d\n  %s", len(names),
 			strings.ReplaceAll(wrapWords(names, terminalWidth(o.Process.Out)-4), "\n", "\n  "))
 	}
 	return nil
 }
 
-func (o *PackageOperation) miseOutput(ctx context.Context, p Process, mise string, args ...string) (string, error) {
+func (o *PackageOperation) miseOutput(ctx context.Context, p process.Process, mise string, args ...string) (string, error) {
 	var out, stderr bytes.Buffer
 	p.Out, p.Err = &out, &stderr
 	code, err := p.Run(ctx, mise, args...)

@@ -10,36 +10,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPinnedNeovimConsumer(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	if os.Getenv("SELFISHELL_PINNED_NEOVIM_E2E") != "1" {
 		t.Skip("requires SELFISHELL_PINNED_NEOVIM_E2E=1")
 	}
 	root, home := testRelease(t), t.TempDir()
 	isolateHome(&env, home)
-	env.set("XDG_CONFIG_HOME", home+"/.config")
-	env.set("XDG_DATA_HOME", home+"/.local/share")
-	env.set("XDG_STATE_HOME", home+"/.local/state")
-	env.set("XDG_CACHE_HOME", home+"/.cache")
-	env.set("MISE_DATA_DIR", home+"/.local/share/mise")
-	env.set("MISE_STATE_DIR", home+"/.local/state/mise")
-	env.set("MISE_CACHE_DIR", home+"/.cache/mise")
-	env.set("SHELL", "/bin/zsh")
+	setEnv(&env, "XDG_CONFIG_HOME", home+"/.config")
+	setEnv(&env, "XDG_DATA_HOME", home+"/.local/share")
+	setEnv(&env, "XDG_STATE_HOME", home+"/.local/state")
+	setEnv(&env, "XDG_CACHE_HOME", home+"/.cache")
+	setEnv(&env, "MISE_DATA_DIR", home+"/.local/share/mise")
+	setEnv(&env, "MISE_STATE_DIR", home+"/.local/state/mise")
+	setEnv(&env, "MISE_CACHE_DIR", home+"/.cache/mise")
+	setEnv(&env, "SHELL", "/bin/zsh")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	var output bytes.Buffer
-	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, env)}
+	p := process.Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, env)}
 	if err := ProvisionDeveloper(ctx, root, "neovim-e2e", p); err != nil {
 		t.Fatalf("pin provision: %v\n%s", err, output.String())
 	}
 	if code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
-	paths, err := userPaths(env)
+	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}

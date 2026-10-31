@@ -8,18 +8,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	resources, _ := ResourcesForPlatform(root, "macos", false, env)
-	var link Resource
+	var link managed.Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
 			link = r
@@ -29,16 +31,16 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 	backup := link.Target + ".backup.fixed"
 	testutil.WriteFile(backup, []byte("original"), 0600)
 	testutil.WriteFile(link.Target, []byte("foreign"), 0600)
-	state := State{"link", "pending", link.Target, link.Source, backup, "-"}
-	if e := WriteState(paths.Resources+"/"+link.Name+".state", state); e != nil {
+	state := managed.State{Kind: "link", Status: "pending", Target: link.Target, Reference: link.Source, Backup: backup, Checksum: "-"}
+	if e := managed.WriteState(paths.Resources+"/"+link.Name+".state", state); e != nil {
 		t.Fatal(e)
 	}
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths}
+	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths}
 	if e := m.installLink(link, false); e == nil {
 		t.Fatal("foreign target falsely accepted")
 	}
-	got, e := ReadState(paths.Resources + "/" + link.Name + ".state")
+	got, e := managed.ReadState(paths.Resources + "/" + link.Name + ".state")
 	if e != nil || got.Status != "pending" {
 		t.Fatalf("state %+v %v", got, e)
 	}
@@ -50,7 +52,7 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 
 func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"file", "unreadable-directory"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -59,7 +61,7 @@ func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 			home := base + "/home"
 			os.Mkdir(home, 0700)
 			isolateHome(&env, home)
-			paths, _ := userPaths(env)
+			paths, _ := managed.UserPaths(env.Get)
 			share := base + "/.local/share/selfishell"
 			release := share + "/releases/v1"
 			os.MkdirAll(release+"/bin", 0700)
@@ -137,18 +139,18 @@ func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
 }
 func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	resources, _ := ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	testutil.WriteFile(r.Target, []byte("original"), 0600)
 	var occupied string
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, beforeBackupMove: func(_, destination string) {
+	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, beforeBackupMove: func(_, destination string) {
 		occupied = destination
 		testutil.WriteFile(destination, []byte("late user data"), 0600)
 	}}
@@ -160,19 +162,19 @@ func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	if string(source) != "original" || string(collision) != "late user data" {
 		t.Fatalf("source=%q collision=%q", source, collision)
 	}
-	state, e := ReadState(paths.Resources + "/" + r.Name + ".state")
+	state, e := managed.ReadState(paths.Resources + "/" + r.Name + ".state")
 	if e != nil || state.Status != "pending" {
 		t.Fatalf("state %+v %v", state, e)
 	}
 }
 func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	base := t.TempDir()
 	home := base + "/home"
 	os.Mkdir(home, 0700)
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	share := base + "/.local/share/selfishell"
 	release := share + "/releases/v1"
 	os.MkdirAll(release+"/bin", 0700)
@@ -197,13 +199,13 @@ func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
 }
 func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	resources, _ := ResourcesForPlatform(root, "macos", false, env)
-	var link Resource
+	var link managed.Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
 			link = r
@@ -212,14 +214,14 @@ func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 	os.MkdirAll(filepath.Dir(link.Target), 0700)
 	testutil.WriteFile(link.Target, []byte("original"), 0600)
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, createLink: func(_, target string) error {
+	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, createLink: func(_, target string) error {
 		testutil.WriteFile(target, []byte("late user data"), 0600)
 		return errors.New("injected link failure")
 	}}
 	if e := m.installLink(link, false); e == nil {
 		t.Fatal("link failure ignored")
 	}
-	state, e := ReadState(paths.Resources + "/" + link.Name + ".state")
+	state, e := managed.ReadState(paths.Resources + "/" + link.Name + ".state")
 	if e != nil || state.Status != "pending" {
 		t.Fatalf("retry state %+v %v", state, e)
 	}

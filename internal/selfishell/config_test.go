@@ -8,17 +8,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func testCLI(env *Environment, root, home string, args ...string) (int, string, string) {
+func testCLI(env *process.Environment, root, home string, args ...string) (int, string, string) {
 	isolateHome(env, home)
-	env.set("XDG_CONFIG_HOME", "")
-	env.set("XDG_STATE_HOME", "")
-	env.set("XDG_CACHE_HOME", "")
-	env.set("XDG_DATA_HOME", "")
-	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	env.set("SHELL", "/bin/zsh")
+	setEnv(env, "XDG_CONFIG_HOME", "")
+	setEnv(env, "XDG_STATE_HOME", "")
+	setEnv(env, "XDG_CACHE_HOME", "")
+	setEnv(env, "XDG_DATA_HOME", "")
+	setEnv(env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	setEnv(env, "SHELL", "/bin/zsh")
 	var out, err bytes.Buffer
 	code := (CLI{Env: *env, Root: root, In: strings.NewReader(""), Out: &out, Err: &err}).Run(args)
 	return code, out.String(), err.String()
@@ -26,23 +28,23 @@ func testCLI(env *Environment, root, home string, args ...string) (int, string, 
 
 func TestInvalidPackageNameHasUsageStatusAtPublicConsumers(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, home, bin := t.TempDir(), t.TempDir(), t.TempDir()
-	env.set("TMPDIR", t.TempDir())
+	setEnv(&env, "TMPDIR", t.TempDir())
 	for _, name := range []string{"apt-get", "apt-cache", "dpkg-query", "sudo", "brew", "curl", "git", "mise", "chsh"} {
 		if err := testutil.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf called >\"$HOME/package-called\"\nexit 99\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	env.set("PATH", bin)
-	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	env.set("SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
-	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
+	setEnv(&env, "PATH", bin)
+	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	setEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", "x86_64")
+	setEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(root, "os-release"))
 	if err := testutil.WriteFile(filepath.Join(root, "os-release"), []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"MISE_DATA_DIR", "MISE_CACHE_DIR", "MISE_STATE_DIR", "MISE_CONFIG_DIR"} {
-		env.set(name, filepath.Join(home, "mise", name))
+		setEnv(&env, name, filepath.Join(home, "mise", name))
 	}
 	if err := os.MkdirAll(filepath.Join(home, ".local/state/selfishell"), 0700); err != nil {
 		t.Fatal(err)
@@ -77,7 +79,7 @@ func TestInvalidPackageNameHasUsageStatusAtPublicConsumers(t *testing.T) {
 }
 func TestUninstallRestoreRequiresRecordedBackup(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, retry := range []string{"restore", "without-restore"} {
 		t.Run(retry, func(t *testing.T) {
 			t.Parallel()
@@ -85,7 +87,7 @@ func TestUninstallRestoreRequiresRecordedBackup(t *testing.T) {
 			root := testRelease(t)
 			home := t.TempDir()
 			isolateHome(&env, home)
-			paths, err := userPaths(env)
+			paths, err := managed.UserPaths(env.Get)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +103,7 @@ func TestUninstallRestoreRequiresRecordedBackup(t *testing.T) {
 				t.Fatalf("install: %s", stderr)
 			}
 			statePath := paths.Resources + "/aliases.state"
-			state, err := ReadState(statePath)
+			state, err := managed.ReadState(statePath)
 			if err != nil || state.Backup == "-" {
 				t.Fatalf("recorded backup: %+v %v", state, err)
 			}
@@ -175,7 +177,7 @@ func testRelease(t *testing.T) string {
 
 func TestLiteralHomePathThroughSymlinkDotDot(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	base := t.TempDir()
 	other := filepath.Join(base, "other")
@@ -197,7 +199,7 @@ func TestLiteralHomePathThroughSymlinkDotDot(t *testing.T) {
 }
 func TestMiseTrustAndDryRun(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	tools := t.TempDir()
@@ -207,8 +209,8 @@ func TestMiseTrustAndDryRun(t *testing.T) {
 printf "%s\n" "$*" >> "$SELFISHELL_TEST_MISE_LOG"
 pwd >> "$SELFISHELL_TEST_MISE_LOG"
 `), 0700)
-	env.set("PATH", tools+":/usr/bin:/bin")
-	env.set("SELFISHELL_TEST_MISE_LOG", log)
+	setEnv(&env, "PATH", tools+":/usr/bin:/bin")
+	setEnv(&env, "SELFISHELL_TEST_MISE_LOG", log)
 	code, _, err := testCLI(&env, root, home, "install", "--skip-packages", "--dry-run")
 	if code != 0 {
 		t.Fatal(err)
@@ -228,7 +230,7 @@ pwd >> "$SELFISHELL_TEST_MISE_LOG"
 
 func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, backups := range []bool{false, true} {
 		name := "without backups"
 		if backups {
@@ -239,7 +241,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 			env := env
 			home := t.TempDir()
 			isolateHome(&env, home)
-			paths, err := userPaths(env)
+			paths, err := managed.UserPaths(env.Get)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -252,7 +254,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 			manifest := home + "/dependencies.conf"
 			source := home + "/source"
 			directDownload(t, manifest, source, "1.0", ".local/bin/tool", false)
-			operation := &PackageOperation{Process: Process{inherit: env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
+			operation := &PackageOperation{Process: process.Process{Inherit: env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
 			if err := installTool(operation, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
@@ -307,7 +309,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 				assertNoPath(t, path)
 			}
 			directDownload(t, manifest, source, "2.0", ".local/bin/tool", false)
-			operation = &PackageOperation{Process: Process{inherit: env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
+			operation = &PackageOperation{Process: process.Process{Inherit: env, Out: new(bytes.Buffer), Err: new(bytes.Buffer)}}
 			if err := installTool(operation, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
@@ -326,14 +328,14 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 
 func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"symlink", "file"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			env := env
 			home := t.TempDir()
 			isolateHome(&env, home)
-			paths, err := userPaths(env)
+			paths, err := managed.UserPaths(env.Get)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -395,12 +397,12 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 
 func TestDependencyManifestOverrideIsValidatedBeforeMutation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	override := filepath.Join(t.TempDir(), "dependencies.conf")
 	testutil.WriteFile(override, []byte("unknown dependency record\n"), 0600)
-	env.set("SELFISHELL_DEPENDENCIES_FILE", override)
+	setEnv(&env, "SELFISHELL_DEPENDENCIES_FILE", override)
 	code, _, err := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 1 || !strings.Contains(err, "invalid manifest record") {
 		t.Fatalf("%d %s", code, err)
@@ -412,7 +414,7 @@ func TestDependencyManifestOverrideIsValidatedBeforeMutation(t *testing.T) {
 }
 func TestPurgeRefusesForeignCLILinkBeforeMutation(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	base := t.TempDir()
 	home := filepath.Join(base, "home")
 	os.Mkdir(home, 0700)
@@ -439,17 +441,17 @@ func TestPurgeRefusesForeignCLILinkBeforeMutation(t *testing.T) {
 	}
 }
 
-func isolateHome(env *Environment, home string) {
+func isolateHome(env *process.Environment, home string) {
 	// WSL integration fixtures opt in explicitly with a fake Windows environment.
-	env.set("WSL_DISTRO_NAME", "")
-	env.set("HOME", home)
+	setEnv(env, "WSL_DISTRO_NAME", "")
+	setEnv(env, "HOME", home)
 	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
-		env.set(name, "")
+		setEnv(env, name, "")
 	}
 }
 func TestNewUserMiseFileIsPrivate(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	code, _, err := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
@@ -463,7 +465,7 @@ func TestNewUserMiseFileIsPrivate(t *testing.T) {
 }
 func TestUninstallCleanupPreservesUntrackedUserPath(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, kind := range []string{"file", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -471,7 +473,7 @@ func TestUninstallCleanupPreservesUntrackedUserPath(t *testing.T) {
 			root := testRelease(t)
 			home := t.TempDir()
 			isolateHome(&env, home)
-			paths, _ := userPaths(env)
+			paths, _ := managed.UserPaths(env.Get)
 			os.MkdirAll(filepath.Dir(paths.Config), 0700)
 			target := filepath.Join(t.TempDir(), "personal")
 			if kind == "file" {
@@ -493,20 +495,20 @@ func TestUninstallCleanupPreservesUntrackedUserPath(t *testing.T) {
 }
 func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	resources, _ := ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	testutil.WriteFile(r.Target, []byte("managed"), 0600)
-	checksum, _ := Checksum(context.Background(), r.Target)
-	state := State{"file", "active", r.Target, "-", "-", checksum}
-	WriteState(paths.Resources+"/"+r.Name+".state", state)
+	checksum, _ := managed.Checksum(context.Background(), r.Target)
+	state := managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: checksum}
+	managed.WriteState(paths.Resources+"/"+r.Name+".state", state)
 	var out, stderr bytes.Buffer
-	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &stderr}, paths: paths}
+	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &stderr}, paths: paths}
 	record := ResourceState{Resource: r, State: state}
 	if e := m.preflightUninstall(record, false); e != nil {
 		t.Fatal(e)
@@ -519,18 +521,18 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	if e != nil || string(data) != "user edit" {
 		t.Fatalf("user data lost %q %v", data, e)
 	}
-	if _, e := ReadState(paths.Resources + "/" + r.Name + ".state"); e != nil {
+	if _, e := managed.ReadState(paths.Resources + "/" + r.Name + ".state"); e != nil {
 		t.Fatal("retry state lost", e)
 	}
 }
 func TestPurgeRechecksCLILinkBeforeRemoval(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	base := t.TempDir()
 	home := base + "/home"
 	os.Mkdir(home, 0700)
 	isolateHome(&env, home)
-	paths, _ := userPaths(env)
+	paths, _ := managed.UserPaths(env.Get)
 	share := base + "/.local/share/selfishell"
 	release := share + "/releases/v1"
 	os.MkdirAll(release+"/bin", 0700)

@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func pruneFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string, []Package) {
+func pruneFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string, []Package) {
 	t.Helper()
 	op, paths, _, home := dependencyFixture(t, env)
 	root := home + "/selfishell/releases/2.0.0"
@@ -38,7 +40,7 @@ esac
 
 func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home, packages := pruneFixture(t, &env)
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", true); err != nil {
 		t.Fatal(err)
@@ -59,13 +61,13 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	if got, _ := os.Readlink(home + "/selfishell/previous"); got != "releases/1.0.0" {
 		t.Fatalf("changed previous: %s", got)
 	}
-	installs := Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/node"
+	installs := process.Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/node"
 	writeTestFile(t, installs+"/24.18.0/bin/node", "", 0755)
 	if err := os.Symlink("24.18.0", installs+"/latest"); err != nil {
 		t.Fatal(err)
 	}
 	for _, remove := range []string{installs + "/latest", installs + "/24.18.0"} {
-		op.Process = withEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": remove})
+		op.Process = process.WithEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": remove})
 		if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", false); err != nil {
 			t.Fatal(err)
 		}
@@ -73,8 +75,8 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 			t.Fatalf("restart note after removing %s: %t", remove, got)
 		}
 	}
-	python := Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/python"
-	dataHome := Environment(op.Process.Env).Get("XDG_DATA_HOME")
+	python := process.Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/python"
+	dataHome := process.Environment(op.Process.Env).Get("XDG_DATA_HOME")
 	if dataHome == "" {
 		dataHome = home + "/.local/share"
 	}
@@ -83,7 +85,7 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	for name, base := range map[string]string{"debugpy": python + "/3.14.8/bin", "current": python + "/3.14.9/bin", "homebrew": "/opt/homebrew/opt/python@3.14/bin"} {
 		writeTestFile(t, mason+"/"+name+"/venv/pyvenv.cfg", "home = "+base+"\nversion = 3.14\n", 0600)
 	}
-	op.Process = withEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": python + "/3.14.8"})
+	op.Process = process.WithEnvironment(op.Process, map[string]string{"PRUNE_REMOVE": python + "/3.14.8"})
 	op.Process.Out = &bytes.Buffer{}
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", false); err != nil {
 		t.Fatal(err)
@@ -107,7 +109,7 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 
 func TestMisePruneRejectsIgnoredAndUnsafePrevious(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "IGNORED_RESULT=[\"project\"]")
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
@@ -132,7 +134,7 @@ func TestMisePruneRejectsIgnoredAndUnsafePrevious(t *testing.T) {
 
 func TestMisePruneSkipsIncompleteAndEmptyScope(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.SkippedOptional = []string{"go"}
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err != nil {
@@ -152,7 +154,7 @@ func TestMisePruneSkipsIncompleteAndEmptyScope(t *testing.T) {
 
 func TestMisePruneRequiresTrackedCurrentPinsAndReturnsPruneFailure(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "TRACKED_RESULT="+home+"/project/mise.toml")
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
@@ -166,14 +168,14 @@ func TestMisePruneRequiresTrackedCurrentPinsAndReturnsPruneFailure(t *testing.T)
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
 		t.Fatal("suppressed cleanup failure")
 	}
-	if value := Environment(op.Process.Env).Get("MISE_IGNORED_CONFIG_PATHS"); value != "" {
+	if value := process.Environment(op.Process.Env).Get("MISE_IGNORED_CONFIG_PATHS"); value != "" {
 		t.Fatalf("leaked scoped ignore: %s", value)
 	}
 }
 
 func TestRetainedReleaseRejectsLinkSpellingAndIncompleteDirectory(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	_, _, root, home, _ := pruneFixture(t, &env)
 	previous := home + "/selfishell/previous"
 	for _, target := range []string{"../project/1.0.0", "releases/01.0.0", "releases/1.0.0/../2.0.0"} {
@@ -203,7 +205,7 @@ func TestRetainedReleaseRejectsLinkSpellingAndIncompleteDirectory(t *testing.T) 
 
 func TestRetainedReleaseAcceptsAbsoluteRawAliasSpelling(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	_, _, root, home, _ := pruneFixture(t, &env)
 	alias := home + "/release alias"
 	if err := os.Symlink(home+"/selfishell", alias); err != nil {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 const lspFixture = "local M = {\n  lsp = {\n    \"lua_ls@3.19.1\", -- keep\n    \"tombi@v1.5.5\",\n    \"marksman@2026-02-08\",\n  },\n  other = { \"lua_ls@0.0.1\" },\n}\nreturn M\n"
@@ -38,7 +38,7 @@ func TestUpdaterLSPMetadata(t *testing.T) {
 			put(t, language, tc.source)
 			put(t, filepath.Join(root, "config/shared/mise.toml"), mise)
 			var output bytes.Buffer
-			status := runDependencyUpdate(context.Background(), root, []string{"--metadata", metadata}, selfishell.Process{Out: &output, Err: &output})
+			status := runDependencyUpdate(context.Background(), root, []string{"--metadata", metadata}, process.Process{Out: &output, Err: &output})
 			if (status != 0) != tc.fail {
 				t.Fatalf("status=%d, error=%s", status, output.String())
 			}

@@ -13,10 +13,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
-func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, dependencies []selfishell.Dependency, root string) ([][]string, error) {
+func discoverDependencyUpdates(ctx context.Context, p process.Process, dependencies []managed.Dependency, root string) ([][]string, error) {
 	language, err := os.ReadFile(filepath.Join(root, "config/shared/nvim/lua/config/languages.lua"))
 	if err != nil {
 		return nil, err

@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 // ToolResult uses the same status vocabulary as the shell diagnostics.
@@ -19,10 +22,10 @@ type ToolResult struct{ Installed, Source, Approved string }
 type ToolInventory struct {
 	windowsFonts                                     *windowsFontStatus
 	root                                             string
-	paths                                            Paths
+	paths                                            managed.Paths
 	warnings                                         io.Writer
-	env                                              Environment
-	dependencies                                     []Dependency
+	env                                              process.Environment
+	dependencies                                     []managed.Dependency
 	apt                                              map[string]string
 	aptReady                                         bool
 	aptError                                         error
@@ -35,7 +38,7 @@ type ToolInventory struct {
 	miseError                                        error
 }
 
-func NewToolInventory(root string, paths Paths, warnings io.Writer, env Environment) (*ToolInventory, error) {
+func NewToolInventory(root string, paths managed.Paths, warnings io.Writer, env process.Environment) (*ToolInventory, error) {
 	deps, err := ReadDependencies(env.Default("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf")))
 	if err != nil {
 		return nil, err
@@ -82,7 +85,7 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 		return result, queryError
 	}
 	executable := toolExecutable(name)
-	path, err := (Process{inherit: i.env}).lookPath(executable)
+	path, err := (process.Process{Inherit: i.env}).LookPath(executable)
 	if err == nil {
 		if manager != "mise" || !miseManagedExecutable(path, i.env) {
 			result.Installed, result.Source = "detected", "external"
@@ -91,7 +94,7 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 	return result, nil
 }
 
-func miseManagedExecutable(path string, env Environment) bool {
+func miseManagedExecutable(path string, env process.Environment) bool {
 	data := env.Default("MISE_DATA_DIR", env.Default("XDG_DATA_HOME", env.Get("HOME")+"/.local/share")+"/mise")
 	var roots []string
 	for _, dir := range []string{data + "/shims", data + "/installs"} {
@@ -138,33 +141,33 @@ func toolExecutable(name string) string {
 	return name
 }
 
-func runInventory(dir string, env Environment, name string, args ...string) (string, string, bool) {
+func runInventory(dir string, env process.Environment, name string, args ...string) (string, string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return runInventoryContext(ctx, dir, env, name, args...)
 }
 
-func inventoryGitHead(dir string, env Environment) (string, error) {
+func inventoryGitHead(dir string, env process.Environment) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return (&PackageOperation{Process: Process{inherit: env}}).gitHead(ctx, dir)
+	return (&PackageOperation{Process: process.Process{Inherit: env}}).gitHead(ctx, dir)
 }
 
-func runInventoryContext(ctx context.Context, dir string, env Environment, name string, args ...string) (string, string, bool) {
+func runInventoryContext(ctx context.Context, dir string, env process.Environment, name string, args ...string) (string, string, bool) {
 	out, stderr, _, err := runInventoryResult(ctx, dir, env, name, args...)
 	return out, stderr, err == nil
 }
 
-func runInventoryQuery(dir string, env Environment, name string, args ...string) (string, error) {
+func runInventoryQuery(dir string, env process.Environment, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	out, _, _, err := runInventoryResult(ctx, dir, env, name, args...)
 	return out, err
 }
 
-func runInventoryResult(ctx context.Context, dir string, env Environment, name string, args ...string) (string, string, int, error) {
+func runInventoryResult(ctx context.Context, dir string, env process.Environment, name string, args ...string) (string, string, int, error) {
 	var out, stderr bytes.Buffer
-	p := Process{Out: &out, Err: &stderr, Dir: dir, Env: env.List()}
+	p := process.Process{Out: &out, Err: &stderr, Dir: dir, Env: env.List()}
 	code, err := p.Run(ctx, name, args...)
 	if err != nil {
 		err = fmt.Errorf("%s: %w", name, err)
@@ -181,7 +184,7 @@ func (i *ToolInventory) aptVersion(name string) (string, error) {
 	if !i.aptReady {
 		i.aptReady = true
 		i.apt = map[string]string{}
-		if _, err := (Process{inherit: i.env}).lookPath("dpkg-query"); err == nil {
+		if _, err := (process.Process{Inherit: i.env}).LookPath("dpkg-query"); err == nil {
 			output, err := runInventoryQuery("", i.env, "dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n")
 			i.aptError = err
 			if err == nil {
@@ -260,7 +263,7 @@ func (i *ToolInventory) loadBrewJSON() {
 	i.brewCasksReady = true
 }
 func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
-	if _, err := (Process{inherit: i.env}).lookPath("brew"); err != nil {
+	if _, err := (process.Process{Inherit: i.env}).LookPath("brew"); err != nil {
 		return "", nil
 	}
 	i.loadBrewJSON()
@@ -310,7 +313,7 @@ func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
 
 func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, error) {
 	result := ToolResult{"missing", "none", ""}
-	var dep *Dependency
+	var dep *managed.Dependency
 	for n := range i.dependencies {
 		d := &i.dependencies[n]
 		if d.Name == name && (d.Platform == "all" || d.Platform == platform) && (d.Arch == "all" || d.Arch == arch) {
@@ -370,24 +373,24 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 	}
 	return result, nil
 }
-func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinned bool) bool {
+func (i *ToolInventory) validDirect(dep managed.Dependency, target string, owned, pinned bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
 		return false
 	}
-	if managed {
+	if owned {
 		if link, err := os.Lstat(target); err != nil || link.Mode()&os.ModeSymlink != 0 {
 			return false
 		}
 	}
 	switch dep.Kind {
 	case "download":
-		return directDownloadIntact(dep, target, info, managed && pinned)
+		return directDownloadIntact(dep, target, info, owned && pinned)
 	case "git":
 		if !directGitMarkerPresent(dep, target, info) {
 			return false
 		}
-		if !managed {
+		if !owned {
 			return true
 		}
 		if _, err := os.Stat(target + "/.git"); err != nil {
@@ -402,7 +405,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinn
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var changesOut, changesErr bytes.Buffer
-		p := Process{Out: &changesOut, Err: &changesErr, Env: i.env.With(map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"}), repoScopedGit: true}
+		p := process.Process{Out: &changesOut, Err: &changesErr, Env: i.env.With(map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"}), RepoScopedGit: true}
 		code, err := p.Run(ctx, "git", "-C", target, "status", "--porcelain", "--untracked-files=no")
 		changes, ok := changesOut.String(), err == nil && code == 0
 		return ok && strings.TrimSpace(changes) == ""
@@ -424,7 +427,7 @@ func (i *ToolInventory) loadMise() {
 	for name, version := range versions {
 		i.miseApproved[name] = strings.Trim(version, "\"")
 	}
-	command, err := (Process{inherit: i.env}).lookPath("mise")
+	command, err := (process.Process{Inherit: i.env}).LookPath("mise")
 	if err != nil {
 		command = i.env.Get("HOME") + "/.local/bin/mise"
 		info, e := os.Stat(command)
@@ -462,7 +465,7 @@ func (i *ToolInventory) loadMise() {
 func (i *ToolInventory) windowsFontInventory() *windowsFontStatus {
 	if i.windowsFonts == nil {
 		i.windowsFonts = &windowsFontStatus{}
-		data, err := (Process{inherit: i.env}).windowsScript(context.Background(), map[string]string{"operation": "font-status"})
+		data, err := runWindowsScript(context.Background(), process.Process{Inherit: i.env}, map[string]string{"operation": "font-status"})
 		if err == nil {
 			_ = json.Unmarshal(data, i.windowsFonts)
 		}

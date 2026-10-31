@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, _, _, home := dependencyFixture(t, &env)
 	sha := "0123456789abcdef0123456789abcdef01234567"
 	for _, fixture := range []struct{ name, head, ref, packed string }{
@@ -48,7 +50,7 @@ func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 
 func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, _, _, home := dependencyFixture(t, &env)
 	parent := home + "/parent"
 	if err := os.MkdirAll(parent, 0700); err != nil {
@@ -79,7 +81,7 @@ func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
 
 func TestGitTrackedChangesIgnoreUntrackedAndGeneratedTags(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	op, _, _, home := dependencyFixture(t, &env)
 	repo := home + "/checkout"
 	if err := os.MkdirAll(repo, 0700); err != nil {

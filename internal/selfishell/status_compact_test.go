@@ -6,17 +6,20 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, requirement := range []string{"required", "optional"} {
 		t.Run(requirement, func(t *testing.T) {
 			t.Parallel()
 			env := env
 			root, paths, warnings, bin := inventoryFixture(t, &env)
-			env.set("PATH", bin)
+			setEnv(&env, "PATH", bin)
 			fixtureFile(t, bin+"/dpkg-query", "#!/bin/sh\nprintf 'database locked\\n' >&2\nexit 2\n", 0700)
 			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"present\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
 			var out bytes.Buffer
@@ -43,7 +46,7 @@ func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 // Zsh plugins are git direct packages; drifted or dirty checkouts are missing.
 func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths, warnings, _ := inventoryFixture(t, &env)
 	repo := t.TempDir()
 	gitCommand(t, repo, "init", "--quiet")
@@ -77,7 +80,7 @@ func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 	}
 }
 
-func compactDiagnosticFixture(t *testing.T, env *Environment, platform string, ghostty bool) (string, Paths) {
+func compactDiagnosticFixture(t *testing.T, env *process.Environment, platform string, ghostty bool) (string, managed.Paths) {
 	t.Helper()
 	source, home, paths := blockHome(t, env, platform)
 	root := t.TempDir()
@@ -106,7 +109,7 @@ func compactDiagnosticFixture(t *testing.T, env *Environment, platform string, g
 
 func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, tc := range []struct {
 		platform string
 		ghostty  bool
@@ -143,7 +146,7 @@ func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T)
 
 func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
 	marker := paths.State + "/configured"
 	if err := os.Remove(marker); err != nil {
@@ -160,7 +163,7 @@ func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
 
 func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	for _, required := range []bool{false, true} {
 		t.Run(map[bool]string{true: "required", false: "optional"}[required], func(t *testing.T) {
 			t.Parallel()
@@ -185,7 +188,7 @@ func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 
 func TestDoctorIsHiddenStatusAlias(t *testing.T) {
 	t.Parallel()
-	var env Environment
+	var env process.Environment
 	root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
 	blockWrite(t, blockState(t, paths, "zsh-common").Target, []byte("personal edit\n"))
 	wantCode, wantOut, wantErr := blockRun(t, env, root, "", "status", "--verbose")

@@ -1,4 +1,4 @@
-package selfishell
+package managed
 
 import (
 	"bytes"
@@ -40,7 +40,8 @@ func Checksum(ctx context.Context, path string) (string, error) {
 	return sum, nil
 }
 
-func checksumBytes(data []byte) (string, error) {
+// ChecksumBytes is Checksum for bytes already in memory.
+func ChecksumBytes(data []byte) (string, error) {
 	return checksumReader(context.Background(), bytes.NewReader(data))
 }
 

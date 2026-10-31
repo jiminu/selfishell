@@ -1,4 +1,4 @@
-package selfishell
+package process
 
 import (
 	"context"
@@ -22,10 +22,23 @@ type Process struct {
 	Out, Err      io.Writer
 	Dir           string
 	Env           []string
-	inherit       Environment // the child environment while Env is nil
-	repoScopedGit bool
-	progress      *operationProgress
-	foreground    bool // Commands which can prompt retain their terminal streams.
+	Inherit       Environment // the child environment while Env is nil
+	RepoScopedGit bool
+	Progress      Progress
+	Foreground    bool // Commands which can prompt retain their terminal streams.
+}
+
+// Progress is the spinner a Process hides captured child output behind.
+type Progress interface {
+	// Compact reports whether the spinner animates and child output is hidden.
+	// It accepts a nil receiver.
+	Compact() bool
+	// Streams returns the spinner's own stdout and stderr.
+	Streams() (out, err io.Writer)
+	// Pause stops the animation and clears its line. It accepts a nil receiver.
+	Pause()
+	// Resume restarts the last stage after a Pause.
+	Resume()
 }
 
 // outputTail bounds hidden tool output while retaining failure diagnostics.
@@ -51,8 +64,8 @@ func (p Process) Run(ctx context.Context, name string, args ...string) (int, err
 	return p.run(ctx, false, name, args...)
 }
 
-// runCLI lets the continuation cancel and reap its own package child before exiting.
-func (p Process) runCLI(ctx context.Context, name string, args ...string) (int, error) {
+// RunCLI lets the continuation cancel and reap its own package child before exiting.
+func (p Process) RunCLI(ctx context.Context, name string, args ...string) (int, error) {
 	return p.run(ctx, true, name, args...)
 }
 
@@ -60,10 +73,10 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	inheritedEnv := p.Env == nil
 	// Approved dependencies are public. Apply this to indirect Git children too,
 	// so authentication failures cannot wait behind captured progress output.
-	p = withEnvironment(p, map[string]string{"GIT_TERMINAL_PROMPT": "0"})
+	p = WithEnvironment(p, map[string]string{"GIT_TERMINAL_PROMPT": "0"})
 	// Propagate transfer limits to tools that start Git themselves,
 	// including Neovim plugin sync.
-	env := p.environment()
+	env := p.Environment()
 	limit, duration := env.Get("SELFISHELL_CURL_LOW_SPEED_LIMIT"), env.Get("SELFISHELL_CURL_LOW_SPEED_TIME")
 	if limit == "" {
 		limit = "1024"
@@ -83,12 +96,12 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 			set["GIT_HTTP_LOW_SPEED_TIME"] = duration
 		}
 		if len(set) != 0 {
-			p = withEnvironment(p, set)
+			p = WithEnvironment(p, set)
 		}
 	}
 	if inheritedEnv && p.Dir != "" {
 		if pwd, err := filepath.Abs(p.Dir); err == nil {
-			p = withEnvironment(p, map[string]string{"PWD": pwd}) // exec.Command updates PWD only while Env is nil.
+			p = WithEnvironment(p, map[string]string{"PWD": pwd}) // exec.Command updates PWD only while Env is nil.
 		}
 	}
 	{
@@ -101,18 +114,18 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 			"GIT_PREFIX": true, "GIT_CEILING_DIRECTORIES": true,
 			"GIT_GRAFT_FILE": true, "GIT_REPLACE_REF_BASE": true,
 		}
-		env = p.environment()
+		env = p.Environment()
 		clean := make([]string, 0, len(env))
 		for _, item := range env {
 			key, _, _ := strings.Cut(item, "=")
-			if !blocked[key] || (p.repoScopedGit && (key == "GIT_DIR" || key == "GIT_WORK_TREE")) {
+			if !blocked[key] || (p.RepoScopedGit && (key == "GIT_DIR" || key == "GIT_WORK_TREE")) {
 				clean = append(clean, item)
 			}
 		}
 		p.Env = clean
 	}
 	if !strings.ContainsRune(name, os.PathSeparator) {
-		path, err := p.lookPath(name)
+		path, err := p.LookPath(name)
 		if err != nil {
 			return 127, err
 		}
@@ -128,13 +141,14 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	// files. CommandContext escalates to Kill if they outlive WaitDelay.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	var captured *outputTail
-	if p.progress != nil && p.progress.compact {
-		if p.foreground || forwardCancel {
-			p.progress.pause()
-		} else if p.Out == p.progress.out && p.Err == p.progress.stderr {
-			if p.progress.stop == nil && p.progress.label != "" {
-				p.progress.stage(p.progress.label)
-			}
+	var stderr io.Writer
+	if p.Progress != nil && p.Progress.Compact() {
+		var out io.Writer
+		out, stderr = p.Progress.Streams()
+		if p.Foreground || forwardCancel {
+			p.Progress.Pause()
+		} else if p.Out == out && p.Err == stderr {
+			p.Progress.Resume()
 			captured = &outputTail{}
 			cmd.Stdout, cmd.Stderr = captured, captured
 		}
@@ -145,8 +159,8 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	}
 	err := cmd.Run()
 	if err != nil && captured != nil {
-		p.progress.pause()
-		_, _ = p.progress.stderr.Write(captured.data)
+		p.Progress.Pause()
+		_, _ = stderr.Write(captured.data)
 	}
 	if err == nil {
 		return 0, nil
@@ -167,14 +181,14 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	return 126, err
 }
 
-// probeLimit bounds concurrent read-only probes such as Git dirty checks.
-const probeLimit = 8
+// ProbeLimit bounds concurrent read-only probes such as Git dirty checks.
+const ProbeLimit = 8
 
-// probeParallel runs probe(0..n-1), at most probeLimit at once. Probes store
+// ProbeParallel runs probe(0..n-1), at most ProbeLimit at once. Probes store
 // results by index so callers still report in declaration order, and their
 // children must not share the caller's stdin.
-func probeParallel(n int, probe func(int)) {
-	slots := make(chan struct{}, probeLimit)
+func ProbeParallel(n int, probe func(int)) {
+	slots := make(chan struct{}, ProbeLimit)
 	var wg sync.WaitGroup
 	for i := range n {
 		slots <- struct{}{}
@@ -186,12 +200,12 @@ func probeParallel(n int, probe func(int)) {
 	wg.Wait()
 }
 
-// lookPath uses the child's PATH, never the caller's PATH when Env is explicit.
-func (p Process) lookPath(name string) (string, error) {
+// LookPath uses the child's PATH, never the caller's PATH when Env is explicit.
+func (p Process) LookPath(name string) (string, error) {
 	if strings.ContainsRune(name, os.PathSeparator) {
 		return name, nil
 	}
-	path := p.environment().Get("PATH")
+	path := p.Environment().Get("PATH")
 	for _, dir := range filepath.SplitList(path) {
 		if !filepath.IsAbs(dir) {
 			continue
@@ -208,7 +222,7 @@ func (p Process) lookPath(name string) (string, error) {
 // Curl retains the existing transport, proxy environment and local-file behavior.
 // Callers select and verify a temporary destination before activating a download.
 func (p Process) Curl(ctx context.Context, mode string, args ...string) (int, error) {
-	env := p.environment()
+	env := p.Environment()
 	connect := env.Default("SELFISHELL_CURL_CONNECT_TIMEOUT", "10")
 	limit := env.Default("SELFISHELL_CURL_LOW_SPEED_LIMIT", "1024")
 	duration := env.Default("SELFISHELL_CURL_LOW_SPEED_TIME", "30")

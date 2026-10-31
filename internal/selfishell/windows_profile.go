@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/report"
 )
 
 // Ownership record for the fragment; written before the fragment first exists.
@@ -18,12 +21,12 @@ type windowsFragmentRecord struct {
 	Checksum string `json:"checksum"`
 }
 
-func windowsFragmentRecordPath(paths Paths) string {
+func windowsFragmentRecordPath(paths managed.Paths) string {
 	return paths.State + "/windows-terminal-fragment.json"
 }
 
-func readWindowsFragmentRecord(paths Paths) (*windowsFragmentRecord, error) {
-	data, err := readStateFile(windowsFragmentRecordPath(paths))
+func readWindowsFragmentRecord(paths managed.Paths) (*windowsFragmentRecord, error) {
+	data, err := managed.ReadFile(windowsFragmentRecordPath(paths))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -110,14 +113,14 @@ func (c CLI) noteWindowsTerminalOverrides(choice *windowsTerminalChoice, say fun
 	}
 }
 
-func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, preflight bool) error {
+func (m *lifecycle) installWindowsTerminal(choice *windowsTerminalChoice, preflight bool) error {
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
 	j, profile, err := readWindowsProfile(choice.SettingsPath, choice.ProfileGUID)
 	if errors.Is(err, os.ErrNotExist) || (err == nil && profile == nil) {
 		if !preflight {
-			m.say(reportWarning, "Existing Windows Terminal profile is missing; skipping its font and theme.")
+			m.say(report.Warning, "Existing Windows Terminal profile is missing; skipping its font and theme.")
 		}
 		return nil
 	}
@@ -145,24 +148,24 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 		}
 		record = nil
 	}
-	info, present, err := exists(path)
+	info, present, err := managed.Exists(path)
 	if err != nil {
 		return err
 	}
 	if present && !info.Mode().IsRegular() {
 		return fmt.Errorf("Windows Terminal fragment path changed type; preserving it: %s", path)
 	}
-	sum, err := checksumBytes(content)
+	sum, err := managed.ChecksumBytes(content)
 	if err != nil {
 		return err
 	}
 	var current []byte
 	if present {
-		if current, err = readStateFile(path); err != nil {
+		if current, err = managed.ReadFile(path); err != nil {
 			return err
 		}
 	}
-	currentSum, err := checksumBytes(current)
+	currentSum, err := managed.ChecksumBytes(current)
 	if err != nil {
 		return err
 	}
@@ -170,12 +173,12 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	if foreign && record != nil {
 		if m.dry {
 			if !preflight {
-				m.say(reportWarning, "Conflict: modified Windows Terminal fragment: %s", path)
-				m.say(reportPreview, "Would require an overwrite or skip decision.")
+				m.say(report.Warning, "Conflict: modified Windows Terminal fragment: %s", path)
+				m.say(report.Preview, "Would require an overwrite or skip decision.")
 			}
 			return nil
 		}
-		r := Resource{Name: "windows-terminal-fragment", Target: path}
+		r := managed.Resource{Name: "windows-terminal-fragment", Target: path}
 		if overwrite, err := m.resolveModified(r, "Windows Terminal fragment", "Overwrite with the Selfishell fragment?", preflight); err != nil || !overwrite {
 			return err
 		}
@@ -186,7 +189,7 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	if currentSum == sum {
 		m.unchanged++
 	} else if m.dry {
-		m.say(reportPreview, "Would apply the font and Dark+ to Windows Terminal profile %q through a fragment: %s", name, path)
+		m.say(report.Preview, "Would apply the font and Dark+ to Windows Terminal profile %q through a fragment: %s", name, path)
 	}
 	saveRecord := func() error {
 		data, err := json.Marshal(windowsFragmentRecord{1, path, sum})
@@ -206,15 +209,15 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 			if err != nil {
 				return err
 			}
-			if err := createRawExclusive(backup, current, 0600); err != nil {
+			if err := managed.CreateRawExclusive(backup, current, 0600); err != nil {
 				return err
 			}
-			m.say(reportSuccess, "Backed up existing Windows Terminal fragment: %s -> %s", path, backup)
+			m.say(report.Success, "Backed up existing Windows Terminal fragment: %s -> %s", path, backup)
 		}
 		if err := m.write(path, content, 0644); err != nil {
 			return err
 		}
-		m.say(reportSuccess, "Applied the font and Dark+ to Windows Terminal profile %q through a fragment: %s", name, path)
+		m.say(report.Success, "Applied the font and Dark+ to Windows Terminal profile %q through a fragment: %s", name, path)
 	}
 	// After a content change, the new bytes stay recognizable until this update.
 	if !m.dry && record != nil && record.Checksum != sum {
@@ -222,11 +225,11 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 			return err
 		}
 	}
-	m.c.noteWindowsTerminalOverrides(choice, func(message string) { m.c.report("Notes", reportWarning, "%s", message) })
+	m.c.noteWindowsTerminalOverrides(choice, func(message string) { m.c.report("Notes", report.Warning, "%s", message) })
 	return nil
 }
 
-func (m *managed) removeWindowsTerminal(preflight bool) error {
+func (m *lifecycle) removeWindowsTerminal(preflight bool) error {
 	record, err := readWindowsFragmentRecord(m.paths)
 	if err != nil || record == nil {
 		return err
@@ -243,8 +246,8 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 	return os.Remove(windowsFragmentRecordPath(m.paths))
 }
 
-func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight bool) error {
-	info, present, err := exists(record.Path)
+func (m *lifecycle) removeWindowsFragment(record *windowsFragmentRecord, preflight bool) error {
+	info, present, err := managed.Exists(record.Path)
 	if err != nil {
 		return err
 	}
@@ -256,11 +259,11 @@ func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight
 	}
 	intact := false
 	if present {
-		data, err := readStateFile(record.Path)
+		data, err := managed.ReadFile(record.Path)
 		if err != nil {
 			return err
 		}
-		sum, err := checksumBytes(data)
+		sum, err := managed.ChecksumBytes(data)
 		if err != nil {
 			return err
 		}
@@ -268,7 +271,7 @@ func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight
 	}
 	if m.dry {
 		if intact {
-			m.say(reportPreview, "Would remove Windows Terminal fragment: %s", record.Path)
+			m.say(report.Preview, "Would remove Windows Terminal fragment: %s", record.Path)
 		}
 		return nil
 	}
@@ -276,14 +279,14 @@ func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight
 		if err := os.Remove(record.Path); err != nil {
 			return err
 		}
-		syscall.Rmdir(rawParent(record.Path))
+		syscall.Rmdir(managed.RawParent(record.Path))
 	} else if present {
-		m.say(reportWarning, "Preserving modified Windows Terminal fragment: %s", record.Path)
+		m.say(report.Warning, "Preserving modified Windows Terminal fragment: %s", record.Path)
 	}
 	return nil
 }
 
-func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, recordIssue bool) {
+func (c CLI) statusWindowsTerminal(paths managed.Paths, verbose bool) (tracked, intact, recordIssue bool) {
 	record, err := readWindowsFragmentRecord(paths)
 	if err != nil {
 		c.sayDiagnostic("31", "MALFORMED", windowsFragmentRecordPath(paths))
@@ -312,8 +315,8 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 			return true, false, false
 		}
 	}
-	data, err := readStateFile(record.Path)
-	sum, _ := checksumBytes(data)
+	data, err := managed.ReadFile(record.Path)
+	sum, _ := managed.ChecksumBytes(data)
 	intact = err == nil && sum == record.Checksum
 	label := record.Path + " (Windows Terminal fragment)"
 	if !intact {
@@ -334,7 +337,7 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 }
 
 func readWindowsProfile(path, guid string) (*terminalJSON, *terminalJSONNode, error) {
-	data, err := readStateFile(path)
+	data, err := managed.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
 	}

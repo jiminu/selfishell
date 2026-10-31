@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestNeovimConfigFixtures(t *testing.T) {
@@ -27,7 +29,7 @@ func standaloneNeovimExecutable(t *testing.T, root string) (string, bool) {
 		t.Fatal(err)
 	}
 	version := strings.TrimPrefix(pins[0], "neovim@")
-	data := ProcessEnvironment().Default("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
+	data := process.HostEnvironment().Default("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
 	candidates := filepath.SplitList(os.Getenv("PATH"))
 	candidates = append(candidates, data+"/installs/neovim/"+version+"/bin")
 	for _, dir := range candidates {
@@ -63,7 +65,7 @@ func standaloneNeovimExecutable(t *testing.T, root string) (string, bool) {
 	return "", false
 }
 
-func standaloneNeovimProcess(t *testing.T, nvim string) Process {
+func standaloneNeovimProcess(t *testing.T, nvim string) process.Process {
 	t.Helper()
 	// Neovim's getcwd() resolves symlinks such as macOS /var -> /private/var.
 	root, err := filepath.EvalSymlinks(t.TempDir())
@@ -80,7 +82,7 @@ func standaloneNeovimProcess(t *testing.T, nvim string) Process {
 			env = append(env, entry)
 		}
 	}
-	return withEnvironment(Process{Env: env}, map[string]string{
+	return process.WithEnvironment(process.Process{Env: env}, map[string]string{
 		"HOME": home, "PATH": filepath.Dir(nvim) + ":/usr/bin:/bin",
 		"XDG_CONFIG_HOME": home + "/.config", "XDG_DATA_HOME": home + "/.local/share",
 		"XDG_STATE_HOME": home + "/.local/state", "XDG_CACHE_HOME": home + "/.cache", "TMPDIR": home + "/tmp",
@@ -114,7 +116,7 @@ func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("fake Neovim: %d %v", code, err)
 	}
-	home := Environment(p.Env).Get("HOME")
+	home := process.Environment(p.Env).Get("HOME")
 	want := strings.Join([]string{home, "", home + "/mise/config", home + "/mise/data", home + "/mise/cache", home + "/mise/state", "1", "", bin + ":/usr/bin:/bin"}, "\n") + "\n"
 	if home == root+"/ambient" || !strings.HasSuffix(home, "/home") || out.String() != want {
 		t.Fatalf("ambient mise or HOME reached Neovim: %q", out.String())
@@ -123,7 +125,7 @@ func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
 
 // These remain native Lua behavior probes; Go owns isolation, process execution,
 // fixture setup and assertions for every former neovim_config_test.bash case.
-func runNeovimConfigFixtures(t *testing.T, root string, base Process, nvim, mise string) {
+func runNeovimConfigFixtures(t *testing.T, root string, base process.Process, nvim, mise string) {
 	t.Helper()
 	home := t.TempDir()
 	config := home + "/.config"
@@ -141,7 +143,7 @@ func runNeovimConfigFixtures(t *testing.T, root string, base Process, nvim, mise
 	if err := os.WriteFile(manifest, contents, 0600); err != nil {
 		t.Fatal(err)
 	}
-	base = withEnvironment(base, map[string]string{
+	base = process.WithEnvironment(base, map[string]string{
 		"HOME": home, "XDG_CONFIG_HOME": config, "XDG_DATA_HOME": data,
 		"XDG_STATE_HOME": home + "/.local/state", "XDG_CACHE_HOME": home + "/.cache",
 		"TMPDIR": home + "/tmp", "NVIM_LOG_FILE": home + "/nvim.log",
@@ -151,7 +153,7 @@ func runNeovimConfigFixtures(t *testing.T, root string, base Process, nvim, mise
 	run := func(fixture, revision string) string {
 		t.Helper()
 		file := root + "/tests/fixtures/neovim/" + fixture
-		command := withEnvironment(base, map[string]string{"SELFISHELL_NVIM_TEST_FIXTURE": file, "SELFISHELL_TEST_REVISION": revision})
+		command := process.WithEnvironment(base, map[string]string{"SELFISHELL_NVIM_TEST_FIXTURE": file, "SELFISHELL_TEST_REVISION": revision})
 		command.Dir = root + "/config/shared"
 		var result bytes.Buffer
 		command.Out, command.Err = &result, &result

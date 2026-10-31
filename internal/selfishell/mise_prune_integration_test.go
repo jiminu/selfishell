@@ -6,6 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/managed"
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
@@ -35,13 +38,13 @@ func TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	rootAlias := home + "/release alias//releases/2.0.0"
-	env := withEnvironment(Process{Env: os.Environ()}, map[string]string{
+	env := process.WithEnvironment(process.Process{Env: os.Environ()}, map[string]string{
 		"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_DATA_HOME": home + "/.local/share", "XDG_STATE_HOME": home + "/.local/state", "XDG_CACHE_HOME": home + "/.cache",
 		"MISE_DATA_DIR": home + "/.local/share/mise", "MISE_CACHE_DIR": home + "/.cache/mise", "MISE_STATE_DIR": home + "/.local/state/mise", "MISE_OFFLINE": "1", "MISE_TRUSTED_CONFIG_PATHS": project,
 	}, "MISE_GLOBAL_CONFIG_FILE", "MISE_IGNORED_CONFIG_PATHS", "__MISE_DIFF", "__MISE_SESSION").Env
 	var out, stderr bytes.Buffer
-	op := &PackageOperation{Process: Process{Out: &out, Err: &stderr, Env: env, Dir: project}}
-	paths := Paths{Config: home + "/.config/selfishell", State: home + "/.local/state/selfishell", Data: home + "/.local/share/selfishell", Cache: home + "/.cache/selfishell"}
+	op := &PackageOperation{Process: process.Process{Out: &out, Err: &stderr, Env: env, Dir: project}}
+	paths := managed.Paths{Config: home + "/.config/selfishell", State: home + "/.local/state/selfishell", Data: home + "/.local/share/selfishell", Cache: home + "/.cache/selfishell"}
 	for _, version := range []string{"20.0.0", "22.0.0", "24.13.0", "24.18.0"} {
 		writeTestFile(t, home+"/.local/share/mise/installs/node/"+version+"/bin/node", "#!/bin/sh\nexit 0\n", 0755)
 	}

@@ -3,6 +3,8 @@ package selfishell
 import (
 	"fmt"
 	"strings"
+
+	"github.com/jiminu/selfishell/internal/process"
 )
 
 func platformLabel(name string) string {
@@ -23,8 +25,8 @@ func platformLabel(name string) string {
 func platformSupported(name string) bool {
 	return name == "macos" || name == "ubuntu" || name == "ubuntu-wsl"
 }
-func commandExists(name string, env Environment) bool {
-	_, err := (Process{inherit: env}).lookPath(name)
+func commandExists(name string, env process.Environment) bool {
+	_, err := (process.Process{Inherit: env}).LookPath(name)
 	return err == nil
 }
 

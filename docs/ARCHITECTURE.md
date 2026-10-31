@@ -38,6 +38,28 @@ See [supported platforms](INSTALLATION.md) and
 [verification coverage](../CONTRIBUTING.md#verification-coverage) for the target
 baseline, environments exercised in CI and limits of simulated platform tests.
 
+## Go packages
+
+The Go code is layered, and imports point only downward:
+
+1. Foundation packages import no other project package:
+   - `internal/process` runs child processes (`Process`, `Curl`, bounded probes)
+     and owns the injected `Environment`; `HostEnvironment` is the only reader of
+     the real process environment.
+   - `internal/managed` owns Selfishell's paths, the state format, checksums,
+     raw-path writes, managed blocks and the `Resource`/`Dependency` records.
+     `UserPaths` takes a lookup function, so it does not import `process`.
+   - `internal/report` holds report tones and yes/no answer parsing.
+2. `internal/selfishell` keeps the CLI, the configuration lifecycle,
+   install/update/status/uninstall, package adapters, inventory, Neovim and
+   releases. It imports the foundation packages; they never import it.
+3. Commands under `cmd/` import only the packages they use.
+
+New code goes in the lowest layer whose dependencies it needs. A foundation
+package that would need the core is a sign the code belongs in the core, or that
+the core should pass it an interface or a function, as `process.Progress` does
+for the spinner.
+
 ## Tests
 
 See [tests and repository gate](../CONTRIBUTING.md#tests-and-repository-gate)
