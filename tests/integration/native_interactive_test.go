@@ -140,7 +140,10 @@ zle -N zle-line-init
 	defer master.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, nativeZsh, "-i")
+	// Only Selfishell's startup is under test: Ubuntu's /etc/zsh/zshrc runs its
+	// own compinit, which prompts on insecure directories and never reaches
+	// the first prompt on CI runners.
+	cmd := exec.CommandContext(ctx, nativeZsh, "--no-globalrcs", "-i")
 	cmd.Dir = home
 	cmd.Env = withEnv(baseEnv(home, root), "ZDOTDIR="+home, "TERM=xterm", "WSL_DISTRO_NAME=", "SELFISHELL_UPDATE_NOTICE=0", "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_PLUGIN_LOG="+log)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
@@ -162,7 +165,12 @@ zle -N zle-line-init
 				return
 			}
 			if ctx.Err() != nil {
-				t.Fatalf("waiting for %s x%d: log %q", line, count, data)
+				// Stop the shell and drain the terminal so the screen is readable.
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				cmd.Wait()
+				master.Close()
+				<-drained
+				t.Fatalf("waiting for %s x%d: log %q screen %q", line, count, data, screen.String())
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
