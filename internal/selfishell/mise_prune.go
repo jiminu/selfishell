@@ -9,6 +9,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/report"
 )
 
@@ -33,10 +34,10 @@ func ValidRetainedRelease(root string) (string, string, error) {
 		return "", "", err
 	}
 	version := filepath.Base(link)
-	if !ValidReleaseVersion(version) || (link != "releases/"+version && link != releases+"/"+version && link != rawReleases+"/"+version) {
+	if !release.ValidVersion(version) || (link != "releases/"+version && link != releases+"/"+version && link != rawReleases+"/"+version) {
 		return "", "", fmt.Errorf("invalid previous release link: %s", link)
 	}
-	dir, err := validReleaseDirectory(releases, version)
+	dir, err := release.Directory(releases, version)
 	if err != nil {
 		return "", "", err
 	}

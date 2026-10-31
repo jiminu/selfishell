@@ -14,8 +14,54 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
+
+func releaseFixture(t *testing.T, env *process.Environment) (release.Operation, string, string) {
+	t.Helper()
+	home := t.TempDir()
+	setEnv(env, "HOME", home)
+	share := home + "/share/selfishell"
+	releases := share + "/releases"
+	root := releases + "/1.0.0"
+	if err := os.MkdirAll(root+"/bin", 0700); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteFile(root+"/VERSION", []byte("1.0.0\n"), 0600)
+	testutil.WriteFile(root+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
+	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
+		t.Fatal(err)
+	}
+	return release.Operation{Root: root, Process: process.Process{Inherit: *env, Err: &bytes.Buffer{}}}, share, releases
+}
+
+func publishReleaseFixture(t *testing.T, env *process.Environment, version string, members ...testutil.ArchiveMember) string {
+	t.Helper()
+	remote := t.TempDir()
+	name, err := release.ArchiveName(version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := remote + "/download/v" + version
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	archive := testutil.Archive(t, members...)
+	data, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testutil.WriteFile(dir+"/"+name, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	if err := testutil.WriteFile(dir+"/SHA256SUMS", []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(env, "SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	return dir
+}
 
 func isolatedUpdateHome(t *testing.T, env *process.Environment) string {
 	t.Helper()
@@ -285,7 +331,7 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	if err := os.MkdirAll(older, 0700); err != nil {
 		t.Fatal(err)
 	}
-	name, _ := releaseArchiveName("1.0.0")
+	name, _ := release.ArchiveName("1.0.0")
 	archive := testutil.Archive(t, testutil.ArchiveMember{Name: "VERSION", Body: "1.0.0\n", Mode: 0644}, testutil.ArchiveMember{Name: "bin/selfishell", Body: "#!/bin/sh\n", Mode: 0755})
 	data, err := os.ReadFile(archive)
 	if err != nil {
@@ -394,7 +440,7 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Chmod(share, 0700)
-	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
+	if _, err := op.Install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("reported activation success without write access")
 	}
 	current, _ := os.Readlink(share + "/current")
@@ -411,7 +457,7 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 	if err := os.Chmod(share, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := op.install(context.Background(), "2.0.0"); err != nil {
+	if _, err := op.Install(context.Background(), "2.0.0"); err != nil {
 		t.Fatalf("activation retry: %v", err)
 	}
 	current, _ = os.Readlink(share + "/current")

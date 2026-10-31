@@ -1,4 +1,4 @@
-package selfishell
+package release
 
 import (
 	"errors"
@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 )
 
-// rollback activates a retained release, the previous one when requested is
-// empty. confirm runs after every check and before any link changes; its error
-// is returned unchanged.
-func (o releaseOperation) rollback(requested string, confirm func(version string) error) error {
-	l, err := installedReleaseLayout(o.Root)
+// Rollback activates a retained release, the previous one when requested is
+// empty, and prints the outcome to Process.Out. confirm runs after every check
+// and before any link changes; its error is returned unchanged.
+func (o Operation) Rollback(requested string, confirm func(version string) error) error {
+	l, err := Installed(o.Root)
 	if err != nil {
 		return err
 	}
@@ -20,21 +20,21 @@ func (o releaseOperation) rollback(requested string, confirm func(version string
 		return err
 	}
 	if requested == "" {
-		link, err := os.Readlink(l.previous)
+		link, err := os.Readlink(l.Previous)
 		if os.IsNotExist(err) {
 			return errors.New("No previous release is retained.")
 		}
 		if err != nil {
 			// A non-link at previous is user data; name it instead of echoing EINVAL.
-			if info, e := os.Lstat(l.previous); e == nil && info.Mode()&os.ModeSymlink == 0 {
-				return errors.New("Retained previous release is invalid: " + l.previous + " is not a link")
+			if info, e := os.Lstat(l.Previous); e == nil && info.Mode()&os.ModeSymlink == 0 {
+				return errors.New("Retained previous release is invalid: " + l.Previous + " is not a link")
 			}
 			return err
 		}
-		if requested, err = retainedRelease(l.releases, link); err != nil {
+		if requested, err = Retained(l.releases, link); err != nil {
 			return errors.New("Retained previous release is invalid: " + filepath.Base(link))
 		}
-	} else if _, err := validReleaseDirectory(l.releases, requested); err != nil {
+	} else if _, err := Directory(l.releases, requested); err != nil {
 		return errors.New("Retained release not found: " + requested)
 	}
 	target := "releases/" + requested
@@ -47,27 +47,27 @@ func (o releaseOperation) rollback(requested string, confirm func(version string
 	if err := releaseLinkReplaceable(l.current); err != nil {
 		return err
 	}
-	if err := releaseLinkReplaceable(l.previous); err != nil {
+	if err := releaseLinkReplaceable(l.Previous); err != nil {
 		return err
 	}
-	previous, previousErr := os.Readlink(l.previous)
+	previous, previousErr := os.Readlink(l.Previous)
 	if previousErr != nil && !os.IsNotExist(previousErr) {
 		return previousErr
 	}
 	if err := confirm(requested); err != nil {
 		return err
 	}
-	if err := atomicReleaseLink(current, l.previous); err != nil {
+	if err := atomicReleaseLink(current, l.Previous); err != nil {
 		return fmt.Errorf("Failed to retain current Selfishell release: %w", err)
 	}
 	if err := atomicReleaseLink(target, l.current); err != nil {
 		var restoreErr error
-		if link, readErr := os.Readlink(l.previous); readErr != nil || link != current {
+		if link, readErr := os.Readlink(l.Previous); readErr != nil || link != current {
 			restoreErr = fmt.Errorf("previous release link changed during rollback")
 		} else if previousErr == nil {
-			restoreErr = atomicReleaseLink(previous, l.previous)
+			restoreErr = atomicReleaseLink(previous, l.Previous)
 		} else {
-			restoreErr = os.Remove(l.previous)
+			restoreErr = os.Remove(l.Previous)
 		}
 		if restoreErr != nil {
 			fmt.Fprintln(o.Process.Err, "selfishell: warning: Failed to restore the previous release link: "+restoreErr.Error())

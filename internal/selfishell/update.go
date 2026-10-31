@@ -11,6 +11,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/report"
 )
 
@@ -73,7 +74,7 @@ func (c CLI) parseUpdate(args []string) (updateOptions, int) {
 				return o, 2
 			}
 			o.version = strings.TrimPrefix(args[i], "v")
-			if !ValidReleaseVersion(o.version) {
+			if !release.ValidVersion(o.version) {
 				c.error("Invalid semantic version: " + args[i])
 				return o, 2
 			}
@@ -141,14 +142,14 @@ func (c CLI) rollback(args []string) int {
 			return 2
 		default:
 			requested = strings.TrimPrefix(arg, "v")
-			if !ValidReleaseVersion(requested) {
+			if !release.ValidVersion(requested) {
 				c.error("Invalid semantic version: " + arg)
 				return 2
 			}
 		}
 	}
 	code := 0
-	err := (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).rollback(requested, func(version string) error {
+	err := (release.Operation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env}}).Rollback(requested, func(version string) error {
 		if code = c.confirmRelease("Roll back Selfishell CLI to "+version+"?", yes, false); code != 0 {
 			return errors.New("rollback not confirmed")
 		}
@@ -187,11 +188,11 @@ func (c CLI) update(args []string) int {
 		active := ""
 		if data, err := os.ReadFile(filepath.Join(c.Root, "VERSION")); err == nil {
 			candidate := strings.TrimSuffix(string(data), "\n")
-			if ValidReleaseVersion(candidate) {
+			if release.ValidVersion(candidate) {
 				active = candidate
 			}
 		}
-		if active == version || (discovered && compareReleaseVersions(active, version) > 0) {
+		if active == version || (discovered && release.CompareVersions(active, version) > 0) {
 			if discovered && active != version {
 				fmt.Fprintf(c.Out, "Selfishell %s is newer than the latest release %s.\n", active, version)
 			}
@@ -212,7 +213,7 @@ func (c CLI) update(args []string) int {
 				fmt.Fprintf(c.Out, "Tools and configuration preview uses the running release (%s); target release contents are not downloaded for dry-run.\n", running)
 			}
 		} else {
-			if _, err := installedReleaseLayout(c.Root); err != nil {
+			if _, err := release.Installed(c.Root); err != nil {
 				c.error(err.Error())
 				return 1
 			}
@@ -230,7 +231,7 @@ func (c CLI) update(args []string) int {
 			// Keep default signal handling while confirmation reads from the terminal.
 			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			target, err := (releaseOperation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}).install(ctx, version)
+			target, err := (release.Operation{Root: c.Root, Process: process.Process{In: c.In, Out: c.Out, Err: c.Err, Inherit: c.Env, Progress: c.progress}}).Install(ctx, version)
 			if err != nil {
 				c.error(err.Error())
 				return 1
@@ -268,11 +269,11 @@ func (c CLI) update(args []string) int {
 }
 
 func (c CLI) completeUpdate() {
-	layout, err := installedReleaseLayout(c.Root)
+	layout, err := release.Installed(c.Root)
 	if err != nil {
 		return
 	}
-	previous, _ := os.Readlink(layout.previous)
+	previous, _ := os.Readlink(layout.Previous)
 	from, to := filepath.Base(previous), filepath.Base(c.Root)
 	if previous == "" || from == to {
 		c.complete("Selfishell updated to " + to + ".")

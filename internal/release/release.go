@@ -1,4 +1,6 @@
-package selfishell
+// Package release downloads, verifies, activates and rolls back Selfishell CLI
+// releases in the versioned install layout.
+package release
 
 import (
 	"context"
@@ -18,7 +20,9 @@ import (
 	"github.com/jiminu/selfishell/internal/process"
 )
 
-type releaseOperation struct {
+// Operation downloads and switches releases for the installation at Root.
+// Process runs curl and carries the output and warning streams.
+type Operation struct {
 	Root    string
 	Process process.Process
 	link    func(target, path string) error
@@ -26,7 +30,9 @@ type releaseOperation struct {
 
 var releaseVersionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$`)
 
-func ValidReleaseVersion(version string) bool {
+// ValidVersion reports whether version is an accepted release version:
+// SemVer without build metadata or leading zeros in numeric identifiers.
+func ValidVersion(version string) bool {
 	if !releaseVersionPattern.MatchString(version) {
 		return false
 	}
@@ -42,10 +48,10 @@ func ValidReleaseVersion(version string) bool {
 	return true
 }
 
-// compareReleaseVersions follows SemVer precedence for accepted release versions.
+// CompareVersions follows SemVer precedence for accepted release versions.
 // Invalid inputs compare equal; callers validate user and remote input first.
-func compareReleaseVersions(a, b string) int {
-	if !ValidReleaseVersion(a) || !ValidReleaseVersion(b) {
+func CompareVersions(a, b string) int {
+	if !ValidVersion(a) || !ValidVersion(b) {
 		return 0
 	}
 	baseA, preA, hasA := strings.Cut(a, "-")
@@ -123,7 +129,7 @@ func releaseRootURL(env process.Environment) string {
 	return officialReleaseRoot
 }
 
-func (o releaseOperation) fetch(ctx context.Context, mode, url, destination string, headers ...string) error {
+func (o Operation) fetch(ctx context.Context, mode, url, destination string, headers ...string) error {
 	args := []string{}
 	for _, h := range headers {
 		args = append(args, "-H", h)
@@ -139,7 +145,9 @@ func (o releaseOperation) fetch(ctx context.Context, mode, url, destination stri
 	return nil
 }
 
-func (o releaseOperation) latest(ctx context.Context) (string, error) {
+// Latest returns the newest published release version from the latest
+// VERSION asset, else from the newest tag, whose VERSION asset must agree.
+func (o Operation) Latest(ctx context.Context) (string, error) {
 	root := releaseRootURL(o.Process.Environment())
 	dir, err := os.MkdirTemp("", "selfishell-release-metadata.")
 	if err != nil {
@@ -190,7 +198,7 @@ func (o releaseOperation) latest(ctx context.Context) (string, error) {
 func parseReleaseVersion(data []byte) (string, bool) {
 	s := strings.TrimSuffix(string(data), "\n")
 	s = strings.TrimPrefix(s, "v")
-	return s, ValidReleaseVersion(s)
+	return s, ValidVersion(s)
 }
 
 func releaseTagVersion(path string) (string, error) {
@@ -208,13 +216,14 @@ func releaseTagVersion(path string) (string, error) {
 		return "", fmt.Errorf("release tags are empty")
 	}
 	version := strings.TrimPrefix(tags[0].Name, "v")
-	if !ValidReleaseVersion(version) {
+	if !ValidVersion(version) {
 		return "", fmt.Errorf("invalid release tag: %s", tags[0].Name)
 	}
 	return version, nil
 }
 
-func releaseArchiveName(version string) (string, error) {
+// ArchiveName names the release asset for this platform and architecture.
+func ArchiveName(version string) (string, error) {
 	platform := map[string]string{"darwin": "macos", "linux": "linux"}[runtime.GOOS]
 	arch := map[string]string{"amd64": "amd64", "arm64": "arm64"}[runtime.GOARCH]
 	if platform == "" || arch == "" {
@@ -223,11 +232,14 @@ func releaseArchiveName(version string) (string, error) {
 	return fmt.Sprintf("selfishell-%s-%s-%s.tar.gz", version, platform, arch), nil
 }
 
-// releaseLayout keeps the executable's resolved root independent of cwd and current.
-type releaseLayout struct{ share, releases, current, previous string }
+// Layout keeps the executable's resolved root independent of cwd and current.
+// Previous is the path of the previous-release link.
+type Layout struct{ share, releases, current, Previous string }
 
-func installedReleaseLayout(root string) (releaseLayout, error) {
-	var l releaseLayout
+// Installed resolves the versioned layout around root, the running release
+// directory, and rejects a development checkout or an incomplete release.
+func Installed(root string) (Layout, error) {
+	var l Layout
 	if root == "" {
 		return l, fmt.Errorf("This command requires a versioned Selfishell installation.")
 	}
@@ -237,14 +249,14 @@ func installedReleaseLayout(root string) (releaseLayout, error) {
 	}
 	l.releases = filepath.Dir(resolved)
 	l.share = filepath.Dir(l.releases)
-	if filepath.Base(l.releases) != "releases" || !ValidReleaseVersion(filepath.Base(resolved)) {
+	if filepath.Base(l.releases) != "releases" || !ValidVersion(filepath.Base(resolved)) {
 		return l, fmt.Errorf("This command requires a versioned Selfishell installation.")
 	}
-	if _, err := validReleaseDirectory(l.releases, filepath.Base(resolved)); err != nil {
+	if _, err := Directory(l.releases, filepath.Base(resolved)); err != nil {
 		return l, fmt.Errorf("This command requires a versioned Selfishell installation: %w", err)
 	}
 	l.current = l.share + "/current"
-	l.previous = l.share + "/previous"
+	l.Previous = l.share + "/previous"
 	info, err := os.Lstat(l.current)
 	if err != nil || info.Mode()&os.ModeSymlink == 0 {
 		return l, fmt.Errorf("This command requires a versioned Selfishell installation.")
@@ -252,8 +264,10 @@ func installedReleaseLayout(root string) (releaseLayout, error) {
 	return l, nil
 }
 
-func validReleaseDirectory(releases, version string) (string, error) {
-	if !ValidReleaseVersion(version) {
+// Directory returns releases/<version> once it is a complete release: a real
+// directory with an executable bin/selfishell and a matching VERSION.
+func Directory(releases, version string) (string, error) {
+	if !ValidVersion(version) {
 		return "", fmt.Errorf("invalid semantic version: %s", version)
 	}
 	dir := releases + "/" + version
@@ -281,14 +295,14 @@ func validReleaseDirectory(releases, version string) (string, error) {
 	return dir, nil
 }
 
-// retainedRelease validates a previous-release link target exactly as
+// Retained validates a previous-release link target exactly as
 // rollback accepts it: releases/<version> naming a complete release.
-func retainedRelease(releases, link string) (string, error) {
+func Retained(releases, link string) (string, error) {
 	version := strings.TrimPrefix(link, "releases/")
-	if link != "releases/"+version || !ValidReleaseVersion(version) {
+	if link != "releases/"+version || !ValidVersion(version) {
 		return "", fmt.Errorf("invalid retained release link: %s", link)
 	}
-	if _, err := validReleaseDirectory(releases, version); err != nil {
+	if _, err := Directory(releases, version); err != nil {
 		return "", err
 	}
 	return version, nil
@@ -322,7 +336,7 @@ func releaseLinkReplaceable(path string) error {
 			return err
 		}
 		version := strings.TrimPrefix(target, "releases/")
-		if target != "releases/"+version || !ValidReleaseVersion(version) {
+		if target != "releases/"+version || !ValidVersion(version) {
 			return fmt.Errorf("foreign release link: %s", path)
 		}
 	} else if !os.IsNotExist(err) {
@@ -331,13 +345,13 @@ func releaseLinkReplaceable(path string) error {
 	return nil
 }
 
-func pruneInactiveReleases(l releaseLayout) {
+func pruneInactiveReleases(l Layout) {
 	current, err := os.Readlink(l.current)
 	if err != nil || !validReleaseLinkTarget(current) {
 		return
 	}
 	keep := map[string]bool{filepath.Base(current): true}
-	previous, err := os.Readlink(l.previous)
+	previous, err := os.Readlink(l.Previous)
 	if err == nil {
 		if !validReleaseLinkTarget(previous) {
 			return
@@ -358,14 +372,14 @@ func pruneInactiveReleases(l releaseLayout) {
 		}
 		path := l.releases + "/" + name
 		stagingVersion, stagingSuffix, stagingName := strings.Cut(strings.TrimPrefix(name, "."), ".tmp.")
-		if strings.HasPrefix(name, ".") && stagingName && stagingSuffix != "" && ValidReleaseVersion(stagingVersion) {
+		if strings.HasPrefix(name, ".") && stagingName && stagingSuffix != "" && ValidVersion(stagingVersion) {
 			if time.Since(info.ModTime()) > 24*time.Hour {
 				_ = os.RemoveAll(path)
 			}
 			continue
 		}
-		if ValidReleaseVersion(name) && !keep[name] {
-			if _, err := validReleaseDirectory(l.releases, name); err == nil {
+		if ValidVersion(name) && !keep[name] {
+			if _, err := Directory(l.releases, name); err == nil {
 				_ = os.RemoveAll(path)
 			}
 		}
@@ -374,7 +388,7 @@ func pruneInactiveReleases(l releaseLayout) {
 
 func validReleaseLinkTarget(target string) bool {
 	version := strings.TrimPrefix(target, "releases/")
-	return target == "releases/"+version && ValidReleaseVersion(version)
+	return target == "releases/"+version && ValidVersion(version)
 }
 
 func selectedChecksum(data []byte, name string) (string, error) {
@@ -406,15 +420,17 @@ func selectedChecksum(data []byte, name string) (string, error) {
 	return selected, nil
 }
 
-func (o releaseOperation) install(ctx context.Context, version string) (string, error) {
-	if !ValidReleaseVersion(version) {
+// Install downloads, verifies and activates version, retains the replaced
+// release as previous and returns the activated release directory.
+func (o Operation) Install(ctx context.Context, version string) (string, error) {
+	if !ValidVersion(version) {
 		return "", fmt.Errorf("invalid semantic version: %s", version)
 	}
-	l, err := installedReleaseLayout(o.Root)
+	l, err := Installed(o.Root)
 	if err != nil {
 		return "", err
 	}
-	name, err := releaseArchiveName(version)
+	name, err := ArchiveName(version)
 	if err != nil {
 		return "", err
 	}
@@ -425,12 +441,12 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 	if err := releaseLinkReplaceable(l.current); err != nil {
 		return "", err
 	}
-	if err := releaseLinkReplaceable(l.previous); err != nil {
+	if err := releaseLinkReplaceable(l.Previous); err != nil {
 		return "", err
 	}
 	target := l.releases + "/" + version
 	if _, err := os.Lstat(target); err == nil {
-		if _, err := validReleaseDirectory(l.releases, version); err != nil {
+		if _, err := Directory(l.releases, version); err != nil {
 			return "", fmt.Errorf("Existing release is incomplete: %s: %w", target, err)
 		}
 	} else if !os.IsNotExist(err) {
@@ -495,7 +511,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		}
 		if _, err := os.Lstat(target); os.IsNotExist(err) {
 			if err := os.Rename(payload, target); err != nil {
-				if _, validErr := validReleaseDirectory(l.releases, version); validErr != nil {
+				if _, validErr := Directory(l.releases, version); validErr != nil {
 					return "", err
 				}
 			}
@@ -506,7 +522,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		// Reusing a release skips extraction, but must still validate the download.
 		return "", err
 	}
-	if _, err := validReleaseDirectory(l.releases, version); err != nil {
+	if _, err := Directory(l.releases, version); err != nil {
 		return "", fmt.Errorf("Existing release is incomplete: %s: %w", target, err)
 	}
 	if err := ctx.Err(); err != nil {
@@ -516,7 +532,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 	if err != nil {
 		return "", err
 	}
-	previous, previousErr := os.Readlink(l.previous)
+	previous, previousErr := os.Readlink(l.Previous)
 	if previousErr != nil && !os.IsNotExist(previousErr) {
 		return "", fmt.Errorf("Failed to retain previous Selfishell release: %w", previousErr)
 	}
@@ -525,19 +541,19 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		link = atomicReleaseLink
 	}
 	if old != "releases/"+version {
-		if err := link(old, l.previous); err != nil {
+		if err := link(old, l.Previous); err != nil {
 			return "", fmt.Errorf("Failed to retain previous Selfishell release: %w", err)
 		}
 	}
 	if err := link("releases/"+version, l.current); err != nil {
 		if old != "releases/"+version {
 			var restoreErr error
-			if got, readErr := os.Readlink(l.previous); readErr != nil || got != old {
+			if got, readErr := os.Readlink(l.Previous); readErr != nil || got != old {
 				restoreErr = fmt.Errorf("previous release link changed during activation")
 			} else if previousErr == nil {
-				restoreErr = atomicReleaseLink(previous, l.previous)
+				restoreErr = atomicReleaseLink(previous, l.Previous)
 			} else {
-				restoreErr = os.Remove(l.previous)
+				restoreErr = os.Remove(l.Previous)
 			}
 			if restoreErr != nil && o.Process.Err != nil {
 				if o.Process.Progress != nil {

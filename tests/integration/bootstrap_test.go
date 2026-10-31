@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/pty"
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -812,7 +812,7 @@ func TestExactReleaseSmoke(t *testing.T) {
 	assertAssetSet(t, dir, version)
 	smokePrebuiltArchive(t, dir, version)
 }
-func validSmokeVersion(v string) bool { return selfishell.ValidReleaseVersion(v) }
+func validSmokeVersion(v string) bool { return release.ValidVersion(v) }
 
 func TestNativeBootstrapPipedSetup(t *testing.T) {
 	t.Parallel()

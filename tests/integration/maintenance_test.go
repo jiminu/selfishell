@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jiminu/selfishell/internal/selfishell"
+	"github.com/jiminu/selfishell/internal/release"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -164,7 +164,7 @@ func TestReleaseVersionValidatorParity(t *testing.T) {
 			home := t.TempDir()
 			got, err := runCommand(home, []string{"/bin/bash", "-c", "source \"$1\"; selfishell_version_is_valid \"$2\"", "bash", script, version}, nil, maintenanceMiseEnv(home), 5*time.Second)
 			mustFS(t, err)
-			if goValid := selfishell.ValidReleaseVersion(version); (got.Status == 0) != valid || goValid != valid {
+			if goValid := release.ValidVersion(version); (got.Status == 0) != valid || goValid != valid {
 				t.Errorf("%q: want valid=%v; shell status %d, Go %v", version, valid, got.Status, goValid)
 			}
 		}
