@@ -85,7 +85,8 @@ The package step of install and tools updates removes that directory, and its
   Selfishell declared (`zsh-users---zsh-completions`, `Aloxaf---fzf-tab`,
   `zsh-users---zsh-autosuggestions`,
   `zdharma-continuum---fast-syntax-highlighting`);
-- `zinit/polaris`, if present, holds only empty directories.
+- `zinit/polaris`, if present, holds only empty directories and Zinit's own
+  `man/man1/zinit.1`.
 
 Otherwise the checkout is kept and `status` prints a one-line note; delete it by
 hand if you do not use Zinit directly. Dry runs only preview the removal, and

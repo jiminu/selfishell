@@ -10,7 +10,7 @@ import (
 )
 
 func TestRemoveLegacyZinit(t *testing.T) {
-	for _, shape := range []string{"owned", "dry_run", "unknown_plugin", "polaris_content", "missing_state", "symlink", "removal_failure"} {
+	for _, shape := range []string{"owned", "dry_run", "unknown_plugin", "polaris_content", "polaris_manual_link", "missing_state", "symlink", "removal_failure"} {
 		t.Run(shape, func(t *testing.T) {
 			op, paths, _, home := dependencyFixture(t)
 			dir, state := home+"/data/zinit", paths.State+"/dependencies/zinit"
@@ -18,15 +18,24 @@ func TestRemoveLegacyZinit(t *testing.T) {
 			for name := range legacyZinitPlugins {
 				fixtureFile(t, dir+"/plugins/"+name+"/.git/HEAD", "ref\n", 0600)
 			}
-			for _, empty := range []string{"/polaris/bin", "/polaris/man/man1", "/completions"} {
+			for _, empty := range []string{"/polaris/bin", "/polaris/man/man2", "/completions"} {
 				mustDir(t, dir+empty)
 			}
+			// Zinit installs its own manual into polaris; a default checkout has it.
+			fixtureFile(t, dir+"/polaris/man/man1/zinit.1", ".TH ZINIT 1\n", 0600)
 			fixtureFile(t, state, "v3.17.1\n", 0600)
 			switch shape {
 			case "unknown_plugin":
 				mustDir(t, dir+"/plugins/user---plugin")
 			case "polaris_content":
 				fixtureFile(t, dir+"/polaris/bin/tool", "#!/bin/sh\n", 0700)
+			case "polaris_manual_link":
+				if err := os.Remove(dir + "/polaris/man/man1/zinit.1"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(dir+"/zinit.git/zinit.zsh", dir+"/polaris/man/man1/zinit.1"); err != nil {
+					t.Fatal(err)
+				}
 			case "missing_state":
 				if err := os.Remove(state); err != nil {
 					t.Fatal(err)
