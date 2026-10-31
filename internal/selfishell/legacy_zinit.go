@@ -55,8 +55,8 @@ func legacyZinitRemovable(paths Paths) (present, removable bool, err error) {
 			return true, false, nil
 		}
 	}
-	empty, err := onlyEmptyDirs(dir + "/polaris")
-	return true, empty, err
+	defaults, err := onlyZinitPolarisDefaults(dir+"/polaris", "")
+	return true, defaults, err
 }
 
 // realDirEntries lists a real directory, returns an empty list when it is
@@ -77,18 +77,30 @@ func realDirEntries(path string) ([]os.DirEntry, error) {
 	return entries, err
 }
 
-// onlyEmptyDirs accepts an absent path or a tree of real directories with no
-// files or links, which is what Zinit leaves in polaris by default.
-func onlyEmptyDirs(path string) (bool, error) {
+// Zinit copies its own manual into polaris on every load (zinit.zsh installs
+// doc/zinit.1 under $ZPFX/man/man1), so a default polaris is that one regular
+// file in a tree of otherwise empty directories.
+const zinitPolarisManual = "man/man1/zinit.1"
+
+// onlyZinitPolarisDefaults accepts an absent path or a tree of real directories
+// holding nothing but Zinit's own manual; any other file or link is user data.
+func onlyZinitPolarisDefaults(path, relative string) (bool, error) {
 	entries, err := realDirEntries(path)
 	if err != nil || entries == nil {
 		return false, err
 	}
 	for _, entry := range entries {
+		name := entry.Name()
+		if relative != "" {
+			name = relative + "/" + name
+		}
+		if entry.Type().IsRegular() && name == zinitPolarisManual {
+			continue
+		}
 		if !entry.IsDir() {
 			return false, nil
 		}
-		if ok, err := onlyEmptyDirs(path + "/" + entry.Name()); err != nil || !ok {
+		if ok, err := onlyZinitPolarisDefaults(path+"/"+entry.Name(), name); err != nil || !ok {
 			return false, err
 		}
 	}
