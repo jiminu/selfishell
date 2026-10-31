@@ -29,4 +29,12 @@ if [[ "${SELFISHELL_GO_RACE:-}" == 1 ]]; then
   test_flags+=(-race)
   test_cgo=1
 fi
+# CI collects coverage; go test prints each package's percentage.
+coverprofile="${SELFISHELL_GO_COVERPROFILE:-}"
+if [[ -n "$coverprofile" ]]; then
+  test_flags+=("-coverprofile=$coverprofile")
+fi
 SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" SELFISHELL_TEST_GO_CACHE="$test_go_cache" CGO_ENABLED="$test_cgo" go test ${test_flags[@]+"${test_flags[@]}"} ./... -count=1
+if [[ -n "$coverprofile" ]]; then
+  go tool cover -func="$coverprofile" | tail -n 1
+fi

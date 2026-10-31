@@ -790,8 +790,9 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	}
 }
 
-// The race job reuses the gate's pinned Go setup, read-only token and runtime gate.
-func TestCIGoRaceJobMatchesGate(t *testing.T) {
+// The race job reuses the gate's pinned Go setup, read-only token and runtime
+// gate; the gate's coverage profile reaches a workflow artifact.
+func TestCIGoRaceAndCoverage(t *testing.T) {
 	t.Parallel()
 	raw, jobs := workflowSections(t, "ci.yml")
 	if !strings.Contains(raw, "\npermissions:\n  contents: read\n\n") {
@@ -813,6 +814,14 @@ func TestCIGoRaceJobMatchesGate(t *testing.T) {
 	}
 	if run := strings.Join(policyStep(t, race, "Run Go checks with the race detector"), "\n"); !strings.Contains(run, `run: SELFISHELL_GO_RACE=1 SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check-go.sh`) {
 		t.Errorf("race run: %q", run)
+	}
+	profile := "${{ runner.temp }}/selfishell-coverage.out"
+	gate := strings.Join(policyStep(t, shell, "Run checks"), "\n")
+	upload := strings.Join(policyStep(t, shell, "Upload Go coverage profile"), "\n")
+	for _, needle := range []string{"SELFISHELL_GO_COVERPROFILE: " + profile, "bash scripts/check.sh", "actions/upload-artifact@", "path: " + profile, "if-no-files-found: error"} {
+		if !strings.Contains(gate+"\n"+upload, needle) {
+			t.Errorf("coverage steps lack %q", needle)
+		}
 	}
 }
 

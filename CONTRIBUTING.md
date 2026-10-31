@@ -84,6 +84,8 @@ test homes.
 `SELFISHELL_GO_RACE=1 bash scripts/check-go.sh` runs the whole test step with
 `-race` and `CGO_ENABLED=1`, so it needs a C compiler; builds, vet and gofmt keep
 the normal `CGO_ENABLED=0` policy. CI runs it in a separate Ubuntu job.
+CI's gate also sets `SELFISHELL_GO_COVERPROFILE` to an absolute file path, logs
+per-package and total coverage, and uploads the profile as a workflow artifact.
 
 ## Verification coverage
 
