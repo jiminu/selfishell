@@ -106,6 +106,17 @@ SELFISHELL_TEST_PINNED_MISE=/absolute/path/to/mise \
   go test ./tests/integration -run '^TestNativeRealMiseWSLFirstPrompt$' -count=1 -v
 ```
 
+## Deferred plugins
+
+fzf-tab loads synchronously after `compinit` because it wraps the completion
+widgets. zsh-autosuggestions and fast-syntax-highlighting load after the first
+prompt is drawn: `interactive.zsh` registers a one-shot `zle -F` handler on an
+always-readable descriptor, so the line editor runs it as soon as it first waits
+for input, sources both plugins, binds the autosuggestion widgets once and
+redraws the line. A `precmd` hook would run before the prompt is printed and put
+their load time back on the critical path. `scripts/benchmark.sh --prompt`
+measures the prompt with and without these plugins ready.
+
 ## Startup caches
 
 Interactive startup audits completion directories on first use and once daily.
