@@ -282,6 +282,15 @@ func (c CLI) completeUpdate() {
 	}
 }
 
+// cancelled reports a cancelled invocation once and tells the caller to stop.
+func (c CLI) cancelled() bool {
+	if err := c.invocationContext().Err(); err != nil {
+		c.error(err.Error())
+		return true
+	}
+	return false
+}
+
 func (c CLI) updateTools(o updateOptions) (result int) {
 	paths, err := managed.UserPaths(c.Env.Get)
 	if err != nil {
@@ -328,8 +337,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 			return 1
 		}
 	}
-	if err := c.invocationContext().Err(); err != nil {
-		c.error(err.Error())
+	if c.cancelled() {
 		return 1
 	}
 	prepared, err := c.prepareConfig(platform, o.dry, o.yes, true, false, false)
@@ -343,8 +351,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 			return 1
 		}
 	}
-	if err := c.invocationContext().Err(); err != nil {
-		c.error(err.Error())
+	if c.cancelled() {
 		return 1
 	}
 	if !o.dry {
@@ -371,16 +378,14 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	if o.skip {
 		c.report("Notes", report.Warning, "Skipping package and tool installation.")
 	}
-	if err := c.invocationContext().Err(); err != nil {
-		c.error(err.Error())
+	if c.cancelled() {
 		return 1
 	}
 	if err := c.applyManagedResources(&prepared); err != nil {
 		c.error(err.Error())
 		return 1
 	}
-	if err := c.invocationContext().Err(); err != nil {
-		c.error(err.Error())
+	if c.cancelled() {
 		return 1
 	}
 	if !o.skip {
@@ -388,8 +393,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 			c.error(err.Error())
 			return 1
 		}
-		if err := c.invocationContext().Err(); err != nil {
-			c.error(err.Error())
+		if c.cancelled() {
 			return 1
 		}
 		toolsCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
@@ -415,8 +419,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 			return 1
 		}
 	}
-	if err := c.invocationContext().Err(); err != nil {
-		c.error(err.Error())
+	if c.cancelled() {
 		return 1
 	}
 	if o.dry {

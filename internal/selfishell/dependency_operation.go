@@ -2,7 +2,6 @@ package selfishell
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -303,17 +302,7 @@ func (o *PackageOperation) stageDownload(ctx context.Context, dep managed.Depend
 }
 
 func (o *PackageOperation) commandOutput(ctx context.Context, name string, args ...string) (string, error) {
-	var out, stderr bytes.Buffer
-	p := o.Process
-	p.Out, p.Err = &out, &stderr
-	code, err := p.Run(ctx, name, args...)
-	if err != nil {
-		return "", err
-	}
-	if code != 0 {
-		return "", fmt.Errorf("%s exited %d: %s", name, code, strings.TrimSpace(stderr.String()))
-	}
-	return strings.TrimSpace(out.String()), nil
+	return process.Output(ctx, o.Process, name, args...)
 }
 func (o *PackageOperation) stageGit(ctx context.Context, dep managed.Dependency, stage string) error {
 	if _, err := o.commandOutput(ctx, "git", "clone", "--quiet", "--", dep.Source, stage); err != nil {
