@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestArchiveModesIgnoreCheckoutPermissions(t *testing.T) {
@@ -14,12 +16,12 @@ func TestArchiveModesIgnoreCheckoutPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"packages.conf", "dependencies.conf", "config/nested/settings"} {
-		if err := os.WriteFile(root+"/"+name, []byte("contents\n"), 0600); err != nil {
+		if err := testutil.WriteFile(root+"/"+name, []byte("contents\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	binary := root + "/selfishell"
-	if err := os.WriteFile(binary, []byte("binary"), 0700); err != nil {
+	if err := testutil.WriteFile(binary, []byte("binary"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	archive := root + "/release.tar.gz"

@@ -70,7 +70,7 @@ func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, tool := range []string{"starship", "fzf", "zoxide"} {
-		if e := os.WriteFile(filepath.Join(ambient, tool), []byte("#!/bin/sh\nexit 99\n"), 0755); e != nil {
+		if e := testutil.WriteFile(filepath.Join(ambient, tool), []byte("#!/bin/sh\nexit 99\n"), 0755); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -81,7 +81,7 @@ func TestRunnerBaseIsolationAndZprof(t *testing.T) {
 		if e := os.MkdirAll(plugin, 0755); e != nil {
 			t.Fatal(e)
 		}
-		if e := os.WriteFile(filepath.Join(plugin, name+".plugin.zsh"), []byte("print loaded >"+sentinel+"\n"), 0644); e != nil {
+		if e := testutil.WriteFile(filepath.Join(plugin, name+".plugin.zsh"), []byte("print loaded >"+sentinel+"\n"), 0644); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -292,7 +292,7 @@ func TestIntegrationQueryCancellationCleansDescendants(t *testing.T) {
 	startedMarker := filepath.Join(home, "started")
 	sentinel := filepath.Join(home, "escaped")
 	script := fmt.Sprintf("#!/bin/sh\n/usr/bin/touch '%s'\n(/bin/sleep 1; /usr/bin/touch '%s') &\nwait\n", startedMarker, sentinel)
-	if e := os.WriteFile(filepath.Join(bin, "mise"), []byte(script), 0755); e != nil {
+	if e := testutil.WriteFile(filepath.Join(bin, "mise"), []byte(script), 0755); e != nil {
 		t.Fatal(e)
 	}
 	f := &fixture{options: options{mode: "full"}, home: home, data: filepath.Join(home, ".local/share"), interactivePath: bin, env: map[string]string{}}
@@ -354,13 +354,13 @@ esac
 printf '%%s\n' '%s' >> '%s'
 exit 97
 `, name, name, log)
-		if e := os.WriteFile(filepath.Join(bin, name), []byte(body), 0755); e != nil {
+		if e := testutil.WriteFile(filepath.Join(bin, name), []byte(body), 0755); e != nil {
 			t.Fatal(e)
 		}
 	}
 	wrapper := filepath.Join(private, "guarded-selfishell")
 	body := fmt.Sprintf("#!/bin/sh\nexport PATH='%s':\"$PATH\"\nexec '%s' \"$@\"\n", bin, realCLI)
-	if e := os.WriteFile(wrapper, []byte(body), 0755); e != nil {
+	if e := testutil.WriteFile(wrapper, []byte(body), 0755); e != nil {
 		t.Fatal(e)
 	}
 	return wrapper, log

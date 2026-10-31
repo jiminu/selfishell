@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestNeovimConfigFixtures(t *testing.T) {
@@ -98,7 +99,7 @@ func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	nvim := bin + "/nvim"
-	if err := os.WriteFile(nvim, []byte("#!/bin/sh\nprintf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' \"$HOME\" \"$MISE_GLOBAL_CONFIG_FILE\" \"$MISE_CONFIG_DIR\" \"$MISE_DATA_DIR\" \"$MISE_CACHE_DIR\" \"$MISE_STATE_DIR\" \"$MISE_OFFLINE\" \"$MISE_OVERRIDE_CONFIG_FILENAMES\" \"$PATH\"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(nvim, []byte("#!/bin/sh\nprintf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n' \"$HOME\" \"$MISE_GLOBAL_CONFIG_FILE\" \"$MISE_CONFIG_DIR\" \"$MISE_DATA_DIR\" \"$MISE_CACHE_DIR\" \"$MISE_STATE_DIR\" \"$MISE_OFFLINE\" \"$MISE_OVERRIDE_CONFIG_FILENAMES\" \"$PATH\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(root+"/ambient", 0700); err != nil {
@@ -140,7 +141,7 @@ func runNeovimConfigFixtures(t *testing.T, root string, base process.Process, nv
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(manifest, contents, 0600); err != nil {
+	if err := testutil.WriteFile(manifest, contents, 0600); err != nil {
 		t.Fatal(err)
 	}
 	base = process.WithEnvironment(base, map[string]string{
@@ -187,7 +188,7 @@ func runNeovimConfigFixtures(t *testing.T, root string, base process.Process, nv
 	if output := run("plugin_versions_missing_manifest.lua", ""); !strings.Contains(output, "plugin_versions missing manifest: OK") {
 		t.Fatalf("missing manifest case: %s", output)
 	}
-	if err := os.WriteFile(manifest, contents, 0600); err != nil {
+	if err := testutil.WriteFile(manifest, contents, 0600); err != nil {
 		t.Fatal(err)
 	}
 	deps, err := ReadDependencies(root + "/dependencies.conf")
@@ -246,7 +247,7 @@ func runNeovimConfigFixtures(t *testing.T, root string, base process.Process, nv
 	if err := os.MkdirAll(lazyPath+"/.git", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(lazyPath+"/.git/HEAD", []byte(lazyRevision+"\n"), 0600); err != nil {
+	if err := testutil.WriteFile(lazyPath+"/.git/HEAD", []byte(lazyRevision+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if output := run("lazy_detached_head.lua", lazyRevision); !strings.Contains(output, "true") {

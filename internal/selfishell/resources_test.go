@@ -10,6 +10,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestResources(t *testing.T) {
@@ -94,7 +95,7 @@ func TestLoadResourceStates(t *testing.T) {
 	if err != nil || len(records) != 1 || records[0].Resource != resources[0] || records[0].State != state {
 		t.Fatalf("records: %+v %v", records, err)
 	}
-	if err := os.WriteFile(dir+"/last.state", []byte("2\n"), 0600); err != nil {
+	if err := testutil.WriteFile(dir+"/last.state", []byte("2\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if records, err := LoadResourceStates(dir, resources); records != nil || !errors.Is(err, managed.ErrMalformedState) {

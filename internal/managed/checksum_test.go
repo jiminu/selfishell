@@ -101,7 +101,11 @@ func TestChecksumReader(t *testing.T) {
 			t.Fatalf("reader checksum: %q %v", got, err)
 		}
 	}
-	file, err := os.CreateTemp(t.TempDir(), "closed")
+	closed := t.TempDir() + "/closed"
+	if err := testutil.WriteFile(closed, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(closed)
 	if err != nil {
 		t.Fatal(err)
 	}

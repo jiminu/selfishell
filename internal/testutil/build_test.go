@@ -9,7 +9,7 @@ import (
 func TestCopyCLIKeepsFixtureIndependent(t *testing.T) {
 	root := t.TempDir()
 	source, target := filepath.Join(root, "source"), filepath.Join(root, "copy")
-	if err := os.WriteFile(source, []byte("original executable"), 0700); err != nil {
+	if err := WriteFile(source, []byte("original executable"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(source, target); err != nil {
@@ -23,7 +23,7 @@ func TestCopyCLIKeepsFixtureIndependent(t *testing.T) {
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0755 {
 		t.Fatalf("fixture CLI must be a regular executable: %v %v", info, err)
 	}
-	if err := os.WriteFile(target, []byte("fixture modified"), 0700); err != nil {
+	if err := WriteFile(target, []byte("fixture modified"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(source); err != nil || string(data) != "original executable" {

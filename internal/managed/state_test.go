@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func stateFixture() State {
@@ -41,7 +43,7 @@ func TestReadState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := os.WriteFile(path, []byte(tc.content), 0600); err != nil {
+			if err := testutil.WriteFile(path, []byte(tc.content), 0600); err != nil {
 				t.Fatal(err)
 			}
 			state, err := ReadState(path)
@@ -54,7 +56,7 @@ func TestReadState(t *testing.T) {
 			}
 		})
 	}
-	if err := os.WriteFile(path, []byte("2\nblock\nactive\n target \\name\n\n\n\n"), 0600); err != nil {
+	if err := testutil.WriteFile(path, []byte("2\nblock\nactive\n target \\name\n\n\n\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	state, err := ReadState(path)
@@ -105,7 +107,7 @@ func TestStatePathTypesAndPermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/state"
 	target := dir + "/target"
-	if err := os.WriteFile(target, []byte("untouched"), 0600); err != nil {
+	if err := testutil.WriteFile(target, []byte("untouched"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []string{"symlink", "dangling", "directory", "fifo"} {
@@ -146,7 +148,7 @@ func TestStatePathTypesAndPermissions(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission failure requires an unprivileged test process")
 	}
-	if err := os.WriteFile(path, []byte("2\nfile\nactive\nx\n-\n-\n0:0\n"), 0000); err != nil {
+	if err := testutil.WriteFile(path, []byte("2\nfile\nactive\nx\n-\n-\n0:0\n"), 0000); err != nil {
 		t.Fatal(err)
 	}
 	defer os.Chmod(path, 0600)
@@ -252,7 +254,7 @@ func TestStateWriteFailures(t *testing.T) {
 				if failure == "create" {
 					return nil, stateIOError
 				}
-				f, err := os.CreateTemp(dir, pattern)
+				f, err := CreateRawTemp(dir + "/" + strings.TrimSuffix(pattern, ".tmp.*"))
 				if err != nil {
 					return nil, err
 				}

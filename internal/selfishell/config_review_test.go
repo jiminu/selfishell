@@ -96,12 +96,12 @@ func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
 	create := func(path, kind, label string) {
 		switch kind {
 		case "file":
-			os.WriteFile(path, []byte(label), 0600)
+			testutil.WriteFile(path, []byte(label), 0600)
 		case "symlink":
 			os.Symlink(label+"-target", path)
 		case "directory":
 			os.Mkdir(path, 0700)
-			os.WriteFile(path+"/"+label+"-child", []byte(label), 0600)
+			testutil.WriteFile(path+"/"+label+"-child", []byte(label), 0600)
 		}
 	}
 	unchanged := func(t *testing.T, path, kind, label string) {

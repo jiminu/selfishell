@@ -63,6 +63,11 @@ Product code in `internal/selfishell`, `internal/release`, `internal/neovim`,
 the injected `process.Environment` (another source check), so its tests pass a
 private environment instead of calling `t.Setenv`.
 
+The subsystem packages (`internal/terminal`, `internal/release` and
+`internal/neovim`) carry only their unit tests; the core's CLI-driving tests in
+`internal/selfishell` verify their behaviour, so a change there needs the whole
+gate, not `go test ./internal/<package>` alone.
+
 Keep command parsing and shared failure cases focused; do not repeat basic
 help/version or successful reinstall checks in every lifecycle scenario.
 
