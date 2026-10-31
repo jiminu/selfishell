@@ -1,6 +1,6 @@
 # Prefer user-local binaries on Ubuntu/WSL
 
-typeset -U path PATH
+typeset -U path PATH fpath FPATH
 path=("$HOME/.local/bin" "$HOME/.rd/bin" $path)
 
 # Windows PATH entries remain available after startup, but probing them while
