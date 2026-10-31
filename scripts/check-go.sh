@@ -22,4 +22,11 @@ go vet ./...
 # one in the checkout, never in the developer's HOME; CI passes its own.
 test_go_cache="${SELFISHELL_TEST_GO_CACHE:-$ROOT_DIR/.build/test-go-cache}"
 mkdir -p "$test_go_cache"
-SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" SELFISHELL_TEST_GO_CACHE="$test_go_cache" go test ./... -count=1
+test_flags=()
+test_cgo=0
+# The race detector needs cgo; only this test step enables it, never the builds.
+if [[ "${SELFISHELL_GO_RACE:-}" == 1 ]]; then
+  test_flags+=(-race)
+  test_cgo=1
+fi
+SELFISHELL_TEST_CLI="$ROOT_DIR/.build/selfishell" SELFISHELL_TEST_GO_CACHE="$test_go_cache" CGO_ENABLED="$test_cgo" go test ${test_flags[@]+"${test_flags[@]}"} ./... -count=1

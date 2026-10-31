@@ -790,6 +790,32 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	}
 }
 
+// The race job reuses the gate's pinned Go setup, read-only token and runtime gate.
+func TestCIGoRaceJobMatchesGate(t *testing.T) {
+	t.Parallel()
+	raw, jobs := workflowSections(t, "ci.yml")
+	if !strings.Contains(raw, "\npermissions:\n  contents: read\n\n") {
+		t.Fatal("CI must default to read-only permissions")
+	}
+	shell, race := policyJob(t, jobs, "shell"), policyJob(t, jobs, "go-race")
+	for _, step := range []string{"Check out repository", "Set up pinned Go toolchain"} {
+		if !slices.Equal(policyStep(t, shell, step), policyStep(t, race, step)) {
+			t.Errorf("race step %q differs from the shell job", step)
+		}
+	}
+	for _, line := range race.lines {
+		if strings.HasPrefix(line, "    permissions:") || strings.HasPrefix(line, "    strategy:") {
+			t.Errorf("race job must inherit read-only permissions and stay off the matrix: %q", line)
+		}
+	}
+	if needs := policyNeeds(t, race.lines); !slices.Equal(needs, []string{"changes"}) || policyField(t, race.lines, "    ", "if") != "needs.changes.outputs.runtime != 'false'" || policyField(t, race.lines, "    ", "runs-on") != "ubuntu-latest" {
+		t.Errorf("race job graph: needs=%v", needs)
+	}
+	if run := strings.Join(policyStep(t, race, "Run Go checks with the race detector"), "\n"); !strings.Contains(run, `run: SELFISHELL_GO_RACE=1 SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check-go.sh`) {
+		t.Errorf("race run: %q", run)
+	}
+}
+
 // The shell job skips the Lua check without nvim, so the Neovim job must fail
 // rather than skip when the pinned nvim is missing.
 func TestCILuaCheckUsesPinnedNeovim(t *testing.T) {

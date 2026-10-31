@@ -105,6 +105,32 @@ jobs:
           printf 'Exact release smoke: %s/%s\n' "$(go env GOOS)" "$(go env GOARCH)"
           go test ./tests/integration -run '^TestExactReleaseSmoke$' -count=1
 
+  go-race:
+    name: Go tests with the race detector
+    needs: changes
+    # Same rule as the macOS gate leg: skip only when no runtime file changed.
+    if: needs.changes.outputs.runtime != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Run Go checks with the race detector
+        run: SELFISHELL_GO_RACE=1 SELFISHELL_TEST_GO_CACHE="$(go env GOCACHE)" bash scripts/check-go.sh
+
   ubuntu-container-e2e:
     name: Ubuntu 24.04 native archive full install E2E
     needs: changes

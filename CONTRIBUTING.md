@@ -81,13 +81,18 @@ homes, XDG paths and mise state remain private, and the reproducibility check
 still uses a fresh cache. Package and tool downloads are not shared between
 test homes.
 
+`SELFISHELL_GO_RACE=1 bash scripts/check-go.sh` runs the whole test step with
+`-race` and `CGO_ENABLED=1`, so it needs a C compiler; builds, vet and gofmt keep
+the normal `CGO_ENABLED=0` policy. CI runs it in a separate Ubuntu job.
+
 ## Verification coverage
 
 CI runs on GitHub-hosted `ubuntu-latest` (AMD64) and `macos-latest` (ARM64)
 runners. For runtime changes and release tags it runs the repository gate and
 an exact prebuilt-archive install on both hosts, a full installation from the
 Linux/AMD64 archive in an `ubuntu:24.04` container, the macOS/ARM64 archive's
-configuration lifecycle, and the pinned Neovim developer lifecycle on Ubuntu.
+configuration lifecycle, the pinned Neovim developer lifecycle, and the Go
+tests under the race detector on Ubuntu.
 The release builder produces four archive formats; only the host's native
 archive executes in each job.
 
