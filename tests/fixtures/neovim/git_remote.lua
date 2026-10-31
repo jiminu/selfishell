@@ -1,4 +1,21 @@
 vim.opt.rtp:prepend(vim.env.SELFISHELL_NVIM_CONFIG)
+-- Poll fast, and count the probe's Git spawns to observe the polling timer.
+-- Only git_remote sets GIT_NO_LAZY_FETCH; plugins such as nvim-tree run Git
+-- too, sometimes synchronously without an on_exit callback, and pass through.
+local interval = 20
+vim.g.selfishell_git_remote_interval = interval
+local git_calls, running, system = 0, 0, vim.system
+vim.system = function(command, options, on_exit)
+  local probe = command[1] == "git" and type(options) == "table" and type(options.env) == "table"
+    and options.env.GIT_NO_LAZY_FETCH == "1" and type(on_exit) == "function"
+  if not probe then return system(command, options, on_exit) end
+  git_calls, running = git_calls + 1, running + 1
+  return system(command, options, function(result)
+    on_exit(result)
+    -- Queued after on_exit's scheduled callback, which may spawn the next step.
+    vim.schedule(function() running = running - 1 end)
+  end)
+end
 local remote = require("config.git_remote")
 remote.setup()
 local tree, lualine
@@ -26,8 +43,27 @@ local function rendered()
 end
 
 -- Go owns the Git repositories and mutations; this probe only drives Neovim.
+local function focus()
+  vim.api.nvim_exec_autocmds("FocusLost", {})
+  -- Let a tick queued before the pause, and the Git it started, finish.
+  vim.wait(interval)
+  vim.wait(5000, function() return running == 0 end, 5)
+  local paused = git_calls
+  vim.wait(10 * interval)
+  local lost = git_calls - paused
+  vim.api.nvim_exec_autocmds("FocusGained", {})
+  local resumed = git_calls
+  vim.wait(5000, function() return git_calls - resumed >= 3 end, 10)
+  return { lost = lost, gained = git_calls - resumed }
+end
+
 for line in io.lines() do
   local request = vim.json.decode(line)
+  if request.focus then
+    io.stdout:write(vim.json.encode(focus()) .. "\n")
+    io.stdout:flush()
+    goto continue
+  end
   if not request.poll then
     vim.cmd.cd(vim.fn.fnameescape(request.path))
     vim.cmd.enew()
@@ -64,4 +100,5 @@ for line in io.lines() do
   end
   io.stdout:write(vim.json.encode(result) .. "\n")
   io.stdout:flush()
+  ::continue::
 end

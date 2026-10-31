@@ -182,6 +182,17 @@ function M.decorator()
   return Decorator
 end
 
+-- Milliseconds; tests shorten it. libuv needs a whole repeat of at least 1 ms.
+local function polling_interval()
+  local value = vim.g.selfishell_git_remote_interval
+  if value == nil then return 5000 end
+  if type(value) ~= "number" or not (value >= 1 and value < math.huge) then
+    vim.notify("vim.g.selfishell_git_remote_interval must be a positive number of milliseconds; using 5000", vim.log.levels.WARN)
+    return 5000
+  end
+  return math.floor(value)
+end
+
 function M.setup()
   if started then return end
   started = true
@@ -199,13 +210,20 @@ function M.setup()
     callback = M.refresh,
   })
   -- Catch fetch/push/checkout in other terminals, including while the tree is idle.
+  -- Polling pauses while Neovim is unfocused; FocusGained refreshes at once.
+  local every = polling_interval()
   local timer = vim.uv.new_timer()
-  timer:start(5000, 5000, vim.schedule_wrap(M.refresh))
+  local tick = vim.schedule_wrap(M.refresh)
+  local function pause() if not timer:is_closing() then timer:stop() end end
+  local function resume() if not timer:is_closing() then timer:start(every, every, tick) end end
+  vim.api.nvim_create_autocmd("FocusLost", { group = group, callback = pause })
+  vim.api.nvim_create_autocmd("FocusGained", { group = group, callback = resume })
   vim.api.nvim_create_autocmd("VimLeavePre", {
     group = group,
     once = true,
-    callback = function() timer:stop(); timer:close() end,
+    callback = function() if not timer:is_closing() then timer:close() end end,
   })
+  resume()
   M.refresh()
 end
 

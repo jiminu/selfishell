@@ -77,7 +77,7 @@ Starship's Git status colors. Local Git
 badges remain separate. Both displays compare against the configured upstream
 using the last fetched refs; Neovim never fetches automatically. They refresh
 when returning to Neovim or its buffers, and within about five seconds while
-idle. No counts appear without an upstream or on a detached HEAD.
+Neovim is focused but idle. No counts appear without an upstream or on a detached HEAD.
 In partial clones, a rename may appear as deletion/addition when the blobs
 needed to detect it are not available locally.
 
