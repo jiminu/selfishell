@@ -6,7 +6,6 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
-	"github.com/jiminu/selfishell/internal/report"
 )
 
 // The app can be installed directly, outside Homebrew's cask inventory.
@@ -95,8 +94,9 @@ func ghosttyTrigger(binding string) string {
 	return trigger
 }
 
-func (c CLI) noteGhosttyOverrides(resources []managed.Resource) {
-	var defaults, entrypoint string
+// ghosttyOverrides lists entrypoint settings that the managed defaults override.
+func ghosttyOverrides(resources []managed.Resource) (entrypoint string, found []string) {
+	var defaults string
 	for _, r := range resources {
 		switch r.Name {
 		case "ghostty-config":
@@ -107,13 +107,11 @@ func (c CLI) noteGhosttyOverrides(resources []managed.Resource) {
 	}
 	defaultsData, err := os.ReadFile(defaults)
 	if err != nil {
-		return
+		return entrypoint, nil
 	}
 	user, err := os.ReadFile(entrypoint)
 	if err != nil {
-		return
+		return entrypoint, nil
 	}
-	if found := ghosttyOverridden(defaultsData, user); len(found) > 0 {
-		c.report("Notes", report.Warning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
-	}
+	return entrypoint, ghosttyOverridden(defaultsData, user)
 }

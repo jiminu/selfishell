@@ -47,7 +47,7 @@ func diagnosticPackages(root, platform string, env process.Environment) ([]Packa
 	if err != nil {
 		return nil, err
 	}
-	// statusWindowsTerminal reports a malformed choice; diagnose without its fonts.
+	// windowsStatus reports a malformed choice; diagnose without its fonts.
 	choice, err := readWindowsTerminalChoice(paths)
 	if err != nil {
 		choice = &windowsTerminalChoice{}
@@ -280,7 +280,7 @@ func (c CLI) status(args []string) int {
 			result = 1
 		}
 	}
-	if tracked, profileIntact, profileRecordIssue := c.statusWindowsTerminal(paths, verbose); tracked {
+	if tracked, profileIntact, profileRecordIssue := windowsStatus(paths, c.Env.Get("WSL_DISTRO_NAME"), verbose, c.sayDiagnostic); tracked {
 		count++
 		if profileIntact {
 			intact++

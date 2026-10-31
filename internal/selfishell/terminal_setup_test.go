@@ -154,6 +154,23 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	}
 }
 
+// The fragment ownership record, as the terminal code writes it.
+func fragmentRecordPath(paths managed.Paths) string {
+	return paths.State + "/windows-terminal-fragment.json"
+}
+
+func readFragmentRecord(paths managed.Paths) (*struct{ Path string }, error) {
+	data, err := os.ReadFile(fragmentRecordPath(paths))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	var record struct{ Path string }
+	if err == nil {
+		err = json.Unmarshal(data, &record)
+	}
+	return &record, err
+}
+
 func windowsTerminalFixture(t *testing.T, env *process.Environment) (string, string, managed.Paths, string) {
 	t.Helper()
 	root, home, paths := blockHome(t, env, "ubuntu")
@@ -234,19 +251,19 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	}
 	blockOK(t, env, root, "uninstall", "--restore", "--dry-run", "--yes")
 	blockEqual(t, fragment, want)
-	record := blockRead(t, windowsFragmentRecordPath(paths))
-	if err := os.Remove(windowsFragmentRecordPath(paths)); err != nil {
+	record := blockRead(t, fragmentRecordPath(paths))
+	if err := os.Remove(fragmentRecordPath(paths)); err != nil {
 		t.Fatal(err)
 	}
 	if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, "[MISSING] Installation record: ") || !strings.Contains(out, "windows-terminal-fragment.json") {
 		t.Fatal("status missed the absent fragment record", out)
 	}
-	if err := testutil.WriteFile(windowsFragmentRecordPath(paths), record, 0600); err != nil {
+	if err := testutil.WriteFile(fragmentRecordPath(paths), record, 0600); err != nil {
 		t.Fatal(err)
 	}
 	blockOK(t, env, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, settings, original)
-	for _, path := range []string{managed.RawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
+	for _, path := range []string{managed.RawParent(fragment), paths.State + "/windows-terminal.json", fragmentRecordPath(paths)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("terminal state left after uninstall: %s: %v", path, err)
 		}
@@ -424,7 +441,7 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 	if err != nil || !strings.EqualFold(windows, probe.AppData) {
 		t.Fatal("path round trip", windows, err)
 	}
-	_, guid, _, err := (CLI{}).findWindowsProfile(p, distro, probe.SettingsPaths, probe.Guids)
+	_, guid, _, err := (windowsSetup{Ctx: context.Background(), Process: p, Distro: distro}).findProfile(probe.SettingsPaths, probe.Guids)
 	if err != nil {
 		t.Skipf("native settings have no unique visible target: %v", err)
 	}
@@ -731,7 +748,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 			}
 			// A clone carries the original's state; its fragment stays the original's.
 			setEnv(&env, "WSL_DISTRO_NAME", "Ubuntu-dev")
-			clone := legacyWSLProfileGUID("Ubuntu-dev")
+			clone := "{6c092f7d-70db-5725-abaa-0fbf5adcce1f}" // legacy profile GUID of Ubuntu-dev
 			if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"},{"guid":"`+clone+`","name":"Ubuntu-dev","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -752,7 +769,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 			}
 			blockOK(t, env, root, "uninstall", "--yes")
 			blockEqual(t, fragments+"963ff2f7-6aed-5ce3-9d91-90d99571f53a.json", original)
-			if _, err := os.Stat(windowsFragmentRecordPath(paths)); !os.IsNotExist(err) {
+			if _, err := os.Stat(fragmentRecordPath(paths)); !os.IsNotExist(err) {
 				t.Fatal("copied record was kept", err)
 			}
 		})
@@ -1048,7 +1065,7 @@ func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 			env := env
 			root, home, paths, _ := existingWindowsProfileFixture(t, &env)
 			blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
-			record, err := readWindowsFragmentRecord(paths)
+			record, err := readFragmentRecord(paths)
 			if err != nil || record == nil {
 				t.Fatal("missing fragment record", err)
 			}
@@ -1064,7 +1081,7 @@ func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			saved := blockRead(t, windowsFragmentRecordPath(paths))
+			saved := blockRead(t, fragmentRecordPath(paths))
 			args := []string{command, "--yes"}
 			if command == "update" {
 				args = append(args, "--tools-only")
@@ -1076,7 +1093,7 @@ func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 			if _, err := os.Stat(home + "/package-called"); !os.IsNotExist(err) {
 				t.Fatal("packages ran before terminal preflight", err)
 			}
-			blockEqual(t, windowsFragmentRecordPath(paths), saved)
+			blockEqual(t, fragmentRecordPath(paths), saved)
 		})
 	}
 }

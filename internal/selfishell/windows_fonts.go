@@ -15,11 +15,6 @@ import (
 	"github.com/jiminu/selfishell/internal/report"
 )
 
-type windowsFontStatus struct {
-	FontInstalled bool              `json:"fontInstalled"`
-	Registrations map[string]string `json:"registrations"`
-}
-
 type retainedWindowsFont struct {
 	Target   string `json:"target"`
 	Checksum string `json:"checksum"`

@@ -207,6 +207,40 @@ type preparedConfig struct {
 	windowsTerminal *windowsTerminalChoice
 }
 
+// windowsSetup reports through the CLI and asks only when it is interactive.
+func (c CLI) windowsSetup() windowsSetup {
+	return windowsSetup{
+		Ctx:     c.invocationContext(),
+		Process: process.Process{Out: c.Out, Err: c.Err, Inherit: c.Env},
+		Distro:  c.Env.Get("WSL_DISTRO_NAME"),
+		Report:  report.ReportFunc(c.report),
+		Ask: func(question string) (string, bool) {
+			if !c.interactive() {
+				return "", false
+			}
+			fmt.Fprint(c.Out, question)
+			answer, _ := c.readAnswer()
+			return answer, true
+		},
+	}
+}
+
+func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool) error {
+	choice, err := c.windowsSetup().prepare(p.paths, dry, yes, update, enable)
+	if err != nil {
+		return err
+	}
+	p.windowsTerminal = choice
+	if choice == nil || !choice.Enabled {
+		return nil
+	}
+	return installFragment(&p.m, p.paths, choice, true)
+}
+
+func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
+	return saveWindowsChoice(p.paths, p.windowsTerminal, p.m.dry)
+}
+
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
 func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, enableWindowsTerminal bool) (preparedConfig, error) {
 	paths, err := managed.UserPaths(c.Env.Get)
@@ -317,7 +351,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 			return err
 		}
 	}
-	if err := m.installWindowsTerminal(p.windowsTerminal, false); err != nil {
+	if err := installFragment(m, m.paths, p.windowsTerminal, false); err != nil {
 		return err
 	}
 	if !m.dry {
@@ -335,7 +369,9 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	m, paths, miseGlobal, ghostty := &p.m, p.paths, p.miseGlobal, p.ghostty
 	if ghostty {
-		c.noteGhosttyOverrides(p.resources)
+		if entrypoint, found := ghosttyOverrides(p.resources); len(found) > 0 {
+			c.report("Notes", report.Warning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
+		}
 	}
 	if operation != nil {
 		m.unchanged += operation.UnchangedCount

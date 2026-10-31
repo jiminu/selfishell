@@ -31,6 +31,21 @@ func (m *lifecycle) write(path string, data []byte, mode os.FileMode) error {
 	return managed.WriteAtomic(path, data, mode)
 }
 
+// Report, DryRun, Unchanged, Backup, ResolveModified and Write let the
+// Windows Terminal fragment code drive this lifecycle (windowsLifecycle).
+func (m *lifecycle) Report(section string, tone report.Tone, format string, args ...any) {
+	m.c.report(section, tone, format, args...)
+}
+func (m *lifecycle) DryRun() bool                       { return m.dry }
+func (m *lifecycle) Unchanged()                         { m.unchanged++ }
+func (m *lifecycle) Backup(base string) (string, error) { return m.backup(base) }
+func (m *lifecycle) ResolveModified(r managed.Resource, kind, question string, preflight bool) (bool, error) {
+	return m.resolveModified(r, kind, question, preflight)
+}
+func (m *lifecycle) Write(path string, data []byte, mode os.FileMode) error {
+	return m.write(path, data, mode)
+}
+
 func blockConflictError(r managed.Resource) error {
 	return fmt.Errorf("Cannot manage the Selfishell %s block in: %s\nselfishell: Preserving the file. Remove conflicting Selfishell markers and retry.", r.Name, r.Target)
 }

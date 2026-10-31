@@ -34,14 +34,14 @@ type windowsTerminalChoice struct {
 	AppDataPath  string `json:"appDataPath,omitempty"`
 	SettingsPath string `json:"settingsPath,omitempty"`
 	ProfileGUID  string `json:"profileGuid,omitempty"`
-	// Not saved: replacing a choice copied from another distribution, keeping
-	// a choice only for this run, or a choice moved to a new profile.
-	replacesForeign, transient, retargeted bool
+	// Not saved: a choice moved to a new profile, replacing a choice copied
+	// from another distribution, or keeping a choice only for this run.
+	Retargeted                 bool `json:"-"`
+	replacesForeign, transient bool
 }
 
 // A cloned distribution inherits the original's state; that fragment is not its own.
-func (w *windowsTerminalChoice) foreign(env process.Environment) bool {
-	distro := env.Get("WSL_DISTRO_NAME")
+func (w *windowsTerminalChoice) foreign(distro string) bool {
 	return w != nil && w.Enabled && distro != "" && w.Distro != distro
 }
 
@@ -107,37 +107,46 @@ func readWindowsTerminalChoice(paths managed.Paths) (*windowsTerminalChoice, err
 	return &choice, nil
 }
 
-func (c CLI) prepareWindowsTerminal(paths managed.Paths, dry, yes, update, enable bool) (*windowsTerminalChoice, error) {
+// windowsSetup selects the Windows Terminal profile for this WSL distribution.
+type windowsSetup struct {
+	Ctx     context.Context
+	Process process.Process
+	Distro  string
+	Report  report.Reporter
+	// Ask prompts with question; ok is false when the CLI is not interactive.
+	Ask func(question string) (answer string, ok bool)
+}
+
+// prepare returns the saved choice, or a new or moved one; it writes nothing.
+func (s windowsSetup) prepare(paths managed.Paths, dry, yes, update, enable bool) (*windowsTerminalChoice, error) {
 	choice, err := readWindowsTerminalChoice(paths)
 	if err != nil {
 		return nil, err
 	}
-	distro := c.Env.Get("WSL_DISTRO_NAME")
-	p := process.Process{Out: c.Out, Err: c.Err, Inherit: c.Env}
-	if choice.foreign(c.Env) {
+	if choice.foreign(s.Distro) {
 		if update {
-			c.report("Notes", report.Warning, "Skipping Windows Terminal setup copied from WSL distribution %q; run 'selfishell install' here to set it up.", choice.Distro)
+			s.Report.Report("Notes", report.Warning, "Skipping Windows Terminal setup copied from WSL distribution %q; run 'selfishell install' here to set it up.", choice.Distro)
 			return &windowsTerminalChoice{Version: 1, transient: true}, nil
 		}
-		next, err := c.setUpWindowsTerminal(p, nil, distro, dry, yes, enable)
+		next, err := s.setUp(nil, dry, yes, enable)
 		if next == nil {
 			next = &windowsTerminalChoice{Version: 1, transient: true}
 		}
 		next.replacesForeign = true
 		return next, err
 	}
-	if choice != nil && choice.Enabled && distro != "" && windowsProfileMissing(choice) {
+	if choice != nil && choice.Enabled && s.Distro != "" && windowsProfileMissing(choice) {
 		// A re-imported distribution gets a new profile; keep the opt-in and move to it.
-		target, err := c.findWindowsTerminalTarget(p, distro)
+		target, err := s.findTarget()
 		if err == nil {
-			next, err := c.windowsTerminalChoiceFor(p, distro, target)
+			next, err := s.choiceFor(target)
 			if next != nil {
-				next.retargeted = true
+				next.Retargeted = true
 			}
 			return next, err
 		}
 		if !errors.Is(err, errWindowsTerminalUnavailable) {
-			c.report("Notes", report.Warning, "Skipping Windows Terminal setup: %s", err)
+			s.Report.Report("Notes", report.Warning, "Skipping Windows Terminal setup: %s", err)
 		}
 		return choice, nil
 	}
@@ -147,15 +156,15 @@ func (c CLI) prepareWindowsTerminal(paths managed.Paths, dry, yes, update, enabl
 	if update {
 		return choice, nil
 	}
-	return c.setUpWindowsTerminal(p, choice, distro, dry, yes, enable)
+	return s.setUp(choice, dry, yes, enable)
 }
 
 var errWindowsTerminalUnavailable = errors.New("Windows Terminal setup requires an installed Windows Terminal and working WSL Windows interoperability")
 
 type windowsTerminalTarget struct{ appData, settings, guid, name string }
 
-func (c CLI) findWindowsTerminalTarget(p process.Process, distro string) (*windowsTerminalTarget, error) {
-	probe, err := runWindowsScript(c.invocationContext(), p, map[string]string{"operation": "probe", "distro": distro})
+func (s windowsSetup) findTarget() (*windowsTerminalTarget, error) {
+	probe, err := runWindowsScript(s.Ctx, s.Process, map[string]string{"operation": "probe", "distro": s.Distro})
 	var detected struct {
 		AppData           string   `json:"appData"`
 		TerminalInstalled bool     `json:"terminalInstalled"`
@@ -168,29 +177,29 @@ func (c CLI) findWindowsTerminalTarget(p process.Process, distro string) (*windo
 	if err != nil || !detected.TerminalInstalled {
 		return nil, errWindowsTerminalUnavailable
 	}
-	settings, guid, name, err := c.findWindowsProfile(p, distro, detected.SettingsPaths, detected.WSLProfileGuids)
+	settings, guid, name, err := s.findProfile(detected.SettingsPaths, detected.WSLProfileGuids)
 	if err != nil {
 		return nil, err
 	}
 	return &windowsTerminalTarget{detected.AppData, settings, guid, name}, nil
 }
 
-func (c CLI) windowsTerminalChoiceFor(p process.Process, distro string, target *windowsTerminalTarget) (*windowsTerminalChoice, error) {
-	path, err := convertWindowsPath(c.invocationContext(), p, "-u", target.appData)
+func (s windowsSetup) choiceFor(target *windowsTerminalTarget) (*windowsTerminalChoice, error) {
+	path, err := convertWindowsPath(s.Ctx, s.Process, "-u", target.appData)
 	if err != nil {
 		return nil, err
 	}
-	return &windowsTerminalChoice{Version: 1, Enabled: true, Distro: distro, AppData: target.appData, AppDataPath: path, SettingsPath: target.settings, ProfileGUID: target.guid}, nil
+	return &windowsTerminalChoice{Version: 1, Enabled: true, Distro: s.Distro, AppData: target.appData, AppDataPath: path, SettingsPath: target.settings, ProfileGUID: target.guid}, nil
 }
 
-func (c CLI) setUpWindowsTerminal(p process.Process, choice *windowsTerminalChoice, distro string, dry, yes, enable bool) (*windowsTerminalChoice, error) {
-	if distro == "" {
+func (s windowsSetup) setUp(choice *windowsTerminalChoice, dry, yes, enable bool) (*windowsTerminalChoice, error) {
+	if s.Distro == "" {
 		if enable {
 			return nil, fmt.Errorf("Windows Terminal setup requires a WSL distribution and working Windows interoperability")
 		}
 		return choice, nil
 	}
-	target, err := c.findWindowsTerminalTarget(p, distro)
+	target, err := s.findTarget()
 	if errors.Is(err, errWindowsTerminalUnavailable) {
 		if enable {
 			return nil, err
@@ -198,48 +207,37 @@ func (c CLI) setUpWindowsTerminal(p process.Process, choice *windowsTerminalChoi
 		return choice, nil
 	}
 	if err != nil {
-		c.report("Notes", report.Warning, "Skipping Windows Terminal setup: %s", err)
+		s.Report.Report("Notes", report.Warning, "Skipping Windows Terminal setup: %s", err)
 		return choice, nil
 	}
 	selected := yes || dry || enable
-	if !selected && c.interactive() {
-		fmt.Fprintf(c.Out, "Apply the Selfishell font and Dark+ to the existing Windows Terminal profile %q and install the font if missing (recommended)? [Y/n] ", target.name)
-		answer, _ := c.readAnswer()
-		selected = !report.Negative(answer)
+	if !selected {
+		if answer, ok := s.Ask(fmt.Sprintf("Apply the Selfishell font and Dark+ to the existing Windows Terminal profile %q and install the font if missing (recommended)? [Y/n] ", target.name)); ok {
+			selected = !report.Negative(answer)
+		}
 	}
 	if !selected {
 		return &windowsTerminalChoice{Version: 1}, nil
 	}
-	return c.windowsTerminalChoiceFor(p, distro, target)
+	return s.choiceFor(target)
 }
 
-func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool) error {
-	choice, err := c.prepareWindowsTerminal(p.paths, dry, yes, update, enable)
-	if err != nil {
-		return err
-	}
-	p.windowsTerminal = choice
-	if choice == nil || !choice.Enabled {
-		return nil
-	}
-	return p.m.installWindowsTerminal(choice, true)
-}
-
-func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
-	if p.m.dry || p.windowsTerminal == nil || p.windowsTerminal.transient {
+// saveWindowsChoice records choice unless it is a dry run or only for this run.
+func saveWindowsChoice(paths managed.Paths, choice *windowsTerminalChoice, dry bool) error {
+	if dry || choice == nil || choice.transient {
 		return nil
 	}
 	// The copied record names another distribution's fragment; forget only the copy.
-	if p.windowsTerminal.replacesForeign {
-		if err := os.Remove(windowsFragmentRecordPath(p.paths)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if choice.replacesForeign {
+		if err := os.Remove(windowsFragmentRecordPath(paths)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
-	data, err := json.Marshal(p.windowsTerminal)
+	data, err := json.Marshal(choice)
 	if err != nil {
 		return err
 	}
-	return managed.WriteAtomic(p.paths.State+"/windows-terminal.json", append(data, '\n'), 0600)
+	return managed.WriteAtomic(paths.State+"/windows-terminal.json", append(data, '\n'), 0600)
 }
 
 func runWindowsScript(ctx context.Context, p process.Process, request any) ([]byte, error) {
@@ -342,8 +340,8 @@ func (j *terminalJSON) profile(guid string) (*terminalJSONNode, error) {
 	return found, nil
 }
 
-func (c CLI) findWindowsProfile(p process.Process, distro string, windowsPaths, modernGUIDs []string) (string, string, string, error) {
-	expected := map[string]string{legacyWSLProfileGUID(distro): "Windows.Terminal.Wsl"}
+func (s windowsSetup) findProfile(windowsPaths, modernGUIDs []string) (string, string, string, error) {
+	expected := map[string]string{legacyWSLProfileGUID(s.Distro): "Windows.Terminal.Wsl"}
 	for _, guid := range modernGUIDs {
 		if id := terminalGUID(guid); id != "" {
 			expected[id] = "Microsoft.WSL"
@@ -353,7 +351,7 @@ func (c CLI) findWindowsProfile(p process.Process, distro string, windowsPaths, 
 	var matches, current []candidate
 	seen := map[string]bool{}
 	for _, windowsPath := range windowsPaths {
-		path, err := convertWindowsPath(c.invocationContext(), p, "-u", windowsPath)
+		path, err := convertWindowsPath(s.Ctx, s.Process, "-u", windowsPath)
 		if err != nil {
 			return "", "", "", err
 		}
@@ -379,7 +377,7 @@ func (c CLI) findWindowsProfile(p process.Process, distro string, windowsPaths, 
 			}
 			match := candidate{path, guid, j.text(profile.property("name"))}
 			matches = append(matches, match)
-			if guid == terminalGUID(c.Env.Get("WT_PROFILE_ID")) {
+			if guid == terminalGUID(s.Process.Environment().Get("WT_PROFILE_ID")) {
 				current = append(current, match)
 			}
 		}
@@ -388,7 +386,7 @@ func (c CLI) findWindowsProfile(p process.Process, distro string, windowsPaths, 
 		matches = current
 	}
 	if len(matches) != 1 {
-		return "", "", "", fmt.Errorf("could not uniquely identify an existing profile for WSL distribution %q; found %d candidates", distro, len(matches))
+		return "", "", "", fmt.Errorf("could not uniquely identify an existing profile for WSL distribution %q; found %d candidates", s.Distro, len(matches))
 	}
 	return matches[0].path, matches[0].guid, matches[0].name, nil
 }

@@ -68,7 +68,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			}
 			out := blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			blockEqual(t, settings, []byte(data))
-			record, err := readWindowsFragmentRecord(paths)
+			record, err := readFragmentRecord(paths)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -168,7 +168,7 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	blockEqual(t, fragment, modified)
 	blockOK(t, env, root, "uninstall", "--yes")
 	blockEqual(t, fragment, modified)
-	if _, err := os.Stat(windowsFragmentRecordPath(paths)); !os.IsNotExist(err) {
+	if _, err := os.Stat(fragmentRecordPath(paths)); !os.IsNotExist(err) {
 		t.Fatal("uninstall retained the fragment record", err)
 	}
 }
@@ -222,17 +222,16 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 	choice := &windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
 	m := lifecycle{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
 	for _, preflight := range []bool{true, false} {
-		if err := m.installWindowsTerminal(choice, preflight); err != nil {
+		if err := installFragment(&m, paths, choice, preflight); err != nil {
 			t.Fatal(err)
 		}
 	}
-	path, content, err := windowsFragment(choice)
-	if err != nil {
-		t.Fatal(err)
+	path := scratch + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
+	if !bytes.Contains(blockRead(t, path), []byte(`"updates": "`+choice.ProfileGUID+`"`)) {
+		t.Fatal("native fragment does not update the profile")
 	}
-	blockEqual(t, path, content)
 	for _, preflight := range []bool{true, false} {
-		if err := m.removeWindowsTerminal(preflight); err != nil {
+		if err := removeFragment(&m, paths, "", preflight); err != nil {
 			t.Fatal(err)
 		}
 	}
