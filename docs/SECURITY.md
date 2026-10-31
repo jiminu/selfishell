@@ -39,7 +39,9 @@ gh attestation verify selfishell-<version>-<platform>-<architecture>.tar.gz \
 Without the signer and ref options, any workflow in the repository could have
 produced a valid attestation.
 
-Review `install.sh`, use an exact release, and
+Review `install.sh`,
+[install an exact release](INSTALLATION.md#install-an-exact-release) with the
+bootstrap fetched from that release tag, and
 [mirror verified artifacts](COMPANY.md#release-mirror) for high-control
 environments.
 

@@ -132,10 +132,12 @@ install prints the `chsh -s` command to run yourself.
 
 ### Install an exact release
 
-Use an exact release in controlled environments:
+Use an exact release in controlled environments. Fetch the bootstrap from the
+release tag as well, so the script and the archive come from the same reviewed
+release; the `main` URL in Quick Start always runs the current bootstrap:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/main/install.sh |
+curl -fsSL https://raw.githubusercontent.com/jiminu/selfishell/v<version>/install.sh |
   bash -s -- --version <version>
 selfishell install --yes
 ```
