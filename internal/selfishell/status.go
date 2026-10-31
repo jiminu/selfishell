@@ -319,7 +319,6 @@ func (c CLI) status(args []string) int {
 		if missing {
 			result = 1
 		}
-		c.legacyZinitNote(paths)
 	}
 	return result
 }

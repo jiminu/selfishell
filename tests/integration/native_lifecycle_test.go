@@ -124,8 +124,8 @@ func smokePrebuiltArchive(t *testing.T, dir, version string) {
 	}
 	f.env = append(f.env, "PATH="+bin+":"+f.systembin)
 	setupAndCheck(t, f, version, original)
-	if got := string(readBytes(t, filepath.Join(f.home, ".local/state/selfishell/resources/user-zshrc.state"))); !strings.HasPrefix(got, "2\n") {
-		t.Fatalf("state is not v2: %q", got)
+	if got := string(readBytes(t, filepath.Join(f.home, ".local/state/selfishell/resources/user-zshrc.state"))); !strings.HasPrefix(got, "3\n") {
+		t.Fatalf("state is not v3: %q", got)
 	}
 	// Release phase is unavailable: tools-only --skip-packages must use installed bytes.
 	f.env = append(f.env, "SELFISHELL_RELEASE_ROOT=file:///definitely-unavailable")

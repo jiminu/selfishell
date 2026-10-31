@@ -71,55 +71,13 @@ Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
 
-### Legacy Zinit checkout
+### Zinit before 1.7.0
 
-Zsh plugins are Git dependencies under
-`${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/zsh-plugins`; older releases
-installed them through Zinit in `${XDG_DATA_HOME:-$HOME/.local/share}/zinit`.
-The package step of install and tools updates removes that directory, and its
-`dependencies/zinit` state record, only when all of these hold:
-
-- the `dependencies/zinit` record exists, so Selfishell installed Zinit;
-- `zinit` is a real directory, not a link, holding only entries Zinit creates;
-- `zinit/plugins` contains only `_local---zinit` and the four plugins
-  Selfishell declared (`zsh-users---zsh-completions`, `Aloxaf---fzf-tab`,
-  `zsh-users---zsh-autosuggestions`,
-  `zdharma-continuum---fast-syntax-highlighting`);
-- `zinit/polaris`, if present, holds only empty directories and Zinit's own
-  `man/man1/zinit.1`.
-
-Otherwise the checkout is kept and `status` prints a one-line note; delete it by
-hand if you do not use Zinit directly. The managed startup files no longer load
-Zinit, so personal configuration that still calls `zinit` must source
-`zinit.git/zinit.zsh` from that directory itself. Dry runs only preview the
-removal, and `--skip-packages` skips it. A failed removal is reported as a
-warning and retried by the next run.
-
-After the removal, `selfishell rollback` to an older release that still loads
-plugins through Zinit starts shells without plugins until that release's own
-`selfishell install` runs and installs Zinit again.
-
-Neovim synchronization can remove plugin checkouts no longer used by its
-configuration. Before cleanup, Selfishell checks directories absent from the
-release's plugin manifest. A non-Git or unreadable checkout, local changes,
-or untracked or ignored files stop synchronization and preserve the directory.
-Generated `doc/tags` files are excluded from this check.
-Move the reported directory outside `nvim/lazy` before retrying if you need to
-keep its contents. Clean unused Git checkouts can still be removed.
-
-Selfishell also verifies the bytes of its managed mise executable against the
-release's approved checksum. A manual `mise self-update` is replaced with the
-approved version on the next tools synchronization. An external mise installation
-that Selfishell does not own remains untouched.
-
-Uninstalling with `--purge` leaves installed tools and fonts in place and retains
-their ownership records. Reinstalling Selfishell continues to synchronize these
-managed dependencies instead of treating them as external installations; see
-[purge](INSTALLATION.md#restore-configuration-and-purge-selfishell) to forget them.
-
-`--skip-packages` skips all package and tool installation when this phase runs,
-matching `selfishell install --skip-packages`. CLI-only and already-current
-default updates skip the entire phase.
+Releases before 1.7.0 installed the Zsh plugins through Zinit under
+`${XDG_DATA_HOME:-$HOME/.local/share}/zinit`. The 1.7 releases removed a
+Selfishell-installed checkout during install and tools updates. An installation
+that skipped those releases keeps that directory; it is no longer read, and you
+can delete it by hand unless personal configuration still uses Zinit.
 
 ### Neovim LSP servers
 
