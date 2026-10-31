@@ -30,8 +30,10 @@ func (b *signalBuffer) Write(p []byte) (int, error) {
 func (b *signalBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.data.String() }
 
 func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
+	t.Parallel()
 	source, fixture, home := testRelease(t), t.TempDir(), t.TempDir()
-	isolateHome(t, home)
+	var env Environment
+	isolateHome(&env, home)
 	share := fixture + "/selfishell"
 	release := share + "/releases/1.0.0"
 	if err := os.MkdirAll(release+"/bin", 0700); err != nil {
@@ -40,10 +42,10 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 	if err := os.Symlink(source+"/config", release+"/config"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(release+"/dependencies.conf", nil, 0600); err != nil {
+	if err := testutil.WriteFile(release+"/dependencies.conf", nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(release+"/packages.conf", []byte("package ubuntu required apt demo\n"), 0600); err != nil {
+	if err := testutil.WriteFile(release+"/packages.conf", []byte("package ubuntu required apt demo\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	buildNativeTestCLI(t, source, home, release+"/bin/selfishell")
@@ -59,23 +61,23 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		"apt-get":    "#!/bin/sh\nexit 0\n",
 		"dpkg-query": "#!/bin/sh\nprintf '%s\\n' \"$$\" >\"$HOME/child-started\"\nexec /bin/sleep 30\n",
 	} {
-		if err := os.WriteFile(bin+"/"+name, []byte(content), 0700); err != nil {
+		if err := testutil.WriteFile(bin+"/"+name, []byte(content), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
 	osRelease := fixture + "/os-release"
-	if err := os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
+	if err := testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env := withEnvironment(Process{Env: os.Environ()}, map[string]string{
+	env = env.With(map[string]string{
 		"HOME": home, "PATH": bin + ":/usr/bin:/bin", "SHELL": "/bin/zsh",
 		"SELFISHELL_TEST_SYSTEM_NAME": "Linux", "SELFISHELL_TEST_OS_RELEASE_FILE": osRelease,
-	}).Env
+	})
 	run := func(t *testing.T, args []string, tty bool) (*exec.Cmd, *signalBuffer, chan error) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		cmd := exec.CommandContext(ctx, release+"/bin/selfishell", args...)
-		cmd.Env = append([]string{}, env...)
+		cmd.Env = env.List()
 		if tty {
 			cmd.Env = append(cmd.Env, "SELFISHELL_TEST_TTY=1")
 		}
@@ -163,8 +165,7 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		publishReleaseFixture(t, "2.0.0", members...)
-		env = withEnvironment(Process{Env: env}, map[string]string{"SELFISHELL_RELEASE_ROOT": os.Getenv("SELFISHELL_RELEASE_ROOT")}).Env
+		publishReleaseFixture(t, &env, "2.0.0", members...) // run passes its release root to the CLI
 		fixtureFile(t, home+"/.local/state/selfishell/configured", "1\n", 0600)
 		for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
 			t.Run(sig.String(), func(t *testing.T) {
@@ -214,15 +215,17 @@ func TestRealInstallSignalHandlingIsScoped(t *testing.T) {
 }
 
 func TestRealReleaseSignalHandlingIsScoped(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	fixture, home := t.TempDir(), t.TempDir()
-	isolateHome(t, home)
+	isolateHome(&env, home)
 	share := fixture + "/selfishell"
 	release := share + "/releases/1.0.0"
 	if err := os.MkdirAll(release+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
 	buildNativeTestCLI(t, testRelease(t), home, release+"/bin/selfishell")
-	if err := os.WriteFile(release+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(release+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
@@ -232,7 +235,7 @@ func TestRealReleaseSignalHandlingIsScoped(t *testing.T) {
 	if err := os.MkdirAll(bin, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin+"/curl", []byte(`#!/bin/sh
+	if err := testutil.WriteFile(bin+"/curl", []byte(`#!/bin/sh
 if [ "$SELFISHELL_TEST_CURL_READY" = 1 ]; then
   while [ "$#" -gt 0 ]; do
     if [ "$1" = -o ]; then printf '2.0.0\n' >"$2"; exit 0; fi
@@ -262,12 +265,12 @@ exec /bin/sleep 30
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, release+"/bin/selfishell", tc.args...)
-			cmd.Env = withEnvironment(Process{Env: os.Environ()}, map[string]string{
+			cmd.Env = env.With(map[string]string{
 				"HOME": home, "PATH": bin + ":/usr/bin:/bin", "TMPDIR": temporary,
 				"SELFISHELL_RELEASE_ROOT":  "file:///selfishell-signal-fixture",
 				"SELFISHELL_TEST_CURL_PID": pidFile, "SELFISHELL_TEST_TTY": "1",
 				"SELFISHELL_TEST_CURL_READY": map[bool]string{true: "1", false: "0"}[tc.prompt],
-			}).Env
+			})
 			var output signalBuffer
 			cmd.Stdout, cmd.Stderr, cmd.WaitDelay = &output, &output, time.Second
 			stdin, err := cmd.StdinPipe()

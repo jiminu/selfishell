@@ -102,6 +102,7 @@ func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
 	if err := os.Mkdir(root+"/ambient", 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Pollute the real environment on purpose: the standalone fixture starts from os.Environ.
 	t.Setenv("HOME", root+"/ambient")
 	t.Setenv("MISE_GLOBAL_CONFIG_FILE", "ambient-sentinel")
 	t.Setenv("MISE_CONFIG_DIR", "ambient-sentinel")

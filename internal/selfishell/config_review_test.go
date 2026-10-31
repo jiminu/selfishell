@@ -7,14 +7,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root := testRelease(t)
 	home := t.TempDir()
-	isolateHome(t, home)
-	paths, _ := userPaths(nil)
-	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
+	isolateHome(&env, home)
+	paths, _ := userPaths(env)
+	resources, _ := ResourcesForPlatform(root, "macos", false, env)
 	var link Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
@@ -23,14 +27,14 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 	}
 	os.MkdirAll(filepath.Dir(link.Target), 0700)
 	backup := link.Target + ".backup.fixed"
-	os.WriteFile(backup, []byte("original"), 0600)
-	os.WriteFile(link.Target, []byte("foreign"), 0600)
+	testutil.WriteFile(backup, []byte("original"), 0600)
+	testutil.WriteFile(link.Target, []byte("foreign"), 0600)
 	state := State{"link", "pending", link.Target, link.Source, backup, "-"}
 	if e := WriteState(paths.Resources+"/"+link.Name+".state", state); e != nil {
 		t.Fatal(e)
 	}
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out, Err: &errOut}, paths: paths}
+	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths}
 	if e := m.installLink(link, false); e == nil {
 		t.Fatal("foreign target falsely accepted")
 	}
@@ -45,13 +49,17 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 }
 
 func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, kind := range []string{"file", "unreadable-directory"} {
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			env := env
 			base := t.TempDir()
 			home := base + "/home"
 			os.Mkdir(home, 0700)
-			isolateHome(t, home)
-			paths, _ := userPaths(nil)
+			isolateHome(&env, home)
+			paths, _ := userPaths(env)
 			share := base + "/.local/share/selfishell"
 			release := share + "/releases/v1"
 			os.MkdirAll(release+"/bin", 0700)
@@ -62,12 +70,12 @@ func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 			os.Symlink(share+"/current/bin/selfishell", link)
 			os.MkdirAll(paths.State, 0700)
 			if kind == "file" {
-				os.WriteFile(paths.State+"/backups", []byte("foreign"), 0600)
+				testutil.WriteFile(paths.State+"/backups", []byte("foreign"), 0600)
 			} else {
 				os.Mkdir(paths.State+"/backups", 0000)
 			}
 			var out, errOut bytes.Buffer
-			c := CLI{Root: release, In: strings.NewReader(""), Out: &out, Err: &errOut}
+			c := CLI{Env: env, Root: release, In: strings.NewReader(""), Out: &out, Err: &errOut}
 			if code := c.Run([]string{"uninstall", "--purge", "--yes"}); code != 1 {
 				t.Fatalf("purge accepted invalid backups: %s", errOut.String())
 			}
@@ -128,19 +136,21 @@ func TestBackupMoveAndCopyNeverReplaceCollision(t *testing.T) {
 	}
 }
 func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root := testRelease(t)
 	home := t.TempDir()
-	isolateHome(t, home)
-	paths, _ := userPaths(nil)
-	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
+	isolateHome(&env, home)
+	paths, _ := userPaths(env)
+	resources, _ := ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
-	os.WriteFile(r.Target, []byte("original"), 0600)
+	testutil.WriteFile(r.Target, []byte("original"), 0600)
 	var occupied string
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out, Err: &errOut}, paths: paths, beforeBackupMove: func(_, destination string) {
+	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, beforeBackupMove: func(_, destination string) {
 		occupied = destination
-		os.WriteFile(destination, []byte("late user data"), 0600)
+		testutil.WriteFile(destination, []byte("late user data"), 0600)
 	}}
 	if e := m.installFile(r, false); e == nil {
 		t.Fatal("collision accepted")
@@ -156,11 +166,13 @@ func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	}
 }
 func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	base := t.TempDir()
 	home := base + "/home"
 	os.Mkdir(home, 0700)
-	isolateHome(t, home)
-	paths, _ := userPaths(nil)
+	isolateHome(&env, home)
+	paths, _ := userPaths(env)
 	share := base + "/.local/share/selfishell"
 	release := share + "/releases/v1"
 	os.MkdirAll(release+"/bin", 0700)
@@ -173,9 +185,9 @@ func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
 		t.Fatal(e)
 	}
 	os.MkdirAll(paths.State, 0700)
-	os.WriteFile(paths.State+"/backups", []byte("late"), 0600)
+	testutil.WriteFile(paths.State+"/backups", []byte("late"), 0600)
 	var out, errOut bytes.Buffer
-	c := CLI{Root: release, Out: &out, Err: &errOut}
+	c := CLI{Env: env, Root: release, Out: &out, Err: &errOut}
 	if e := purgeFiles(c, paths); e == nil {
 		t.Fatal("invalid backup inventory accepted")
 	}
@@ -184,11 +196,13 @@ func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
 	}
 }
 func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root := testRelease(t)
 	home := t.TempDir()
-	isolateHome(t, home)
-	paths, _ := userPaths(nil)
-	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
+	isolateHome(&env, home)
+	paths, _ := userPaths(env)
+	resources, _ := ResourcesForPlatform(root, "macos", false, env)
 	var link Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
@@ -196,10 +210,10 @@ func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 		}
 	}
 	os.MkdirAll(filepath.Dir(link.Target), 0700)
-	os.WriteFile(link.Target, []byte("original"), 0600)
+	testutil.WriteFile(link.Target, []byte("original"), 0600)
 	var out, errOut bytes.Buffer
-	m := managed{c: CLI{Root: root, Out: &out, Err: &errOut}, paths: paths, createLink: func(_, target string) error {
-		os.WriteFile(target, []byte("late user data"), 0600)
+	m := managed{c: CLI{Env: env, Root: root, Out: &out, Err: &errOut}, paths: paths, createLink: func(_, target string) error {
+		testutil.WriteFile(target, []byte("late user data"), 0600)
 		return errors.New("injected link failure")
 	}}
 	if e := m.installLink(link, false); e == nil {

@@ -6,11 +6,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func pruneFixture(t *testing.T) (*PackageOperation, Paths, string, string, []Package) {
+func pruneFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string, []Package) {
 	t.Helper()
-	op, paths, _, home := dependencyFixture(t)
+	op, paths, _, home := dependencyFixture(t, env)
 	root := home + "/selfishell/releases/2.0.0"
 	for _, version := range []string{"1.0.0", "2.0.0"} {
 		dir := home + "/selfishell/releases/" + version
@@ -30,12 +32,14 @@ case "$*" in
   *'prune --tools --yes'*) rm -rf "${PRUNE_REMOVE:-/nonexistent}"; exit "${PRUNE_EXIT:-0}" ;;
 esac
 `, 0755)
-	op.Process.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
+	op.Process.Env = append(env.List(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
 	return op, paths, root, home, []Package{{Platform: "all", Manager: "mise", Name: "node"}, {Platform: "macos", Manager: "mise", Name: "go"}}
 }
 
 func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
-	op, paths, root, home, packages := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home, packages := pruneFixture(t, &env)
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu-wsl", true); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +91,7 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	if got := op.Process.Out.(*bytes.Buffer).String(); !strings.Contains(got, "':MasonInstall --force debugpy'") {
 		t.Fatalf("Mason virtualenv on removed Python: %s", got)
 	}
-	if err := os.WriteFile(home+"/selfishell/releases/1.0.0/VERSION", []byte("invalid\n"), 0600); err != nil {
+	if err := testutil.WriteFile(home+"/selfishell/releases/1.0.0/VERSION", []byte("invalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(home + "/mise.log"); err != nil {
@@ -102,7 +106,9 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 }
 
 func TestMisePruneRejectsIgnoredAndUnsafePrevious(t *testing.T) {
-	op, paths, root, home, packages := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "IGNORED_RESULT=[\"project\"]")
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
 		t.Fatal("accepted ignored paths")
@@ -125,7 +131,9 @@ func TestMisePruneRejectsIgnoredAndUnsafePrevious(t *testing.T) {
 }
 
 func TestMisePruneSkipsIncompleteAndEmptyScope(t *testing.T) {
-	op, paths, root, home, packages := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.SkippedOptional = []string{"go"}
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err != nil {
 		t.Fatal(err)
@@ -143,7 +151,9 @@ func TestMisePruneSkipsIncompleteAndEmptyScope(t *testing.T) {
 }
 
 func TestMisePruneRequiresTrackedCurrentPinsAndReturnsPruneFailure(t *testing.T) {
-	op, paths, root, home, packages := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home, packages := pruneFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "TRACKED_RESULT="+home+"/project/mise.toml")
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
 		t.Fatal("accepted untracked current pins")
@@ -162,7 +172,9 @@ func TestMisePruneRequiresTrackedCurrentPinsAndReturnsPruneFailure(t *testing.T)
 }
 
 func TestRetainedReleaseRejectsLinkSpellingAndIncompleteDirectory(t *testing.T) {
-	_, _, root, home, _ := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	_, _, root, home, _ := pruneFixture(t, &env)
 	previous := home + "/selfishell/previous"
 	for _, target := range []string{"../project/1.0.0", "releases/01.0.0", "releases/1.0.0/../2.0.0"} {
 		if err := os.Remove(previous); err != nil {
@@ -190,7 +202,9 @@ func TestRetainedReleaseRejectsLinkSpellingAndIncompleteDirectory(t *testing.T) 
 }
 
 func TestRetainedReleaseAcceptsAbsoluteRawAliasSpelling(t *testing.T) {
-	_, _, root, home, _ := pruneFixture(t)
+	t.Parallel()
+	var env Environment
+	_, _, root, home, _ := pruneFixture(t, &env)
 	alias := home + "/release alias"
 	if err := os.Symlink(home+"/selfishell", alias); err != nil {
 		t.Fatal(err)

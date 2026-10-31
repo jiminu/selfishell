@@ -12,13 +12,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func isolatedUpdateHome(t *testing.T) string {
+func isolatedUpdateHome(t *testing.T, env *Environment) string {
 	t.Helper()
 	home := t.TempDir()
 	// A temporary Linux HOME must never inherit the host Windows profile.
-	t.Setenv("WSL_DISTRO_NAME", "")
+	env.set("WSL_DISTRO_NAME", "")
 	for name, value := range map[string]string{
 		"HOME":            home,
 		"XDG_CONFIG_HOME": home + "/.config",
@@ -30,12 +32,12 @@ func isolatedUpdateHome(t *testing.T) string {
 		"MISE_CONFIG_DIR": home + "/mise/config",
 		"MISE_STATE_DIR":  home + "/mise/state",
 	} {
-		t.Setenv(name, value)
+		env.set(name, value)
 	}
 	return home
 }
 
-func isolateMiseForHome(t *testing.T, home string) {
+func isolateMiseForHome(t *testing.T, env *Environment, home string) {
 	t.Helper()
 	for name, path := range map[string]string{
 		"XDG_CONFIG_HOME": "/.config", "XDG_DATA_HOME": "/.local/share",
@@ -43,13 +45,13 @@ func isolateMiseForHome(t *testing.T, home string) {
 		"MISE_DATA_DIR": "/mise/data", "MISE_CACHE_DIR": "/mise/cache",
 		"MISE_CONFIG_DIR": "/mise/config", "MISE_STATE_DIR": "/mise/state",
 	} {
-		t.Setenv(name, home+path)
+		env.set(name, home+path)
 	}
 }
 
-func commandResult(root string, args ...string) (int, string, string) {
+func commandResult(env Environment, root string, args ...string) (int, string, string) {
 	var out, err bytes.Buffer
-	c := CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &err}
+	c := CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &err}
 	code := c.Run(args)
 	return code, out.String(), err.String()
 }
@@ -83,7 +85,9 @@ func retainedRollbackRelease(t *testing.T, releases string) {
 }
 
 func TestUpdateAndRollbackArguments(t *testing.T) {
-	root := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	root := isolatedUpdateHome(t, &env)
 	for _, tc := range []struct {
 		args []string
 		code int
@@ -106,7 +110,7 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 		{[]string{"rollback", "v"}, 2, "Invalid semantic version"},
 		{[]string{"rollback", "--bogus"}, 2, "Unknown rollback option"},
 	} {
-		code, out, stderr := commandResult(root, tc.args...)
+		code, out, stderr := commandResult(env, root, tc.args...)
 		if code != tc.code || !strings.Contains(out+stderr, tc.text) || strings.Contains(out, "Selfishell updated") {
 			t.Errorf("%v: code %d, out %q, err %q", tc.args, code, out, stderr)
 		}
@@ -114,31 +118,37 @@ func TestUpdateAndRollbackArguments(t *testing.T) {
 }
 
 func TestUpdateContinuationRejectsUnreadableConfiguredMarker(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
 	path := home + "/.local/state/selfishell/configured"
 	if err := os.MkdirAll(path, 0700); err != nil {
 		t.Fatal(err)
 	}
-	code, out, stderr := commandResult(root, "update", "--continue-after-cli-update", "--skip-packages", "--dry-run", "--yes")
+	code, out, stderr := commandResult(env, root, "update", "--continue-after-cli-update", "--skip-packages", "--dry-run", "--yes")
 	if code != 1 || strings.Contains(out, "skipping tools") || strings.Contains(out, "Selfishell updated") || !strings.Contains(stderr, "configured marker") {
 		t.Fatalf("directory marker: %d %q %q", code, out, stderr)
 	}
 }
 
 func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, content := range []string{"", "invalid-marker\n"} {
 		t.Run("bytes-"+strconv.Itoa(len(content)), func(t *testing.T) {
-			home := isolatedUpdateHome(t)
+			t.Parallel()
+			env := env
+			home := isolatedUpdateHome(t, &env)
 			root := testRelease(t)
 			path := home + "/.local/state/selfishell/configured"
 			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			if err := testutil.WriteFile(path, []byte(content), 0600); err != nil {
 				t.Fatal(err)
 			}
-			code, out, stderr := commandResult(root, "update", "--tools-only", "--skip-packages", "--dry-run", "--yes")
+			code, out, stderr := commandResult(env, root, "update", "--tools-only", "--skip-packages", "--dry-run", "--yes")
 			if code != 0 || strings.Contains(out, "configuration is not installed") || !strings.Contains(out, "Tool/configuration dry run complete") {
 				t.Fatalf("readable marker: %d %q %q", code, out, stderr)
 			}
@@ -147,17 +157,19 @@ func TestUpdateAcceptsReadableNoncanonicalConfiguredMarker(t *testing.T) {
 }
 
 func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	home, root := os.Getenv("HOME"), op.Root
-	isolateMiseForHome(t, home)
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file:///unavailable")
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	home, root := env.Get("HOME"), op.Root
+	isolateMiseForHome(t, &env, home)
+	env.set("SELFISHELL_RELEASE_ROOT", "file:///unavailable")
 	retainedRollbackRelease(t, releases)
 	if err := os.Symlink("releases/2.0.0", share+"/previous"); err != nil {
 		t.Fatal(err)
 	}
 	state := home + "/.local/state/selfishell/configured"
 	writeTestFile(t, state, "1\n", 0600)
-	code, out, stderr := commandResult(root, "rollback", "v1.0.0", "--yes")
+	code, out, stderr := commandResult(env, root, "rollback", "v1.0.0", "--yes")
 	if code != 0 || !strings.Contains(out, "already active") {
 		t.Fatalf("noop: %d %q %q", code, out, stderr)
 	}
@@ -165,7 +177,7 @@ func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 	if link != "releases/2.0.0" {
 		t.Fatalf("noop rewrote previous: %s", link)
 	}
-	code, out, stderr = commandResult(root, "rollback", "--yes")
+	code, out, stderr = commandResult(env, root, "rollback", "--yes")
 	if code != 0 || !strings.Contains(out, "rolled back to 2.0.0") {
 		t.Fatalf("rollback: %d %q %q", code, out, stderr)
 	}
@@ -174,7 +186,7 @@ func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 	if current != "releases/2.0.0" || previous != "releases/1.0.0" {
 		t.Fatalf("links: %s %s", current, previous)
 	}
-	code, out, stderr = commandResult(root, "rollback", "--yes")
+	code, out, stderr = commandResult(env, root, "rollback", "--yes")
 	if code != 0 || !strings.Contains(out, "rolled back to 1.0.0") {
 		t.Fatalf("return rollback: %d %q %q", code, out, stderr)
 	}
@@ -190,15 +202,17 @@ func TestRollbackOfflineKeepsConfigurationAndHistoryOnNoop(t *testing.T) {
 }
 
 func TestRollbackToActiveAbsoluteLinkPreservesLinkIdentity(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	isolateMiseForHome(t, os.Getenv("HOME"))
+	t.Parallel()
+	var env Environment
+	op, share, _ := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
 	if err := os.Remove(share + "/current"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(op.Root, share+"/current"); err != nil {
 		t.Fatal(err)
 	}
-	code, out, stderr := commandResult(op.Root, "rollback", "1.0.0", "--yes")
+	code, out, stderr := commandResult(env, op.Root, "rollback", "1.0.0", "--yes")
 	if code != 0 || !strings.Contains(out, "already active") {
 		t.Fatalf("same directory: %d %q %q", code, out, stderr)
 	}
@@ -212,17 +226,19 @@ func TestRollbackToActiveAbsoluteLinkPreservesLinkIdentity(t *testing.T) {
 }
 
 func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	isolateMiseForHome(t, os.Getenv("HOME"))
+	t.Parallel()
+	var env Environment
+	op, share, _ := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
 	root := op.Root
-	remote := publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	remote := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
 	if err := os.MkdirAll(filepath.Dir(filepath.Dir(remote))+"/latest/download", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Dir(filepath.Dir(remote))+"/latest/download/VERSION", []byte("2.0.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Dir(filepath.Dir(remote))+"/latest/download/VERSION", []byte("2.0.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, stderr := commandResult(root, "update", "--cli-only", "--dry-run")
+	code, out, stderr := commandResult(env, root, "update", "--cli-only", "--dry-run")
 	if code != 0 || !strings.Contains(out, "Would update Selfishell CLI to 2.0.0") {
 		t.Fatalf("dry: %d %q %q", code, out, stderr)
 	}
@@ -230,7 +246,7 @@ func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 	if link != "releases/1.0.0" {
 		t.Fatalf("dry mutated current: %s", link)
 	}
-	code, out, stderr = commandResult(root, "update", "--cli-only", "--yes")
+	code, out, stderr = commandResult(env, root, "update", "--cli-only", "--yes")
 	if code != 0 || strings.Count(out, "Selfishell updated:") != 1 {
 		t.Fatalf("updated: %d %q %q", code, out, stderr)
 	}
@@ -238,15 +254,17 @@ func TestUpdateSelectionAndDryRunDoNotMutateRelease(t *testing.T) {
 	if link != "releases/2.0.0" {
 		t.Fatalf("wrong current: %s", link)
 	}
-	code, out, stderr = commandResult(share+"/releases/2.0.0", "update", "--version", "v2.0.0", "--yes")
+	code, out, stderr = commandResult(env, share+"/releases/2.0.0", "update", "--version", "v2.0.0", "--yes")
 	if code != 0 || !strings.Contains(out, "up to date") {
 		t.Fatalf("noop: %d %q %q", code, out, stderr)
 	}
 }
 
 func TestUpdateDryRunLabelsCurrentToolsPreview(t *testing.T) {
-	root, home, _ := updateCleanupFixture(t, false, false)
-	code, out, stderr := commandResult(root, "update", "--version", "2.0.0", "--dry-run", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, _ := updateCleanupFixture(t, &env, false, false)
+	code, out, stderr := commandResult(env, root, "update", "--version", "2.0.0", "--dry-run", "--yes")
 	if code != 0 || !strings.Contains(out, "Would update Selfishell CLI to 2.0.0") || !strings.Contains(out, "Tools and configuration preview uses the running release (1.0.0)") {
 		t.Fatalf("preview: %d %q %q", code, out, stderr)
 	}
@@ -256,9 +274,11 @@ func TestUpdateDryRunLabelsCurrentToolsPreview(t *testing.T) {
 }
 
 func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	isolateMiseForHome(t, os.Getenv("HOME"))
-	dir := publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, _ := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
+	dir := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
 	remote := filepath.Dir(filepath.Dir(dir))
 	older := remote + "/download/v1.0.0"
 	if err := os.MkdirAll(older, 0700); err != nil {
@@ -270,14 +290,14 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(older+"/"+name, data, 0600); err != nil {
+	if err := testutil.WriteFile(older+"/"+name, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(data)
-	if err := os.WriteFile(older+"/SHA256SUMS", []byte(hex.EncodeToString(sum[:])+"  "+name+"\n"), 0600); err != nil {
+	if err := testutil.WriteFile(older+"/SHA256SUMS", []byte(hex.EncodeToString(sum[:])+"  "+name+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, stderr := commandResult(op.Root, "update", "--version", "2.0.0", "--cli-only", "--yes")
+	code, out, stderr := commandResult(env, op.Root, "update", "--version", "2.0.0", "--cli-only", "--yes")
 	if code != 0 {
 		t.Fatalf("upgrade: %d %q %q", code, out, stderr)
 	}
@@ -285,11 +305,11 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	if err := os.MkdirAll(latest, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(latest+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(latest+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	active := share + "/releases/2.0.0"
-	code, out, stderr = commandResult(active, "update", "--yes")
+	code, out, stderr = commandResult(env, active, "update", "--yes")
 	if code != 0 || !strings.Contains(out, "newer than the latest release") {
 		t.Fatalf("older latest: %d %q %q", code, out, stderr)
 	}
@@ -297,7 +317,7 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 	if current != "releases/2.0.0" {
 		t.Fatalf("latest downgraded: %s", current)
 	}
-	code, out, stderr = commandResult(active, "update", "--version", "v1.0.0", "--cli-only", "--yes")
+	code, out, stderr = commandResult(env, active, "update", "--version", "v1.0.0", "--cli-only", "--yes")
 	if code != 0 || !strings.Contains(out, "2.0.0 -> 1.0.0") {
 		t.Fatalf("explicit downgrade: %d %q %q", code, out, stderr)
 	}
@@ -308,6 +328,8 @@ func TestUpdateExplicitDowngradeAndOlderLatestNoop(t *testing.T) {
 }
 
 func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		name, path, value, version, want string
 	}{
@@ -322,8 +344,10 @@ func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 		{"absolute previous", "previous", "->/tmp/elsewhere", "", "Retained previous release is invalid: "},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			op, share, releases := releaseFixture(t)
-			isolateMiseForHome(t, os.Getenv("HOME"))
+			t.Parallel()
+			env := env
+			op, share, releases := releaseFixture(t, &env)
+			isolateMiseForHome(t, &env, env.Get("HOME"))
 			retainedRollbackRelease(t, releases)
 			path := share + "/" + tc.path
 			os.Remove(path)
@@ -347,7 +371,7 @@ func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 			if tc.version != "" {
 				args = append(args, tc.version)
 			}
-			code, out, stderr := commandResult(op.Root, args...)
+			code, out, stderr := commandResult(env, op.Root, args...)
 			if code != 1 || out != "" || !strings.Contains(stderr, tc.want) {
 				t.Fatalf("%d %q %q", code, out, stderr)
 			}
@@ -359,23 +383,25 @@ func TestRollbackRejectsInvalidReleasesWithoutMutation(t *testing.T) {
 }
 
 func TestRollbackRestoresPreviousWhenCurrentActivationFails(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	isolateMiseForHome(t, os.Getenv("HOME"))
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
 	retainedRollbackRelease(t, releases)
 	if err := os.Symlink("releases/2.0.0", share+"/previous"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	env.set("SELFISHELL_TEST_TTY", "1")
 	reader := &rollbackMutationReader{answer: strings.NewReader("y\n"), mutate: func() {
 		if err := os.Remove(share + "/current"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(share+"/current", []byte("user data\n"), 0600); err != nil {
+		if err := testutil.WriteFile(share+"/current", []byte("user data\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}}
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: op.Root, In: reader, Out: &out, Err: &stderr}).Run([]string{"rollback", "2.0.0"})
+	code := (CLI{Env: env, Root: op.Root, In: reader, Out: &out, Err: &stderr}).Run([]string{"rollback", "2.0.0"})
 	if code != 1 || strings.Contains(out.String(), "rolled back") || stderr.Len() == 0 {
 		t.Fatalf("failed activation: %d %q %q", code, out.String(), stderr.String())
 	}
@@ -388,27 +414,29 @@ func TestRollbackRestoresPreviousWhenCurrentActivationFails(t *testing.T) {
 }
 
 func TestToolsOnlySkipPackagesAppliesConfigurationWithoutInstallFinalization(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SHELL", "/bin/zsh")
 	state := home + "/.local/state/selfishell"
 	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
+	if err := testutil.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	tools := t.TempDir()
 	log := tools + "/calls"
 	for _, name := range []string{"mise", "brew", "chsh", "curl"} {
-		if err := os.WriteFile(tools+"/"+name, []byte("#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \"$SELFISHELL_TEST_CALLS\"\nexit 91\n"), 0700); err != nil {
+		if err := testutil.WriteFile(tools+"/"+name, []byte("#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \"$SELFISHELL_TEST_CALLS\"\nexit 91\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("PATH", tools+":/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_CALLS", log)
-	code, out, stderr := commandResult(root, "update", "--tools-only", "--skip-packages", "--yes")
+	env.set("PATH", tools+":/usr/bin:/bin")
+	env.set("SELFISHELL_TEST_CALLS", log)
+	code, out, stderr := commandResult(env, root, "update", "--tools-only", "--skip-packages", "--yes")
 	if code != 0 || !strings.Contains(out, "Selfishell tools and configuration synchronized") {
 		t.Fatalf("config: %d %q %q", code, out, stderr)
 	}
@@ -431,19 +459,21 @@ func TestToolsOnlySkipPackagesAppliesConfigurationWithoutInstallFinalization(t *
 }
 
 func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	osRelease := home + "/os-release"
-	if err := os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
+	if err := testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
 	state := home + "/.local/state/selfishell"
 	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
+	if err := testutil.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	before, err := os.ReadDir(home)
@@ -455,13 +485,13 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 	for _, name := range []string{"git", "mise", "brew", "nvim", "zsh", "dpkg-query", "apt-get", "apt-cache", "sudo", "curl"} {
 		writeTestFile(t, tools+"/"+name, "#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \""+calls+"\"\nexit 91\n", 0700)
 	}
-	t.Setenv("PATH", tools+":/usr/bin:/bin")
-	code, out, stderr := commandResult(root, "update", "--tools-only", "--dry-run")
+	env.set("PATH", tools+":/usr/bin:/bin")
+	code, out, stderr := commandResult(env, root, "update", "--tools-only", "--dry-run")
 	if code != 0 || !strings.Contains(out, "Would install required apt packages") || !strings.Contains(out, "git") || !strings.Contains(out, "Would sync declared Neovim plugins") || !strings.Contains(out, "Would prune unused mise versions") {
 		t.Fatalf("dry: %d %q %q", code, out, stderr)
 	}
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	code, out, stderr = commandResult(root, "update", "--tools-only", "--dry-run")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	code, out, stderr = commandResult(env, root, "update", "--tools-only", "--dry-run")
 	if code != 0 || !strings.Contains(out, "Would install required Homebrew formula") || !strings.Contains(out, "Would install optional Homebrew cask") {
 		t.Fatalf("macOS dry: %d %q %q", code, out, stderr)
 	}
@@ -478,7 +508,9 @@ func TestToolsOnlyDryRunLeavesHomeAndMiseUntouched(t *testing.T) {
 }
 
 func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := t.TempDir()
 	copy := exec.Command("cp", "-R", testRelease(t)+"/config", root+"/config")
 	if output, err := copy.CombinedOutput(); err != nil {
@@ -489,14 +521,14 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
-	code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SHELL", "/bin/zsh")
+	code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatalf("install: %s", stderr)
 	}
 	target := home + "/.config/selfishell/vim/vimrc"
-	if err := os.WriteFile(target, []byte("personal data\n"), 0600); err != nil {
+	if err := testutil.WriteFile(target, []byte("personal data\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	state := home + "/.local/state/selfishell/resources/vimrc.state"
@@ -522,12 +554,12 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 	}
 	tools := t.TempDir()
 	log := tools + "/calls"
-	if err := os.WriteFile(tools+"/brew", []byte("#!/bin/sh\nprintf invoked >> \"$SELFISHELL_TEST_CALLS\"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(tools+"/brew", []byte("#!/bin/sh\nprintf invoked >> \"$SELFISHELL_TEST_CALLS\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", tools+":/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_CALLS", log)
-	code, out, stderr := commandResult(root, "update", "--tools-only", "--yes")
+	env.set("PATH", tools+":/usr/bin:/bin")
+	env.set("SELFISHELL_TEST_CALLS", log)
+	code, out, stderr := commandResult(env, root, "update", "--tools-only", "--yes")
 	if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, "Managed file was modified") {
 		t.Fatalf("conflict: %d %q %q", code, out, stderr)
 	}
@@ -553,27 +585,29 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 }
 
 func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
-	if code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes"); code != 0 {
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SHELL", "/bin/zsh")
+	if code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatal(stderr)
 	}
 	target := home + "/.config/selfishell/zsh/completion.zsh"
-	if err := os.WriteFile(target, []byte("personal completion\n"), 0600); err != nil {
+	if err := testutil.WriteFile(target, []byte("personal completion\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	bin := t.TempDir()
 	log := home + "/brew-called"
-	if err := os.WriteFile(bin+"/brew", []byte("#!/bin/sh\nprintf called > \"$SELFISHELL_TEST_BREW_CALLS\"\nexit 1\n"), 0755); err != nil {
+	if err := testutil.WriteFile(bin+"/brew", []byte("#!/bin/sh\nprintf called > \"$SELFISHELL_TEST_BREW_CALLS\"\nexit 1\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_BREW_CALLS", log)
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	env.set("SELFISHELL_TEST_BREW_CALLS", log)
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("SELFISHELL_TEST_TTY", "1")
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, In: strings.NewReader("n\n"), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only"})
+	code := (CLI{Env: env, Root: root, In: strings.NewReader("n\n"), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only"})
 	if code == 0 || !strings.Contains(out.String(), "Managed file was modified") || strings.Contains(out.String(), "synchronized") {
 		t.Fatalf("prompt/package order: %d %q %q", code, out.String(), stderr.String())
 	}
@@ -586,20 +620,22 @@ func TestUpdateAsksConflictBeforeFailingPackageOperation(t *testing.T) {
 }
 
 func TestToolsOnlyCancelledBeforeConfigurationHasNoEffects(t *testing.T) {
-	home := isolatedUpdateHome(t)
+	t.Parallel()
+	var env Environment
+	home := isolatedUpdateHome(t, &env)
 	root := testRelease(t)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	state := home + "/.local/state/selfishell"
 	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
+	if err := testutil.WriteFile(state+"/configured", []byte("1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, Context: ctx, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only", "--skip-packages", "--yes"})
+	code := (CLI{Env: env, Root: root, Context: ctx, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"update", "--tools-only", "--skip-packages", "--yes"})
 	if code != 1 || !strings.Contains(stderr.String(), "context canceled") {
 		t.Fatalf("cancel: %d %q %q", code, out.String(), stderr.String())
 	}
@@ -608,9 +644,9 @@ func TestToolsOnlyCancelledBeforeConfigurationHasNoEffects(t *testing.T) {
 	}
 }
 
-func updateCleanupFixture(t *testing.T, optional, failPrune bool) (string, string, string) {
+func updateCleanupFixture(t *testing.T, env *Environment, optional, failPrune bool) (string, string, string) {
 	t.Helper()
-	_, paths, initialRoot, manifest, home, _ := neovimFixture(t)
+	_, paths, initialRoot, manifest, home, _ := neovimFixture(t, env)
 	share := home + "/.local/share/selfishell"
 	root := share + "/releases/1.0.0"
 	if err := os.MkdirAll(filepath.Dir(root), 0700); err != nil {
@@ -625,13 +661,13 @@ func updateCleanupFixture(t *testing.T, optional, failPrune bool) (string, strin
 	if err := os.Symlink(testRelease(t)+"/config", root+"/config"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(root+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(root+"/VERSION", []byte("1.0.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(root+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(root+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
+	if err := testutil.WriteFile(root+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
@@ -644,13 +680,13 @@ func updateCleanupFixture(t *testing.T, optional, failPrune bool) (string, strin
 	if optional {
 		packages += "package ubuntu optional apt fixture-optional\n"
 	}
-	if err := os.WriteFile(root+"/packages.conf", []byte(packages), 0600); err != nil {
+	if err := testutil.WriteFile(root+"/packages.conf", []byte(packages), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.State, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.State+"/configured", []byte("1\n"), 0600); err != nil {
+	if err := testutil.WriteFile(paths.State+"/configured", []byte("1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	bin := home + "/bin"
@@ -664,7 +700,7 @@ case "$*" in
   *'prune --tools --yes'*) exit "${FAIL_PRUNE:-0}" ;;
 esac
 `
-	if err := os.WriteFile(bin+"/mise", []byte(mise), 0755); err != nil {
+	if err := testutil.WriteFile(bin+"/mise", []byte(mise), 0755); err != nil {
 		t.Fatal(err)
 	}
 	for name, body := range map[string]string{
@@ -673,29 +709,31 @@ esac
 		"apt-cache":  "#!/bin/sh\nexit 1\n",
 		"sudo":       "#!/bin/sh\nexec \"$@\"\n",
 	} {
-		if err := os.WriteFile(bin+"/"+name, []byte(body), 0755); err != nil {
+		if err := testutil.WriteFile(bin+"/"+name, []byte(body), 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	osRelease := home + "/os-release"
-	if err := os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
+	if err := testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
-	t.Setenv("SELFISHELL_TEST_RELEASE_ROOT", root)
-	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("MISE_IGNORED_CONFIG_PATHS", "")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
+	env.set("SELFISHELL_TEST_RELEASE_ROOT", root)
+	env.set("SHELL", "/bin/zsh")
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("MISE_IGNORED_CONFIG_PATHS", "")
 	if failPrune {
-		t.Setenv("FAIL_PRUNE", "9")
+		env.set("FAIL_PRUNE", "9")
 	} else {
-		t.Setenv("FAIL_PRUNE", "0")
+		env.set("FAIL_PRUNE", "0")
 	}
 	return root, home, home + "/mise-calls"
 }
 
 func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	const plugin = "/data/nvim/lazy/lazy-source"
 	nvim := func(script string, replace bool) func(*testing.T, string) {
 		return func(t *testing.T, home string) {
@@ -741,7 +779,9 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 			}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, home, log := updateCleanupFixture(t, tc.optional, tc.failPrune)
+			t.Parallel()
+			env := env
+			root, home, log := updateCleanupFixture(t, &env, tc.optional, tc.failPrune)
 			if tc.setup != nil {
 				tc.setup(t, home)
 			}
@@ -750,7 +790,7 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 			var stdout, errors bytes.Buffer
 			done := make(chan int, 1)
 			go func() {
-				done <- (CLI{Root: root, Context: ctx, Out: &stdout, Err: &errors}).Run([]string{"update", "--tools-only", "--yes"})
+				done <- (CLI{Env: env, Root: root, Context: ctx, Out: &stdout, Err: &errors}).Run([]string{"update", "--tools-only", "--yes"})
 			}()
 			if tc.cancel {
 				deadline := time.Now().Add(5 * time.Second)
@@ -796,6 +836,8 @@ func TestUpdatePrunesOnlyAfterCompleteToolsAndEditor(t *testing.T) {
 }
 
 func TestUpdateModesSkipLSP(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, args := range [][]string{
 		{"--cli-only", "--version", "1.0.0"},
 		{"--version", "1.0.0"},
@@ -803,8 +845,10 @@ func TestUpdateModesSkipLSP(t *testing.T) {
 		{"--tools-only", "--dry-run"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			root, home, _ := updateCleanupFixture(t, false, false)
-			code, out, stderr := commandResult(root, append([]string{"update", "--yes"}, args...)...)
+			t.Parallel()
+			env := env
+			root, home, _ := updateCleanupFixture(t, &env, false, false)
+			code, out, stderr := commandResult(env, root, append([]string{"update", "--yes"}, args...)...)
 			if code != 0 {
 				t.Fatalf("update: %d %q %q", code, out, stderr)
 			}
@@ -819,26 +863,30 @@ func TestUpdateModesSkipLSP(t *testing.T) {
 }
 
 func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ name, platform, target, kind string }{
 		{"zshenv-link", "ubuntu", ".zshenv", "link"},
 		{"ghostty-link", "macos", ".config/ghostty/config.ghostty", "link"},
 		{"ghostty-directory", "macos", ".config/ghostty/config.ghostty", "directory"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			home := isolatedUpdateHome(t)
+			t.Parallel()
+			env := env
+			home := isolatedUpdateHome(t, &env)
 			root := testRelease(t)
-			t.Setenv("SHELL", "/bin/zsh")
+			env.set("SHELL", "/bin/zsh")
 			if tc.platform == "macos" {
-				t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+				env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 			} else {
-				t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+				env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 				osRelease := home + "/os-release"
-				if err := os.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
+				if err := testutil.WriteFile(osRelease, []byte("ID=ubuntu\n"), 0600); err != nil {
 					t.Fatal(err)
 				}
-				t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
+				env.set("SELFISHELL_TEST_OS_RELEASE_FILE", osRelease)
 			}
-			code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes")
+			code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes")
 			if code != 0 {
 				t.Fatalf("setup: %s", stderr)
 			}
@@ -848,7 +896,7 @@ func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 			}
 			if tc.kind == "link" {
 				foreign := home + "/foreign-" + tc.name
-				if err := os.WriteFile(foreign, []byte("personal\n"), 0600); err != nil {
+				if err := testutil.WriteFile(foreign, []byte("personal\n"), 0600); err != nil {
 					t.Fatal(err)
 				}
 				if err := os.Symlink(foreign, target); err != nil {
@@ -866,10 +914,10 @@ func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 			if err := os.MkdirAll(filepath.Dir(cache), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(cache, []byte("stale"), 0600); err != nil {
+			if err := testutil.WriteFile(cache, []byte("stale"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			code, out, stderr := commandResult(root, "update", "--tools-only", "--skip-packages", "--yes")
+			code, out, stderr := commandResult(env, root, "update", "--tools-only", "--skip-packages", "--yes")
 			if code != 1 || strings.Contains(out, "synchronized") || stderr == "" {
 				t.Fatalf("preflight: %d %q %q", code, out, stderr)
 			}
@@ -893,6 +941,8 @@ func TestUpdatePreflightsUserBlocksAndSavedGhosttyBeforeAnyWrite(t *testing.T) {
 }
 
 func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		name        string
 		interactive bool
@@ -904,12 +954,14 @@ func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
 		{"new-defaults-noninteractive", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+			t.Parallel()
+			env := env
+			root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
 			tty := ""
 			if tc.interactive {
 				tty = "1"
 			}
-			t.Setenv("SELFISHELL_TEST_TTY", tty)
+			env.set("SELFISHELL_TEST_TTY", tty)
 			state := blockState(t, paths, "zsh-common")
 			source := root + "/config/shared/zsh/common.zsh"
 			want := blockRead(t, source)
@@ -917,7 +969,7 @@ func TestToolsUpdateDoesNotAskForUnmodifiedConfiguration(t *testing.T) {
 				want = append(want, []byte("\n# updated release defaults\n")...)
 				blockWrite(t, source, want)
 			}
-			code, out, stderr := blockRun(t, root, "", "update", "--tools-only", "--skip-packages")
+			code, out, stderr := blockRun(t, env, root, "", "update", "--tools-only", "--skip-packages")
 			if code != 0 || stderr != "" || !strings.Contains(out, "Selfishell tools and configuration synchronized.") || strings.Contains(out, "[y/N]") {
 				t.Fatalf("unmodified configuration: code=%d out=%q errors=%q", code, out, stderr)
 			}

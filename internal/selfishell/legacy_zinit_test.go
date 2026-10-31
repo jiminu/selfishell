@@ -10,9 +10,13 @@ import (
 )
 
 func TestRemoveLegacyZinit(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, shape := range []string{"owned", "dry_run", "unknown_plugin", "polaris_content", "polaris_manual_link", "missing_state", "symlink", "removal_failure"} {
 		t.Run(shape, func(t *testing.T) {
-			op, paths, _, home := dependencyFixture(t)
+			t.Parallel()
+			env := env
+			op, paths, _, home := dependencyFixture(t, &env)
 			dir, state := home+"/data/zinit", paths.State+"/dependencies/zinit"
 			fixtureFile(t, dir+"/zinit.git/zinit.zsh", ":\n", 0600)
 			for name := range legacyZinitPlugins {
@@ -54,7 +58,7 @@ func TestRemoveLegacyZinit(t *testing.T) {
 				t.Fatal(err)
 			}
 			var note bytes.Buffer
-			(CLI{Out: &note}).legacyZinitNote(paths)
+			(CLI{Out: &note, Env: env}).legacyZinitNote(paths)
 			out, warnings := output(op), op.Process.Err.(*bytes.Buffer).String()
 			switch shape {
 			case "owned":

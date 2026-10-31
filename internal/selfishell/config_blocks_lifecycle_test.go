@@ -11,15 +11,17 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func blockHome(t *testing.T, platform string) (string, string, Paths) {
+func blockHome(t *testing.T, env *Environment, platform string) (string, string, Paths) {
 	t.Helper()
 	root := testRelease(t)
 	home := t.TempDir()
-	isolateHome(t, home)
+	isolateHome(env, home)
 	for _, key := range []string{"MISE_DATA_DIR", "MISE_STATE_DIR", "MISE_CACHE_DIR", "MISE_CONFIG_DIR"} {
-		t.Setenv(key, filepath.Join(home, strings.ToLower(key)))
+		env.set(key, filepath.Join(home, strings.ToLower(key)))
 	}
 	tools := filepath.Join(home, "tools")
 	if err := os.Mkdir(tools, 0700); err != nil {
@@ -30,47 +32,47 @@ func blockHome(t *testing.T, platform string) (string, string, Paths) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("PATH", tools)
-	t.Setenv("MISE_GLOBAL_CONFIG_FILE", filepath.Join(home, "mise/global.toml"))
-	t.Setenv("MISE_DEFAULT_CONFIG_FILENAME", "")
-	t.Setenv("MISE_OVERRIDE_CONFIG_FILENAMES", "")
-	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", home)
-	t.Setenv("MISE_IGNORED_CONFIG_PATHS", "")
-	t.Setenv("MISE_OFFLINE", "1")
+	env.set("PATH", tools)
+	env.set("MISE_GLOBAL_CONFIG_FILE", filepath.Join(home, "mise/global.toml"))
+	env.set("MISE_DEFAULT_CONFIG_FILENAME", "")
+	env.set("MISE_OVERRIDE_CONFIG_FILENAMES", "")
+	env.set("MISE_TRUSTED_CONFIG_PATHS", home)
+	env.set("MISE_IGNORED_CONFIG_PATHS", "")
+	env.set("MISE_OFFLINE", "1")
 	if err := os.Mkdir(filepath.Join(home, "tmp"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMPDIR", filepath.Join(home, "tmp"))
-	t.Setenv("SHELL", "/bin/zsh")
+	env.set("TMPDIR", filepath.Join(home, "tmp"))
+	env.set("SHELL", "/bin/zsh")
 	if platform == "macos" {
-		t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+		env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	} else {
-		t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+		env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 		release := filepath.Join(home, "os-release")
-		if err := os.WriteFile(release, []byte("ID=ubuntu\n"), 0600); err != nil {
+		if err := testutil.WriteFile(release, []byte("ID=ubuntu\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", release)
+		env.set("SELFISHELL_TEST_OS_RELEASE_FILE", release)
 		proc := filepath.Join(home, "proc-version")
 		blockWrite(t, proc, []byte("Linux fixture\n"))
-		t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", proc)
+		env.set("SELFISHELL_TEST_PROC_VERSION_FILE", proc)
 	}
-	paths, err := userPaths(nil)
+	paths, err := userPaths(*env)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return root, home, paths
 }
-func blockRun(t *testing.T, root string, input string, args ...string) (int, string, string) {
+func blockRun(t *testing.T, env Environment, root string, input string, args ...string) (int, string, string) {
 	t.Helper()
 	var out, stderr bytes.Buffer
-	c := CLI{Root: root, In: strings.NewReader(input), Out: &out, Err: &stderr}
+	c := CLI{Env: env, Root: root, In: strings.NewReader(input), Out: &out, Err: &stderr}
 	code := c.Run(args)
 	return code, out.String(), stderr.String()
 }
-func blockOK(t *testing.T, root string, args ...string) string {
+func blockOK(t *testing.T, env Environment, root string, args ...string) string {
 	t.Helper()
-	code, out, stderr := blockRun(t, root, "", args...)
+	code, out, stderr := blockRun(t, env, root, "", args...)
 	if code != 0 {
 		t.Fatalf("%v: %d %s %s", args, code, out, stderr)
 	}
@@ -109,16 +111,20 @@ func blockEqual(t *testing.T, path string, want []byte) {
 }
 
 func TestManagedBlockAtEOFWithoutNewline(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, name := range []string{"user-zshrc", "user-zprofile", "user-vimrc", "user-ghostty", "user-zshenv"} {
 		for _, update := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/update=%t", name, update), func(t *testing.T) {
+				t.Parallel()
+				env := env
 				platform := "macos"
 				if name == "user-zshenv" {
 					platform = "ubuntu"
 				}
-				root, _, paths := blockHome(t, platform)
-				blockOK(t, root, "install", "--skip-packages", "--yes")
-				r := failureResource(t, root, name)
+				root, _, paths := blockHome(t, &env, platform)
+				blockOK(t, env, root, "install", "--skip-packages", "--yes")
+				r := failureResource(t, env, root, name)
 				content, err := blockContent(name, paths.Config)
 				if err != nil {
 					t.Fatal(err)
@@ -126,9 +132,9 @@ func TestManagedBlockAtEOFWithoutNewline(t *testing.T) {
 				personal := []byte("# personal content\n")
 				blockWrite(t, r.Target, append(bytes.Clone(personal), bytes.TrimSuffix(content, []byte("\n"))...))
 				if update {
-					blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+					blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 				}
-				blockOK(t, root, "uninstall", "--yes")
+				blockOK(t, env, root, "uninstall", "--yes")
 				blockEqual(t, r.Target, personal)
 			})
 		}
@@ -136,6 +142,8 @@ func TestManagedBlockAtEOFWithoutNewline(t *testing.T) {
 }
 
 func TestMissingActiveUserBlockCanBeReinstalledAndUninstalled(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		name    string
 		removed bool
@@ -149,8 +157,10 @@ func TestMissingActiveUserBlockCanBeReinstalledAndUninstalled(t *testing.T) {
 		{"uninstall deleted rc", true, []string{"uninstall", "--yes"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, home, paths := blockHome(t, "macos")
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, "macos")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			target := home + "/.zshrc"
 			personal := []byte("alias personal='yes'\n")
 			if tc.removed {
@@ -160,7 +170,7 @@ func TestMissingActiveUserBlockCanBeReinstalledAndUninstalled(t *testing.T) {
 			} else {
 				blockWrite(t, target, personal)
 			}
-			blockOK(t, root, tc.command...)
+			blockOK(t, env, root, tc.command...)
 			if tc.command[0] == "uninstall" {
 				if tc.removed {
 					if _, err := os.Lstat(target); !os.IsNotExist(err) {
@@ -190,8 +200,10 @@ func TestMissingActiveUserBlockCanBeReinstalledAndUninstalled(t *testing.T) {
 }
 
 func TestStatusDoesNotBlockOnReplacedUserRCFIFO(t *testing.T) {
-	root, home, _ := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, _ := blockHome(t, &env, "macos")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	target := home + "/.zshrc"
 	if err := os.Remove(target); err != nil {
 		t.Fatal(err)
@@ -200,7 +212,7 @@ func TestStatusDoesNotBlockOnReplacedUserRCFIFO(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan int, 1)
-	go func() { code, _, _ := blockRun(t, root, "", "status"); done <- code }()
+	go func() { code, _, _ := blockRun(t, env, root, "", "status"); done <- code }()
 	select {
 	case code := <-done:
 		if code != 1 {
@@ -218,6 +230,8 @@ func TestStatusDoesNotBlockOnReplacedUserRCFIFO(t *testing.T) {
 }
 
 func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	ambient := t.TempDir()
 	bin := filepath.Join(ambient, "bin")
 	if err := os.Mkdir(bin, 0700); err != nil {
@@ -230,18 +244,18 @@ func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
 	if err := os.Chmod(filepath.Join(bin, "mise"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("MISE_GLOBAL_CONFIG_FILE", global)
-	t.Setenv("MISE_SENTINEL_MARKER", marker)
-	root, home, _ := blockHome(t, "macos")
-	if _, err := exec.LookPath("mise"); err == nil {
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("MISE_GLOBAL_CONFIG_FILE", global)
+	env.set("MISE_SENTINEL_MARKER", marker)
+	root, home, _ := blockHome(t, &env, "macos")
+	if _, err := (Process{inherit: env}).lookPath("mise"); err == nil {
 		t.Fatal("ambient mise remained on fixture PATH")
 	}
-	if got := os.Getenv("MISE_GLOBAL_CONFIG_FILE"); got != filepath.Join(home, "mise/global.toml") {
+	if got := env.Get("MISE_GLOBAL_CONFIG_FILE"); got != filepath.Join(home, "mise/global.toml") {
 		t.Fatalf("ambient global config remained: %q", got)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 	if _, err := os.Lstat(marker); !os.IsNotExist(err) {
 		t.Fatalf("ambient mise was invoked: %v", err)
 	}
@@ -249,8 +263,10 @@ func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
 }
 
 func TestCurrentNeovimSourcesAreDeclaredOnce(t *testing.T) {
-	root, _, _ := blockHome(t, "macos")
-	resources, err := ManagedResources(root, nil)
+	t.Parallel()
+	var env Environment
+	root, _, _ := blockHome(t, &env, "macos")
+	resources, err := ManagedResources(root, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,6 +289,8 @@ func TestCurrentNeovimSourcesAreDeclaredOnce(t *testing.T) {
 	}
 }
 func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ platform, name, path, kind, diagnostic string }{
 		{"macos", "zshrc-link", ".zshrc", "link", "Refusing to modify symbolic link"},
 		{"macos", "zprofile-link", ".zprofile", "link", "Refusing to modify symbolic link"},
@@ -284,7 +302,9 @@ func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
 		{"macos", "zshrc-untracked", ".zshrc", "untracked", "Cannot manage"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, home, paths := blockHome(t, tc.platform)
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, tc.platform)
 			target := filepath.Join(home, tc.path)
 			if e := os.MkdirAll(filepath.Dir(target), 0700); e != nil {
 				t.Fatal(e)
@@ -314,7 +334,7 @@ func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
 			if tc.kind != "directory" {
 				before = blockRead(t, target)
 			}
-			code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes")
+			code, _, stderr := blockRun(t, env, root, "", "install", "--skip-packages", "--yes")
 			if code != 1 || !strings.Contains(stderr, tc.diagnostic) {
 				t.Fatalf("%d %s", code, stderr)
 			}
@@ -343,19 +363,22 @@ func TestFreshUserBlockPreflightRejectsForeignPaths(t *testing.T) {
 	}
 }
 func TestManagedBlockStateIdentityMismatch(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, paths := blockHome(t, &env, "macos")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	target := home + "/.zprofile"
 	statePath := paths.Resources + "/user-zprofile.state"
 	original := blockRead(t, target)
 	for _, tc := range []struct{ name, kind, target string }{{"kind", "file", target}, {"target", "block", target + ".other"}} {
 		t.Run(tc.name, func(t *testing.T) {
+			env := env
 			state := State{Kind: tc.kind, Status: "active", Target: tc.target, Reference: "-", Backup: "-", Checksum: "bogus-checksum"}
 			if e := WriteState(statePath, state); e != nil {
 				t.Fatal(e)
 			}
 			before := blockRead(t, statePath)
-			code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes")
+			code, _, stderr := blockRun(t, env, root, "", "install", "--skip-packages", "--yes")
 			if code != 1 || !strings.Contains(stderr, "State conflict for managed block") {
 				t.Fatalf("%d %s", code, stderr)
 			}
@@ -365,13 +388,17 @@ func TestManagedBlockStateIdentityMismatch(t *testing.T) {
 	}
 }
 func TestOutdatedUserBlocksUpgradeInPlace(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ name, platform, path, old string }{
 		{"zprofile", "macos", ".zprofile", "# >>> Selfishell mise shims >>>\nif command -v mise >/dev/null 2>&1; then\n  eval \"$(command mise activate zsh --shims)\"\nfi\n# <<< Selfishell mise shims <<<\n"},
 		{"ghostty", "macos", ".config/ghostty/config.ghostty", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, home, paths := blockHome(t, tc.platform)
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, tc.platform)
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			target := filepath.Join(home, tc.path)
 			old := []byte(tc.old)
 			if tc.name == "ghostty" {
@@ -391,23 +418,27 @@ func TestOutdatedUserBlocksUpgradeInPlace(t *testing.T) {
 			if e = WriteState(paths.Resources+"/user-"+tc.name+".state", State{"block", "active", target, "-", "-", checksum}); e != nil {
 				t.Fatal(e)
 			}
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			want := append(append(append([]byte{}, surrounding...), current...), suffix...)
 			blockEqual(t, target, want)
 			active := blockState(t, paths, "user-"+tc.name)
 			if active.Status != "active" || active.Checksum == checksum {
 				t.Fatalf("state %+v", active)
 			}
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			blockEqual(t, target, want)
 		})
 	}
 }
 func TestModifiedZprofileBlockDecisions(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, decision := range []string{"overwrite", "skip", "yes"} {
 		t.Run(decision, func(t *testing.T) {
-			root, home, paths := blockHome(t, "macos")
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, "macos")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			target := home + "/.zprofile"
 			clean := blockRead(t, target)
 			clean = append([]byte("export BEFORE=1\r\n"), clean...)
@@ -426,7 +457,7 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			t.Setenv("SELFISHELL_TEST_TTY", "1")
+			env.set("SELFISHELL_TEST_TTY", "1")
 			args := []string{"install", "--skip-packages"}
 			input := "y\ny\n"
 			if decision == "skip" {
@@ -436,7 +467,7 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 				args = append(args, "--yes")
 				input = ""
 			}
-			code, out, stderr := blockRun(t, root, input, args...)
+			code, out, stderr := blockRun(t, env, root, input, args...)
 			if decision == "yes" {
 				if code != 1 || !strings.Contains(stderr, "Managed block was modified; preserving it") {
 					t.Fatalf("%d %s", code, stderr)
@@ -476,9 +507,13 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 }
 
 func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, platform := range []string{"macos", "ubuntu"} {
 		t.Run(platform, func(t *testing.T) {
-			root, home, paths := blockHome(t, platform)
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, platform)
 			originals := map[string][]byte{
 				".zshrc":    []byte("export BEFORE=한글\r\nalias tail=true"),
 				".zprofile": []byte("export USER_ZPROFILE=kept"),
@@ -496,7 +531,7 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 			if platform == "macos" {
 				blockWrite(t, ghostty, []byte("font-size = 14\r\ncursor-style = bar"))
 			}
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			for name, original := range originals {
 				target := home + "/" + name
 				info, err := os.Lstat(target)
@@ -539,12 +574,12 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 			edited := append([]byte("alias PREFIX=true\n"), blockRead(t, zshrc)...)
 			edited = append(edited, []byte("\nexport AFTER=1")...)
 			blockWrite(t, zshrc, edited)
-			blockOK(t, root, "update", "--tools-only", "--skip-packages", "--dry-run", "--yes")
+			blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--dry-run", "--yes")
 			blockEqual(t, zshrc, edited)
-			blockOK(t, root, "install", "--skip-packages", "--yes")
-			blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 			blockEqual(t, zshrc, edited)
-			blockOK(t, root, "uninstall", "--yes")
+			blockOK(t, env, root, "uninstall", "--yes")
 			wantZsh := append([]byte("alias PREFIX=true\n"), originals[".zshrc"]...)
 			wantZsh = append(wantZsh, []byte("\nexport AFTER=1")...)
 			blockEqual(t, zshrc, wantZsh)
@@ -564,9 +599,13 @@ func TestUserBlocksAndGhosttyLifecycle(t *testing.T) {
 	}
 }
 func TestUserGhosttyOverrideIsUntouched(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, kind := range []string{"regular", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
-			root, _, paths := blockHome(t, "macos")
+			t.Parallel()
+			env := env
+			root, _, paths := blockHome(t, &env, "macos")
 			override := filepath.Dir(paths.Config) + "/ghostty/user.ghostty"
 			referent := filepath.Join(filepath.Dir(paths.Config), "personal-ghostty")
 			original := []byte("theme = Catppuccin Mocha\nfont-size = 15\x00")
@@ -597,47 +636,53 @@ func TestUserGhosttyOverrideIsUntouched(t *testing.T) {
 					blockEqual(t, referent, original)
 				}
 			}
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			check()
-			blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+			blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 			check()
-			blockOK(t, root, "uninstall", "--yes")
+			blockOK(t, env, root, "uninstall", "--yes")
 			check()
 		})
 	}
 }
 func TestSavedDeclinedGhosttyChoiceStaysUntilGhosttyOption(t *testing.T) {
-	root, _, paths := blockHome(t, "macos")
+	t.Parallel()
+	var env Environment
+	root, _, paths := blockHome(t, &env, "macos")
 	choice := paths.State + "/ghostty"
 	entrypoint := filepath.Dir(paths.Config) + "/ghostty/config.ghostty"
 	blockWrite(t, choice, []byte("0\n"))
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	blockEqual(t, choice, []byte("0\n"))
 	for _, p := range []string{paths.Config + "/ghostty/config.ghostty", entrypoint, paths.Resources + "/user-ghostty.state"} {
 		if _, e := os.Lstat(p); !os.IsNotExist(e) {
 			t.Fatalf("declined Ghostty path %s: %v", p, e)
 		}
 	}
-	if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty", "--dry-run"); !strings.Contains(out, entrypoint) {
+	if out := blockOK(t, env, root, "install", "--skip-packages", "--yes", "--ghostty", "--dry-run"); !strings.Contains(out, entrypoint) {
 		t.Fatalf("dry-run plan lacks Ghostty: %s", out)
 	}
 	blockEqual(t, choice, []byte("0\n"))
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--ghostty")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--ghostty")
 	blockEqual(t, choice, []byte("1\n"))
 	if !bytes.Contains(blockRead(t, entrypoint), []byte("# >>> Selfishell ghostty >>>")) {
 		t.Fatal("Ghostty block missing")
 	}
 }
 func TestZprofileActivatesPrivateMise(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	if _, e := os.Stat("/bin/zsh"); e != nil {
 		t.Skip("native zsh unavailable")
 	}
 	for _, kind := range []string{"path", "private"} {
 		t.Run(kind, func(t *testing.T) {
-			root, home, _ := blockHome(t, "macos")
+			t.Parallel()
+			env := env
+			root, home, _ := blockHome(t, &env, "macos")
 			blockWrite(t, home+"/.zprofile", []byte("export USER_ZPROFILE=kept"))
-			blockOK(t, root, "install", "--skip-packages", "--yes")
-			blockOK(t, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			marker := []byte("# >>> Selfishell mise shims >>>")
 			if bytes.Count(blockRead(t, home+"/.zprofile"), marker) != 1 {
 				t.Fatal("duplicate zprofile block")
@@ -663,7 +708,7 @@ func TestZprofileActivatesPrivateMise(t *testing.T) {
 				t.Fatalf("mise activation: %q %v", out, e)
 			}
 			blockEqual(t, home+"/mise-args", []byte("activate zsh --shims\n"))
-			blockOK(t, root, "uninstall", "--yes")
+			blockOK(t, env, root, "uninstall", "--yes")
 			blockEqual(t, home+"/.zprofile", []byte("export USER_ZPROFILE=kept"))
 		})
 	}
@@ -697,11 +742,13 @@ func runNativeZsh(home, path string, timeout time.Duration, args ...string) ([]b
 }
 
 func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	if os.Geteuid() == 0 {
 		t.Skip("backup copy permission failure requires unprivileged process")
 	}
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	root, home, paths := blockHome(t, &env, "macos")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	target := home + "/.zprofile"
 	modified := bytes.Replace(blockRead(t, target), []byte("command mise activate zsh"), []byte("command mise activate --user-edited zsh"), 1)
 	if !bytes.Contains(modified, []byte("--user-edited")) {
@@ -718,8 +765,8 @@ func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(backupDir, 0700) })
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
-	code, out, stderr := blockRun(t, root, "y\ny\n", "install", "--skip-packages")
+	env.set("SELFISHELL_TEST_TTY", "1")
+	code, out, stderr := blockRun(t, env, root, "y\ny\n", "install", "--skip-packages")
 	if code != 1 || strings.Contains(out, "Updated Selfishell block:") || stderr == "" {
 		t.Fatalf("backup failure accepted: %d %q %q", code, out, stderr)
 	}
@@ -731,11 +778,13 @@ func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
 	}
 }
 func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	if os.Geteuid() == 0 {
 		t.Skip("filesystem permission failure requires unprivileged process")
 	}
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	root, home, paths := blockHome(t, &env, "macos")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	target := home + "/.zprofile"
 	clean := blockRead(t, target)
 	modified := bytes.Replace(clean, []byte("command mise activate zsh"), []byte("command mise activate --user-edited zsh"), 1)
@@ -743,12 +792,12 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 		t.Fatal("bad conflict fixture")
 	}
 	blockWrite(t, target, modified)
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	env.set("SELFISHELL_TEST_TTY", "1")
 	if e := os.Chmod(home, 0500); e != nil {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { _ = os.Chmod(home, 0700) })
-	code, out, stderr := blockRun(t, root, "y\ny\n", "install", "--skip-packages")
+	code, out, stderr := blockRun(t, env, root, "y\ny\n", "install", "--skip-packages")
 	if e := os.Chmod(home, 0700); e != nil {
 		t.Fatal(e)
 	}
@@ -763,7 +812,7 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 	if e != nil || len(temps) != 0 {
 		t.Fatalf("temporary files %v %v", temps, e)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	blockEqual(t, target, clean)
 	if state := blockState(t, paths, "user-zprofile"); state.Status != "active" {
 		t.Fatalf("state %+v", state)
@@ -771,11 +820,15 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 }
 
 func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ answer, want string }{{"", "1\n"}, {"y", "1\n"}, {"n", "0\n"}, {"no", "0\n"}} {
 		t.Run("answer="+tc.answer, func(t *testing.T) {
-			root, _, paths := blockHome(t, "macos")
-			t.Setenv("SELFISHELL_TEST_TTY", "1")
-			code, out, stderr := blockRun(t, root, "y\n"+tc.answer+"\n", "install", "--skip-packages")
+			t.Parallel()
+			env := env
+			root, _, paths := blockHome(t, &env, "macos")
+			env.set("SELFISHELL_TEST_TTY", "1")
+			code, out, stderr := blockRun(t, env, root, "y\n"+tc.answer+"\n", "install", "--skip-packages")
 			if code != 0 || !strings.Contains(out, "Install Ghostty terminal and managed configuration (recommended)? [Y/n] ") {
 				t.Fatalf("%d %s %s", code, out, stderr)
 			}
@@ -785,8 +838,10 @@ func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
 }
 
 func TestInstallGhosttyOptionRequiresMacOS(t *testing.T) {
-	root, _, paths := blockHome(t, "ubuntu")
-	code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes", "--ghostty")
+	t.Parallel()
+	var env Environment
+	root, _, paths := blockHome(t, &env, "ubuntu")
+	code, _, stderr := blockRun(t, env, root, "", "install", "--skip-packages", "--yes", "--ghostty")
 	if code != 2 || !strings.Contains(stderr, "--ghostty is available only on macOS.") {
 		t.Fatalf("%d %s", code, stderr)
 	}

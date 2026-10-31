@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestSelectedChecksumIgnoresCompanionAssets(t *testing.T) {
@@ -33,15 +35,17 @@ func TestSelectedChecksumIgnoresCompanionAssets(t *testing.T) {
 }
 
 func TestPruneInactiveReleasesRequiresValidCurrentLink(t *testing.T) {
-	_, share, releases := releaseFixture(t)
+	t.Parallel()
+	var env Environment
+	_, share, releases := releaseFixture(t, &env)
 	stale := releases + "/0.9.0"
 	if err := os.MkdirAll(stale+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(stale+"/VERSION", []byte("0.9.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(stale+"/VERSION", []byte("0.9.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(stale+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
+	if err := testutil.WriteFile(stale+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(share + "/current"); err != nil {
@@ -77,16 +81,18 @@ func TestReleaseVersionFixture(t *testing.T) {
 }
 
 func TestReleaseLatestMetadata(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	var env Environment
+	env.set("HOME", t.TempDir())
 	root := t.TempDir()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+root)
-	t.Setenv("SELFISHELL_RELEASE_TAGS_API_URL", "")
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
+	env.set("SELFISHELL_RELEASE_TAGS_API_URL", "")
 	if err := os.MkdirAll(root+"/latest/download", 0700); err != nil {
 		t.Fatal(err)
 	}
-	op := releaseOperation{Process: Process{Err: &bytes.Buffer{}}}
+	op := releaseOperation{Process: Process{inherit: env, Err: &bytes.Buffer{}}}
 	for _, tc := range []struct{ body, want string }{{"1.2.3\n", "1.2.3"}, {"v1.2.3\n", "1.2.3"}, {"../escape\n", ""}, {"1.2.3+build\n", ""}, {"\n", ""}} {
-		if err := os.WriteFile(root+"/latest/download/VERSION", []byte(tc.body), 0600); err != nil {
+		if err := testutil.WriteFile(root+"/latest/download/VERSION", []byte(tc.body), 0600); err != nil {
 			t.Fatal(err)
 		}
 		got, err := op.latest(context.Background())
@@ -101,30 +107,32 @@ func TestReleaseLatestMetadata(t *testing.T) {
 }
 
 func TestReleaseLatestPublishedTagFallback(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	var env Environment
+	env.set("HOME", t.TempDir())
 	root := t.TempDir()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+root)
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
 	tags := root + "/tags.json"
-	t.Setenv("SELFISHELL_RELEASE_TAGS_API_URL", "file://"+tags)
+	env.set("SELFISHELL_RELEASE_TAGS_API_URL", "file://"+tags)
 	if err := os.MkdirAll(root+"/download/v0.3.0-beta.2", 0700); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(tags, []byte(`[{"name":"v0.3.0-beta.2"}]`), 0600)
+	testutil.WriteFile(tags, []byte(`[{"name":"v0.3.0-beta.2"}]`), 0600)
 	published := root + "/download/v0.3.0-beta.2/VERSION"
-	os.WriteFile(published, []byte("0.3.0-beta.2\n"), 0600)
-	op := releaseOperation{Process: Process{Err: &bytes.Buffer{}}}
+	testutil.WriteFile(published, []byte("0.3.0-beta.2\n"), 0600)
+	op := releaseOperation{Process: Process{inherit: env, Err: &bytes.Buffer{}}}
 	got, err := op.latest(context.Background())
 	if err != nil || got != "0.3.0-beta.2" {
 		t.Fatalf("got %q, %v", got, err)
 	}
 	for _, value := range []string{"9.9.9\n", "../bad\n"} {
-		os.WriteFile(published, []byte(value), 0600)
+		testutil.WriteFile(published, []byte(value), 0600)
 		if got, err := op.latest(context.Background()); err == nil {
 			t.Errorf("accepted mismatched VERSION %q as %q", value, got)
 		}
 	}
 	for _, value := range []string{`{`, `[]`, `[{"name":"../bad"}]`} {
-		os.WriteFile(tags, []byte(value), 0600)
+		testutil.WriteFile(tags, []byte(value), 0600)
 		if got, err := op.latest(context.Background()); err == nil {
 			t.Errorf("accepted tags %q as %q", value, got)
 		}
@@ -132,17 +140,19 @@ func TestReleaseLatestPublishedTagFallback(t *testing.T) {
 }
 
 func TestVersionAvailableCLI(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	var env Environment
+	env.set("HOME", t.TempDir())
 	root := t.TempDir()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+root)
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
 	os.MkdirAll(root+"/latest/download", 0700)
-	os.WriteFile(root+"/latest/download/VERSION", []byte("1.2.3\n"), 0600)
+	testutil.WriteFile(root+"/latest/download/VERSION", []byte("1.2.3\n"), 0600)
 	var out, stderr bytes.Buffer
-	c := CLI{Root: root, Out: &out, Err: &stderr}
+	c := CLI{Env: env, Root: root, Out: &out, Err: &stderr}
 	if code := c.Run([]string{"version", "--available"}); code != 0 || out.String() != "1.2.3\n" {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), stderr.String())
 	}
-	os.WriteFile(root+"/latest/download/VERSION", []byte("unsafe\n"), 0600)
+	testutil.WriteFile(root+"/latest/download/VERSION", []byte("unsafe\n"), 0600)
 	out.Reset()
 	stderr.Reset()
 	if code := c.Run([]string{"version", "--available"}); code != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "Unable to determine the latest Selfishell release") {
@@ -150,25 +160,25 @@ func TestVersionAvailableCLI(t *testing.T) {
 	}
 }
 
-func releaseFixture(t *testing.T) (releaseOperation, string, string) {
+func releaseFixture(t *testing.T, env *Environment) (releaseOperation, string, string) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	env.set("HOME", home)
 	share := home + "/share/selfishell"
 	releases := share + "/releases"
 	root := releases + "/1.0.0"
 	if err := os.MkdirAll(root+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(root+"/VERSION", []byte("1.0.0\n"), 0600)
-	os.WriteFile(root+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
+	testutil.WriteFile(root+"/VERSION", []byte("1.0.0\n"), 0600)
+	testutil.WriteFile(root+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
 	if err := os.Symlink("releases/1.0.0", share+"/current"); err != nil {
 		t.Fatal(err)
 	}
-	return releaseOperation{Root: root, Process: Process{Err: &bytes.Buffer{}}}, share, releases
+	return releaseOperation{Root: root, Process: Process{inherit: *env, Err: &bytes.Buffer{}}}, share, releases
 }
 
-func publishReleaseFixture(t *testing.T, version string, members ...archiveMember) string {
+func publishReleaseFixture(t *testing.T, env *Environment, version string, members ...archiveMember) string {
 	t.Helper()
 	remote := t.TempDir()
 	name, err := releaseArchiveName(version)
@@ -184,26 +194,29 @@ func publishReleaseFixture(t *testing.T, version string, members ...archiveMembe
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(dir+"/"+name, data, 0600); err != nil {
+	if err := testutil.WriteFile(dir+"/"+name, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(data)
-	if err := os.WriteFile(dir+"/SHA256SUMS", []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0600); err != nil {
+	if err := testutil.WriteFile(dir+"/SHA256SUMS", []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+remote)
 	return dir
 }
 
 func TestReleaseInstallExactAndRetainsRollback(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	dir := publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"bin/sfs", "selfishell", tar.TypeSymlink, "", 0})
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	dir := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"bin/sfs", "selfishell", tar.TypeSymlink, "", 0})
+	op.Process.inherit = env
 	checksum := dir + "/SHA256SUMS"
 	original, _ := os.ReadFile(checksum)
-	os.WriteFile(checksum, append(original, original...), 0600)
+	testutil.WriteFile(checksum, append(original, original...), 0600)
 	os.MkdirAll(releases+"/0.9.0/bin", 0700)
-	os.WriteFile(releases+"/0.9.0/VERSION", []byte("0.9.0\n"), 0600)
-	os.WriteFile(releases+"/0.9.0/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
+	testutil.WriteFile(releases+"/0.9.0/VERSION", []byte("0.9.0\n"), 0600)
+	testutil.WriteFile(releases+"/0.9.0/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
 	got, err := op.install(context.Background(), "2.0.0")
 	if err != nil || filepath.Base(got) != "2.0.0" {
 		t.Fatalf("install %q, %v", got, err)
@@ -225,21 +238,24 @@ func TestReleaseInstallExactAndRetainsRollback(t *testing.T) {
 }
 
 func TestReleaseInstallRejectsConflictBeforeActivation(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	dir := publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	dir := publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	name, _ := releaseArchiveName("2.0.0")
 	checksum := dir + "/SHA256SUMS"
-	os.WriteFile(checksum, []byte(strings.Repeat("0", 64)+"  "+name+"\n"), 0600)
+	testutil.WriteFile(checksum, []byte(strings.Repeat("0", 64)+"  "+name+"\n"), 0600)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted checksum mismatch")
 	}
-	os.WriteFile(checksum, []byte("bad\n"), 0600)
+	testutil.WriteFile(checksum, []byte("bad\n"), 0600)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted missing checksum")
 	}
 	valid, _ := os.ReadFile(dir + "/" + name)
 	digest := sha256.Sum256(valid)
-	os.WriteFile(checksum, []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"+strings.Repeat("0", 64)+"  "+name+"\n"), 0600)
+	testutil.WriteFile(checksum, []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"+strings.Repeat("0", 64)+"  "+name+"\n"), 0600)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted conflicting checksum")
 	}
@@ -253,11 +269,14 @@ func TestReleaseInstallRejectsConflictBeforeActivation(t *testing.T) {
 }
 
 func TestReleaseInstallUsesExactVersionURL(t *testing.T) {
-	op, share, releases := releaseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
 	remote := t.TempDir()
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	op.Process.inherit = env
 	os.MkdirAll(remote+"/latest/download", 0700)
-	os.WriteFile(remote+"/latest/download/VERSION", []byte("2.0.0\n"), 0600)
+	testutil.WriteFile(remote+"/latest/download/VERSION", []byte("2.0.0\n"), 0600)
 	if _, err := op.install(context.Background(), "9.9.9"); err == nil {
 		t.Fatal("fell back to latest")
 	}
@@ -271,6 +290,8 @@ func TestReleaseInstallUsesExactVersionURL(t *testing.T) {
 }
 
 func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ link, kind, want string }{
 		{"previous", "file", "occupied release link"},
 		{"previous", "link", "foreign release link"},
@@ -278,7 +299,9 @@ func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
 		{"current", "link", "foreign release link"},
 	} {
 		t.Run(tc.link+"-"+tc.kind, func(t *testing.T) {
-			op, share, releases := releaseFixture(t)
+			t.Parallel()
+			env := env
+			op, share, releases := releaseFixture(t, &env)
 			path := share + "/" + tc.link
 			os.Remove(path)
 			if tc.kind == "file" {
@@ -289,7 +312,8 @@ func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
 			var requests atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests.Add(1) }))
 			defer server.Close()
-			t.Setenv("SELFISHELL_RELEASE_ROOT", server.URL)
+			env.set("SELFISHELL_RELEASE_ROOT", server.URL)
+			op.Process.inherit = env
 			if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("%s %s was not rejected: %v", tc.kind, tc.link, err)
 			}
@@ -317,8 +341,11 @@ func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
 }
 
 func TestReleaseInstallKeepsForeignReleaseEntries(t *testing.T) {
-	op, _, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, _, releases := releaseFixture(t, &env)
+	publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	writeTestFile(t, op.Root+"/VERSION", "wrong\n", 0600)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted corrupt running root")
@@ -357,8 +384,11 @@ func TestReleaseInstallKeepsForeignReleaseEntries(t *testing.T) {
 }
 
 func TestReleaseInstallRestoresPreviousAfterActivationFailure(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, _ := releaseFixture(t, &env)
+	publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	if err := os.Symlink("releases/0.9.0", share+"/previous"); err != nil {
 		t.Fatal(err)
 	}
@@ -380,11 +410,14 @@ func TestReleaseInstallRestoresPreviousAfterActivationFailure(t *testing.T) {
 }
 
 func TestReleaseInstallRejectsExistingIncompleteAndSymlinkTargets(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	target := releases + "/2.0.0"
 	os.MkdirAll(target+"/bin", 0700)
-	os.WriteFile(target+"/bin/selfishell", []byte("not executable"), 0600)
+	testutil.WriteFile(target+"/bin/selfishell", []byte("not executable"), 0600)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted incomplete existing release")
 	}
@@ -403,16 +436,19 @@ func TestReleaseInstallRejectsExistingIncompleteAndSymlinkTargets(t *testing.T) 
 	}
 	os.Remove(target)
 	os.MkdirAll(target+"/bin", 0700)
-	os.WriteFile(target+"/VERSION", []byte("9.9.9\n"), 0600)
-	os.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
+	testutil.WriteFile(target+"/VERSION", []byte("9.9.9\n"), 0600)
+	testutil.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755)
 	if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 		t.Fatal("accepted wrong VERSION in existing release")
 	}
 }
 
 func TestReleaseInstallSameVersionPreservesPreviousLink(t *testing.T) {
-	op, share, _ := releaseFixture(t)
-	publishReleaseFixture(t, "1.0.0", archiveMember{"VERSION", "", 0, "1.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, _ := releaseFixture(t, &env)
+	publishReleaseFixture(t, &env, "1.0.0", archiveMember{"VERSION", "", 0, "1.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	os.Symlink("releases/0.9.0", share+"/previous")
 	if _, err := op.install(context.Background(), "1.0.0"); err != nil {
 		t.Fatal(err)
@@ -424,18 +460,23 @@ func TestReleaseInstallSameVersionPreservesPreviousLink(t *testing.T) {
 }
 
 func TestReleaseInstallPreflightsWholeArchiveBeforeFilesystemMutation(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, existing := range []bool{false, true} {
 		t.Run(fmt.Sprintf("existing=%t", existing), func(t *testing.T) {
-			op, share, releases := releaseFixture(t)
-			publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"../sentinel", "", 0, "overwrite", 0600})
+			t.Parallel()
+			env := env
+			op, share, releases := releaseFixture(t, &env)
+			publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755}, archiveMember{"../sentinel", "", 0, "overwrite", 0600})
 			if existing {
 				writeTestFile(t, releases+"/2.0.0/VERSION", "2.0.0\n", 0600)
 				writeTestFile(t, releases+"/2.0.0/bin/selfishell", "winner binary\n", 0755)
 			}
 			downloads := t.TempDir()
-			t.Setenv("TMPDIR", downloads)
+			env.set("TMPDIR", downloads)
+			op.Process.inherit = env
 			sentinel := filepath.Dir(share) + "/sentinel"
-			os.WriteFile(sentinel, []byte("original\n"), 0600)
+			testutil.WriteFile(sentinel, []byte("original\n"), 0600)
 			os.Symlink("releases/0.9.0", share+"/previous")
 			if _, err := op.install(context.Background(), "2.0.0"); err == nil {
 				t.Fatal("accepted traversal archive")
@@ -474,9 +515,12 @@ func TestReleaseInstallPreflightsWholeArchiveBeforeFilesystemMutation(t *testing
 }
 
 func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
-	op, share, releases := releaseFixture(t)
-	isolateMiseForHome(t, os.Getenv("HOME"))
-	publishReleaseFixture(t, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	t.Parallel()
+	var env Environment
+	op, share, releases := releaseFixture(t, &env)
+	isolateMiseForHome(t, &env, env.Get("HOME"))
+	publishReleaseFixture(t, &env, "2.0.0", archiveMember{"VERSION", "", 0, "2.0.0\n", 0644}, archiveMember{"bin/selfishell", "", 0, "#!/bin/sh\n", 0755})
+	op.Process.inherit = env
 	if err := os.Chmod(share, 0500); err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +535,7 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 	if _, err := os.Stat(releases + "/2.0.0/bin/selfishell"); err != nil {
 		t.Fatalf("promoted release cannot be reused: %v", err)
 	}
-	code, out, stderr := commandResult(op.Root, "update", "--cli-only", "--version", "2.0.0", "--yes")
+	code, out, stderr := commandResult(env, op.Root, "update", "--cli-only", "--version", "2.0.0", "--yes")
 	if code == 0 || strings.Contains(out, "Selfishell updated") || stderr == "" {
 		t.Fatalf("CLI claimed failed activation: code %d, stdout %q, stderr %q", code, out, stderr)
 	}
@@ -509,16 +553,18 @@ func TestReleaseInstallActivationFailureDoesNotClaimSuccess(t *testing.T) {
 }
 
 func TestReleaseFetchUsesMetadataDeadlineOnlyForMetadata(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("SELFISHELL_RELEASE_ROOT", "file://"+home+"/remote")
-	t.Setenv("SELFISHELL_CURL_METADATA_MAX_TIME", "7")
+	env.set("HOME", home)
+	env.set("SELFISHELL_RELEASE_ROOT", "file://"+home+"/remote")
+	env.set("SELFISHELL_CURL_METADATA_MAX_TIME", "7")
 	fake := home + "/bin"
 	os.Mkdir(fake, 0700)
 	log := home + "/curl-args"
 	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >\"$CURL_LOG\"\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = '-o' ]; then shift; printf '1.2.3\\n' >\"$1\"; fi\n  shift\ndone\n"
-	os.WriteFile(fake+"/curl", []byte(script), 0755)
-	op := releaseOperation{Process: Process{Env: append(os.Environ(), "PATH="+fake+":/usr/bin:/bin", "CURL_LOG="+log)}}
+	testutil.WriteFile(fake+"/curl", []byte(script), 0755)
+	op := releaseOperation{Process: Process{Env: append(env.List(), "PATH="+fake+":/usr/bin:/bin", "CURL_LOG="+log)}}
 	if got, err := op.latest(context.Background()); err != nil || got != "1.2.3" {
 		t.Fatalf("metadata %q, %v", got, err)
 	}
