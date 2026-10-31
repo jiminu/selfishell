@@ -211,6 +211,14 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 		check(client, "↑1", false, false, worktree)
 	}
 	check(client, "↑1", false, false)
+	// Unfocused Neovim spawns no Git; FocusGained refreshes and resumes polling.
+	if _, err := fmt.Fprintln(stdin, `{"focus":true}`); err != nil {
+		t.Fatal(err)
+	}
+	var focus struct{ Lost, Gained int }
+	if !scanner.Scan() || json.Unmarshal(scanner.Bytes(), &focus) != nil || focus.Lost != 0 || focus.Gained < 3 {
+		t.Fatalf("focus polling: lost/gained Git calls %s", scanner.Text())
+	}
 	check(home, "", false, false)
 
 	// Rename similarity must not lazily download missing partial-clone blobs.
