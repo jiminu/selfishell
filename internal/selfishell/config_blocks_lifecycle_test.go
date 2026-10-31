@@ -93,7 +93,7 @@ func blockWrite(t *testing.T, path string, b []byte) {
 	if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
 		t.Fatal(e)
 	}
-	if e := os.WriteFile(path, b, 0640); e != nil {
+	if e := testutil.WriteFile(path, b, 0640); e != nil {
 		t.Fatal(e)
 	}
 }

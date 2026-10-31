@@ -123,10 +123,10 @@ func retainedRollbackRelease(t *testing.T, releases string) {
 	if err := os.MkdirAll(target+"/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(target+"/VERSION", []byte("2.0.0\n"), 0600); err != nil {
+	if err := testutil.WriteFile(target+"/VERSION", []byte("2.0.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
+	if err := testutil.WriteFile(target+"/bin/selfishell", []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -627,14 +627,7 @@ func TestToolsOnlyPreflightRejectsChangedManagedFileBeforePackageWork(t *testing
 		t.Fatal(err)
 	}
 	source := root + "/config/shared/zsh/runtime.zsh"
-	f, err := os.OpenFile(source, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("\n# new approved runtime\n"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
+	if err := testutil.AppendFile(source, []byte("\n# new approved runtime\n")); err != nil {
 		t.Fatal(err)
 	}
 	tools := t.TempDir()

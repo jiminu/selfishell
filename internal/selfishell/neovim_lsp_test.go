@@ -3,13 +3,13 @@ package selfishell
 import (
 	"bytes"
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestDefaultLSPSelection(t *testing.T) {
@@ -46,7 +46,7 @@ func runDefaultLSPSelection(t *testing.T, root, nvim string) {
 			p := standaloneNeovimProcess(t, nvim)
 			p = process.WithEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_MODE": tc.mode})
 			fixture := t.TempDir() + "/mason.lua"
-			if err := os.WriteFile(fixture, []byte(defaultLSPFixtureLua), 0600); err != nil {
+			if err := testutil.WriteFile(fixture, []byte(defaultLSPFixtureLua), 0600); err != nil {
 				t.Fatal(err)
 			}
 			p = process.WithEnvironment(p, map[string]string{"SELFISHELL_LSP_TEST_FIXTURE": fixture})

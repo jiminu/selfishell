@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestSummarizeNearestRanks(t *testing.T) {
@@ -74,7 +76,7 @@ RPROMPT='__SFS_READY_${count}__'
 zshexit() { print finished >> "$HOME/finished"; }
 [[ "$MISE_CEILING_PATHS" == "$PWD" ]] || exit 2
 `
-	if err := os.WriteFile(filepath.Join(zdot, ".zshrc"), []byte(fixture), 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Join(zdot, ".zshrc"), []byte(fixture), 0600); err != nil {
 		t.Fatal(err)
 	}
 	env := PromptEnvironment("/release", home, zdot, "/release/zshrc", "/usr/bin:/bin", nil)
@@ -116,7 +118,7 @@ func TestPromptFromSessionLeader(t *testing.T) {
 	}
 	home := t.TempDir()
 	config := "setopt promptsubst\ntypeset -gi count=0\nprecmd() { (( ++count )); }\nRPROMPT='__SFS_READY_${count}__'\n"
-	if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte(config), 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(os.Args[0], "-test.run", "^TestPromptFromSessionLeader$")

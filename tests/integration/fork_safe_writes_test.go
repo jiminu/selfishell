@@ -10,12 +10,15 @@ import (
 
 // Parallel tests fork constantly. A file written outside testutil's ForkLock
 // can be inherited open for writing, and executing it then fails with ETXTBSY.
+// Unit tests under internal/ write executable fixtures too.
 func TestIntegrationWritesHoldForkLock(t *testing.T) {
 	t.Parallel()
 	files, err := filepath.Glob("*.go")
-	if err != nil || len(files) == 0 {
-		t.Fatalf("integration sources: %v %v", files, err)
+	units, unitErr := filepath.Glob("../../internal/*/*_test.go")
+	if err != nil || unitErr != nil || len(files) == 0 || len(units) == 0 {
+		t.Fatalf("test sources: %v %v %v %v", files, units, err, unitErr)
 	}
+	files = append(files, units...)
 	fset := token.NewFileSet()
 	for _, name := range files {
 		file, err := parser.ParseFile(fset, name, nil, 0)

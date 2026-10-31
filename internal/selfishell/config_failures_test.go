@@ -412,28 +412,12 @@ func TestManagedCacheOnlyInvalidatedByGeneratorChange(t *testing.T) {
 	}
 	blockOK(t, env, copyRoot, "install", "--skip-packages", "--yes")
 	check(true)
-	f, err := os.OpenFile(copyRoot+"/config/shared/vimrc", os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.WriteString("\nset noshowmode\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
+	if err := testutil.AppendFile(copyRoot+"/config/shared/vimrc", []byte("\nset noshowmode\n")); err != nil {
 		t.Fatal(err)
 	}
 	blockOK(t, env, copyRoot, "install", "--skip-packages", "--yes")
 	check(true)
-	f, err = os.OpenFile(copyRoot+"/config/shared/zsh/interactive.zsh", os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.WriteString("\n# changed generator\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
+	if err := testutil.AppendFile(copyRoot+"/config/shared/zsh/interactive.zsh", []byte("\n# changed generator\n")); err != nil {
 		t.Fatal(err)
 	}
 	blockOK(t, env, copyRoot, "install", "--skip-packages", "--yes", "--dry-run")
@@ -466,7 +450,7 @@ func copyTree(source, target string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(to, data, info.Mode().Perm())
+		return testutil.WriteFile(to, data, info.Mode().Perm())
 	})
 }
 

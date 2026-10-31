@@ -15,7 +15,7 @@ import (
 func TestCLI(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, ".git"), nil, 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Join(root, ".git"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -54,7 +54,7 @@ func TestVersionAndRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	executable := filepath.Join(bin, "selfishell")
-	if err := os.WriteFile(executable, nil, 0700); err != nil {
+	if err := testutil.WriteFile(executable, nil, 0700); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(t.TempDir(), "sfs")
@@ -79,7 +79,7 @@ func TestVersionAndRoot(t *testing.T) {
 		t.Fatal(stderr.String())
 	}
 	for _, contents := range []string{"1.2.3\n\n", " v1 \r\n", "1\x002\n", ""} {
-		if err := os.WriteFile(filepath.Join(root, "VERSION"), []byte(contents), 0600); err != nil {
+		if err := testutil.WriteFile(filepath.Join(root, "VERSION"), []byte(contents), 0600); err != nil {
 			t.Fatal(err)
 		}
 		out.Reset()

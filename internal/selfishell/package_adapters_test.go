@@ -75,7 +75,7 @@ if [ "$1" = install ] && [ -f "$HOME/fail-install" ]; then exit 1; fi`)
 
 func (f *packageFixture) flag(name string) {
 	f.t.Helper()
-	if err := os.WriteFile(filepath.Join(f.home, name), nil, 0600); err != nil {
+	if err := testutil.WriteFile(filepath.Join(f.home, name), nil, 0600); err != nil {
 		f.t.Fatal(err)
 	}
 }
