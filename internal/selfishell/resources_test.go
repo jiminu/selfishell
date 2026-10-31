@@ -4,8 +4,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/jiminu/selfishell/internal/managed"
@@ -47,40 +45,9 @@ func TestResources(t *testing.T) {
 			t.Fatal(resources[0])
 		}
 	}
-	if resources, err := ResourcesForPlatform("/release", "unsupported-linux", false, env); resources != nil || err == nil {
-		t.Fatalf("unsupported: %v %v", resources, err)
-	}
 	entries, _ := os.ReadDir(home)
 	if len(entries) != 0 {
 		t.Fatal("resource discovery wrote files")
-	}
-}
-
-func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
-	t.Parallel()
-	var env process.Environment
-	home := t.TempDir()
-	setEnv(&env, "HOME", home)
-	setEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
-	setEnv(&env, "XDG_STATE_HOME", home+"/state")
-	paths, err := managed.UserPaths(env.Get)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resources, err := ManagedResources("/release", env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := managedDirectories(resources, paths)
-	if !slices.Contains(got, paths.Config+"/nvim") || !slices.Contains(got, paths.State) {
-		t.Fatalf("directories: %q", got)
-	}
-	for i, dir := range got {
-		for _, earlier := range got[:i] {
-			if strings.HasPrefix(dir, earlier+"/") {
-				t.Fatalf("%s is removed before its child %s", earlier, dir)
-			}
-		}
 	}
 }
 

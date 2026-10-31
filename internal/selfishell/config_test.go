@@ -5,11 +5,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -508,7 +510,7 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	state := managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: checksum}
 	managed.WriteState(paths.Resources+"/"+r.Name+".state", state)
 	var out, stderr bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out, Err: &stderr}, paths: paths}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &stderr}.report)}
 	record := ResourceState{Resource: r, State: state}
 	if e := m.preflightUninstall(record, false); e != nil {
 		t.Fatal(e)
@@ -554,5 +556,33 @@ func TestPurgeRechecksCLILinkBeforeRemoval(t *testing.T) {
 	data, e := os.ReadFile(link)
 	if e != nil || string(data) != "personal" {
 		t.Fatalf("user path lost: %q %v", data, e)
+	}
+}
+
+func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
+	t.Parallel()
+	var env process.Environment
+	home := t.TempDir()
+	setEnv(&env, "HOME", home)
+	setEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
+	setEnv(&env, "XDG_STATE_HOME", home+"/state")
+	paths, err := managed.UserPaths(env.Get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resources, err := ManagedResources("/release", env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := managedDirectories(resources, paths)
+	if !slices.Contains(got, paths.Config+"/nvim") || !slices.Contains(got, paths.State) {
+		t.Fatalf("directories: %q", got)
+	}
+	for i, dir := range got {
+		for _, earlier := range got[:i] {
+			if strings.HasPrefix(dir, earlier+"/") {
+				t.Fatalf("%s is removed before its child %s", earlier, dir)
+			}
+		}
 	}
 }

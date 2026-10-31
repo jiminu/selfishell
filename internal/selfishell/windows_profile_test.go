@@ -10,6 +10,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -194,7 +195,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	choice := &terminal.WindowsChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
-	m := lifecycle{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Out: io.Discard, Err: io.Discard}.report), Yes: true}
 	for _, preflight := range []bool{true, false} {
 		if err := terminal.InstallFragment(&m, paths, choice, preflight); err != nil {
 			t.Fatal(err)

@@ -122,7 +122,7 @@ func (c CLI) install(args []string) (result int) {
 	}
 	if !dry {
 		c.progress = newProgress(c.Out, c.Err, prepared.paths, c.Env)
-		prepared.m.c.progress = c.progress
+		prepared.m.Reporter, prepared.m.Ask = report.ReportFunc(c.report), c.askModified
 		defer c.progress.finish()
 	}
 	var operation *PackageOperation
@@ -208,6 +208,25 @@ type preparedConfig struct {
 	windowsTerminal *terminal.WindowsChoice
 }
 
+// The Windows Terminal fragment code drives the managed-file lifecycle.
+var _ terminal.Lifecycle = (*lifecycle)(nil)
+
+// managedLifecycle reports through the CLI and asks only when it is interactive.
+func (c CLI) managedLifecycle(paths managed.Paths, dry, yes bool) lifecycle {
+	return lifecycle{Paths: paths, Reporter: report.ReportFunc(c.report), Ask: c.askModified, Dry: dry, Yes: yes}
+}
+
+// askModified pauses the spinner before asking about a modified resource.
+func (c CLI) askModified(question string) (string, bool) {
+	if !c.interactive() {
+		return "", false
+	}
+	c.progress.Pause()
+	fmt.Fprint(c.Out, question)
+	answer, _ := c.readAnswer()
+	return answer, true
+}
+
 // windowsSetup reports through the CLI and asks only when it is interactive.
 func (c CLI) windowsSetup() terminal.Setup {
 	return terminal.Setup{
@@ -239,7 +258,7 @@ func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool
 }
 
 func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
-	return terminal.SaveChoice(p.paths, p.windowsTerminal, p.m.dry)
+	return terminal.SaveChoice(p.paths, p.windowsTerminal, p.m.Dry)
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
@@ -271,11 +290,14 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			}
 		}
 	}
+	if !platformSupported(platform) {
+		return preparedConfig{}, fmt.Errorf("managed installation is unavailable on %s", platform)
+	}
 	resources, err := ResourcesForPlatform(c.Root, platform, ghostty, c.Env)
 	if err != nil {
 		return preparedConfig{}, err
 	}
-	m := lifecycle{c: c, paths: paths, dry: dry, yes: yes, actions: map[string]string{}}
+	m := c.managedLifecycle(paths, dry, yes)
 	for _, name := range []string{"user-zshrc", "user-zprofile", "user-zshenv", "user-vimrc", "user-ghostty"} {
 		for _, r := range resources {
 			if r.Name == name {
@@ -335,7 +357,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if r.Name == "zsh-interactive" && !m.dry {
+		if r.Name == "zsh-interactive" && !m.Dry {
 			same := false
 			source, e := os.ReadFile(r.Source)
 			if e == nil {
@@ -352,10 +374,10 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 			return err
 		}
 	}
-	if err := terminal.InstallFragment(m, m.paths, p.windowsTerminal, false); err != nil {
+	if err := terminal.InstallFragment(m, m.Paths, p.windowsTerminal, false); err != nil {
 		return err
 	}
-	if !m.dry {
+	if !m.Dry {
 		c.trustMise(paths)
 	}
 	return ctx.Err()
@@ -375,7 +397,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		}
 	}
 	if operation != nil {
-		m.unchanged += operation.UnchangedCount
+		m.UnchangedCount += operation.UnchangedCount
 	}
 	if dry {
 		if !skip {
@@ -389,8 +411,8 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 			fmt.Fprintf(c.Out, "Would create user mise config: %s\n", miseGlobal)
 		}
 		c.defaultShell(dry, yes)
-		if m.unchanged > 0 {
-			fmt.Fprintf(c.Out, "%d items unchanged.\n", m.unchanged)
+		if m.UnchangedCount > 0 {
+			fmt.Fprintf(c.Out, "%d items unchanged.\n", m.UnchangedCount)
 		}
 		fmt.Fprintln(c.Out, "Dry run complete; no files were changed.")
 		return nil
@@ -417,8 +439,8 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		return err
 	}
 	c.defaultShell(dry, yes)
-	if m.unchanged > 0 {
-		c.report("Notes", report.Info, "%d items unchanged.", m.unchanged)
+	if m.UnchangedCount > 0 {
+		c.report("Notes", report.Info, "%d items unchanged.", m.UnchangedCount)
 	}
 	c.complete("Selfishell configuration installed.")
 	return nil

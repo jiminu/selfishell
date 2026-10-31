@@ -12,6 +12,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/report"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -198,7 +199,7 @@ func TestManagedSameContentReplacedSymlinkIsPreserved(t *testing.T) {
 		blockEqual(t, statePath, stateBytes)
 	}
 	state := blockState(t, paths, r.Name)
-	m := lifecycle{c: CLI{Env: env, Root: root}, paths: paths}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root}.report)}
 	if err := m.installFile(r, true); err == nil {
 		t.Fatal("preflight accepted replaced symlink")
 	}
@@ -588,7 +589,7 @@ func TestManagedLinkCreateFailureRollbackAndRetry(t *testing.T) {
 	original := []byte("preexisting user starship config\n")
 	blockWrite(t, r.Target, original)
 	var out bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, createLink: func(string, string) error { return errors.New("injected link failure") }}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report), Hooks: lifecycleHooks{CreateLink: func(string, string) error { return errors.New("injected link failure") }}}
 	if err := m.installLink(r, false); err == nil {
 		t.Fatal("link failure reported success")
 	}
@@ -616,7 +617,7 @@ func TestManagedMissingActiveLinkFailureStaysPendingAndRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, createLink: func(string, string) error { return errors.New("injected link failure") }}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report), Hooks: lifecycleHooks{CreateLink: func(string, string) error { return errors.New("injected link failure") }}}
 	if err := m.installLink(r, false); err == nil {
 		t.Fatal("link failure reported success")
 	}
@@ -704,7 +705,7 @@ func TestManagedAtomicFileFailureKeepsOriginalAndPendingRetry(t *testing.T) {
 	original := []byte("original existing file\n")
 	blockWrite(t, r.Target, original)
 	var out bytes.Buffer
-	m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected copy/chmod/write failure") }}
+	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report), Hooks: lifecycleHooks{AtomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected copy/chmod/write failure") }}}
 	if err := m.installFile(r, false); err == nil {
 		t.Fatal("write failure reported success")
 	}
@@ -755,15 +756,16 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 					blockWrite(t, r.Target, before)
 				}
 				var out bytes.Buffer
-				m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, yes: true, actions: map[string]string{r.Name: "overwrite"},
-					atomicWrite: func(path string, data []byte, mode os.FileMode) error {
+				m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report),
+					Ask: func(string) (string, bool) { return "y", true }, // overwrite
+					Hooks: lifecycleHooks{AtomicWrite: func(path string, data []byte, mode os.FileMode) error {
 						if outcome == "write-completed" {
 							if err := managed.WriteAtomic(path, data, mode); err != nil {
 								return err
 							}
 						}
 						return errors.New("injected interruption before active state commit")
-					}}
+					}}}
 				if err := m.installFile(r, false); err == nil {
 					t.Fatal("expected update failure")
 				}
@@ -782,7 +784,7 @@ func TestManagedUpdateWriteFailureRetriesWithFreshProcess(t *testing.T) {
 				if changed {
 					blockWrite(t, r.Target, []byte("personal edit after failure\n"))
 				}
-				retry := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, yes: true}
+				retry := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report), Yes: true}
 				for _, preflight := range []bool{true, false} {
 					err := retry.installFile(r, preflight)
 					if changed {
@@ -833,8 +835,8 @@ func TestRestoreStateRemovalFailureCanRetryUninstall(t *testing.T) {
 			blockOK(t, env, root, "install", "--skip-packages", "--yes")
 			state := blockState(t, paths, r.Name)
 			var out bytes.Buffer
-			m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths,
-				removeState: func(string) error { return errors.New("injected state removal failure") }}
+			m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report),
+				Hooks: lifecycleHooks{RemoveState: func(string) error { return errors.New("injected state removal failure") }}}
 			if err := m.removeResource(ResourceState{Resource: r, State: state}, true); err == nil {
 				t.Fatal("expected state removal failure")
 			}
@@ -886,7 +888,7 @@ func TestInterruptedRestorePreflightAndRetry(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "after-move-user-edit":
-				if err := moveBackupNoReplace(state.Backup, r.Target); err != nil {
+				if err := os.Rename(state.Backup, r.Target); err != nil {
 					t.Fatal(err)
 				}
 				blockWrite(t, r.Target, []byte("personal edit after restore\n"))
@@ -975,7 +977,7 @@ func TestManagedBlockWriteFailureKeepsUserBytesPendingAndRetries(t *testing.T) {
 				blockWrite(t, r.Target, original)
 			}
 			var out bytes.Buffer
-			m := lifecycle{c: CLI{Env: env, Root: root, Out: &out}, paths: paths, atomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected atomic write failure") }}
+			m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out}.report), Hooks: lifecycleHooks{AtomicWrite: func(string, []byte, os.FileMode) error { return errors.New("injected atomic write failure") }}}
 			if err := m.installBlock(r, false); err == nil {
 				t.Fatal("block write failure reported success")
 			}
@@ -1010,11 +1012,11 @@ func TestManagedBlockRemovalFailureKeepsStateForRetry(t *testing.T) {
 			r := failureResource(t, env, root, "user-zshrc")
 			before := blockRead(t, r.Target)
 			injected := errors.New("injected " + point + " failure")
-			m := lifecycle{c: CLI{Env: env, Root: root}, paths: paths}
+			m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root}.report)}
 			if point == "write" {
-				m.atomicWrite = func(string, []byte, os.FileMode) error { return injected }
+				m.Hooks.AtomicWrite = func(string, []byte, os.FileMode) error { return injected }
 			} else {
-				m.removeState = func(string) error { return injected }
+				m.Hooks.RemoveState = func(string) error { return injected }
 			}
 			if err := m.removeResource(ResourceState{Resource: r, State: blockState(t, paths, r.Name)}, false); err == nil {
 				t.Fatal("removal reported success")

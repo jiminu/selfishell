@@ -105,7 +105,7 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 		r := failureResource(t, env, root, "zsh-common")
 		blockWrite(t, r.Target, []byte("# user edit after preflight\n"))
 		c.progress = newProgress(c.Out, c.Err, prepared.paths, env)
-		prepared.m.c.progress = c.progress
+		prepared.m.Reporter, prepared.m.Ask = report.ReportFunc(c.report), c.askModified
 		defer c.progress.finish()
 		if err := c.applyManagedResources(&prepared); err != nil {
 			t.Fatal(err)

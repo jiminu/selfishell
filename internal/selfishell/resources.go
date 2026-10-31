@@ -67,10 +67,8 @@ func ManagedResources(root string, env process.Environment) ([]managed.Resource,
 
 // ResourcesForPlatform selects installation resources only. It must not be
 // used to filter uninstall: another platform's recorded resources still count.
+// Callers reject unsupported platforms first.
 func ResourcesForPlatform(root, platform string, ghostty bool, env process.Environment) ([]managed.Resource, error) {
-	if !platformSupported(platform) {
-		return nil, fmt.Errorf("managed installation is unavailable on %s", platform)
-	}
 	all, err := ManagedResources(root, env)
 	if err != nil {
 		return nil, err
