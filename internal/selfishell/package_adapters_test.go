@@ -167,10 +167,10 @@ printf '%s\n' "$1" >>"$HOME/apt-proxy-calls"`)
 	if err := f.op.InstallApt(context.Background(), "required", false, "available"); err != nil {
 		t.Fatal(err)
 	}
-	if got := readTestFile(t, f.home+"/apt-proxy-calls"); got != "update\ninstall\n" {
+	if got := testutil.ReadTestFile(t, f.home+"/apt-proxy-calls"); got != "update\ninstall\n" {
 		t.Fatalf("proxy commands: %q", got)
 	}
-	args := readTestFile(t, f.home+"/sudo-args")
+	args := testutil.ReadTestFile(t, f.home+"/sudo-args")
 	for _, secret := range []string{"private", "proxy.example", "UNRELATED_SECRET", "-E "} {
 		if strings.Contains(args, secret) {
 			t.Fatalf("sudo exposes or broadly preserves environment: %q", args)

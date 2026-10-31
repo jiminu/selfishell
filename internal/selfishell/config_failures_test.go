@@ -515,7 +515,7 @@ func TestManagedConflictSkipOverwriteAndOriginalRestore(t *testing.T) {
 		t.Fatalf("conflict backup made on refusal: %v", err)
 	}
 	// Interactive skip preserves bytes and state, and a later resource proceeds.
-	setEnv(&env, "SELFISHELL_TEST_TTY", "1")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_TTY", "1")
 	if err := os.Remove(paths.Config + "/starship.toml"); err != nil {
 		t.Fatal(err)
 	}

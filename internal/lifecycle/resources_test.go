@@ -15,11 +15,11 @@ func TestResources(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	home := t.TempDir()
-	setEnv(&env, "HOME", home)
-	setEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
-	setEnv(&env, "XDG_STATE_HOME", home+"/state")
-	setEnv(&env, "XDG_CACHE_HOME", home+"/cache")
-	setEnv(&env, "XDG_DATA_HOME", home+"/data")
+	testutil.SetEnv(&env, "HOME", home)
+	testutil.SetEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
+	testutil.SetEnv(&env, "XDG_STATE_HOME", home+"/state")
+	testutil.SetEnv(&env, "XDG_CACHE_HOME", home+"/cache")
+	testutil.SetEnv(&env, "XDG_DATA_HOME", home+"/data")
 	all, err := ManagedResources("/release/alias/..", env)
 	if err != nil || len(all) == 0 {
 		t.Fatalf("resources: %d %v", len(all), err)

@@ -12,8 +12,8 @@ func TestPlatform(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	root := t.TempDir()
-	setEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
-	setEnv(&env, "SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
 	for _, tc := range []struct{ system, arch, id, proc, platform, wantArch string }{
 		{"Darwin", "arm64", "", "", "macos", "arm64"},
 		{"Linux", "x86_64", "ubuntu", "Linux", "ubuntu", "amd64"},
@@ -23,8 +23,8 @@ func TestPlatform(t *testing.T) {
 		{"Linux", "amd64", "debian", "WSL", "unsupported-wsl", "amd64"},
 		{"FreeBSD", "amd64", "", "", "unsupported", "amd64"},
 	} {
-		setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", tc.system)
-		setEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
+		testutil.SetEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", tc.system)
+		testutil.SetEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
 		if err := testutil.WriteFile(root+"/os-release", []byte("NAME=ignored\nID="+tc.id+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func TestPlatform(t *testing.T) {
 			t.Fatalf("got %+v, want %s/%s", p, tc.platform, tc.wantArch)
 		}
 	}
-	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	if err := os.Remove(root + "/os-release"); err != nil {
 		t.Fatal(err)
 	}

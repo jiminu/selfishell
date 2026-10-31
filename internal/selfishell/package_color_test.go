@@ -18,6 +18,7 @@ import (
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/pty"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func packageTestPTY(t *testing.T) (*os.File, *os.File) {
@@ -58,9 +59,9 @@ func TestProgressTerminalFailure(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	isolateHome(&env, t.TempDir())
-	setEnv(&env, "TERM", "xterm-256color")
-	setEnv(&env, "CI", "")
-	setEnv(&env, "NO_COLOR", "1")
+	testutil.SetEnv(&env, "TERM", "xterm-256color")
+	testutil.SetEnv(&env, "CI", "")
+	testutil.SetEnv(&env, "NO_COLOR", "1")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
@@ -124,9 +125,9 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 	}
 	root, _, _ := blockHome(t, &env, platform)
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
-	setEnv(&env, "SELFISHELL_TEST_PROMPT_ROOT", root)
-	setEnv(&env, "TERM", "xterm-256color")
-	setEnv(&env, "CI", "")
+	testutil.SetEnv(&env, "SELFISHELL_TEST_PROMPT_ROOT", root)
+	testutil.SetEnv(&env, "TERM", "xterm-256color")
+	testutil.SetEnv(&env, "CI", "")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()

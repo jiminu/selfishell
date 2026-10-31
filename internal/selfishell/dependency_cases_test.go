@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,32 +18,15 @@ import (
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func writeTestFile(t *testing.T, path, value string, mode os.FileMode) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := testutil.WriteFile(path, []byte(value), mode); err != nil {
-		t.Fatal(err)
-	}
-}
-func readTestFile(t *testing.T, path string) string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
-}
 func directDownload(t *testing.T, manifest, source, version, target string, bad bool) {
 	t.Helper()
 	data := []byte("#!/bin/sh\necho " + version + "\n")
-	writeTestFile(t, source, string(data), 0600)
+	testutil.WriteTestFile(t, source, string(data), 0600)
 	sum := sha256.Sum256(data)
 	if bad {
 		sum = sha256.Sum256([]byte("wrong"))
 	}
-	writeTestFile(t, manifest, fmt.Sprintf("download tool %s linux amd64 file://%s %x %s raw\n", version, source, sum, target), 0600)
+	testutil.WriteTestFile(t, manifest, fmt.Sprintf("download tool %s linux amd64 file://%s %x %s raw\n", version, source, sum, target), 0600)
 }
 func installTool(op *PackageOperation, paths managed.Paths, manifest string) error {
 	return op.InstallDirect(context.Background(), paths, manifest, "required", "tool", "linux", "amd64", false)
@@ -71,8 +53,8 @@ func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 				directDownload(t, manifest, home+"/source", "1.0", ".local/bin/tool", phase == "stage")
 				prior := map[string]string{"file": target, "directory": target + "/leftover"}[shape]
 				if prior != "" {
-					writeTestFile(t, prior, "old", 0755)
-					writeTestFile(t, state, "0.9\n", 0600)
+					testutil.WriteTestFile(t, prior, "old", 0755)
+					testutil.WriteTestFile(t, state, "0.9\n", 0600)
 				}
 				op.dependencyFault = func(at string) error {
 					if at == phase {
@@ -89,7 +71,7 @@ func TestDirectDownloadFaultKeepsPriorTarget(t *testing.T) {
 				if prior == "" {
 					assertNoPath(t, target)
 					assertNoPath(t, state)
-				} else if readTestFile(t, prior) != "old" || readTestFile(t, state) != "0.9\n" {
+				} else if testutil.ReadTestFile(t, prior) != "old" || testutil.ReadTestFile(t, state) != "0.9\n" {
 					t.Fatal("prior target or state lost")
 				}
 			})
@@ -119,31 +101,31 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 			}
 			state := paths.State + "/dependencies/tool"
 			if tc.old != "" {
-				writeTestFile(t, state, tc.old+"\n", 0600)
+				testutil.WriteTestFile(t, state, tc.old+"\n", 0600)
 			}
 			switch tc.shape {
 			case "valid":
 				content := "existing-install-marker"
 				if tc.old == tc.version {
-					content = readTestFile(t, home+"/source")
+					content = testutil.ReadTestFile(t, home+"/source")
 				}
-				writeTestFile(t, target, content, 0755)
+				testutil.WriteTestFile(t, target, content, 0755)
 			case "nonexecutable":
-				writeTestFile(t, target, "broken", 0644)
+				testutil.WriteTestFile(t, target, "broken", 0644)
 			case "symlink":
-				writeTestFile(t, home+"/user-file", "user owned content", 0755)
+				testutil.WriteTestFile(t, home+"/user-file", "user owned content", 0755)
 				os.MkdirAll(filepath.Dir(target), 0700)
 				if err := os.Symlink(home+"/user-file", target); err != nil {
 					t.Fatal(err)
 				}
 			case "directory":
-				writeTestFile(t, target+"/leftover", "leftover", 0600)
+				testutil.WriteTestFile(t, target+"/leftover", "leftover", 0600)
 			}
 			if err := installTool(op, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
 			if tc.shape == "valid" && tc.old == tc.version {
-				if output(op) != "" || readTestFile(t, target) != readTestFile(t, home+"/source") || op.UnchangedCount != 1 {
+				if output(op) != "" || testutil.ReadTestFile(t, target) != testutil.ReadTestFile(t, home+"/source") || op.UnchangedCount != 1 {
 					t.Fatalf("noop: %q", output(op))
 				}
 				return
@@ -155,16 +137,16 @@ func TestDirectDownloadXDGAndManagedCases(t *testing.T) {
 			} else if !strings.Contains(output(op), "Installed approved dependency: tool "+tc.version) {
 				t.Fatalf("install output: %q", output(op))
 			}
-			if readTestFile(t, state) != tc.version+"\n" {
+			if testutil.ReadTestFile(t, state) != tc.version+"\n" {
 				t.Fatal("wrong state")
 			}
 			if info, err := os.Lstat(target); err != nil || !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
 				t.Fatalf("not executable regular target: %v %v", info, err)
 			}
-			if tc.shape == "symlink" && readTestFile(t, home+"/user-file") != "user owned content" {
+			if tc.shape == "symlink" && testutil.ReadTestFile(t, home+"/user-file") != "user owned content" {
 				t.Fatal("symlink destination changed")
 			}
-			if tc.shape == "directory" && readTestFile(t, target) == "leftover" {
+			if tc.shape == "directory" && testutil.ReadTestFile(t, target) == "leftover" {
 				t.Fatal("directory nested")
 			}
 			if strings.HasPrefix(tc.target, ".local/share/") {
@@ -189,12 +171,12 @@ func TestDirectDownloadExternalTargets(t *testing.T) {
 			}
 			switch shape {
 			case "valid_symlink":
-				writeTestFile(t, home+"/external", "external", 0755)
+				testutil.WriteTestFile(t, home+"/external", "external", 0755)
 				os.Symlink(home+"/external", target)
 			case "dangling_symlink":
 				os.Symlink(home+"/missing", target)
 			case "directory":
-				writeTestFile(t, target+"/user-data", "user data", 0600)
+				testutil.WriteTestFile(t, target+"/user-data", "user data", 0600)
 			}
 			err := installTool(op, paths, manifest)
 			if shape == "valid_symlink" {
@@ -204,7 +186,7 @@ func TestDirectDownloadExternalTargets(t *testing.T) {
 			} else if err == nil {
 				t.Fatal("invalid external target accepted")
 			}
-			if shape == "directory" && readTestFile(t, target+"/user-data") != "user data" {
+			if shape == "directory" && testutil.ReadTestFile(t, target+"/user-data") != "user data" {
 				t.Fatal("external data changed")
 			}
 			if shape != "directory" {
@@ -255,12 +237,12 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	var env process.Environment
 	op, _, manifest, home := dependencyFixture(t, &env)
 	// alias/.. resolves to actual/data; a lexical clean would select work/data.
-	writeTestFile(t, home+"/actual/child/.keep", "keep", 0600)
+	testutil.WriteTestFile(t, home+"/actual/child/.keep", "keep", 0600)
 	os.MkdirAll(home+"/work", 0700)
 	if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
+	testutil.SetEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
 	op.Process.Inherit = env
 	paths, err := managed.UserPaths(env.Get)
 	if err != nil {
@@ -270,7 +252,7 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	if err := installTool(op, paths, manifest); err != nil {
 		t.Fatal(err)
 	}
-	if readTestFile(t, home+"/actual/data/tool/tool") != "#!/bin/sh\necho 1.0\n" {
+	if testutil.ReadTestFile(t, home+"/actual/data/tool/tool") != "#!/bin/sh\necho 1.0\n" {
 		t.Fatal("raw XDG data target not used")
 	}
 	assertNoPath(t, home+"/work/data")
@@ -317,12 +299,12 @@ func TestDirectArchiveMemberAndUnsafeEntries(t *testing.T) {
 				t.Fatal(err)
 			}
 			source := home + "/archive.tar.gz"
-			writeTestFile(t, source, archive.String(), 0600)
+			testutil.WriteTestFile(t, source, archive.String(), 0600)
 			sum := sha256.Sum256(archive.Bytes())
-			writeTestFile(t, manifest, fmt.Sprintf("download tool 1.0 linux amd64 file://%s %x .local/bin/tool bin/tool\n", source, sum), 0600)
+			testutil.WriteTestFile(t, manifest, fmt.Sprintf("download tool 1.0 linux amd64 file://%s %x .local/bin/tool bin/tool\n", source, sum), 0600)
 			err := installTool(op, paths, manifest)
 			if kind == "valid" {
-				if err != nil || readTestFile(t, home+"/.local/bin/tool") != "payload" {
+				if err != nil || testutil.ReadTestFile(t, home+"/.local/bin/tool") != "payload" {
 					t.Fatalf("archive install: %v", err)
 				}
 				return
@@ -336,29 +318,18 @@ func TestDirectArchiveMemberAndUnsafeEntries(t *testing.T) {
 	}
 }
 
-func gitCommand(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	// Detached auto-maintenance after a fixture commit would race path snapshots.
-	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "maintenance.auto=false"}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.invalid", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.invalid")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %s: %v", args, out, err)
-	}
-	return strings.TrimSpace(string(out))
-}
 func directGitFixture(t *testing.T, env *process.Environment) (*PackageOperation, managed.Paths, string, string, string, string) {
 	t.Helper()
 	op, paths, manifest, home := dependencyFixture(t, env)
 	repo := home + "/repo"
 	os.MkdirAll(repo, 0700)
-	gitCommand(t, repo, "init", "--quiet")
-	writeTestFile(t, repo+"/marker", "marker\n", 0600)
-	gitCommand(t, repo, "add", "marker")
-	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
-	gitCommand(t, repo, "tag", "v1.0")
-	head := gitCommand(t, repo, "rev-parse", "HEAD")
-	writeTestFile(t, manifest, fmt.Sprintf("git testgit v1.0 linux amd64 %s %s .local/share/testgit marker\n", repo, head), 0600)
+	testutil.GitCommand(t, repo, "init", "--quiet")
+	testutil.WriteTestFile(t, repo+"/marker", "marker\n", 0600)
+	testutil.GitCommand(t, repo, "add", "marker")
+	testutil.GitCommand(t, repo, "commit", "--quiet", "-m", "initial")
+	testutil.GitCommand(t, repo, "tag", "v1.0")
+	head := testutil.GitCommand(t, repo, "rev-parse", "HEAD")
+	testutil.WriteTestFile(t, manifest, fmt.Sprintf("git testgit v1.0 linux amd64 %s %s .local/share/testgit marker\n", repo, head), 0600)
 	return op, paths, manifest, home, repo, head
 }
 func installGit(op *PackageOperation, paths managed.Paths, manifest string) error {
@@ -377,43 +348,43 @@ func TestDirectGitPinAndRepair(t *testing.T) {
 			version := "v1.0"
 			if pin == "commit" {
 				version = head
-				writeTestFile(t, manifest, fmt.Sprintf("git testgit %s linux amd64 %s %s .local/share/testgit marker\n", head, repo, head), 0600)
+				testutil.WriteTestFile(t, manifest, fmt.Sprintf("git testgit %s linux amd64 %s %s .local/share/testgit marker\n", head, repo, head), 0600)
 			}
 			dep := managed.Dependency{Kind: "git", Name: "testgit", Version: version, Checksum: head, Marker: "marker"}
 			target := home + "/data/testgit"
 			if err := installGit(op, paths, manifest); err != nil {
 				t.Fatal(err)
 			}
-			if gitCommand(t, target, "rev-parse", "HEAD") != head || gitCommand(t, target, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" || readTestFile(t, paths.State+"/dependencies/testgit") != version+"\n" {
+			if testutil.GitCommand(t, target, "rev-parse", "HEAD") != head || testutil.GitCommand(t, target, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" || testutil.ReadTestFile(t, paths.State+"/dependencies/testgit") != version+"\n" {
 				t.Fatal("initial pin/state wrong")
 			}
 			op.Process.Out = new(bytes.Buffer)
 			if err := installGit(op, paths, manifest); err != nil || output(op) != "" || op.UnchangedCount != 1 {
 				t.Fatalf("noop: %v %q", err, output(op))
 			}
-			writeTestFile(t, target+"/cache", "untracked", 0600)
+			testutil.WriteTestFile(t, target+"/cache", "untracked", 0600)
 			if err := installGit(op, paths, manifest); err != nil || output(op) != "" {
 				t.Fatalf("untracked file caused repair: %v %q", err, output(op))
 			}
-			writeTestFile(t, target+"/marker", "edited", 0600)
+			testutil.WriteTestFile(t, target+"/marker", "edited", 0600)
 			if op.validDirect(context.Background(), dep, target, true) {
 				t.Fatal("dirty checkout reported valid")
 			}
-			if err := installGit(op, paths, manifest); err != nil || !strings.Contains(output(op), "Installed approved dependency") || readTestFile(t, target+"/marker") != "marker\n" {
+			if err := installGit(op, paths, manifest); err != nil || !strings.Contains(output(op), "Installed approved dependency") || testutil.ReadTestFile(t, target+"/marker") != "marker\n" {
 				t.Fatalf("dirty repair: %v %q", err, output(op))
 			}
-			gitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
+			testutil.GitCommand(t, target, "commit", "--quiet", "--allow-empty", "-m", "drift")
 			if op.validDirect(context.Background(), dep, target, true) {
 				t.Fatal("drifted checkout reported valid")
 			}
-			if err := installGit(op, paths, manifest); err != nil || gitCommand(t, target, "rev-parse", "HEAD") != head {
+			if err := installGit(op, paths, manifest); err != nil || testutil.GitCommand(t, target, "rev-parse", "HEAD") != head {
 				t.Fatalf("commit drift not repaired: %v", err)
 			}
 			if pin == "commit" {
 				return
 			}
-			gitCommand(t, repo, "commit", "--quiet", "--allow-empty", "-m", "moved")
-			gitCommand(t, repo, "tag", "-f", "v1.0")
+			testutil.GitCommand(t, repo, "commit", "--quiet", "--allow-empty", "-m", "moved")
+			testutil.GitCommand(t, repo, "tag", "-f", "v1.0")
 			if err := os.RemoveAll(target); err != nil {
 				t.Fatal(err)
 			}
@@ -440,7 +411,7 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 			if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 				t.Fatal(err)
 			}
-			setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
+			testutil.SetEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
 			op.Process.Inherit = env
 			paths, err := managed.UserPaths(env.Get)
 			if err != nil {
@@ -449,8 +420,8 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 			real, lexical := home+"/actual/data/testgit", home+"/work/data/testgit"
 			state := paths.State + "/dependencies/testgit"
 			if shape == "managed_real_checkout" {
-				gitCommand(t, home, "clone", "--quiet", repo, real)
-				writeTestFile(t, state, "v1.0\n", 0600)
+				testutil.GitCommand(t, home, "clone", "--quiet", repo, real)
+				testutil.WriteTestFile(t, state, "v1.0\n", 0600)
 				before, err := os.Lstat(real)
 				if err != nil {
 					t.Fatal(err)
@@ -463,20 +434,20 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 					t.Fatalf("approved checkout not reused: %v %q", err, output(op))
 				}
 				after, err := os.Lstat(real)
-				if err != nil || !os.SameFile(before, after) || readTestFile(t, state) != "v1.0\n" {
+				if err != nil || !os.SameFile(before, after) || testutil.ReadTestFile(t, state) != "v1.0\n" {
 					t.Fatalf("approved checkout replaced: %v", err)
 				}
 				assertNoPath(t, lexical)
 				return
 			}
-			writeTestFile(t, real+"/user-file", "user data\n", 0600)
-			writeTestFile(t, lexical+"/marker", "marker\n", 0600)
+			testutil.WriteTestFile(t, real+"/user-file", "user data\n", 0600)
+			testutil.WriteTestFile(t, lexical+"/marker", "marker\n", 0600)
 			if err := installGit(op, paths, manifest); err == nil || !strings.Contains(err.Error(), "not a usable testgit installation") {
 				t.Fatalf("lexical marker accepted: %v %q", err, output(op))
 			}
 			assertNoPath(t, real+"/marker")
 			assertNoPath(t, state)
-			if readTestFile(t, real+"/user-file") != "user data\n" || readTestFile(t, lexical+"/marker") != "marker\n" {
+			if testutil.ReadTestFile(t, real+"/user-file") != "user data\n" || testutil.ReadTestFile(t, lexical+"/marker") != "marker\n" {
 				t.Fatal("existing paths changed")
 			}
 		})
@@ -493,42 +464,42 @@ func TestDirectGitBrokenTargetsAndCheckoutFailure(t *testing.T) {
 			op, paths, manifest, home, repo, head := directGitFixture(t, &env)
 			target := home + "/data/testgit"
 			state := paths.State + "/dependencies/testgit"
-			writeTestFile(t, state, "v1.0\n", 0600)
+			testutil.WriteTestFile(t, state, "v1.0\n", 0600)
 			switch shape {
 			case "missing_marker":
 				os.MkdirAll(target+"/.git", 0700)
 			case "missing_git":
-				writeTestFile(t, target+"/marker", "marker", 0600)
+				testutil.WriteTestFile(t, target+"/marker", "marker", 0600)
 			case "symlink":
-				writeTestFile(t, home+"/elsewhere/marker", "user marker", 0600)
+				testutil.WriteTestFile(t, home+"/elsewhere/marker", "user marker", 0600)
 				os.MkdirAll(filepath.Dir(target), 0700)
 				os.Symlink(home+"/elsewhere", target)
 			case "checkout_failure":
 				if err := installGit(op, paths, manifest); err != nil {
 					t.Fatal(err)
 				}
-				writeTestFile(t, manifest, fmt.Sprintf("git testgit missing linux amd64 %s %s .local/share/testgit marker\n", repo, head), 0600)
+				testutil.WriteTestFile(t, manifest, fmt.Sprintf("git testgit missing linux amd64 %s %s .local/share/testgit marker\n", repo, head), 0600)
 				op.dependencies = nil
 			case "stale_previous":
-				writeTestFile(t, target+".previous.stale/marker", "stale", 0600)
+				testutil.WriteTestFile(t, target+".previous.stale/marker", "stale", 0600)
 			}
 			err := installGit(op, paths, manifest)
 			if shape == "checkout_failure" {
-				if err == nil || readTestFile(t, target+"/marker") != "marker\n" || readTestFile(t, state) != "v1.0\n" {
+				if err == nil || testutil.ReadTestFile(t, target+"/marker") != "marker\n" || testutil.ReadTestFile(t, state) != "v1.0\n" {
 					t.Fatalf("checkout failure damaged prior state: %v", err)
 				}
 				return
 			}
-			if err != nil || gitCommand(t, target, "rev-parse", "HEAD") != head {
+			if err != nil || testutil.GitCommand(t, target, "rev-parse", "HEAD") != head {
 				t.Fatalf("repair failed: %v", err)
 			}
-			if shape == "symlink" && readTestFile(t, home+"/elsewhere/marker") != "user marker" {
+			if shape == "symlink" && testutil.ReadTestFile(t, home+"/elsewhere/marker") != "user marker" {
 				t.Fatal("symlink destination changed")
 			}
-			if shape == "stale_previous" && readTestFile(t, target+".previous.stale/marker") != "stale" {
+			if shape == "stale_previous" && testutil.ReadTestFile(t, target+".previous.stale/marker") != "stale" {
 				t.Fatal("stale previous path changed")
 			}
-			if shape == "stale_previous" && readTestFile(t, state) != "v1.0\n" {
+			if shape == "stale_previous" && testutil.ReadTestFile(t, state) != "v1.0\n" {
 				t.Fatal("stale previous install did not record the approved version")
 			}
 		})

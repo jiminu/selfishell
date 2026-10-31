@@ -61,8 +61,8 @@ func TestProcessChild(t *testing.T) {
 func TestProcess(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
-	setEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
+	testutil.SetEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
+	testutil.SetEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -104,8 +104,8 @@ func TestProcessCancellation(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			env := env
-			setEnv(&env, "HOME", t.TempDir())
-			setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
+			testutil.SetEnv(&env, "HOME", t.TempDir())
+			testutil.SetEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
 			executable, _ := os.Executable()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -184,9 +184,9 @@ func TestChildProcessEnvironment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := env
-			setEnv(&env, "HOME", t.TempDir())
+			testutil.SetEnv(&env, "HOME", t.TempDir())
 			for key, value := range tc.inherit {
-				setEnv(&env, key, value)
+				testutil.SetEnv(&env, key, value)
 			}
 			dir := ""
 			if tc.dir {
@@ -209,7 +209,7 @@ func TestChildProcessEnvironment(t *testing.T) {
 func TestCurl(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	setEnv(&env, "HOME", t.TempDir())
+	testutil.SetEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
 	file := root + "/file with spaces"
 	if err := testutil.WriteFile(file, []byte("download\x00bytes"), 0600); err != nil {
@@ -221,10 +221,10 @@ func TestCurl(t *testing.T) {
 	if code != 0 || err != nil || out.String() != "download\x00bytes" {
 		t.Fatalf("code=%d err=%v out=%q stderr=%q", code, err, out.String(), stderr.String())
 	}
-	setEnv(&env, "PATH", root) // Invalid policy must be rejected before looking for curl.
+	testutil.SetEnv(&env, "PATH", root) // Invalid policy must be rejected before looking for curl.
 	p.Inherit = env
 	for _, value := range []string{"0", "-1", "x", " 1"} {
-		setEnv(&env, "SELFISHELL_CURL_CONNECT_TIMEOUT", value)
+		testutil.SetEnv(&env, "SELFISHELL_CURL_CONNECT_TIMEOUT", value)
 		p.Inherit = env
 		code, err = p.Curl(context.Background(), "metadata", "https://example.invalid")
 		if code != 2 || err == nil || !strings.Contains(err.Error(), "positive integers") {
@@ -237,11 +237,11 @@ func TestCurl(t *testing.T) {
 func TestCurlRetryReplacesPartialResponse(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	setEnv(&env, "HOME", t.TempDir())
+	testutil.SetEnv(&env, "HOME", t.TempDir())
 	for _, name := range []string{"http_proxy", "HTTP_PROXY", "ALL_PROXY", "all_proxy"} {
-		setEnv(&env, name, "")
+		testutil.SetEnv(&env, name, "")
 	}
-	setEnv(&env, "SELFISHELL_CURL_METADATA_MAX_TIME", "1")
+	testutil.SetEnv(&env, "SELFISHELL_CURL_METADATA_MAX_TIME", "1")
 	body := "1.4.1\n"
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +266,7 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	setEnv(&env, "HOME", home)
+	testutil.SetEnv(&env, "HOME", home)
 	project := t.TempDir()
 	safe := t.TempDir()
 	if err := testutil.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
@@ -283,7 +283,7 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	setEnv(&env, "PATH", rel+":"+safe)
+	testutil.SetEnv(&env, "PATH", rel+":"+safe)
 	var out bytes.Buffer
 	p := Process{Dir: project, Out: &out, Env: []string{"HOME=" + home, "PATH=" + rel + ":" + safe}}
 	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
@@ -297,9 +297,4 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	if code, err := p.Run(context.Background(), "./git"); err != nil || code != 0 || out.String() != "unsafe" {
 		t.Fatalf("explicit relative command: code=%d err=%v output=%q", code, err, out.String())
 	}
-}
-
-// setEnv changes only the test's own environment, so tests can run in parallel.
-func setEnv(e *Environment, key, value string) {
-	*e = e.With(map[string]string{key: value})
 }
