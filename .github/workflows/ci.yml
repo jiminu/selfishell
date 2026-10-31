@@ -131,6 +131,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # A second hashed file gives race builds their own cache key.
+          cache-dependency-path: |
+            go.mod
+            scripts/check-go.sh
 
       - name: Install Zsh
         run: |

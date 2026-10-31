@@ -75,6 +75,8 @@ selects an absolute compiler-cache path instead: the repository gate uses
 `.build/test-go-cache` in the checkout so repeated runs reuse fixture builds, and
 CI passes its restored cache to the gate and native archive E2E fixtures. CI's
 pinned `setup-go` action keys its cache from `go.mod`; no `go.sum` is required.
+The race job also hashes `scripts/check-go.sh`, so its race builds use a
+separate cache key from the gate's.
 The Neovim E2E setup also retains that compiler cache when switching to its
 temporary home. The test process leaves the caller-owned cache in place. Test
 homes, XDG paths and mise state remain private, and the reproducibility check

@@ -799,10 +799,16 @@ func TestCIGoRaceAndCoverage(t *testing.T) {
 		t.Fatal("CI must default to read-only permissions")
 	}
 	shell, race := policyJob(t, jobs, "shell"), policyJob(t, jobs, "go-race")
-	for _, step := range []string{"Check out repository", "Set up pinned Go toolchain"} {
-		if !slices.Equal(policyStep(t, shell, step), policyStep(t, race, step)) {
-			t.Errorf("race step %q differs from the shell job", step)
-		}
+	// Only the cache key may differ, so race builds never replace the gate's cache.
+	cacheKey := []string{"          # A second hashed file gives race builds their own cache key.", "          cache-dependency-path: |", "            go.mod", "            scripts/check-go.sh"}
+	setup := policyStep(t, race, "Set up pinned Go toolchain")
+	at := slices.Index(setup, cacheKey[0])
+	if at < 0 || len(setup) < at+len(cacheKey) || !slices.Equal(setup[at:at+len(cacheKey)], cacheKey) {
+		t.Fatalf("race setup-go lacks its own cache key: %q", setup)
+	}
+	setup = slices.Concat(setup[:at], setup[at+len(cacheKey):])
+	if !slices.Equal(policyStep(t, shell, "Check out repository"), policyStep(t, race, "Check out repository")) || !slices.Equal(policyStep(t, shell, "Set up pinned Go toolchain"), setup) {
+		t.Error("race checkout or setup-go differs from the shell job beyond the cache key")
 	}
 	for _, line := range race.lines {
 		if strings.HasPrefix(line, "    permissions:") || strings.HasPrefix(line, "    strategy:") {
