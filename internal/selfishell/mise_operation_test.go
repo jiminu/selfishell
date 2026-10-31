@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func miseFixture(t *testing.T) (*PackageOperation, Paths, string, string) {
+func miseFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string) {
 	t.Helper()
-	op, paths, _, home := dependencyFixture(t)
+	op, paths, _, home := dependencyFixture(t, env)
 	root := home + "/release"
 	writeTestFile(t, root+"/config/shared/mise.toml", "[tools]\nnode = \"24.18.0\"\n", 0600)
 	bin := home + "/bin"
@@ -20,13 +20,15 @@ case "$*" in
   *'install '* ) exit "${INSTALL_EXIT:-0}" ;;
 esac
 `, 0755)
-	t.Setenv("MISE_LOG", home+"/mise.log")
-	op.Process.Env = append(os.Environ(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
+	env.set("MISE_LOG", home+"/mise.log")
+	op.Process.Env = append(env.List(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
 	return op, paths, root, home
 }
 
 func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
-	op, paths, root, home := miseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home := miseFixture(t, &env)
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node@24.18.0", "python@3.13.14"); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,9 @@ func TestMiseInstallUsesReleasePinsAndOfflineCheck(t *testing.T) {
 }
 
 func TestMiseInstallSkipOptionalAndDryRun(t *testing.T) {
-	op, paths, root, home := miseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home := miseFixture(t, &env)
 	if err := op.InstallMise(context.Background(), root, paths, "required", true, "node"); err != nil {
 		t.Fatal(err)
 	}
@@ -78,14 +82,16 @@ func TestMiseInstallSkipOptionalAndDryRun(t *testing.T) {
 }
 
 func TestMiseInstallFallsBackToManagedBinary(t *testing.T) {
-	op, paths, root, home := miseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home := miseFixture(t, &env)
 	if err := os.MkdirAll(home+"/.local/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(home+"/bin/mise", home+"/.local/bin/mise"); err != nil {
 		t.Fatal(err)
 	}
-	op.Process.Env = append(os.Environ(), "HOME="+home, "PATH=/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
+	op.Process.Env = append(env.List(), "HOME="+home, "PATH=/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +101,9 @@ func TestMiseInstallFallsBackToManagedBinary(t *testing.T) {
 }
 
 func TestMiseMissing(t *testing.T) {
-	op, paths, root, home := miseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home := miseFixture(t, &env)
 	if err := os.Remove(home + "/bin/mise"); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +119,9 @@ func TestMiseMissing(t *testing.T) {
 }
 
 func TestMiseTrustsExistingManagedConfigLink(t *testing.T) {
-	op, paths, root, home := miseFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, home := miseFixture(t, &env)
 	link := home + "/.config/mise/conf.d/selfishell.toml"
 	writeTestFile(t, link, "[tools]\n", 0600)
 	if err := op.InstallMise(context.Background(), root, paths, "required", false, "node"); err != nil {

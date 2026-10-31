@@ -18,6 +18,7 @@ type CLI struct {
 	In       io.Reader
 	Out, Err io.Writer
 	Context  context.Context
+	Env      Environment // nil reads the process environment
 	progress *operationProgress
 }
 
@@ -31,13 +32,13 @@ func (c CLI) invocationContext() context.Context {
 func (c CLI) latestReleaseVersion() (string, error) {
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err}}).latest(ctx)
+	return (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env}}).latest(ctx)
 }
 
 func (c CLI) error(message string) {
 	c.progress.pause()
 	prefix := "selfishell:"
-	if progressColor(c.Err) {
+	if progressColor(c.Err, c.Env) {
 		prefix = "\x1b[31mselfishell:\x1b[0m"
 	}
 	fmt.Fprintln(c.Err, prefix+" "+message)

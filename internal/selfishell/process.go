@@ -22,6 +22,7 @@ type Process struct {
 	Out, Err      io.Writer
 	Dir           string
 	Env           []string
+	inherit       Environment // the child environment while Env is nil
 	repoScopedGit bool
 	progress      *operationProgress
 	foreground    bool // Commands which can prompt retain their terminal streams.
@@ -63,7 +64,7 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	// Propagate transfer limits to tools that start Git themselves,
 	// including Neovim plugin sync.
 	env := p.environment()
-	limit, duration := envValue(env, "SELFISHELL_CURL_LOW_SPEED_LIMIT"), envValue(env, "SELFISHELL_CURL_LOW_SPEED_TIME")
+	limit, duration := env.Get("SELFISHELL_CURL_LOW_SPEED_LIMIT"), env.Get("SELFISHELL_CURL_LOW_SPEED_TIME")
 	if limit == "" {
 		limit = "1024"
 	}
@@ -75,10 +76,10 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	}
 	if valid(limit) && valid(duration) {
 		set := map[string]string{}
-		if envValue(env, "GIT_HTTP_LOW_SPEED_LIMIT") == "" {
+		if env.Get("GIT_HTTP_LOW_SPEED_LIMIT") == "" {
 			set["GIT_HTTP_LOW_SPEED_LIMIT"] = limit
 		}
-		if envValue(env, "GIT_HTTP_LOW_SPEED_TIME") == "" {
+		if env.Get("GIT_HTTP_LOW_SPEED_TIME") == "" {
 			set["GIT_HTTP_LOW_SPEED_TIME"] = duration
 		}
 		if len(set) != 0 {
@@ -100,8 +101,9 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 			"GIT_PREFIX": true, "GIT_CEILING_DIRECTORIES": true,
 			"GIT_GRAFT_FILE": true, "GIT_REPLACE_REF_BASE": true,
 		}
-		clean := make([]string, 0, len(p.environment()))
-		for _, item := range p.environment() {
+		env = p.environment()
+		clean := make([]string, 0, len(env))
+		for _, item := range env {
 			key, _, _ := strings.Cut(item, "=")
 			if !blocked[key] || (p.repoScopedGit && (key == "GIT_DIR" || key == "GIT_WORK_TREE")) {
 				clean = append(clean, item)
@@ -189,15 +191,7 @@ func (p Process) lookPath(name string) (string, error) {
 	if strings.ContainsRune(name, os.PathSeparator) {
 		return name, nil
 	}
-	path := os.Getenv("PATH")
-	if p.Env != nil {
-		path = ""
-		for _, entry := range p.Env {
-			if strings.HasPrefix(entry, "PATH=") {
-				path = strings.TrimPrefix(entry, "PATH=")
-			}
-		}
-	}
+	path := p.environment().Get("PATH")
 	for _, dir := range filepath.SplitList(path) {
 		if !filepath.IsAbs(dir) {
 			continue
@@ -214,10 +208,11 @@ func (p Process) lookPath(name string) (string, error) {
 // Curl retains the existing transport, proxy environment and local-file behavior.
 // Callers select and verify a temporary destination before activating a download.
 func (p Process) Curl(ctx context.Context, mode string, args ...string) (int, error) {
-	connect := envDefault("SELFISHELL_CURL_CONNECT_TIMEOUT", "10")
-	limit := envDefault("SELFISHELL_CURL_LOW_SPEED_LIMIT", "1024")
-	duration := envDefault("SELFISHELL_CURL_LOW_SPEED_TIME", "30")
-	maximum := envDefault("SELFISHELL_CURL_METADATA_MAX_TIME", "15")
+	env := p.environment()
+	connect := env.Default("SELFISHELL_CURL_CONNECT_TIMEOUT", "10")
+	limit := env.Default("SELFISHELL_CURL_LOW_SPEED_LIMIT", "1024")
+	duration := env.Default("SELFISHELL_CURL_LOW_SPEED_TIME", "30")
+	maximum := env.Default("SELFISHELL_CURL_METADATA_MAX_TIME", "15")
 	for _, value := range []string{connect, limit, duration, maximum} {
 		if value == "0" || strings.IndexFunc(value, func(r rune) bool { return r < '0' || r > '9' }) >= 0 {
 			return 2, fmt.Errorf("Selfishell curl timeout and speed settings must be positive integers.")

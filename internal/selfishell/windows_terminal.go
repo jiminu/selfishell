@@ -36,8 +36,8 @@ type windowsTerminalChoice struct {
 }
 
 // A cloned distribution inherits the original's state; that fragment is not its own.
-func (w *windowsTerminalChoice) foreign() bool {
-	distro := os.Getenv("WSL_DISTRO_NAME")
+func (w *windowsTerminalChoice) foreign(env Environment) bool {
+	distro := env.Get("WSL_DISTRO_NAME")
 	return w != nil && w.Enabled && distro != "" && w.Distro != distro
 }
 
@@ -108,9 +108,9 @@ func (c CLI) prepareWindowsTerminal(paths Paths, dry, yes, update, enable bool) 
 	if err != nil {
 		return nil, err
 	}
-	distro := os.Getenv("WSL_DISTRO_NAME")
-	p := Process{Out: c.Out, Err: c.Err}
-	if choice.foreign() {
+	distro := c.Env.Get("WSL_DISTRO_NAME")
+	p := Process{Out: c.Out, Err: c.Err, inherit: c.Env}
+	if choice.foreign(c.Env) {
 		if update {
 			c.report("Notes", reportWarning, "Skipping Windows Terminal setup copied from WSL distribution %q; run 'selfishell install' here to set it up.", choice.Distro)
 			return &windowsTerminalChoice{Version: 1, transient: true}, nil
@@ -375,7 +375,7 @@ func (c CLI) findWindowsProfile(p Process, distro string, windowsPaths, modernGU
 			}
 			match := candidate{path, guid, j.text(profile.property("name"))}
 			matches = append(matches, match)
-			if guid == terminalGUID(os.Getenv("WT_PROFILE_ID")) {
+			if guid == terminalGUID(c.Env.Get("WT_PROFILE_ID")) {
 				current = append(current, match)
 			}
 		}

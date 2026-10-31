@@ -26,11 +26,15 @@ const terminalSettingsFixture = `{
 `
 
 func TestWindowsProfileDiscoveryUsesDistroIdentity(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, scenario := range []string{"other-distro-renamed", "modern", "missing", "ambiguous", "current", "hidden", "malformed", "duplicate-face"} {
 		t.Run(scenario, func(t *testing.T) {
-			root, home, paths, settings := existingWindowsProfileFixture(t)
+			t.Parallel()
+			env := env
+			root, home, paths, settings := existingWindowsProfileFixture(t, &env)
 			data := `{"profiles":{"list":[{"guid":"{2c4de342-38b7-51cf-b940-2309a097f518}","source":"Windows.Terminal.Wsl","name":"Renamed shell"}]}}`
-			t.Setenv("WSL_DISTRO_NAME", "Ubuntu")
+			env.set("WSL_DISTRO_NAME", "Ubuntu")
 			modern := `{"guid":"{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}","source":"Microsoft.WSL","name":"Renamed modern shell"}`
 			if scenario == "modern" || scenario == "ambiguous" || scenario == "current" {
 				probe := `#!/bin/sh
@@ -47,7 +51,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			}
 			switch scenario {
 			case "current":
-				t.Setenv("WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
+				env.set("WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
 			case "missing":
 				data = `{"profiles":{"list":[]}}`
 			case "hidden":
@@ -60,7 +64,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			if err := testutil.WriteFile(settings, []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
-			out := blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			out := blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			blockEqual(t, settings, []byte(data))
 			record, err := readWindowsFragmentRecord(paths)
 			if err != nil {
@@ -115,19 +119,23 @@ func TestWindowsTerminalOverrides(t *testing.T) {
 }
 
 func TestWindowsTerminalReportsUserOverrides(t *testing.T) {
-	root, _, _, settings := existingWindowsProfileFixture(t)
-	out := blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	t.Parallel()
+	var env Environment
+	root, _, _, settings := existingWindowsProfileFixture(t, &env)
+	out := blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	blockEqual(t, settings, []byte(terminalSettingsFixture))
 	if !strings.Contains(out, `profile font.face "Cascadia Mono" takes precedence`) || !strings.Contains(out, `Defaults colorScheme "Campbell" takes precedence`) {
 		t.Fatal("missing override notice", out)
 	}
-	if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, `[INFO] Windows Terminal profile font.face "Cascadia Mono"`) {
+	if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, `[INFO] Windows Terminal profile font.face "Cascadia Mono"`) {
 		t.Fatal("status missed the override", out)
 	}
 }
 
 func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
-	root, _, paths, windowsHome := windowsTerminalFixture(t)
+	t.Parallel()
+	var env Environment
+	root, _, paths, windowsHome := windowsTerminalFixture(t, &env)
 	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
 	foreign := []byte(`{"profiles": []}`)
 	for _, dir := range []string{rawParent(fragment), paths.State} {
@@ -138,7 +146,7 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	if err := testutil.WriteFile(fragment, foreign, 0600); err != nil {
 		t.Fatal(err)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	backups, err := filepath.Glob(paths.State + "/backups/windows-terminal-fragment.backup.*")
 	if err != nil || len(backups) != 1 {
 		t.Fatal("existing fragment was not backed up", backups, err)
@@ -148,25 +156,25 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 	if err := testutil.WriteFile(fragment, modified, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "[CHANGED] ~/windows-localappdata/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json (Windows Terminal fragment)") {
+	if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, "[CHANGED] ~/windows-localappdata/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json (Windows Terminal fragment)") {
 		t.Fatal("status missed the modified fragment", out)
 	}
-	code, _, stderr := blockRun(t, root, "", "update", "--tools-only", "--skip-packages", "--yes")
+	code, _, stderr := blockRun(t, env, root, "", "update", "--tools-only", "--skip-packages", "--yes")
 	if code == 0 || !strings.Contains(stderr, "modified") {
 		t.Fatal("update overwrote a modified fragment", code, stderr)
 	}
 	blockEqual(t, fragment, modified)
-	blockOK(t, root, "uninstall", "--yes")
+	blockOK(t, env, root, "uninstall", "--yes")
 	blockEqual(t, fragment, modified)
 	if _, err := os.Stat(windowsFragmentRecordPath(paths)); !os.IsNotExist(err) {
 		t.Fatal("uninstall retained the fragment record", err)
 	}
 }
 
-func existingWindowsProfileFixture(t *testing.T) (string, string, Paths, string) {
+func existingWindowsProfileFixture(t *testing.T, env *Environment) (string, string, Paths, string) {
 	t.Helper()
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	t.Setenv("WT_PROFILE_ID", "")
+	root, home, paths, windowsHome := windowsTerminalFixture(t, env)
+	env.set("WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
 		t.Fatal(err)

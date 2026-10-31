@@ -114,7 +114,7 @@ func (o *PackageOperation) nvimCommand(ctx context.Context, root string, paths P
 	if path, err := o.Process.lookPath("nvim"); err == nil {
 		return path, mise, nil
 	}
-	home := envValue(o.Process.environment(), "HOME")
+	home := o.Process.environment().Get("HOME")
 	path := home + "/.local/bin/nvim"
 	if executableFile(path) {
 		return path, mise, nil

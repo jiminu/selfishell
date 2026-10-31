@@ -14,7 +14,7 @@ import (
 var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
 
 func (c CLI) uninstallConfig(restore, purge, dry bool) error {
-	paths, err := UserPaths()
+	paths, err := userPaths(c.Env)
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 			return err
 		}
 	}
-	resources, err := ManagedResources(c.Root)
+	resources, err := ManagedResources(c.Root, c.Env)
 	if err != nil {
 		return err
 	}

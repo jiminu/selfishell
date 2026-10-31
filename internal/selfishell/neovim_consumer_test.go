@@ -14,30 +14,32 @@ import (
 )
 
 func TestPinnedNeovimConsumer(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	if os.Getenv("SELFISHELL_PINNED_NEOVIM_E2E") != "1" {
 		t.Skip("requires SELFISHELL_PINNED_NEOVIM_E2E=1")
 	}
 	root, home := testRelease(t), t.TempDir()
-	isolateHome(t, home)
-	t.Setenv("XDG_CONFIG_HOME", home+"/.config")
-	t.Setenv("XDG_DATA_HOME", home+"/.local/share")
-	t.Setenv("XDG_STATE_HOME", home+"/.local/state")
-	t.Setenv("XDG_CACHE_HOME", home+"/.cache")
-	t.Setenv("MISE_DATA_DIR", home+"/.local/share/mise")
-	t.Setenv("MISE_STATE_DIR", home+"/.local/state/mise")
-	t.Setenv("MISE_CACHE_DIR", home+"/.cache/mise")
-	t.Setenv("SHELL", "/bin/zsh")
+	isolateHome(&env, home)
+	env.set("XDG_CONFIG_HOME", home+"/.config")
+	env.set("XDG_DATA_HOME", home+"/.local/share")
+	env.set("XDG_STATE_HOME", home+"/.local/state")
+	env.set("XDG_CACHE_HOME", home+"/.cache")
+	env.set("MISE_DATA_DIR", home+"/.local/share/mise")
+	env.set("MISE_STATE_DIR", home+"/.local/state/mise")
+	env.set("MISE_CACHE_DIR", home+"/.cache/mise")
+	env.set("SHELL", "/bin/zsh")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	var output bytes.Buffer
-	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root)}
+	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, env)}
 	if err := ProvisionDeveloper(ctx, root, "neovim-e2e", p); err != nil {
 		t.Fatalf("pin provision: %v\n%s", err, output.String())
 	}
-	if code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes"); code != 0 {
+	if code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(env)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,22 +17,26 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPaths(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	env.set("HOME", home)
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		t.Setenv(k, "")
+		env.set(k, "")
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(env)
 	if err != nil || paths.Config != home+"/.config/selfishell" || paths.State != home+"/.local/state/selfishell" || paths.Cache != home+"/.cache/selfishell" || paths.Data != home+"/.local/share/selfishell" || paths.Resources != paths.State+"/resources" {
 		t.Fatalf("paths=%+v, err=%v", paths, err)
 	}
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		t.Setenv(k, home+"/custom dir")
+		env.set(k, home+"/custom dir")
 	}
-	paths, err = UserPaths()
+	paths, err = userPaths(env)
 	if err != nil || paths.Config != home+"/custom dir/selfishell" || paths.State != paths.Config || paths.Data != paths.Config || paths.Cache != paths.Config {
 		t.Fatalf("override paths=%+v, err=%v", paths, err)
 	}
@@ -51,18 +55,18 @@ func TestPaths(t *testing.T) {
 	}
 	prefix := home + "/alias/.."
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		t.Setenv(k, prefix+"/custom")
+		env.set(k, prefix+"/custom")
 	}
-	paths, err = UserPaths()
+	paths, err = userPaths(env)
 	expected := Paths{Config: prefix + "/custom/selfishell", State: prefix + "/custom/selfishell", Resources: prefix + "/custom/selfishell/resources", Cache: prefix + "/custom/selfishell", Data: prefix + "/custom/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("XDG path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
 	}
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		t.Setenv(k, "")
+		env.set(k, "")
 	}
-	t.Setenv("HOME", prefix)
-	paths, err = UserPaths()
+	env.set("HOME", prefix)
+	paths, err = userPaths(env)
 	expected = Paths{Config: prefix + "/.config/selfishell", State: prefix + "/.local/state/selfishell", Resources: prefix + "/.local/state/selfishell/resources", Cache: prefix + "/.cache/selfishell", Data: prefix + "/.local/share/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("HOME path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
@@ -71,16 +75,18 @@ func TestPaths(t *testing.T) {
 	if err != nil || len(children) != 1 {
 		t.Fatalf("path discovery created targets: %v %v", children, err)
 	}
-	t.Setenv("HOME", "")
-	if _, err := UserPaths(); err == nil {
+	env.set("HOME", "")
+	if _, err := userPaths(env); err == nil {
 		t.Fatal("empty HOME accepted")
 	}
 }
 
 func TestPlatform(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root := t.TempDir()
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
-	t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
+	env.set("SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
 	for _, tc := range []struct{ system, arch, id, proc, platform, wantArch string }{
 		{"Darwin", "arm64", "", "", "macos", "arm64"},
 		{"Linux", "x86_64", "ubuntu", "Linux", "ubuntu", "amd64"},
@@ -90,24 +96,24 @@ func TestPlatform(t *testing.T) {
 		{"Linux", "amd64", "debian", "WSL", "unsupported-wsl", "amd64"},
 		{"FreeBSD", "amd64", "", "", "unsupported", "amd64"},
 	} {
-		t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", tc.system)
-		t.Setenv("SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
-		if err := os.WriteFile(root+"/os-release", []byte("NAME=ignored\nID="+tc.id+"\n"), 0600); err != nil {
+		env.set("SELFISHELL_TEST_SYSTEM_NAME", tc.system)
+		env.set("SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
+		if err := testutil.WriteFile(root+"/os-release", []byte("NAME=ignored\nID="+tc.id+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(root+"/proc-version", []byte(tc.proc), 0600); err != nil {
+		if err := testutil.WriteFile(root+"/proc-version", []byte(tc.proc), 0600); err != nil {
 			t.Fatal(err)
 		}
-		p := DetectPlatform()
+		p := detectPlatform(env)
 		if p.Name != tc.platform || p.Arch != tc.wantArch {
 			t.Fatalf("got %+v, want %s/%s", p, tc.platform, tc.wantArch)
 		}
 	}
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	if err := os.Remove(root + "/os-release"); err != nil {
 		t.Fatal(err)
 	}
-	if DetectPlatform().Name != "unsupported-linux" {
+	if detectPlatform(env).Name != "unsupported-linux" {
 		t.Fatal("missing distro was supported")
 	}
 }
@@ -150,15 +156,17 @@ func TestProcessChild(t *testing.T) {
 }
 
 func TestProcess(t *testing.T) {
-	t.Setenv("SELFISHELL_GO_PROCESS_CHILD", "1")
-	t.Setenv("HTTPS_PROXY", "http://proxy.example:8443")
+	t.Parallel()
+	var env Environment
+	env.set("SELFISHELL_GO_PROCESS_CHILD", "1")
+	env.set("HTTPS_PROXY", "http://proxy.example:8443")
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
 	var out, stderr bytes.Buffer
-	p := Process{In: strings.NewReader("stdin\x00bytes"), Out: &out, Err: &stderr, Dir: dir}
+	p := Process{inherit: env, In: strings.NewReader("stdin\x00bytes"), Out: &out, Err: &stderr, Dir: dir}
 	args := []string{"-test.run=^TestProcessChild$", "--", "echo", "a b", "$(touch SHOULD_NOT_EXIST)", "", "a'\"b"}
 	code, err := p.Run(context.Background(), executable, args...)
 	want := fmt.Sprintf("%q\nstdin\x00bytes\n%s\nhttp://proxy.example:8443", args[3:], dir)
@@ -177,7 +185,7 @@ func TestProcess(t *testing.T) {
 	if code != 127 || err == nil {
 		t.Fatalf("missing code=%d err=%v", code, err)
 	}
-	if err := os.WriteFile(dir+"/not-executable", nil, 0600); err != nil {
+	if err := testutil.WriteFile(dir+"/not-executable", nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 	code, err = p.Run(context.Background(), dir+"/not-executable")
@@ -187,10 +195,14 @@ func TestProcess(t *testing.T) {
 }
 
 func TestProcessCancellation(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, mode := range []string{"wait", "graceful", "ignore"} {
 		t.Run(mode, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
-			t.Setenv("SELFISHELL_GO_PROCESS_CHILD", "1")
+			t.Parallel()
+			env := env
+			env.set("HOME", t.TempDir())
+			env.set("SELFISHELL_GO_PROCESS_CHILD", "1")
 			executable, _ := os.Executable()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -202,7 +214,7 @@ func TestProcessCancellation(t *testing.T) {
 			defer write.Close()
 			done := make(chan error, 1)
 			go func() {
-				code, err := (Process{Out: write, Err: io.Discard}).Run(ctx, executable, "-test.run=^TestProcessChild$", "--", mode)
+				code, err := (Process{inherit: env, Out: write, Err: io.Discard}).Run(ctx, executable, "-test.run=^TestProcessChild$", "--", mode)
 				if code != 130 || !errors.Is(err, context.Canceled) {
 					done <- fmt.Errorf("code=%d err=%v", code, err)
 				} else {
@@ -242,6 +254,8 @@ func TestProcessCancellation(t *testing.T) {
 }
 
 func TestChildProcessEnvironment(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	speed := func(curlLimit, curlTime, gitLimit string) map[string]string {
 		return map[string]string{"SELFISHELL_CURL_LOW_SPEED_LIMIT": curlLimit, "SELFISHELL_CURL_LOW_SPEED_TIME": curlTime, "GIT_HTTP_LOW_SPEED_LIMIT": gitLimit, "GIT_HTTP_LOW_SPEED_TIME": ""}
 	}
@@ -265,20 +279,22 @@ func TestChildProcessEnvironment(t *testing.T) {
 		{"repository selectors", nil, []string{"GIT_DIR=/foreign", "GIT_WORK_TREE=/foreign", "GIT_INDEX_FILE=/foreign/index", "GIT_HTTP_LOW_SPEED_LIMIT=12"}, false, []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_HTTP_LOW_SPEED_LIMIT"}, "|||12"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			t.Parallel()
+			env := env
+			env.set("HOME", t.TempDir())
 			for key, value := range tc.inherit {
-				t.Setenv(key, value)
+				env.set(key, value)
 			}
 			dir := ""
 			if tc.dir {
 				dir = t.TempDir()
 			}
 			var out bytes.Buffer
-			code, err := (Process{Out: &out, Env: tc.env, Dir: dir}).Run(context.Background(), "/usr/bin/env")
-			env := strings.Split(out.String(), "\n")
+			code, err := (Process{Out: &out, Env: tc.env, inherit: env, Dir: dir}).Run(context.Background(), "/usr/bin/env")
+			child := Environment(strings.Split(out.String(), "\n"))
 			var got []string
 			for _, key := range tc.vars {
-				got = append(got, envValue(env, key))
+				got = append(got, child.Get(key))
 			}
 			if want := strings.ReplaceAll(tc.want, "DIR", dir); err != nil || code != 0 || strings.Join(got, "|") != want {
 				t.Fatalf("code=%d err=%v got %q want %q", code, err, strings.Join(got, "|"), want)
@@ -302,21 +318,25 @@ func TestTerminal(t *testing.T) {
 }
 
 func TestCurl(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	var env Environment
+	env.set("HOME", t.TempDir())
 	root := t.TempDir()
 	file := root + "/file with spaces"
-	if err := os.WriteFile(file, []byte("download\x00bytes"), 0600); err != nil {
+	if err := testutil.WriteFile(file, []byte("download\x00bytes"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	p := Process{Out: &out, Err: &stderr}
+	p := Process{inherit: env, Out: &out, Err: &stderr}
 	code, err := p.Curl(context.Background(), "transfer", (&url.URL{Scheme: "file", Path: file}).String())
 	if code != 0 || err != nil || out.String() != "download\x00bytes" {
 		t.Fatalf("code=%d err=%v out=%q stderr=%q", code, err, out.String(), stderr.String())
 	}
-	t.Setenv("PATH", root) // Invalid policy must be rejected before looking for curl.
+	env.set("PATH", root) // Invalid policy must be rejected before looking for curl.
+	p.inherit = env
 	for _, value := range []string{"0", "-1", "x", " 1"} {
-		t.Setenv("SELFISHELL_CURL_CONNECT_TIMEOUT", value)
+		env.set("SELFISHELL_CURL_CONNECT_TIMEOUT", value)
+		p.inherit = env
 		code, err = p.Curl(context.Background(), "metadata", "https://example.invalid")
 		if code != 2 || err == nil || !strings.Contains(err.Error(), "positive integers") {
 			t.Fatalf("policy %q: code=%d err=%v", value, code, err)
@@ -326,11 +346,13 @@ func TestCurl(t *testing.T) {
 
 // A retry after a partial response must replace it, not append to it.
 func TestCurlRetryReplacesPartialResponse(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	var env Environment
+	env.set("HOME", t.TempDir())
 	for _, name := range []string{"http_proxy", "HTTP_PROXY", "ALL_PROXY", "all_proxy"} {
-		t.Setenv(name, "")
+		env.set(name, "")
 	}
-	t.Setenv("SELFISHELL_CURL_METADATA_MAX_TIME", "1")
+	env.set("SELFISHELL_CURL_METADATA_MAX_TIME", "1")
 	body := "1.4.1\n"
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -345,21 +367,23 @@ func TestCurlRetryReplacesPartialResponse(t *testing.T) {
 	}))
 	defer server.Close()
 	var out bytes.Buffer
-	code, err := (Process{Out: &out, Err: io.Discard}).Curl(context.Background(), "metadata", server.URL+"/VERSION")
+	code, err := (Process{inherit: env, Out: &out, Err: io.Discard}).Curl(context.Background(), "metadata", server.URL+"/VERSION")
 	if code != 0 || err != nil || out.String() != body || requests.Load() != 2 {
 		t.Fatalf("code=%d err=%v out=%q requests=%d", code, err, out.String(), requests.Load())
 	}
 }
 
 func TestProcessSkipsRelativePATHEntries(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	env.set("HOME", home)
 	project := t.TempDir()
 	safe := t.TempDir()
-	if err := os.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
+	if err := testutil.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(safe, "git"), []byte("#!/bin/sh\nprintf safe\n"), 0755); err != nil {
+	if err := testutil.WriteFile(filepath.Join(safe, "git"), []byte("#!/bin/sh\nprintf safe\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	workdir, err := os.Getwd()
@@ -370,14 +394,14 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", rel+":"+safe)
+	env.set("PATH", rel+":"+safe)
 	var out bytes.Buffer
 	p := Process{Dir: project, Out: &out, Env: []string{"HOME=" + home, "PATH=" + rel + ":" + safe}}
 	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
 		t.Fatalf("PATH lookup: code=%d err=%v output=%q", code, err, out.String())
 	}
 	out.Reset()
-	if code, err := (Process{Dir: project, Out: &out}).Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
+	if code, err := (Process{inherit: env, Dir: project, Out: &out}).Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {
 		t.Fatalf("inherited PATH lookup: code=%d err=%v output=%q", code, err, out.String())
 	}
 	out.Reset()

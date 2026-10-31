@@ -34,7 +34,7 @@ func runNeovimGitRemote(t *testing.T, root, nvim, pluginRoot string) {
 		"SELFISHELL_TEST_NVIM_PLUGIN_ROOT": pluginRoot,
 		"GIT_CONFIG_NOSYSTEM":              "1", "GIT_CONFIG_GLOBAL": "/dev/null",
 	}, "WSL_DISTRO_NAME", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
-	home, err := filepath.EvalSymlinks(envValue(p.Env, "HOME"))
+	home, err := filepath.EvalSymlinks(Environment(p.Env).Get("HOME"))
 	if err != nil {
 		t.Fatal(err)
 	}

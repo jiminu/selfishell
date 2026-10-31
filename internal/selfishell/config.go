@@ -59,11 +59,11 @@ func (c CLI) install(args []string) (result int) {
 	if err != nil {
 		return c.diagnosticError(err)
 	}
-	if _, err := ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(c.Root, "dependencies.conf"))); err != nil {
+	if _, err := ReadDependencies(c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(c.Root, "dependencies.conf"))); err != nil {
 		c.error(err.Error())
 		return 1
 	}
-	platform := DetectPlatform().Name
+	platform := detectPlatform(c.Env).Name
 	if !platformSupported(platform) {
 		c.error("Managed installation is unavailable on " + platform + ".")
 		return 1
@@ -116,17 +116,17 @@ func (c CLI) install(args []string) (result int) {
 		return 1
 	}
 	if !dry {
-		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		c.progress = newProgress(c.Out, c.Err, prepared.paths, c.Env)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 	}
 	var operation *PackageOperation
 	if !skip {
-		operation = &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
+		operation = &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}
 		err = func() error {
 			ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			if err := c.installPackages(ctx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, prepared.ghostty, dry); err != nil {
+			if err := c.installPackages(ctx, operation, prepared.paths, packages, platform, detectPlatform(c.Env).Arch, prepared.ghostty, dry); err != nil {
 				return err
 			}
 			operation.reportSkippedOptional()
@@ -208,7 +208,7 @@ type preparedConfig struct {
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
 func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, enableWindowsTerminal bool) (preparedConfig, error) {
-	paths, err := UserPaths()
+	paths, err := userPaths(c.Env)
 	if err != nil {
 		return preparedConfig{}, err
 	}
@@ -226,7 +226,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
 				question := "Install Ghostty terminal and managed configuration (recommended)? [Y/n] "
-				if ghosttyInstalled(Process{}) {
+				if ghosttyInstalled(Process{inherit: c.Env}) {
 					question = "Use Selfishell configuration for your existing Ghostty terminal (recommended)? [Y/n] "
 				}
 				fmt.Fprint(c.Out, question)
@@ -235,7 +235,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			}
 		}
 	}
-	resources, err := ResourcesForPlatform(c.Root, platform, ghostty)
+	resources, err := ResourcesForPlatform(c.Root, platform, ghostty, c.Env)
 	if err != nil {
 		return preparedConfig{}, err
 	}
@@ -249,7 +249,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			}
 		}
 	}
-	miseGlobal := envDefault("XDG_CONFIG_HOME", os.Getenv("HOME")+"/.config") + "/mise/config.toml"
+	miseGlobal := c.Env.Default("XDG_CONFIG_HOME", c.Env.Get("HOME")+"/.config") + "/mise/config.toml"
 	if !update {
 		if info, present, e := exists(miseGlobal); e != nil {
 			return preparedConfig{}, e
@@ -390,10 +390,10 @@ func (c CLI) installNeovim(operation *PackageOperation, paths Paths, dry bool) e
 	c.progress.stage("Synchronizing Neovim plugins")
 	ctx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return operation.InstallNeovimPlugins(ctx, c.Root, paths, envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
+	return operation.InstallNeovimPlugins(ctx, c.Root, paths, c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
 }
 func writeOnce(path string, data []byte) error { return createRawOnce(path, data) }
-func (c CLI) interactive() bool                { return IsTerminal(c.In) || os.Getenv("SELFISHELL_TEST_TTY") != "" }
+func (c CLI) interactive() bool                { return IsTerminal(c.In) || c.Env.Get("SELFISHELL_TEST_TTY") != "" }
 func (c CLI) readAnswer() (string, error) {
 	resume := c.progress.prompt()
 	defer resume()

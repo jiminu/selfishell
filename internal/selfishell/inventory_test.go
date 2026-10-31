@@ -15,7 +15,7 @@ import (
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
+func inventoryFixture(t *testing.T, env *Environment) (string, Paths, *bytes.Buffer, string) {
 	t.Helper()
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
@@ -25,16 +25,16 @@ func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("HOME", home)
-	t.Setenv("WSL_DISTRO_NAME", "")
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
-	t.Setenv("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf"))
+	env.set("HOME", home)
+	env.set("WSL_DISTRO_NAME", "")
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("XDG_DATA_HOME", filepath.Join(home, "data"))
+	env.set("XDG_STATE_HOME", filepath.Join(home, "state"))
+	env.set("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf"))
 	if err := testutil.WriteFile(filepath.Join(root, "dependencies.conf"), []byte(""), 0600); err != nil {
 		t.Fatal(err)
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(*env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,9 +49,9 @@ func fixtureFile(t *testing.T, path, content string, mode os.FileMode) {
 		t.Fatal(err)
 	}
 }
-func inventory(t *testing.T, root string, paths Paths, warnings *bytes.Buffer) *ToolInventory {
+func inventory(t *testing.T, env Environment, root string, paths Paths, warnings *bytes.Buffer) *ToolInventory {
 	t.Helper()
-	inv, err := NewToolInventory(root, paths, warnings)
+	inv, err := NewToolInventory(root, paths, warnings, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,9 +64,11 @@ func wantTool(t *testing.T, got ToolResult, installed, source, approved string) 
 	}
 }
 func TestInventoryAptStatusesAndCache(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(bin, "dpkg-query"), "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/dpkg-calls\"\nprintf 'git:amd64\\tii \\t2.43.0\\nvim\\trc \\t9.1\\nmake\\thi \\t4.3\\nless\\tiiR\\t590\\n'\n", 0700)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	for _, tc := range []struct{ name, version, source string }{{"git", "2.43.0", "apt"}, {"make", "4.3", "apt"}} {
 		got, err := inv.Detect("apt", tc.name, "linux", "amd64")
 		if err != nil {
@@ -83,7 +85,7 @@ func TestInventoryAptStatusesAndCache(t *testing.T) {
 			t.Fatalf("%s incorrectly reported as apt: %+v", name, got)
 		}
 	}
-	calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "dpkg-calls"))
+	calls, err := os.ReadFile(filepath.Join(env.Get("HOME"), "dpkg-calls"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,15 +95,19 @@ func TestInventoryAptStatusesAndCache(t *testing.T) {
 }
 
 func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
 		t.Run(manager, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("PATH", bin)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			env.set("PATH", bin)
 			fixtureFile(t, root+"/config/shared/mise.toml", "[tools]\nprobe = \"1.0\"\n", 0600)
 			command := map[string]string{"apt": "dpkg-query", "formula": "brew", "cask": "brew", "mise": "mise"}[manager]
 			fixtureFile(t, bin+"/"+command, "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/query-calls\"\nprintf 'database permission denied\\n' >&2\nexit 2\n", 0700)
 			fixtureFile(t, bin+"/probe", "#!/bin/sh\nexit 0\n", 0700)
-			inv := inventory(t, root, paths, warnings)
+			inv := inventory(t, env, root, paths, warnings)
 			for range 2 {
 				got, err := inv.Detect(manager, "probe", "linux", "amd64")
 				if err == nil || !strings.Contains(err.Error(), "database permission denied") {
@@ -111,7 +117,7 @@ func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
 					t.Fatalf("failed query asserted absence or external ownership: %+v", got)
 				}
 			}
-			calls, err := os.ReadFile(os.Getenv("HOME") + "/query-calls")
+			calls, err := os.ReadFile(env.Get("HOME") + "/query-calls")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -127,13 +133,17 @@ func TestInventoryQueryFailureIsUnknownWithoutExternalFallback(t *testing.T) {
 }
 
 func TestInventorySuccessfulEmptyQueryAllowsMissingAndExternal(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, manager := range []string{"apt", "formula", "cask", "mise"} {
 		t.Run(manager, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("PATH", bin)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			env.set("PATH", bin)
 			command := map[string]string{"apt": "dpkg-query", "formula": "brew", "cask": "brew", "mise": "mise"}[manager]
 			fixtureFile(t, bin+"/"+command, "#!/bin/sh\nexit 0\n", 0700)
-			inv := inventory(t, root, paths, warnings)
+			inv := inventory(t, env, root, paths, warnings)
 			got, err := inv.Detect(manager, "probe", "linux", "amd64")
 			if err != nil || got.Installed != "missing" {
 				t.Fatalf("successful empty inventory: %+v, %v", got, err)
@@ -148,16 +158,20 @@ func TestInventorySuccessfulEmptyQueryAllowsMissingAndExternal(t *testing.T) {
 }
 
 func TestInventoryMiseFailureWithoutStderrRetainsExitStatus(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
-	t.Setenv("PATH", bin)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
+	env.set("PATH", bin)
 	fixtureFile(t, bin+"/mise", "#!/bin/sh\nexit 7\n", 0700)
-	got, err := inventory(t, root, paths, warnings).Detect("mise", "probe", "linux", "amd64")
+	got, err := inventory(t, env, root, paths, warnings).Detect("mise", "probe", "linux", "amd64")
 	if got.Installed != "unknown" || err == nil || !strings.Contains(err.Error(), "exited 7") {
 		t.Fatalf("silent process error lost: tool=%+v error=%v", got, err)
 	}
 }
 
 func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		name, response string
 		unknown        bool
@@ -167,10 +181,12 @@ func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
 		{"inspection failure", "printf 'database locked\\n' >&2; exit 2", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("PATH", bin)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			env.set("PATH", bin)
 			fixtureFile(t, bin+"/brew", "#!/bin/sh\ncase \"$*\" in\n 'list --versions --json') printf '{\"formulae\":[],\"casks\":[]}' ;;\n 'list --versions probe') "+tc.response+";;\nesac\n", 0700)
-			got, err := inventory(t, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
+			got, err := inventory(t, env, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
 			if tc.unknown {
 				if err == nil || got.Installed != "unknown" {
 					t.Fatalf("alias inspection failure discarded: tool=%+v error=%v", got, err)
@@ -183,18 +199,22 @@ func TestInventoryBrewAliasDistinguishesAbsentFromQueryFailure(t *testing.T) {
 }
 
 func TestInventoryBrewAliasExecutionFailureIsUnknown(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
-	t.Setenv("PATH", bin)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
+	env.set("PATH", bin)
 	// A successful bulk query followed by a missing executable must not be
 	// confused with Homebrew's ordinary silent exit 1 for an absent formula.
 	fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[],\"casks\":[]}'\n/bin/rm \"$0\"\n", 0700)
 	fixtureFile(t, bin+"/probe", "#!/bin/sh\nexit 0\n", 0700)
-	got, err := inventory(t, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
+	got, err := inventory(t, env, root, paths, warnings).Detect("formula", "probe", "macos", "arm64")
 	if err == nil || got.Installed != "unknown" || got.Source != "none" || !strings.Contains(err.Error(), "brew") {
 		t.Fatalf("alias execution failure swallowed: tool=%+v error=%v", got, err)
 	}
 }
 func TestInventoryBrewJSONAndLegacy(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	legacy := "list --versions --json\nlist --formula --versions\nlist --cask --versions\n"
 	for _, tc := range []struct{ name, json, calls string }{
 		{"json", `{"formulae":[{"name":"starship","versions":["1.26.0"]}],"casks":[{"token":"ghostty","versions":["1.3.1"]}]}`, "list --versions --json\n"},
@@ -205,10 +225,12 @@ func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 		{"null formula versions", `{"formulae":[{"name":"starship","versions":null}],"casks":[{"token":"ghostty","versions":["0.0.0"]}]}`, legacy},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("BREW_JSON", tc.json)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			env.set("BREW_JSON", tc.json)
 			fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') if [ \"$BREW_JSON\" = unsupported ]; then printf 'unknown option: --json\\n' >&2; exit 2; fi; printf '%s\\n' \"$BREW_JSON\";;\n 'list --formula --versions') printf 'starship 1.26.0\\n';;\n 'list --cask --versions') printf 'ghostty 1.3.1\\n';;\nesac\n", 0700)
-			inv := inventory(t, root, paths, warnings)
+			inv := inventory(t, env, root, paths, warnings)
 			got, err := inv.Detect("formula", "starship", "macos", "arm64")
 			if err != nil {
 				t.Fatal(err)
@@ -219,7 +241,7 @@ func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantTool(t, got, "1.3.1", "homebrew-cask", "package-manager")
-			calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "brew-calls"))
+			calls, err := os.ReadFile(filepath.Join(env.Get("HOME"), "brew-calls"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,12 +252,14 @@ func TestInventoryBrewJSONAndLegacy(t *testing.T) {
 	}
 }
 func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, _ := inventoryFixture(t, &env)
 	// sha256 of the fixture binary below, as install records it for raw downloads.
 	sum := sha256.Sum256([]byte("#!/bin/sh\nexit 0\n"))
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source "+hex.EncodeToString(sum[:])+" .local/bin/mise raw\n", 0600)
-	target := filepath.Join(os.Getenv("HOME"), ".local/bin/mise")
-	inv := inventory(t, root, paths, warnings)
+	target := filepath.Join(env.Get("HOME"), ".local/bin/mise")
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("direct", "mise", "macos", "arm64")
 	if err != nil {
 		t.Fatal(err)
@@ -279,11 +303,13 @@ func TestInventoryDirectManagedExternalAndMissing(t *testing.T) {
 	wantTool(t, got, "missing", "selfishell", "1.0")
 }
 func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
-	t.Setenv("PATH", bin)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
+	env.set("PATH", bin)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\npython = \"3.13.14\"\ngh = \"2.100.0\"\n[settings]\nnode = \"ignored\"\n", 0600)
 	fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$*\" \"$PWD\" \"$MISE_GLOBAL_CONFIG_FILE\" \"$NO_COLOR\" >>\"$HOME/mise-calls\"\nprintf 'node 24.18.0 /config/mise.toml 24.18.0\\npython 3.13.14 /config/mise.toml 3.13.14\\npython 3.12.0 /config/mise.toml 3.12.0\\n'\nif [ -f \"$HOME/mise-fail\" ]; then printf 'mise ERROR untrusted\\nextra detail\\n' >&2; exit 1; fi\n", 0700)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("mise", "node", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +320,7 @@ func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "3.13.14 3.12.0", "mise", "3.13.14")
-	calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "mise-calls"))
+	calls, err := os.ReadFile(filepath.Join(env.Get("HOME"), "mise-calls"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,8 +332,8 @@ func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 	if string(calls) != want {
 		t.Fatalf("mise call %q, want %q", calls, want)
 	}
-	fixtureFile(t, filepath.Join(os.Getenv("HOME"), "mise-fail"), "", 0600)
-	inv = inventory(t, root, paths, warnings)
+	fixtureFile(t, filepath.Join(env.Get("HOME"), "mise-fail"), "", 0600)
+	inv = inventory(t, env, root, paths, warnings)
 	got, err = inv.Detect("mise", "gh", "linux", "amd64")
 	if err == nil || !strings.Contains(err.Error(), "mise ERROR untrusted") || !strings.Contains(err.Error(), "extra detail") {
 		t.Fatalf("query error lost: %v", err)
@@ -327,9 +353,11 @@ func TestInventoryMiseInstalledPinsFailureAndShim(t *testing.T) {
 }
 
 func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(bin, "brew"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/brew-calls\"\ncase \"$*\" in\n 'list --versions --json') printf '{\"formulae\":[],\"casks\":[]}' ;;\n 'list --versions aliased') printf 'canonical 1.2.3\\n' ;;\nesac\n", 0700)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("formula", "aliased", "macos", "arm64")
 	if err != nil {
 		t.Fatal(err)
@@ -340,7 +368,7 @@ func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "none", "package-manager")
-	calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "brew-calls"))
+	calls, err := os.ReadFile(filepath.Join(env.Get("HOME"), "brew-calls"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,16 +377,18 @@ func TestInventoryBrewAliasAndCaskFallback(t *testing.T) {
 	}
 }
 func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, _ := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "download mise 1.0 all all source checksum .local/bin/mise raw\n", 0600)
-	target := filepath.Join(os.Getenv("HOME"), ".local/bin/mise")
+	target := filepath.Join(env.Get("HOME"), ".local/bin/mise")
 	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(root, "absent"), target); err != nil {
 		t.Fatal(err)
 	}
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("direct", "mise", "macos", "arm64")
 	if err != nil {
 		t.Fatal(err)
@@ -385,11 +415,13 @@ func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 	wantTool(t, got, "missing", "selfishell", "1.0")
 }
 func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
-	target := filepath.Join(os.Getenv("HOME"), "data", "testgit")
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, _ := inventoryFixture(t, &env)
+	target := filepath.Join(env.Get("HOME"), "data", "testgit")
 	fixtureFile(t, filepath.Join(target, "marker"), ":\n", 0600)
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source - .local/share/testgit marker\n", 0600)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
@@ -406,30 +438,32 @@ func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 }
 func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
-	root, paths, warnings, bin := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, bin := inventoryFixture(t, &env)
 	fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nuv = \"0.12.13\"\n", 0600)
 	fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nprintf 'call\\n' >>\"$HOME/mise-calls\"\ncat \"$HOME/mise-output\"\n", 0700)
-	fixtureFile(t, filepath.Join(os.Getenv("HOME"), "mise-output"), "", 0600)
+	fixtureFile(t, filepath.Join(env.Get("HOME"), "mise-output"), "", 0600)
 	fixtureFile(t, filepath.Join(bin, "uv"), "#!/bin/sh\n", 0700)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("mise", "uv", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "detected", "external", "0.12.13")
-	fixtureFile(t, filepath.Join(os.Getenv("HOME"), "mise-output"), "uv 0.12.13 /config 0.12.13\n", 0600)
+	fixtureFile(t, filepath.Join(env.Get("HOME"), "mise-output"), "uv 0.12.13 /config 0.12.13\n", 0600)
 	got, err = inv.Detect("mise", "uv", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "detected", "external", "0.12.13")
-	fresh := inventory(t, root, paths, warnings)
+	fresh := inventory(t, env, root, paths, warnings)
 	got, err = fresh.Detect("mise", "uv", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "0.12.13", "mise", "0.12.13")
-	calls, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "mise-calls"))
+	calls, err := os.ReadFile(filepath.Join(env.Get("HOME"), "mise-calls"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,11 +473,15 @@ func TestInventoryMiseShimFallbackAndReset(t *testing.T) {
 }
 
 func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, location := range []string{"installs", "symlink", "shims", "shim-alias", "shim-directory-alias", "shim-parent-alias", "configured-parent-alias", "external-sibling"} {
 		t.Run(location, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
 			data := filepath.Join(root, "mise-data")
-			t.Setenv("MISE_DATA_DIR", data)
+			env.set("MISE_DATA_DIR", data)
 			if location == "configured-parent-alias" {
 				nested := filepath.Join(root, "nested")
 				if err := os.MkdirAll(nested, 0700); err != nil {
@@ -453,7 +491,7 @@ func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 				if err := os.Symlink(nested, alias); err != nil {
 					t.Fatal(err)
 				}
-				t.Setenv("MISE_DATA_DIR", alias+"/../mise-data")
+				env.set("MISE_DATA_DIR", alias+"/../mise-data")
 			}
 			fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
 			fixtureFile(t, filepath.Join(bin, "mise"), "#!/bin/sh\nexit 0\n", 0700)
@@ -508,8 +546,8 @@ func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 				selected = filepath.Join(data, "installs-personal/node")
 				fixtureFile(t, selected, "#!/bin/sh\nexit 0\n", 0700)
 			}
-			t.Setenv("PATH", filepath.Dir(selected)+":"+bin)
-			got, err := inventory(t, root, paths, warnings).Detect("mise", "node", "linux", "amd64")
+			env.set("PATH", filepath.Dir(selected)+":"+bin)
+			got, err := inventory(t, env, root, paths, warnings).Detect("mise", "node", "linux", "amd64")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -522,11 +560,15 @@ func TestInventoryMiseInstallsAreNotExternalTools(t *testing.T) {
 	}
 }
 func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, location := range []string{"home", "home_alias", "lexical_home_alias"} {
 		t.Run(location, func(t *testing.T) {
-			root, paths, warnings, _ := inventoryFixture(t)
+			t.Parallel()
+			env := env
+			root, paths, warnings, _ := inventoryFixture(t, &env)
 			fixtureFile(t, filepath.Join(root, "config/shared/mise.toml"), "[tools]\nnode = \"24.18.0\"\n", 0600)
-			home := os.Getenv("HOME")
+			home := env.Get("HOME")
 			if location != "home" {
 				// alias/.. resolves to actual/home; a lexical clean would select work/home.
 				for _, dir := range []string{root + "/actual/child", root + "/work"} {
@@ -537,14 +579,14 @@ func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 				if err := os.Symlink(root+"/actual/child", root+"/work/alias"); err != nil {
 					t.Fatal(err)
 				}
-				t.Setenv("HOME", root+"/work/alias/../home")
+				env.set("HOME", root+"/work/alias/../home")
 				home = root + "/actual/home"
 				if location == "lexical_home_alias" {
 					home = root + "/work/home"
 				}
 			}
 			fixtureFile(t, home+"/.local/bin/mise", "#!/bin/sh\nprintf 'node 24.18.0 /config 24.18.0\\n'\n", 0700)
-			inv := inventory(t, root, paths, warnings)
+			inv := inventory(t, env, root, paths, warnings)
 			got, err := inv.Detect("mise", "node", "linux", "amd64")
 			if err != nil {
 				t.Fatal(err)
@@ -560,13 +602,16 @@ func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 	}
 }
 func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
-	target := filepath.Join(os.Getenv("HOME"), "data", "testgit")
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, _ := inventoryFixture(t, &env)
+	target := filepath.Join(env.Get("HOME"), "data", "testgit")
 	if err := os.MkdirAll(target, 0700); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"init", "--quiet"}, {"config", "user.name", "Test"}, {"config", "user.email", "test@example.invalid"}} {
 		cmd := exec.Command("git", append([]string{"-C", target}, args...)...)
+		cmd.Env = env.List()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -575,11 +620,13 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	fixtureFile(t, marker, ":\n", 0600)
 	for _, args := range [][]string{{"add", "marker"}, {"commit", "--quiet", "-m", "initial"}} {
 		cmd := exec.Command("git", append([]string{"-C", target}, args...)...)
+		cmd.Env = env.List()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
 	cmd := exec.Command("git", "-C", target, "rev-parse", "HEAD")
+	cmd.Env = env.List()
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)
@@ -587,14 +634,14 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	sha := strings.TrimSpace(string(out))
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source "+sha+" .local/share/testgit marker\n", 0600)
 	fixtureFile(t, filepath.Join(paths.State, "dependencies/testgit"), "v3.15.0\n", 0600)
-	inv := inventory(t, root, paths, warnings)
+	inv := inventory(t, env, root, paths, warnings)
 	got, err := inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "v3.15.0", "selfishell", "v3.15.0")
-	t.Setenv("GIT_DIR", root+"/foreign")
-	t.Setenv("GIT_WORK_TREE", root+"/foreign")
+	env.set("GIT_DIR", root+"/foreign")
+	env.set("GIT_WORK_TREE", root+"/foreign")
 	fixtureFile(t, target+"/.git/HEAD", "invalid\n", 0600)
 	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
@@ -616,7 +663,7 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 	fixtureFile(t, marker, ":\n", 0600)
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source deadbeef .local/share/testgit marker\n", 0600)
-	inv = inventory(t, root, paths, warnings)
+	inv = inventory(t, env, root, paths, warnings)
 	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
@@ -625,7 +672,7 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	// A newer pin's commit cannot judge the recorded checkout, but tracked
 	// changes still can.
 	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.16.0 all all source deadbeef .local/share/testgit marker\n", 0600)
-	inv = inventory(t, root, paths, warnings)
+	inv = inventory(t, env, root, paths, warnings)
 	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
@@ -674,10 +721,14 @@ func pathSnapshot(t *testing.T, root string) string {
 	return b.String()
 }
 func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, shape := range []string{"managed_real_checkout", "external_real_marker", "external_lexical_marker"} {
 		t.Run(shape, func(t *testing.T) {
-			root, paths, warnings, _ := inventoryFixture(t)
-			home := os.Getenv("HOME")
+			t.Parallel()
+			env := env
+			root, paths, warnings, _ := inventoryFixture(t, &env)
+			home := env.Get("HOME")
 			// alias/.. resolves to actual/data; a lexical clean would select work/data.
 			for _, dir := range []string{home + "/actual/child", home + "/work"} {
 				if err := os.MkdirAll(dir, 0700); err != nil {
@@ -687,7 +738,7 @@ func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 			if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
+			env.set("XDG_DATA_HOME", home+"/work/alias/../data")
 			real, lexical := home+"/actual/data/testgit", home+"/work/data/testgit"
 			sha, want := "-", ToolResult{"detected", "external", "v3.15.0"}
 			switch shape {
@@ -711,7 +762,7 @@ func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 			}
 			fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source "+sha+" .local/share/testgit marker\n", 0600)
 			before := pathSnapshot(t, root)
-			got, err := inventory(t, root, paths, warnings).Detect("direct", "testgit", "linux", "amd64")
+			got, err := inventory(t, env, root, paths, warnings).Detect("direct", "testgit", "linux", "amd64")
 			if err != nil {
 				t.Fatal(err)
 			}

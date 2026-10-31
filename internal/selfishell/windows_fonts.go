@@ -61,7 +61,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		o.report(reportInfo, "Externally installed; preserving Windows font: %s", terminalFont)
 		return nil
 	}
-	target, err := dependencyTarget(dep, paths)
+	target, err := dependencyTarget(dep, paths, o.Process.environment())
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 		}
 		previous := dep
 		previous.Version = pending.Version
-		expected, err := dependencyTarget(previous, paths)
+		expected, err := dependencyTarget(previous, paths, o.Process.environment())
 		if err != nil || expected != pending.Target {
 			return fmt.Errorf("invalid pending Windows font target: %s", journal)
 		}
@@ -132,7 +132,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths Paths, 
 	if oldVersion != "" && oldVersion != dep.Version {
 		previous := dep
 		previous.Version = oldVersion
-		oldTarget, err := dependencyTarget(previous, paths)
+		oldTarget, err := dependencyTarget(previous, paths, o.Process.environment())
 		if err != nil {
 			return err
 		}

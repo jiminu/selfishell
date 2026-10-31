@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ type ToolInventory struct {
 	root                                             string
 	paths                                            Paths
 	warnings                                         io.Writer
+	env                                              Environment
 	dependencies                                     []Dependency
 	apt                                              map[string]string
 	aptReady                                         bool
@@ -35,12 +35,12 @@ type ToolInventory struct {
 	miseError                                        error
 }
 
-func NewToolInventory(root string, paths Paths, warnings io.Writer) (*ToolInventory, error) {
-	deps, err := ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf")))
+func NewToolInventory(root string, paths Paths, warnings io.Writer, env Environment) (*ToolInventory, error) {
+	deps, err := ReadDependencies(env.Default("SELFISHELL_DEPENDENCIES_FILE", filepath.Join(root, "dependencies.conf")))
 	if err != nil {
 		return nil, err
 	}
-	return &ToolInventory{root: root, paths: paths, warnings: warnings, dependencies: deps}, nil
+	return &ToolInventory{root: root, paths: paths, warnings: warnings, env: env, dependencies: deps}, nil
 }
 
 func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult, error) {
@@ -82,17 +82,17 @@ func (i *ToolInventory) Detect(manager, name, platform, arch string) (ToolResult
 		return result, queryError
 	}
 	executable := toolExecutable(name)
-	path, err := exec.LookPath(executable)
+	path, err := (Process{inherit: i.env}).lookPath(executable)
 	if err == nil {
-		if manager != "mise" || !miseManagedExecutable(path) {
+		if manager != "mise" || !miseManagedExecutable(path, i.env) {
 			result.Installed, result.Source = "detected", "external"
 		}
 	}
 	return result, nil
 }
 
-func miseManagedExecutable(path string) bool {
-	data := envDefault("MISE_DATA_DIR", envDefault("XDG_DATA_HOME", os.Getenv("HOME")+"/.local/share")+"/mise")
+func miseManagedExecutable(path string, env Environment) bool {
+	data := env.Default("MISE_DATA_DIR", env.Default("XDG_DATA_HOME", env.Get("HOME")+"/.local/share")+"/mise")
 	var roots []string
 	for _, dir := range []string{data + "/shims", data + "/installs"} {
 		if physical, err := filepath.EvalSymlinks(dir); err == nil {
@@ -138,33 +138,33 @@ func toolExecutable(name string) string {
 	return name
 }
 
-func runInventory(dir string, env []string, name string, args ...string) (string, string, bool) {
+func runInventory(dir string, env Environment, name string, args ...string) (string, string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return runInventoryContext(ctx, dir, env, name, args...)
 }
 
-func inventoryGitHead(dir string) (string, error) {
+func inventoryGitHead(dir string, env Environment) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return (&PackageOperation{}).gitHead(ctx, dir)
+	return (&PackageOperation{Process: Process{inherit: env}}).gitHead(ctx, dir)
 }
 
-func runInventoryContext(ctx context.Context, dir string, env []string, name string, args ...string) (string, string, bool) {
+func runInventoryContext(ctx context.Context, dir string, env Environment, name string, args ...string) (string, string, bool) {
 	out, stderr, _, err := runInventoryResult(ctx, dir, env, name, args...)
 	return out, stderr, err == nil
 }
 
-func runInventoryQuery(dir string, env []string, name string, args ...string) (string, error) {
+func runInventoryQuery(dir string, env Environment, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	out, _, _, err := runInventoryResult(ctx, dir, env, name, args...)
 	return out, err
 }
 
-func runInventoryResult(ctx context.Context, dir string, env []string, name string, args ...string) (string, string, int, error) {
+func runInventoryResult(ctx context.Context, dir string, env Environment, name string, args ...string) (string, string, int, error) {
 	var out, stderr bytes.Buffer
-	p := Process{Out: &out, Err: &stderr, Dir: dir, Env: env}
+	p := Process{Out: &out, Err: &stderr, Dir: dir, Env: env.List()}
 	code, err := p.Run(ctx, name, args...)
 	if err != nil {
 		err = fmt.Errorf("%s: %w", name, err)
@@ -181,8 +181,8 @@ func (i *ToolInventory) aptVersion(name string) (string, error) {
 	if !i.aptReady {
 		i.aptReady = true
 		i.apt = map[string]string{}
-		if _, err := exec.LookPath("dpkg-query"); err == nil {
-			output, err := runInventoryQuery("", nil, "dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n")
+		if _, err := (Process{inherit: i.env}).lookPath("dpkg-query"); err == nil {
+			output, err := runInventoryQuery("", i.env, "dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\t${Version}\n")
 			i.aptError = err
 			if err == nil {
 				for _, line := range strings.Split(output, "\n") {
@@ -216,7 +216,7 @@ func (i *ToolInventory) loadBrewJSON() {
 		return
 	}
 	i.brewJSONReady = true
-	output, _, ok := runInventory("", nil, "brew", "list", "--versions", "--json")
+	output, _, ok := runInventory("", i.env, "brew", "list", "--versions", "--json")
 	if !ok || strings.TrimSpace(output) == "" {
 		return
 	}
@@ -260,14 +260,14 @@ func (i *ToolInventory) loadBrewJSON() {
 	i.brewCasksReady = true
 }
 func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
-	if _, err := exec.LookPath("brew"); err != nil {
+	if _, err := (Process{inherit: i.env}).lookPath("brew"); err != nil {
 		return "", nil
 	}
 	i.loadBrewJSON()
 	if manager == "formula" {
 		if !i.brewFormulaeReady {
 			i.brewFormulaeReady = true
-			output, err := runInventoryQuery("", nil, "brew", "list", "--formula", "--versions")
+			output, err := runInventoryQuery("", i.env, "brew", "list", "--formula", "--versions")
 			i.brewFormulaeError = err
 			if err == nil {
 				i.brewFormulae = parseBrewLines(output)
@@ -282,7 +282,7 @@ func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
 		// Homebrew may list a formula under its canonical name rather than an alias.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		output, stderr, code, err := runInventoryResult(ctx, "", nil, "brew", "list", "--versions", name)
+		output, stderr, code, err := runInventoryResult(ctx, "", i.env, "brew", "list", "--versions", name)
 		if err != nil {
 			// Homebrew signals an absent named formula with empty output and an
 			// unsuccessful exit. A diagnostic instead means inspection failed.
@@ -299,7 +299,7 @@ func (i *ToolInventory) brewVersion(manager, name string) (string, error) {
 	}
 	if !i.brewCasksReady {
 		i.brewCasksReady = true
-		output, err := runInventoryQuery("", nil, "brew", "list", "--cask", "--versions")
+		output, err := runInventoryQuery("", i.env, "brew", "list", "--cask", "--versions")
 		i.brewCasksError = err
 		if err == nil {
 			i.brewCasks = parseBrewLines(output)
@@ -322,14 +322,14 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 		return result, fmt.Errorf("No approved dependency entry for %s (%s/%s).", name, platform, arch)
 	}
 	result.Approved = dep.Version
-	home := os.Getenv("HOME")
+	home := i.env.Get("HOME")
 	target := home + "/" + dep.Target
 	if strings.HasPrefix(dep.Target, ".local/share/") {
-		target = envDefault("XDG_DATA_HOME", home+"/.local/share") + "/" + strings.TrimPrefix(dep.Target, ".local/share/")
+		target = i.env.Default("XDG_DATA_HOME", home+"/.local/share") + "/" + strings.TrimPrefix(dep.Target, ".local/share/")
 	}
 	if dep.Marker == "font" {
 		var err error
-		target, err = dependencyTarget(*dep, i.paths)
+		target, err = dependencyTarget(*dep, i.paths, i.env)
 		if err != nil {
 			return result, err
 		}
@@ -344,7 +344,7 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 			previous := *dep
 			previous.Version = recorded
 			var err error
-			target, err = dependencyTarget(previous, i.paths)
+			target, err = dependencyTarget(previous, i.paths, i.env)
 			if err != nil {
 				return result, err
 			}
@@ -394,7 +394,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinn
 			return false
 		}
 		if pinned && dep.Checksum != "-" {
-			head, err := inventoryGitHead(target)
+			head, err := inventoryGitHead(target, i.env)
 			if err != nil || head != dep.Checksum {
 				return false
 			}
@@ -402,7 +402,7 @@ func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinn
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		var changesOut, changesErr bytes.Buffer
-		p := Process{Out: &changesOut, Err: &changesErr, Env: withEnvironment(Process{Env: os.Environ()}, map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"}).Env, repoScopedGit: true}
+		p := Process{Out: &changesOut, Err: &changesErr, Env: i.env.With(map[string]string{"GIT_DIR": ".git", "GIT_WORK_TREE": ".", "GIT_OPTIONAL_LOCKS": "0"}), repoScopedGit: true}
 		code, err := p.Run(ctx, "git", "-C", target, "status", "--porcelain", "--untracked-files=no")
 		changes, ok := changesOut.String(), err == nil && code == 0
 		return ok && strings.TrimSpace(changes) == ""
@@ -424,23 +424,23 @@ func (i *ToolInventory) loadMise() {
 	for name, version := range versions {
 		i.miseApproved[name] = strings.Trim(version, "\"")
 	}
-	command, err := exec.LookPath("mise")
+	command, err := (Process{inherit: i.env}).lookPath("mise")
 	if err != nil {
-		command = os.Getenv("HOME") + "/.local/bin/mise"
+		command = i.env.Get("HOME") + "/.local/bin/mise"
 		info, e := os.Stat(command)
 		if e != nil || info.Mode()&0111 == 0 {
 			return
 		}
 	}
 	shared := filepath.Join(i.root, "config", "shared")
-	env := append(os.Environ(), "NO_COLOR=1", "MISE_GLOBAL_CONFIG_FILE="+config)
+	env := append(i.env.List(), "NO_COLOR=1", "MISE_GLOBAL_CONFIG_FILE="+config)
 	output, err := runInventoryQuery(shared, env, command, "-C", shared, "ls", "--current", "--installed", "--no-header", "--no-truncate")
 	if err != nil {
 		i.miseError = fmt.Errorf("mise could not list installed tools: %w", err)
 		line, _, _ := strings.Cut(i.miseError.Error(), "\n")
 		if i.warnings != nil {
 			prefix := "selfishell: warning:"
-			if os.Getenv("NO_COLOR") == "" && IsTerminal(i.warnings) {
+			if i.env.Get("NO_COLOR") == "" && IsTerminal(i.warnings) {
 				prefix = "\x1b[33mselfishell: warning:\x1b[0m"
 			}
 			fmt.Fprintf(i.warnings, "%s %s\n", prefix, line)
@@ -462,7 +462,7 @@ func (i *ToolInventory) loadMise() {
 func (i *ToolInventory) windowsFontInventory() *windowsFontStatus {
 	if i.windowsFonts == nil {
 		i.windowsFonts = &windowsFontStatus{}
-		data, err := (Process{}).windowsScript(context.Background(), map[string]string{"operation": "font-status"})
+		data, err := (Process{inherit: i.env}).windowsScript(context.Background(), map[string]string{"operation": "font-status"})
 		if err == nil {
 			_ = json.Unmarshal(data, i.windowsFonts)
 		}

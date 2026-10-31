@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"strings"
 )
 
@@ -12,16 +11,16 @@ import (
 // user-facing entrypoints last. Uninstall must retain the all-platform set.
 type Resource struct{ Kind, Name, Target, Source string }
 
-func ManagedResources(root string) ([]Resource, error) {
+func ManagedResources(root string, env Environment) ([]Resource, error) {
 	if root == "" {
 		return nil, fmt.Errorf("release root must be set")
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(env)
 	if err != nil {
 		return nil, err
 	}
-	home := os.Getenv("HOME")
-	configHome := envDefault("XDG_CONFIG_HOME", home+"/.config")
+	home := env.Get("HOME")
+	configHome := env.Default("XDG_CONFIG_HOME", home+"/.config")
 	return []Resource{
 		{Kind: "file", Name: "zshrc-config", Target: paths.Config + "/zsh/zshrc", Source: root + "/config/macos/zshrc"},
 		{Kind: "file", Name: "zsh-runtime", Target: paths.Config + "/zsh/runtime.zsh", Source: root + "/config/shared/zsh/runtime.zsh"},
@@ -66,11 +65,11 @@ func ManagedResources(root string) ([]Resource, error) {
 
 // ResourcesForPlatform selects installation resources only. It must not be
 // used to filter uninstall: another platform's recorded resources still count.
-func ResourcesForPlatform(root, platform string, ghostty bool) ([]Resource, error) {
+func ResourcesForPlatform(root, platform string, ghostty bool, env Environment) ([]Resource, error) {
 	if !platformSupported(platform) {
 		return nil, fmt.Errorf("managed installation is unavailable on %s", platform)
 	}
-	all, err := ManagedResources(root)
+	all, err := ManagedResources(root, env)
 	if err != nil {
 		return nil, err
 	}

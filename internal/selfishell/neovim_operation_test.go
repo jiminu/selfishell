@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-func neovimFixture(t *testing.T) (*PackageOperation, Paths, string, string, string, string) {
+func neovimFixture(t *testing.T, env *Environment) (*PackageOperation, Paths, string, string, string, string) {
 	t.Helper()
-	op, paths, manifest, home := dependencyFixture(t)
+	op, paths, manifest, home := dependencyFixture(t, env)
 	root := home + "/release"
 	writeTestFile(t, root+"/config/shared/mise.toml", "[tools]\n", 0600)
 	repo := home + "/lazy-source"
@@ -32,14 +32,16 @@ printf '%s\n' "$*" >> "$NVIM_LOG"
 case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "$LAZY_SOURCE" "$XDG_DATA_HOME/nvim/lazy/lazy-source" ;; esac
 case "$*" in *nvim-treesitter*) exit "${PARSER_EXIT:-0}" ;; esac
 `, 0755)
-	t.Setenv("NVIM_LOG", home+"/nvim.log")
-	t.Setenv("LAZY_SOURCE", repo)
-	op.Process.Env = append(os.Environ(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH="+bin+":/usr/bin:/bin", "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+repo)
+	env.set("NVIM_LOG", home+"/nvim.log")
+	env.set("LAZY_SOURCE", repo)
+	op.Process.Env = append(env.List(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH="+bin+":/usr/bin:/bin", "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+repo)
 	return op, paths, root, manifest, home, head
 }
 
 func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
-	op, paths, root, manifest, home, head := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, home, head := neovimFixture(t, &env)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
@@ -90,9 +92,13 @@ func TestNeovimBootstrapsSyncsAndSkipsMatchingPins(t *testing.T) {
 }
 
 func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, shape := range []string{"modified", "untracked", "ignored", "non-git", "broken-git", "bootstrap-name"} {
 		t.Run(shape, func(t *testing.T) {
-			op, paths, root, manifest, home, _ := neovimFixture(t)
+			t.Parallel()
+			env := env
+			op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 			target := home + "/data/nvim/lazy/removed-plugin"
 			if shape == "bootstrap-name" {
 				target = home + "/data/nvim/lazy/lazy.nvim"
@@ -133,7 +139,9 @@ func TestNeovimPreservesUserDataInUndeclaredPluginPaths(t *testing.T) {
 }
 
 func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
-	op, paths, root, manifest, home, head := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, home, head := neovimFixture(t, &env)
 	lines := fmt.Sprintf("nvim-plugin folke/lazy.nvim %s all all %s/lazy-source - - -\n", head, home)
 	var plugins []string
 	for i := range 2*probeLimit + 2 {
@@ -202,7 +210,9 @@ func TestNeovimReportsConcurrentCheckFailuresInDeclarationOrder(t *testing.T) {
 }
 
 func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, true); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +242,9 @@ func TestNeovimDryRunAndMissingBinaryDoNotMutate(t *testing.T) {
 }
 
 func TestNeovimParserFailureWarns(t *testing.T) {
-	op, paths, root, manifest, _, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, _, _ := neovimFixture(t, &env)
 	op.Process.Env = append(op.Process.Env, "PARSER_EXIT=1")
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
@@ -243,7 +255,9 @@ func TestNeovimParserFailureWarns(t *testing.T) {
 }
 
 func TestLazyRevisionUpdateReplacesCleanCheckout(t *testing.T) {
-	op, paths, _, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, _, manifest, home, _ := neovimFixture(t, &env)
 	deps, err := ReadDependencies(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -286,13 +300,17 @@ func TestLazyRestoreFailureIncludesPrimaryActivationError(t *testing.T) {
 }
 
 func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct{ shape, want string }{
 		{"file", "preserving"},
 		{"git_symlink", "preserving"},
 		{"blocked_parent", "Could not create Neovim plugin directory"},
 	} {
 		t.Run(tc.shape, func(t *testing.T) {
-			op, paths, _, manifest, home, _ := neovimFixture(t)
+			t.Parallel()
+			env := env
+			op, paths, _, manifest, home, _ := neovimFixture(t, &env)
 			deps, err := ReadDependencies(manifest)
 			if err != nil {
 				t.Fatal(err)
@@ -316,7 +334,9 @@ func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
 }
 
 func TestNeovimUsesManagedMiseResolutionAndExec(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := os.MkdirAll(home+"/.local/bin", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +350,7 @@ if [ "$3" = exec ]; then shift 4; "$@"; exit; fi
 printf '%s\n' "$*" >> "$NVIM_LOG"
 case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "$LAZY_SOURCE" "$XDG_DATA_HOME/nvim/lazy/lazy-source" ;; esac
 `, 0755)
-	op.Process.Env = append(os.Environ(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH=/usr/bin:/bin", "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managedNvim, "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+home+"/lazy-source")
+	op.Process.Env = append(env.List(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH=/usr/bin:/bin", "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managedNvim, "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+home+"/lazy-source")
 	if err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false); err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +369,9 @@ case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "
 }
 
 func TestNeovimMiseResolutionReusesOnlyAnExecutableSuccess(t *testing.T) {
-	op, paths, root, _, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, _, home, _ := neovimFixture(t, &env)
 	writeTestFile(t, home+"/.local/bin/mise", `#!/bin/sh
 printf '%s\n' "$*" >> "$MISE_LOG"
 [ "$3" = which ] && [ -f "$HOME/which-ok" ] && printf '%s\n' "$MANAGED_NVIM"
@@ -380,7 +402,9 @@ printf '%s\n' "$*" >> "$MISE_LOG"
 }
 
 func TestNeovimVerificationFailureSurfacesSyncLog(t *testing.T) {
-	op, paths, root, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	op, paths, root, manifest, home, _ := neovimFixture(t, &env)
 	writeTestFile(t, home+"/bin/nvim", "#!/bin/sh\nprintf 'sync diagnostic\\n'\n", 0755)
 	err := op.InstallNeovimPlugins(context.Background(), root, paths, manifest, false)
 	if err == nil || !strings.Contains(err.Error(), "missing after sync") {

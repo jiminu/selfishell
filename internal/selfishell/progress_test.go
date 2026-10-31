@@ -11,13 +11,15 @@ import (
 )
 
 func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	home := t.TempDir()
-	isolateHome(t, home)
+	isolateHome(&env, home)
 	var out, stderr bytes.Buffer
 	state := filepath.Join(home, "state")
-	ui := newProgress(&out, &stderr, Paths{State: state})
+	ui := newProgress(&out, &stderr, Paths{State: state}, env)
 	ui.compact = true
-	p := Process{Out: &out, Err: &stderr, progress: ui}
+	p := Process{inherit: env, Out: &out, Err: &stderr, progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'; printf 'tool detail\\n' >&2")
 	ui.pause()
@@ -58,7 +60,7 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
+	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
@@ -72,7 +74,7 @@ func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 func TestProgressFailureOutputIsBounded(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
+	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
@@ -83,19 +85,21 @@ func TestProgressFailureOutputIsBounded(t *testing.T) {
 }
 
 func TestConfigurationProgressCancelsBlockedTrust(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, paths := blockHome(t, &env, "macos")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	blockWrite(t, home+"/tools/mise", []byte("#!/bin/sh\nexec /bin/sleep 2\n"))
 	if err := os.Chmod(home+"/tools/mise", 0700); err != nil {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, paths)
+	ui := newProgress(&out, &stderr, paths, env)
 	ui.compact = true
 	defer ui.finish()
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	c := CLI{Root: root, Out: &out, Err: &stderr, Context: ctx, progress: ui}
+	c := CLI{Env: env, Root: root, Out: &out, Err: &stderr, Context: ctx, progress: ui}
 	p, err := c.prepareConfig("macos", false, true, true, false, false)
 	if err != nil {
 		t.Fatal(err)

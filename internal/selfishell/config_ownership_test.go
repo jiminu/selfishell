@@ -5,18 +5,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
-func identicalUserFile(t *testing.T) (string, string, Resource, Paths, []byte) {
+func identicalUserFile(t *testing.T, env *Environment) (string, string, Resource, Paths, []byte) {
 	t.Helper()
 	root := testRelease(t)
 	home := t.TempDir()
-	isolateHome(t, home)
-	paths, e := UserPaths()
+	isolateHome(env, home)
+	paths, e := userPaths(*env)
 	if e != nil {
 		t.Fatal(e)
 	}
-	resources, e := ResourcesForPlatform(root, "macos", false)
+	resources, e := ResourcesForPlatform(root, "macos", false, *env)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -33,14 +35,14 @@ func identicalUserFile(t *testing.T) (string, string, Resource, Paths, []byte) {
 	if e = os.MkdirAll(filepath.Dir(r.Target), 0700); e != nil {
 		t.Fatal(e)
 	}
-	if e = os.WriteFile(r.Target, data, 0600); e != nil {
+	if e = testutil.WriteFile(r.Target, data, 0600); e != nil {
 		t.Fatal(e)
 	}
 	return root, home, r, paths, data
 }
-func assertOriginalRestored(t *testing.T, root, home string, r Resource, want []byte) {
+func assertOriginalRestored(t *testing.T, env Environment, root, home string, r Resource, want []byte) {
 	t.Helper()
-	code, _, stderr := testCLI(t, root, home, "uninstall", "--restore", "--yes")
+	code, _, stderr := testCLI(&env, root, home, "uninstall", "--restore", "--yes")
 	if code != 0 {
 		t.Fatalf("uninstall %d %s", code, stderr)
 	}
@@ -74,13 +76,15 @@ func assertOriginalBackup(t *testing.T, paths Paths, r Resource, want []byte) St
 	return state
 }
 func TestIdenticalExistingFileKeepsOriginalThroughReinstallAndRestore(t *testing.T) {
-	root, home, r, paths, original := identicalUserFile(t)
-	code, _, stderr := testCLI(t, root, home, "install", "--skip-packages", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, r, paths, original := identicalUserFile(t, &env)
+	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatalf("install %d %s", code, stderr)
 	}
 	first := assertOriginalBackup(t, paths, r, original)
-	code, _, stderr = testCLI(t, root, home, "install", "--skip-packages", "--yes")
+	code, _, stderr = testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatalf("reinstall %d %s", code, stderr)
 	}
@@ -88,10 +92,12 @@ func TestIdenticalExistingFileKeepsOriginalThroughReinstallAndRestore(t *testing
 	if second.Backup != first.Backup {
 		t.Fatalf("original backup changed %q -> %q", first.Backup, second.Backup)
 	}
-	assertOriginalRestored(t, root, home, r, original)
+	assertOriginalRestored(t, env, root, home, r, original)
 }
 func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
-	root, home, r, paths, original := identicalUserFile(t)
+	t.Parallel()
+	var env Environment
+	root, home, r, paths, original := identicalUserFile(t, &env)
 	backup := r.Target + ".backup.fixed"
 	checksum, e := checksumBytes(original)
 	if e != nil {
@@ -100,7 +106,7 @@ func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
 	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{"file", "pending", r.Target, "-", backup, checksum}); e != nil {
 		t.Fatal(e)
 	}
-	code, _, stderr := testCLI(t, root, home, "install", "--skip-packages", "--yes")
+	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatalf("recover %d %s", code, stderr)
 	}
@@ -108,10 +114,12 @@ func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
 	if state.Backup != backup {
 		t.Fatalf("backup changed %q", state.Backup)
 	}
-	assertOriginalRestored(t, root, home, r, original)
+	assertOriginalRestored(t, env, root, home, r, original)
 }
 func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing.T) {
-	root, home, r, paths, original := identicalUserFile(t)
+	t.Parallel()
+	var env Environment
+	root, home, r, paths, original := identicalUserFile(t, &env)
 	backup := r.Target + ".backup.missing"
 	checksum, e := checksumBytes(original)
 	if e != nil {
@@ -120,7 +128,7 @@ func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing
 	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{"file", "active", r.Target, "-", backup, checksum}); e != nil {
 		t.Fatal(e)
 	}
-	code, _, stderr := testCLI(t, root, home, "install", "--skip-packages", "--yes")
+	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatalf("repair %d %s", code, stderr)
 	}
@@ -128,5 +136,5 @@ func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing
 	if state.Backup != backup {
 		t.Fatalf("backup changed %q", state.Backup)
 	}
-	assertOriginalRestored(t, root, home, r, original)
+	assertOriginalRestored(t, env, root, home, r, original)
 }

@@ -14,6 +14,8 @@ import (
 )
 
 func TestTerminalFontHintAppearsOnce(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	macos := "Set your terminal font to " + terminalFont + " to show Neovim's icons."
 	desktop := "Install " + terminalFont + " and set it as your terminal font to show Neovim's icons."
 	for _, tc := range []struct {
@@ -32,9 +34,11 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 		{name: "ubuntu headless", platform: "ubuntu"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("DISPLAY", tc.display)
-			t.Setenv("WAYLAND_DISPLAY", "")
-			t.Setenv("SSH_CONNECTION", tc.ssh)
+			t.Parallel()
+			env := env
+			env.set("DISPLAY", tc.display)
+			env.set("WAYLAND_DISPLAY", "")
+			env.set("SSH_CONNECTION", tc.ssh)
 			f := newPackageFixture(t)
 			casks := ""
 			if tc.installed {
@@ -58,7 +62,7 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 				}
 			}
 			var out bytes.Buffer
-			c := CLI{Root: t.TempDir(), Out: &out, Err: io.Discard}
+			c := CLI{Env: env, Root: t.TempDir(), Out: &out, Err: io.Discard}
 			packages := []Package{{"macos", "optional", "cask", terminalFontCask}}
 			if err := c.installPackages(context.Background(), f.op, paths, packages, tc.platform, "arm64", tc.ghostty, false); err != nil {
 				t.Fatal(err)

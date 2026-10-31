@@ -18,6 +18,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "selfishell: Cannot locate release:", err)
 		os.Exit(1)
 	}
-	cli := selfishell.CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	cli := selfishell.CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: os.Environ()}
 	os.Exit(cli.Run(os.Args[1:]))
 }

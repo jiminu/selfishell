@@ -47,8 +47,8 @@ func (o *PackageOperation) reportSkippedOptional() {
 }
 func (o *PackageOperation) color(stream io.Writer, code string) (string, string) {
 	env := o.Process.environment()
-	ci := envValue(env, "CI")
-	if envValue(env, "NO_COLOR") != "" || envValue(env, "TERM") == "dumb" || (ci != "" && ci != "false") || !IsTerminal(stream) {
+	ci := env.Get("CI")
+	if env.Get("NO_COLOR") != "" || env.Get("TERM") == "dumb" || (ci != "" && ci != "false") || !IsTerminal(stream) {
 		return "", ""
 	}
 	return code, "\x1b[0m"
@@ -136,7 +136,7 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 			// stay in the environment rather than the command line or diagnostics.
 			var proxies []string
 			for _, key := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY", "ftp_proxy", "FTP_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"} {
-				if envValue(p.environment(), key) != "" {
+				if p.environment().Get(key) != "" {
 					proxies = append(proxies, key)
 				}
 			}

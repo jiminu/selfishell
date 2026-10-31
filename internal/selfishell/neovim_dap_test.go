@@ -24,7 +24,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 		t.Skip("requires the pinned physical Neovim executable")
 	}
 	p := standaloneNeovimProcess(t, nvim)
-	home := envValue(p.Env, "HOME")
+	home := Environment(p.Env).Get("HOME")
 	config := home + "/.config/nvim"
 	if err := os.MkdirAll(config, 0700); err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 		}
 	}
 	p = withEnvironment(p, map[string]string{
-		"PATH":                         home + "/bin:" + envValue(p.Env, "PATH"),
+		"PATH":                         home + "/bin:" + Environment(p.Env).Get("PATH"),
 		"SELFISHELL_NVIM_TEST_FIXTURE": root + "/tests/fixtures/neovim/dap_setup.lua",
 	}, "WSL_DISTRO_NAME", "VIRTUAL_ENV", "CONDA_PREFIX")
 	p.Dir = home + "/project"
@@ -61,16 +61,18 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 }
 
 func TestNeovimDAPUserConfigurationSurvivesLifecycle(t *testing.T) {
-	root, _, paths := blockHome(t, "ubuntu")
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	t.Parallel()
+	var env Environment
+	root, _, paths := blockHome(t, &env, "ubuntu")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	user := paths.Config + "/nvim/lua/plugins/dap_user.lua"
 	contents := "return { { 'jay-babu/mason-nvim-dap.nvim', opts = { handlers = { python = function() end } } } }\n"
 	if err := testutil.WriteFile(user, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
-	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+	blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 	blockEqual(t, user, []byte(contents))
-	blockOK(t, root, "uninstall", "--restore", "--yes")
+	blockOK(t, env, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, user, []byte(contents))
 }
 

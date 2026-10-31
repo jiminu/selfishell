@@ -9,7 +9,9 @@ import (
 )
 
 func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
-	op, _, _, home := dependencyFixture(t)
+	t.Parallel()
+	var env Environment
+	op, _, _, home := dependencyFixture(t, &env)
 	sha := "0123456789abcdef0123456789abcdef01234567"
 	for _, fixture := range []struct{ name, head, ref, packed string }{
 		{"detached", sha + "\nignored second line\n", "", ""},
@@ -45,7 +47,9 @@ func TestGitHeadReadsDetachedLoosePackedAndFallback(t *testing.T) {
 }
 
 func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
-	op, _, _, home := dependencyFixture(t)
+	t.Parallel()
+	var env Environment
+	op, _, _, home := dependencyFixture(t, &env)
 	parent := home + "/parent"
 	if err := os.MkdirAll(parent, 0700); err != nil {
 		t.Fatal(err)
@@ -74,7 +78,9 @@ func TestGitHeadFallbackCannotReadParentRepository(t *testing.T) {
 }
 
 func TestGitTrackedChangesIgnoreUntrackedAndGeneratedTags(t *testing.T) {
-	op, _, _, home := dependencyFixture(t)
+	t.Parallel()
+	var env Environment
+	op, _, _, home := dependencyFixture(t, &env)
 	repo := home + "/checkout"
 	if err := os.MkdirAll(repo, 0700); err != nil {
 		t.Fatal(err)

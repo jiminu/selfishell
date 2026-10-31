@@ -90,13 +90,15 @@ func TestWindowsFontRegistrationProcess(t *testing.T) {
 }
 
 func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_FONT_EXE", executable)
+	env.set("SELFISHELL_TEST_FONT_EXE", executable)
 	for name, body := range map[string]string{
 		"curl":           "exec /usr/bin/curl \"$@\"",
 		"wslpath":        "printf '%s\\n' \"$2\"",
@@ -116,7 +118,7 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 		if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 			t.Fatal(err)
 		}
-		op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+		op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 		return op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 	}
 	if err := install("1"); err != nil {

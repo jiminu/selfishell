@@ -9,18 +9,22 @@ import (
 )
 
 func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, requirement := range []string{"required", "optional"} {
 		t.Run(requirement, func(t *testing.T) {
-			root, paths, warnings, bin := inventoryFixture(t)
-			t.Setenv("PATH", bin)
+			t.Parallel()
+			env := env
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			env.set("PATH", bin)
 			fixtureFile(t, bin+"/dpkg-query", "#!/bin/sh\nprintf 'database locked\\n' >&2\nexit 2\n", 0700)
 			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"present\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
 			var out bytes.Buffer
-			cli := CLI{Out: &out}
+			cli := CLI{Env: env, Out: &out}
 			problem, err := cli.statusTools([]Package{
 				{Name: "probe", Manager: "apt", Requirement: requirement},
 				{Name: "present", Manager: "formula", Requirement: "required"},
-			}, inventory(t, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
+			}, inventory(t, env, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
 			if err != nil || !problem {
 				t.Fatalf("query failure aborted listing or passed diagnosis: problem=%v error=%v output=%s", problem, err, &out)
 			}
@@ -38,14 +42,16 @@ func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 
 // Zsh plugins are git direct packages; drifted or dirty checkouts are missing.
 func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
-	root, paths, warnings, _ := inventoryFixture(t)
+	t.Parallel()
+	var env Environment
+	root, paths, warnings, _ := inventoryFixture(t, &env)
 	repo := t.TempDir()
 	gitCommand(t, repo, "init", "--quiet")
 	fixtureFile(t, repo+"/p.plugin.zsh", ":\n", 0600)
 	gitCommand(t, repo, "add", "p.plugin.zsh")
 	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
 	sha := gitCommand(t, repo, "rev-parse", "HEAD")
-	data := os.Getenv("XDG_DATA_HOME") + "/selfishell/zsh-plugins/"
+	data := env.Get("XDG_DATA_HOME") + "/selfishell/zsh-plugins/"
 	var manifest strings.Builder
 	var packages []Package
 	for _, name := range []string{"present", "drifted", "dirty", "absent"} {
@@ -60,7 +66,7 @@ func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 	fixtureFile(t, data+"dirty/p.plugin.zsh", "changed\n", 0600)
 	fixtureFile(t, root+"/dependencies.conf", manifest.String(), 0600)
 	var out bytes.Buffer
-	problem, err := (CLI{Out: &out}).statusTools(packages, inventory(t, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
+	problem, err := (CLI{Env: env, Out: &out}).statusTools(packages, inventory(t, env, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
 	if err != nil || !problem {
 		t.Fatalf("plugin issues passed diagnosis: %v %s", err, &out)
 	}
@@ -71,9 +77,9 @@ func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
 	}
 }
 
-func compactDiagnosticFixture(t *testing.T, platform string, ghostty bool) (string, Paths) {
+func compactDiagnosticFixture(t *testing.T, env *Environment, platform string, ghostty bool) (string, Paths) {
 	t.Helper()
-	source, home, paths := blockHome(t, platform)
+	source, home, paths := blockHome(t, env, platform)
 	root := t.TempDir()
 	if err := copyTree(source+"/config", root+"/config"); err != nil {
 		t.Fatal(err)
@@ -87,7 +93,7 @@ func compactDiagnosticFixture(t *testing.T, platform string, ghostty bool) (stri
 		}
 		blockWrite(t, paths.State+"/ghostty", []byte(choice))
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, *env, root, "install", "--skip-packages", "--yes")
 	for _, name := range []string{"apt-get", "brew", "xcode-select", "gcc"} {
 		path := home + "/tools/" + name
 		blockWrite(t, path, []byte("#!/bin/sh\nprintf 'fixture 1.0\\n'\n"))
@@ -99,6 +105,8 @@ func compactDiagnosticFixture(t *testing.T, platform string, ghostty bool) (stri
 }
 
 func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		platform string
 		ghostty  bool
@@ -109,14 +117,16 @@ func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T)
 		{"macos", true, "ghostty-config"},
 	} {
 		t.Run(tc.platform+tc.name, func(t *testing.T) {
-			root, paths := compactDiagnosticFixture(t, tc.platform, tc.ghostty)
-			blockOK(t, root, "status")
+			t.Parallel()
+			env := env
+			root, paths := compactDiagnosticFixture(t, &env, tc.platform, tc.ghostty)
+			blockOK(t, env, root, "status")
 			state := blockState(t, paths, tc.name)
 			before := blockRead(t, state.Target)
 			if err := os.Remove(paths.Resources + "/" + tc.name + ".state"); err != nil {
 				t.Fatal(err)
 			}
-			code, out, stderr := blockRun(t, root, "", "status")
+			code, out, stderr := blockRun(t, env, root, "", "status")
 			if code != 1 || stderr != "" || !strings.Contains(out, "[MISSING] Installation record: ~/.local/state/selfishell/resources/"+tc.name+".state") || strings.Count(out, "[MISSING]") != 1 {
 				t.Fatalf("missing record or optional/platform false positive: code=%d out=%q errors=%q", code, out, stderr)
 			}
@@ -132,7 +142,9 @@ func TestStatusDetectsMissingInstallationRecordForSelectedPlatform(t *testing.T)
 }
 
 func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
-	root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+	t.Parallel()
+	var env Environment
+	root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
 	marker := paths.State + "/configured"
 	if err := os.Remove(marker); err != nil {
 		t.Fatal(err)
@@ -140,16 +152,20 @@ func TestDiagnosticsRequireRegularConfiguredMarker(t *testing.T) {
 	if err := os.Mkdir(marker, 0700); err != nil {
 		t.Fatal(err)
 	}
-	_, out, stderr := blockRun(t, root, "", "status")
+	_, out, stderr := blockRun(t, env, root, "", "status")
 	if stderr != "" || strings.Contains(out, "configuration is installed") || strings.Contains(out, "Tools:") || strings.Contains(out, "C compiler") {
 		t.Fatalf("status treated a directory marker as completed setup: out=%q errors=%q", out, stderr)
 	}
 }
 
 func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, required := range []bool{false, true} {
 		t.Run(map[bool]string{true: "required", false: "optional"}[required], func(t *testing.T) {
-			root, _ := compactDiagnosticFixture(t, "ubuntu", false)
+			t.Parallel()
+			env := env
+			root, _ := compactDiagnosticFixture(t, &env, "ubuntu", false)
 			packages := "package all optional direct fzf-tab\n"
 			wantCode := 0
 			want := "[INFO] Tools: 0 present, 1 optional not installed"
@@ -159,7 +175,7 @@ func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 				want = "[ERROR] Tools: 0 present, 1 required missing, 1 optional not installed"
 			}
 			blockWrite(t, root+"/packages.conf", []byte(packages))
-			code, out, stderr := blockRun(t, root, "", "status")
+			code, out, stderr := blockRun(t, env, root, "", "status")
 			if code != wantCode || stderr != "" || !strings.Contains(out, want) || strings.Contains(out, "[WARN] Tools") || strings.Count(out, "selfishell update --tools-only") != 1 {
 				t.Fatalf("tool severity/count/hint: code=%d out=%q errors=%q", code, out, stderr)
 			}
@@ -168,10 +184,12 @@ func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 }
 
 func TestDoctorIsHiddenStatusAlias(t *testing.T) {
-	root, paths := compactDiagnosticFixture(t, "ubuntu", false)
+	t.Parallel()
+	var env Environment
+	root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
 	blockWrite(t, blockState(t, paths, "zsh-common").Target, []byte("personal edit\n"))
-	wantCode, wantOut, wantErr := blockRun(t, root, "", "status", "--verbose")
-	code, out, stderr := blockRun(t, root, "", "doctor", "--verbose")
+	wantCode, wantOut, wantErr := blockRun(t, env, root, "", "status", "--verbose")
+	code, out, stderr := blockRun(t, env, root, "", "doctor", "--verbose")
 	if code != 1 || code != wantCode || out != wantOut || stderr != wantErr {
 		t.Fatalf("doctor diverged from status: code=%d/%d out=%q want %q errors=%q/%q", code, wantCode, out, wantOut, stderr, wantErr)
 	}
@@ -180,7 +198,7 @@ func TestDoctorIsHiddenStatusAlias(t *testing.T) {
 			t.Fatalf("merged status omitted %q: %s", want, out)
 		}
 	}
-	if help := blockOK(t, root, "help"); strings.Contains(help, "doctor") {
+	if help := blockOK(t, env, root, "help"); strings.Contains(help, "doctor") {
 		t.Fatalf("help lists the hidden alias: %s", help)
 	}
 }

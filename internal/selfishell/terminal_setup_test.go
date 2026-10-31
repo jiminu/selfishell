@@ -25,13 +25,15 @@ import (
 )
 
 func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T) {
-	root, home, paths := blockHome(t, "macos")
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	t.Parallel()
+	var env Environment
+	root, home, paths := blockHome(t, &env, "macos")
+	env.set("SELFISHELL_TEST_TTY", "1")
 	ghostty := filepath.Join(home, "tools/ghostty")
 	if err := testutil.WriteFile(ghostty, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	code, out, stderr := blockRun(t, root, "y\ny\n", "install", "--skip-packages")
+	code, out, stderr := blockRun(t, env, root, "y\ny\n", "install", "--skip-packages")
 	if code != 0 || !strings.Contains(out, "Use Selfishell configuration for your existing Ghostty terminal") {
 		t.Fatalf("%d %s %s", code, out, stderr)
 	}
@@ -39,7 +41,7 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 		t.Fatal(err)
 	}
 	apps := t.TempDir()
-	t.Setenv("SELFISHELL_TEST_APPLICATIONS_DIR", apps)
+	env.set("SELFISHELL_TEST_APPLICATIONS_DIR", apps)
 	if err := os.MkdirAll(apps+"/Ghostty.app/Contents/MacOS", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +50,11 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 	}
 	for _, cask := range []string{"", "ghostty"} {
 		f := newPackageFixture(t)
+		// The package operation's own environment must see the test applications
+		// directory, as the process environment did before injection.
+		f.op.Process.Env = append(f.op.Process.Env, "SELFISHELL_TEST_APPLICATIONS_DIR="+apps)
 		f.executable("brew", "if [ \"$1\" = list ]; then echo "+cask+"; exit 0; fi\necho attempted >\"$HOME/brew-attempted\"; exit 90")
-		c := CLI{Root: root, Out: &f.out, Err: &f.err}
+		c := CLI{Env: env, Root: root, Out: &f.out, Err: &f.err}
 		if err := c.installPackages(context.Background(), f.op, paths, nil, "macos", "arm64", true, false); err != nil {
 			t.Fatal(err)
 		}
@@ -63,9 +68,11 @@ func TestExistingGhosttyOffersConfigurationAndPreservesExternalApp(t *testing.T)
 }
 
 func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
+	t.Parallel()
 	if root := os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT"); root != "" {
 		os.Exit((CLI{Root: root, Out: os.Stdout, Err: os.Stderr}).Run(strings.Fields(os.Getenv("SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS"))))
 	}
+	var env Environment
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -73,8 +80,10 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	// readStateFile rejects every kind the same way; each command needs one.
 	for command, kind := range map[string]string{"install": "fifo", "install --ghostty": "dangling", "install --skip-packages --ghostty": "symlink", "update": "directory"} {
 		t.Run(command+"/"+kind, func(t *testing.T) {
-			root, paths := compactDiagnosticFixture(t, "macos", false)
-			home := os.Getenv("HOME")
+			t.Parallel()
+			env := env
+			root, paths := compactDiagnosticFixture(t, &env, "macos", false)
+			home := env.Get("HOME")
 			choice := paths.State + "/ghostty"
 			if err := os.Remove(choice); err != nil {
 				t.Fatal(err)
@@ -119,7 +128,7 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, executable, "-test.run=^TestGhosttyChoicePreflightBeforePackages$")
-			cmd.Env = append(os.Environ(), "SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT="+root, "SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS="+args)
+			cmd.Env = append(env.List(), "SELFISHELL_TEST_GHOSTTY_CHOICE_ROOT="+root, "SELFISHELL_TEST_GHOSTTY_CHOICE_ARGS="+args)
 			output, err := cmd.CombinedOutput()
 			if ctx.Err() != nil {
 				t.Fatalf("reading %s choice exceeded the deadline: %v", kind, ctx.Err())
@@ -141,16 +150,16 @@ func TestGhosttyChoicePreflightBeforePackages(t *testing.T) {
 	}
 }
 
-func windowsTerminalFixture(t *testing.T) (string, string, Paths, string) {
+func windowsTerminalFixture(t *testing.T, env *Environment) (string, string, Paths, string) {
 	t.Helper()
-	root, home, paths := blockHome(t, "ubuntu")
-	t.Setenv("WSL_DISTRO_NAME", "Ubuntu-24.04")
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
-	if err := testutil.WriteFile(os.Getenv("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux microsoft WSL2\n"), 0600); err != nil {
+	root, home, paths := blockHome(t, env, "ubuntu")
+	env.set("WSL_DISTRO_NAME", "Ubuntu-24.04")
+	env.set("SELFISHELL_TEST_TTY", "1")
+	if err := testutil.WriteFile(env.Get("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux microsoft WSL2\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	windowsHome := home + "/windows-localappdata"
-	t.Setenv("WT_PROFILE_ID", "")
+	env.set("WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
 		t.Fatal(err)
@@ -176,19 +185,21 @@ esac
 }
 
 func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
-	root, _, paths, windowsHome := windowsTerminalFixture(t)
+	t.Parallel()
+	var env Environment
+	root, _, paths, windowsHome := windowsTerminalFixture(t, &env)
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	fragment := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/963ff2f7-6aed-5ce3-9d91-90d99571f53a.json"
 	original := blockRead(t, settings)
-	code, out, stderr := blockRun(t, root, "y\nn\n", "install", "--skip-packages")
+	code, out, stderr := blockRun(t, env, root, "y\nn\n", "install", "--skip-packages")
 	if code != 0 || !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("choice: %d %s %s", code, out, stderr)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	if _, err := os.Stat(fragment); !os.IsNotExist(err) {
 		t.Fatal("declined choice was not retained", err)
 	}
-	out = blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
+	out = blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	want := []byte(`{
   "profiles": [
     {
@@ -205,31 +216,31 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 	if strings.Contains(out, "takes precedence") {
 		t.Fatal("reported an override without user values", out)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 	blockEqual(t, fragment, want)
 	blockEqual(t, settings, original)
 	// Uninstall must inspect Windows records even after platform detection changes.
-	if err := testutil.WriteFile(os.Getenv("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux"), 0600); err != nil {
+	if err := testutil.WriteFile(env.Get("SELFISHELL_TEST_PROC_VERSION_FILE"), []byte("Linux"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr = blockRun(t, root, "", "install", "--windows-terminal", "--skip-packages", "--yes")
+	code, _, stderr = blockRun(t, env, root, "", "install", "--windows-terminal", "--skip-packages", "--yes")
 	if code != 2 || !strings.Contains(stderr, "only on Ubuntu on WSL") {
 		t.Fatalf("%d %s", code, stderr)
 	}
-	blockOK(t, root, "uninstall", "--restore", "--dry-run", "--yes")
+	blockOK(t, env, root, "uninstall", "--restore", "--dry-run", "--yes")
 	blockEqual(t, fragment, want)
 	record := blockRead(t, windowsFragmentRecordPath(paths))
 	if err := os.Remove(windowsFragmentRecordPath(paths)); err != nil {
 		t.Fatal(err)
 	}
-	if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "[MISSING] Installation record: ") || !strings.Contains(out, "windows-terminal-fragment.json") {
+	if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, "[MISSING] Installation record: ") || !strings.Contains(out, "windows-terminal-fragment.json") {
 		t.Fatal("status missed the absent fragment record", out)
 	}
 	if err := testutil.WriteFile(windowsFragmentRecordPath(paths), record, 0600); err != nil {
 		t.Fatal(err)
 	}
-	blockOK(t, root, "uninstall", "--restore", "--yes")
+	blockOK(t, env, root, "uninstall", "--restore", "--yes")
 	blockEqual(t, settings, original)
 	for _, path := range []string{rawParent(fragment), paths.State + "/windows-terminal.json", windowsFragmentRecordPath(paths)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -239,8 +250,10 @@ func TestWindowsTerminalChoiceLifecycle(t *testing.T) {
 }
 
 func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	out := blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal", "--dry-run")
+	t.Parallel()
+	var env Environment
+	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+	out := blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal", "--dry-run")
 	if !strings.Contains(out, "Windows Terminal") {
 		t.Fatalf("missing preview: %s", out)
 	}
@@ -252,16 +265,18 @@ func TestWindowsTerminalDryRunAndUnavailableInterop(t *testing.T) {
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
-	code, _, stderr := blockRun(t, root, "", "install", "--skip-packages", "--yes", "--windows-terminal")
+	code, _, stderr := blockRun(t, env, root, "", "install", "--skip-packages", "--yes", "--windows-terminal")
 	if code == 0 || !strings.Contains(stderr, "Windows") {
 		t.Fatalf("missing interop: %d %s", code, stderr)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 }
 
 func TestWindowsFontPinnedInstallRecoveryAndExternalPreservation(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
+	t.Parallel()
+	var env Environment
+	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +292,7 @@ func TestWindowsFontPinnedInstallRecoveryAndExternalPreservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
-	op := &PackageOperation{Process: Process{Out: new(strings.Builder), Err: new(strings.Builder)}}
+	op := &PackageOperation{Process: Process{inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +341,7 @@ printf '%s\n' '{"fontInstalled":true}'
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	op = &PackageOperation{Process: Process{Out: new(strings.Builder), Err: new(strings.Builder)}}
+	op = &PackageOperation{Process: Process{inherit: env, Out: new(strings.Builder), Err: new(strings.Builder)}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -336,8 +351,10 @@ printf '%s\n' '{"fontInstalled":true}'
 }
 
 func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--yes", "--windows-terminal")
+	t.Parallel()
+	var env Environment
+	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+	blockOK(t, env, root, "install", "--skip-packages", "--yes", "--windows-terminal")
 	if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +366,7 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+	op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 	err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 	if err == nil || !strings.Contains(err.Error(), "Checksum mismatch") {
 		t.Fatal("bad checksum accepted", err)
@@ -360,7 +377,7 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
-	op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+	op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 	if err := op.InstallDirect(context.Background(), paths, manifest, "optional", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
@@ -413,15 +430,17 @@ func TestWindowsInteropReadOnly(t *testing.T) {
 }
 
 func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
-	root, home, paths, windowsHome := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	payload := []byte("approved-font")
 	manifest := home + "/font-manifest"
 	record := fmt.Sprintf("download jetbrainsmono-regular 3.4.0 linux all file://unused %x .local/share/selfishell/fonts/Regular.ttf font\n", sha256.Sum256(payload))
 	if err := testutil.WriteFile(manifest, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_DEPENDENCIES_FILE", manifest)
+	env.set("SELFISHELL_DEPENDENCIES_FILE", manifest)
 	target := windowsHome + "/Microsoft/Windows/Fonts/Selfishell/3.4.0/Regular.ttf"
 	if err := os.MkdirAll(rawParent(target), 0700); err != nil {
 		t.Fatal(err)
@@ -435,7 +454,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(paths.State+"/dependencies/jetbrainsmono-regular", []byte("3.4.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err := NewToolInventory(root, paths, io.Discard)
+	inventory, err := NewToolInventory(root, paths, io.Discard, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +467,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err = NewToolInventory(root, paths, io.Discard)
+	inventory, err = NewToolInventory(root, paths, io.Discard, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +480,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(nextRecord), 0600); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err = NewToolInventory(root, paths, io.Discard)
+	inventory, err = NewToolInventory(root, paths, io.Discard, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,10 +492,14 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 }
 
 func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, scenario := range []string{"reuse", "modified", "unrecorded"} {
 		t.Run(scenario, func(t *testing.T) {
-			root, home, paths, windowsHome := windowsTerminalFixture(t)
-			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			t.Parallel()
+			env := env
+			root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
+			blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			if err := testutil.WriteFile(home+"/tools/curl", []byte("#!/bin/sh\nexec /usr/bin/curl \"$@\"\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -493,12 +516,12 @@ func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
 				}
 			}
 			writeManifest("3.4.0", payload)
-			op := &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			op := &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal(err)
 			}
 			deps, _ := ReadDependencies(manifest)
-			oldTarget, err := dependencyTarget(deps[0], paths)
+			oldTarget, err := dependencyTarget(deps[0], paths, env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -523,12 +546,12 @@ print('{}')
 				t.Fatal(err)
 			}
 			writeManifest("3.4.1", payload)
-			op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal(err)
 			}
 			deps, _ = ReadDependencies(manifest)
-			newTarget, err := dependencyTarget(deps[0], paths)
+			newTarget, err := dependencyTarget(deps[0], paths, env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -570,7 +593,7 @@ print('{}')
 			if scenario == "modified" || scenario == "unrecorded" {
 				preserved := blockRead(t, oldTarget)
 				registration := blockRead(t, home+"/registration-request")
-				op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+				op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 				err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false)
 				if err == nil || !strings.Contains(err.Error(), "preserving") {
 					t.Fatal("unsafe retained path accepted", err)
@@ -580,7 +603,7 @@ print('{}')
 				}
 				return
 			}
-			op = &PackageOperation{Process: Process{Out: io.Discard, Err: io.Discard}}
+			op = &PackageOperation{Process: Process{inherit: env, Out: io.Discard, Err: io.Discard}}
 			if err := op.InstallDirect(context.Background(), paths, manifest, "required", "jetbrainsmono-regular", "ubuntu-wsl", "amd64", false); err != nil {
 				t.Fatal("return to retained pin", err)
 			}
@@ -605,22 +628,28 @@ print('{}')
 }
 
 func TestWindowsTerminalSavedChoiceDoesNotNeedInterop(t *testing.T) {
-	root, home, paths, _ := windowsTerminalFixture(t)
-	blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+	t.Parallel()
+	var env Environment
+	root, home, paths, _ := windowsTerminalFixture(t, &env)
+	blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 	before := blockRead(t, paths.State+"/windows-terminal.json")
 	if err := os.Remove(home + "/tools/powershell.exe"); err != nil {
 		t.Fatal(err)
 	}
-	blockOK(t, root, "install", "--skip-packages", "--yes")
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
 	if string(blockRead(t, paths.State+"/windows-terminal.json")) != string(before) {
 		t.Fatal("saved choice changed")
 	}
 }
 
 func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, scenario := range []string{"reimport", "stale-stub", "ambiguous", "clone-install", "clone-uninstall"} {
 		t.Run(scenario, func(t *testing.T) {
-			root, home, paths, windowsHome := windowsTerminalFixture(t)
+			t.Parallel()
+			env := env
+			root, home, paths, windowsHome := windowsTerminalFixture(t, &env)
 			fragments := windowsHome + "/Microsoft/Windows Terminal/Fragments/Selfishell/"
 			settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 			// Settings keep stubs; WSL's own fragments, which the probe reads, list current profiles.
@@ -654,7 +683,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 				old = "0e9c7e1c-0000-4000-8000-000000000002"
 				profiles([]string{old}, old)
 			}
-			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			original := blockRead(t, fragments+old+".json")
 			if !strings.HasPrefix(scenario, "clone") {
 				// Re-importing gives the distribution a new profile GUID.
@@ -667,7 +696,7 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 					other := "0e9c7e1c-0000-4000-8000-000000000003"
 					profiles([]string{next, other}, next, other)
 				}
-				if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, "Windows Terminal profile {"+old+"}; run 'selfishell install'") {
+				if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, "Windows Terminal profile {"+old+"}; run 'selfishell install'") {
 					t.Fatal("status missed the missing profile", out)
 				}
 				if scenario == "reimport" {
@@ -676,11 +705,11 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 					if err := testutil.WriteFile(paths.State+"/windows-terminal.json", []byte(choice), 0600); err != nil {
 						t.Fatal(err)
 					}
-					if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, next+".json (Windows Terminal fragment); run 'selfishell install'") {
+					if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, next+".json (Windows Terminal fragment); run 'selfishell install'") {
 						t.Fatal("status reported an unfinished move as intact", out)
 					}
 				}
-				out := blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes")
+				out := blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes")
 				if scenario == "ambiguous" {
 					if !strings.Contains(out, "Skipping Windows Terminal setup: could not uniquely identify") {
 						t.Fatal("hid why the profile could not be re-targeted", out)
@@ -697,27 +726,27 @@ func TestWindowsTerminalProfileChangeAndClone(t *testing.T) {
 				return
 			}
 			// A clone carries the original's state; its fragment stays the original's.
-			t.Setenv("WSL_DISTRO_NAME", "Ubuntu-dev")
+			env.set("WSL_DISTRO_NAME", "Ubuntu-dev")
 			clone := legacyWSLProfileGUID("Ubuntu-dev")
 			if err := testutil.WriteFile(settings, []byte(`{"profiles":{"list":[{"guid":"{963ff2f7-6aed-5ce3-9d91-90d99571f53a}","name":"Ubuntu-24.04","source":"Windows.Terminal.Wsl"},{"guid":"`+clone+`","name":"Ubuntu-dev","source":"Windows.Terminal.Wsl"}]}}`), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if _, out, _ := blockRun(t, root, "", "status"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
+			if _, out, _ := blockRun(t, env, root, "", "status"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
 				t.Fatal("status missed the copied setup", out)
 			}
-			if out := blockOK(t, root, "update", "--tools-only", "--skip-packages", "--yes"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
+			if out := blockOK(t, env, root, "update", "--tools-only", "--skip-packages", "--yes"); !strings.Contains(out, `copied from WSL distribution "Ubuntu-24.04"`) {
 				t.Fatal("update did not explain the skipped setup", out)
 			}
 			if scenario == "clone-install" {
-				if out := blockOK(t, root, "install", "--skip-packages", "--yes", "--dry-run"); strings.Contains(out, "Would remove Windows Terminal fragment") {
+				if out := blockOK(t, env, root, "install", "--skip-packages", "--yes", "--dry-run"); strings.Contains(out, "Would remove Windows Terminal fragment") {
 					t.Fatal("dry-run previewed removing the original's fragment", out)
 				}
-				blockOK(t, root, "install", "--skip-packages", "--yes")
+				blockOK(t, env, root, "install", "--skip-packages", "--yes")
 				if !strings.Contains(string(blockRead(t, fragments+strings.Trim(clone, "{}")+".json")), clone) {
 					t.Fatal("clone was not set up")
 				}
 			}
-			blockOK(t, root, "uninstall", "--yes")
+			blockOK(t, env, root, "uninstall", "--yes")
 			blockEqual(t, fragments+"963ff2f7-6aed-5ce3-9d91-90d99571f53a.json", original)
 			if _, err := os.Stat(windowsFragmentRecordPath(paths)); !os.IsNotExist(err) {
 				t.Fatal("copied record was kept", err)
@@ -775,7 +804,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err != nil || response.StatusCode != 200 || fmt.Sprintf("%x", sha256.Sum256(payload)) != dep.Checksum {
 		t.Fatal("font download verification", err, response.StatusCode)
 	}
-	oldTarget, err := dependencyTarget(dep, paths)
+	oldTarget, err := dependencyTarget(dep, paths, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -861,7 +890,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 	if err := op.InstallDirect(ctx, paths, manifest, "required", dep.Name, "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
-	newTarget, err := dependencyTarget(dep, paths)
+	newTarget, err := dependencyTarget(dep, paths, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -886,9 +915,11 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 }
 
 func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	outer := t.TempDir()
-	t.Setenv("WSL_DISTRO_NAME", "Inherited-Real-Distro")
-	home := isolatedUpdateHome(t)
+	env.set("WSL_DISTRO_NAME", "Inherited-Real-Distro")
+	home := isolatedUpdateHome(t, &env)
 	tools := outer + "/tools"
 	if err := os.Mkdir(tools, 0700); err != nil {
 		t.Fatal(err)
@@ -897,17 +928,17 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 	if err := testutil.WriteFile(tools+"/powershell.exe", []byte(probe), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", tools)
-	t.Setenv("SHELL", "/bin/zsh")
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("PATH", tools)
+	env.set("SHELL", "/bin/zsh")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	for name, data := range map[string]string{"os-release": "ID=ubuntu\n", "proc-version": "Microsoft WSL2\n"} {
 		if err := testutil.WriteFile(home+"/"+name, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
-	t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", home+"/proc-version")
-	code, _, stderr := commandResult(testRelease(t), "install", "--skip-packages", "--yes")
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
+	env.set("SELFISHELL_TEST_PROC_VERSION_FILE", home+"/proc-version")
+	code, _, stderr := commandResult(env, testRelease(t), "install", "--skip-packages", "--yes")
 	if code != 0 {
 		t.Fatal("isolated setup failed", stderr)
 	}
@@ -917,15 +948,19 @@ func TestUpdateHomeCannotReachInheritedWindowsInterop(t *testing.T) {
 }
 
 func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, scenario := range []string{"declined", "enabled", "absent", "in-memory", "malformed"} {
 		t.Run(scenario, func(t *testing.T) {
-			root, _, paths, _ := windowsTerminalFixture(t)
+			t.Parallel()
+			env := env
+			root, _, paths, _ := windowsTerminalFixture(t, &env)
 			enabled := scenario == "enabled"
 			answer := "y\nn\n"
 			if enabled {
 				answer = "y\ny\n"
 			}
-			code, _, stderr := blockRun(t, root, answer, "install", "--skip-packages")
+			code, _, stderr := blockRun(t, env, root, answer, "install", "--skip-packages")
 			if code != 0 {
 				t.Fatal(stderr)
 			}
@@ -938,7 +973,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 				if err := testutil.WriteFile(paths.State+"/windows-terminal.json", []byte("{\n"), 0600); err != nil {
 					t.Fatal(err)
 				}
-				code, out, stderr := blockRun(t, root, "", "status")
+				code, out, stderr := blockRun(t, env, root, "", "status")
 				if code != 1 || !strings.Contains(out, "[MALFORMED] ~/.local/state/selfishell/windows-terminal.json") || !strings.Contains(out, "Configuration:") || stderr != "" {
 					t.Fatalf("status stopped before diagnosing the choice: %d %s %s", code, out, stderr)
 				}
@@ -958,8 +993,8 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 				t.Fatal(err)
 			}
 			var out strings.Builder
-			c := CLI{Root: root, Out: &out, Err: io.Discard}
-			op := &PackageOperation{Process: Process{Out: &out, Err: io.Discard}}
+			c := CLI{Env: env, Root: root, Out: &out, Err: io.Discard}
+			op := &PackageOperation{Process: Process{inherit: env, Out: &out, Err: io.Discard}}
 			if scenario == "in-memory" {
 				op.windowsTerminal = &windowsTerminalChoice{Enabled: true}
 			}
@@ -980,7 +1015,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 					t.Errorf("wrong install selection: %s", out.String())
 				}
 			}
-			selected, err := diagnosticPackages(root, "ubuntu-wsl")
+			selected, err := diagnosticPackages(root, "ubuntu-wsl", env)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1001,10 +1036,14 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 }
 
 func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, command := range []string{"install", "update", "uninstall"} {
 		t.Run(command, func(t *testing.T) {
-			root, home, paths, _ := existingWindowsProfileFixture(t)
-			blockOK(t, root, "install", "--skip-packages", "--windows-terminal", "--yes")
+			t.Parallel()
+			env := env
+			root, home, paths, _ := existingWindowsProfileFixture(t, &env)
+			blockOK(t, env, root, "install", "--skip-packages", "--windows-terminal", "--yes")
 			record, err := readWindowsFragmentRecord(paths)
 			if err != nil || record == nil {
 				t.Fatal("missing fragment record", err)
@@ -1026,7 +1065,7 @@ func TestWindowsTerminalPreflightBeforePackages(t *testing.T) {
 			if command == "update" {
 				args = append(args, "--tools-only")
 			}
-			code, _, stderr := blockRun(t, root, "", args...)
+			code, _, stderr := blockRun(t, env, root, "", args...)
 			if code == 0 || !strings.Contains(stderr, "changed type") {
 				t.Fatalf("unsafe fragment accepted: %d %s", code, stderr)
 			}

@@ -12,22 +12,22 @@ import (
 )
 
 func (c CLI) marker(color, label string) string {
-	if progressColor(c.Out) {
+	if progressColor(c.Out, c.Env) {
 		return "\x1b[" + color + "m" + label + "\x1b[0m"
 	}
 	return label
 }
 func (c CLI) sayDiagnostic(color, label, message string) {
-	fmt.Fprintf(c.Out, "%s %s\n", c.marker(color, "["+label+"]"), displayHome(message, os.Getenv("HOME")))
+	fmt.Fprintf(c.Out, "%s %s\n", c.marker(color, "["+label+"]"), displayHome(message, c.Env.Get("HOME")))
 }
 func (c CLI) bold(value string) string {
-	if progressColor(c.Out) {
+	if progressColor(c.Out, c.Env) {
 		return "\x1b[1m" + value + "\x1b[0m"
 	}
 	return value
 }
 func (c CLI) diagnosticError(err error) int {
-	c.error(displayHome(err.Error(), os.Getenv("HOME")))
+	c.error(displayHome(err.Error(), c.Env.Get("HOME")))
 	var invalid invalidPackageNameError
 	if errors.As(err, &invalid) {
 		return 2
@@ -35,12 +35,12 @@ func (c CLI) diagnosticError(err error) int {
 	return 1
 }
 
-func diagnosticPackages(root, platform string) ([]Package, error) {
+func diagnosticPackages(root, platform string, env Environment) ([]Package, error) {
 	all, err := ReadPackages(filepath.Join(root, "packages.conf"))
 	if err != nil {
 		return nil, err
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(env)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func diagnosticPackages(root, platform string) ([]Package, error) {
 	if err != nil {
 		choice = &windowsTerminalChoice{}
 	}
-	eligible, err := selectPackages(root, paths, all, platform, choice)
+	eligible, err := selectPackages(root, paths, all, platform, choice, env)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c CLI) status(args []string) int {
 			return 2
 		}
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(c.Env)
 	if err != nil {
 		return c.diagnosticError(err)
 	}
@@ -140,20 +140,20 @@ func (c CLI) status(args []string) int {
 	count, intact := 0, 0
 	changedPaths, recordIssues := false, false
 	configured := hasConfiguredMarker(paths)
-	platform := DetectPlatform()
+	platform := detectPlatform(c.Env)
 	var packages []Package
 	var inventory *ToolInventory
 	if configured {
 		c.sayDiagnostic("36", "INFO", "Selfishell configuration is installed.")
-		if packages, err = diagnosticPackages(c.Root, platform.Name); err != nil {
+		if packages, err = diagnosticPackages(c.Root, platform.Name, c.Env); err != nil {
 			return c.diagnosticError(err)
 		}
-		if inventory, err = NewToolInventory(c.Root, paths, c.Err); err != nil {
+		if inventory, err = NewToolInventory(c.Root, paths, c.Err, c.Env); err != nil {
 			return c.diagnosticError(err)
 		}
 	}
 	result, installHinted := c.statusSystem(platform, configured, verbose)
-	resources, err := ManagedResources(c.Root)
+	resources, err := ManagedResources(c.Root, c.Env)
 	if err != nil {
 		return c.diagnosticError(err)
 	}
@@ -171,7 +171,7 @@ func (c CLI) status(args []string) int {
 			}
 			ghostty = e == nil && string(choice) == "1\n"
 		}
-		selected, e := ResourcesForPlatform(c.Root, platform.Name, ghostty)
+		selected, e := ResourcesForPlatform(c.Root, platform.Name, ghostty, c.Env)
 		if e != nil {
 			return c.diagnosticError(e)
 		}

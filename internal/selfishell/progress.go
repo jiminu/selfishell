@@ -3,7 +3,6 @@ package selfishell
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 )
@@ -34,16 +33,16 @@ type progressEvent struct {
 	tone             reportTone
 }
 
-func newProgress(out, stderr io.Writer, paths Paths) *operationProgress {
+func newProgress(out, stderr io.Writer, paths Paths, env Environment) *operationProgress {
 	return &operationProgress{out: out, stderr: stderr,
-		compact: IsTerminal(out) && IsTerminal(stderr) && os.Getenv("TERM") != "dumb" && !progressCI(),
-		color:   progressColor(out),
-		config:  paths.Config, home: os.Getenv("HOME")}
+		compact: IsTerminal(out) && IsTerminal(stderr) && env.Get("TERM") != "dumb" && !progressCI(env),
+		color:   progressColor(out, env),
+		config:  paths.Config, home: env.Get("HOME")}
 }
 
-func progressCI() bool { return os.Getenv("CI") != "" && os.Getenv("CI") != "false" }
-func progressColor(out io.Writer) bool {
-	return IsTerminal(out) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" && !progressCI()
+func progressCI(env Environment) bool { return env.Get("CI") != "" && env.Get("CI") != "false" }
+func progressColor(out io.Writer, env Environment) bool {
+	return IsTerminal(out) && env.Get("NO_COLOR") == "" && env.Get("TERM") != "dumb" && !progressCI(env)
 }
 
 func (p *operationProgress) prompt() func() {
@@ -111,7 +110,7 @@ func (c CLI) report(section string, tone reportTone, format string, args ...any)
 		c.progress.events = append(c.progress.events, progressEvent{section, message, tone})
 		return
 	}
-	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out), tone))
+	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out, c.Env), tone))
 }
 
 func (c CLI) complete(message string) {
@@ -119,7 +118,7 @@ func (c CLI) complete(message string) {
 		c.progress.completion = message
 		return
 	}
-	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out), reportSuccess))
+	fmt.Fprintln(c.Out, statusText(message, progressColor(c.Out, c.Env), reportSuccess))
 }
 
 func (o *PackageOperation) report(tone reportTone, format string, args ...any) {

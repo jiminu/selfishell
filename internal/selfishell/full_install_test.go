@@ -7,9 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	const required = "package ubuntu required apt fixture-unavailable\n"
 	const unpinned = "package ubuntu required apt fixture-apt\npackage all required mise absent\n"
 	for _, tc := range []struct {
@@ -22,7 +26,9 @@ func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
 		{"update missing pin", unpinned, "missing approved mise version: absent", "", []string{"update", "--tools-only", "--yes"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			home := isolatedUpdateHome(t)
+			t.Parallel()
+			env := env
+			home := isolatedUpdateHome(t, &env)
 			root, bin := t.TempDir(), t.TempDir()
 			for _, name := range []string{"config", "dependencies.conf"} {
 				if err := os.Symlink(filepath.Join(testRelease(t), name), filepath.Join(root, name)); err != nil {
@@ -41,11 +47,11 @@ func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
 			} {
 				writeTestFile(t, bin+"/"+name, body, 0700)
 			}
-			t.Setenv("PATH", bin+":/usr/bin:/bin")
-			t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-			t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", bin+"/os-release")
-			t.Setenv("SELFISHELL_TEST_TTY", "")
-			code, out, stderr := commandResult(root, tc.args...)
+			env.set("PATH", bin+":/usr/bin:/bin")
+			env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+			env.set("SELFISHELL_TEST_OS_RELEASE_FILE", bin+"/os-release")
+			env.set("SELFISHELL_TEST_TTY", "")
+			code, out, stderr := commandResult(env, root, tc.args...)
 			if code != 1 || strings.Contains(out, "synchronized") || !strings.Contains(stderr, tc.want) {
 				t.Fatalf("%d %q %q", code, out, stderr)
 			}
@@ -63,26 +69,28 @@ func TestPackagePhaseFailuresLeaveConfigurationUnchanged(t *testing.T) {
 }
 
 func TestFullInstallPreflightsMiseTargetBeforePackageCommands(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root, home := testRelease(t), t.TempDir()
 	bin := t.TempDir()
 	for name, body := range map[string]string{
 		"apt-get":    "#!/bin/sh\nprintf called >\"$HOME/package-called\"\n",
 		"dpkg-query": "#!/bin/sh\nexit 1\n",
 	} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0700); err != nil {
+		if err := testutil.WriteFile(filepath.Join(bin, name), []byte(body), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	isolateHome(t, home)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(bin, "os-release"))
-	os.WriteFile(filepath.Join(bin, "os-release"), []byte("ID=ubuntu\n"), 0600)
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	isolateHome(&env, home)
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", filepath.Join(bin, "os-release"))
+	testutil.WriteFile(filepath.Join(bin, "os-release"), []byte("ID=ubuntu\n"), 0600)
+	env.set("PATH", bin+":/usr/bin:/bin")
 	if err := os.MkdirAll(home+"/.config/mise/config.toml", 0700); err != nil {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
+	code := (CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
 	if code != 1 || !strings.Contains(stderr.String(), "user mise config path") {
 		t.Fatalf("%d %s", code, stderr.String())
 	}
@@ -92,12 +100,14 @@ func TestFullInstallPreflightsMiseTargetBeforePackageCommands(t *testing.T) {
 }
 
 func TestFullInstallDryRunAndCancellationDoNotMutate(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root, home := testRelease(t), t.TempDir()
-	isolateHome(t, home)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
+	isolateHome(&env, home)
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SHELL", "/bin/zsh")
 	var out, stderr bytes.Buffer
-	cli := CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
+	cli := CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
 	if code := cli.Run([]string{"install", "--dry-run"}); code != 0 {
 		t.Fatalf("dry-run %d: %s", code, stderr.String())
 	}
@@ -121,6 +131,8 @@ func TestFullInstallDryRunAndCancellationDoNotMutate(t *testing.T) {
 }
 
 func TestInstallLoginShellListedAndSafe(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root, home, fixture := testRelease(t), t.TempDir(), t.TempDir()
 	bin := fixture + "/bin"
 	listed := fixture + "/listed/zsh"
@@ -135,25 +147,25 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 		"id":   "#!/bin/sh\nprintf 'fixture-user\\n'\n",
 		"chsh": "#!/bin/sh\n[ -f \"$HOME/.local/state/selfishell/configured\" ] && [ -f \"$HOME/.local/state/selfishell/ghostty\" ] || exit 42\nprintf '%s\\n' \"$*\" >\"$HOME/chsh-args\"\n",
 	} {
-		if err := os.WriteFile(bin+"/"+name, []byte(body), 0700); err != nil {
+		if err := testutil.WriteFile(bin+"/"+name, []byte(body), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(listed, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+	if err := testutil.WriteFile(listed, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	shells := fixture + "/shells"
-	if err := os.WriteFile(shells, []byte("/bin/sh\n"+listed+"\n"), 0600); err != nil {
+	if err := testutil.WriteFile(shells, []byte("/bin/sh\n"+listed+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	isolateHome(t, home)
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("SHELL", "/bin/bash")
-	t.Setenv("SELFISHELL_TEST_SHELLS_FILE", shells)
-	t.Setenv("SELFISHELL_TEST_TERMINAL", "/dev/null")
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	isolateHome(&env, home)
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("SHELL", "/bin/bash")
+	env.set("SELFISHELL_TEST_SHELLS_FILE", shells)
+	env.set("SELFISHELL_TEST_TERMINAL", "/dev/null")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	var out, stderr bytes.Buffer
-	c := CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
+	c := CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
 	if code := c.Run([]string{"install", "--skip-packages", "--yes"}); code != 0 {
 		t.Fatalf("install %d: %s", code, stderr.String())
 	}
@@ -163,15 +175,17 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	if err := os.Remove(home + "/chsh-args"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SHELL", "/opt/homebrew/bin/zsh")
+	env.set("SHELL", "/opt/homebrew/bin/zsh")
+	c.Env = env
 	if code := c.Run([]string{"install", "--skip-packages", "--yes"}); code != 0 {
 		t.Fatalf("repeat %d: %s", code, stderr.String())
 	}
 	if _, err := os.Lstat(home + "/chsh-args"); !os.IsNotExist(err) {
 		t.Fatal("changed existing Zsh shell")
 	}
-	t.Setenv("SHELL", "/bin/bash")
-	t.Setenv("SELFISHELL_TEST_TERMINAL", fixture+"/missing-terminal")
+	env.set("SHELL", "/bin/bash")
+	env.set("SELFISHELL_TEST_TERMINAL", fixture+"/missing-terminal")
+	c.Env = env
 	out.Reset()
 	if code := c.Run([]string{"install", "--skip-packages", "--yes"}); code != 0 || !strings.Contains(out.String(), "chsh -s "+listed) {
 		t.Fatalf("terminal guard: %d %s", code, out.String())
@@ -179,7 +193,7 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	if _, err := os.Lstat(home + "/chsh-args"); !os.IsNotExist(err) {
 		t.Fatal("called chsh without terminal")
 	}
-	if err := os.WriteFile(shells, []byte("/bin/sh\n"), 0600); err != nil {
+	if err := testutil.WriteFile(shells, []byte("/bin/sh\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
@@ -189,10 +203,11 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	if _, err := os.Lstat(home + "/chsh-args"); !os.IsNotExist(err) {
 		t.Fatal("called chsh with unlisted shell")
 	}
-	if err := os.WriteFile(shells, []byte(listed+"\n"), 0600); err != nil {
+	if err := testutil.WriteFile(shells, []byte(listed+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_TERMINAL", "/dev/null")
+	env.set("SELFISHELL_TEST_TERMINAL", "/dev/null")
+	c.Env = env
 	out.Reset()
 	c.defaultShell(true, true)
 	if !strings.Contains(out.String(), "Would set login shell to: "+listed) {
@@ -201,13 +216,14 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 	if _, err := os.Lstat(home + "/chsh-args"); !os.IsNotExist(err) {
 		t.Fatal("dry-run called chsh")
 	}
-	t.Setenv("SELFISHELL_TEST_TTY", "1")
+	env.set("SELFISHELL_TEST_TTY", "1")
+	c.Env = env
 	c.In = strings.NewReader("n\n")
 	c.defaultShell(false, false)
 	if _, err := os.Lstat(home + "/chsh-args"); !os.IsNotExist(err) {
 		t.Fatal("denied shell confirmation called chsh")
 	}
-	os.WriteFile(bin+"/chsh", []byte("#!/bin/sh\nexit 1\n"), 0700)
+	testutil.WriteFile(bin+"/chsh", []byte("#!/bin/sh\nexit 1\n"), 0700)
 	c.In = strings.NewReader("y\n")
 	out.Reset()
 	c.defaultShell(false, false)
@@ -217,9 +233,11 @@ func TestInstallLoginShellListedAndSafe(t *testing.T) {
 }
 
 func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *testing.T) {
-	_, _, root, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	_, _, root, manifest, home, _ := neovimFixture(t, &env)
 	original := []byte("alias own='yes'\r\n")
-	if err := os.WriteFile(home+"/.zshrc", original, 0600); err != nil {
+	if err := testutil.WriteFile(home+"/.zshrc", original, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.RemoveAll(root + "/config"); err != nil {
@@ -231,31 +249,31 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 	if err := os.Rename(manifest, root+"/dependencies.conf"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(root+"/packages.conf", []byte("package ubuntu required apt example\npackage ubuntu optional apt optional-example\n"), 0600); err != nil {
+	if err := testutil.WriteFile(root+"/packages.conf", []byte("package ubuntu required apt example\npackage ubuntu optional apt optional-example\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	bin := home + "/bin"
-	if err := os.WriteFile(bin+"/dpkg-query", []byte("#!/bin/sh\ncase \"$*\" in *optional-example*) exit 1;; esac\nprintf 'install ok installed\\n'\n"), 0700); err != nil {
+	if err := testutil.WriteFile(bin+"/dpkg-query", []byte("#!/bin/sh\ncase \"$*\" in *optional-example*) exit 1;; esac\nprintf 'install ok installed\\n'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin+"/apt-get", []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/apt-calls\"\ncase \"$1\" in update) exit 0;; *) exit 1;; esac\n"), 0700); err != nil {
+	if err := testutil.WriteFile(bin+"/apt-get", []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$HOME/apt-calls\"\ncase \"$1\" in update) exit 0;; *) exit 1;; esac\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin+"/sudo", []byte("#!/bin/sh\nexec \"$@\"\n"), 0700); err != nil {
+	if err := testutil.WriteFile(bin+"/sudo", []byte("#!/bin/sh\nexec \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin+"/apt-cache", []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+	if err := testutil.WriteFile(bin+"/apt-cache", []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", bin+":/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
-	if err := os.WriteFile(home+"/os-release", []byte("ID=ubuntu\n"), 0600); err != nil {
+	env.set("PATH", bin+":/usr/bin:/bin")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", home+"/os-release")
+	if err := testutil.WriteFile(home+"/os-release", []byte("ID=ubuntu\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SHELL", "/bin/zsh")
+	env.set("SHELL", "/bin/zsh")
 	var out, stderr bytes.Buffer
-	c := CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
+	c := CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}
 	if code := c.Run([]string{"install", "--yes"}); code != 0 {
 		t.Fatalf("full install %d: %s", code, stderr.String())
 	}
@@ -280,6 +298,8 @@ func TestFullInstallAppliesConfigurationAfterPackagesAndKeepsGhosttyChoice(t *te
 }
 
 func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	for _, tc := range []struct {
 		name, command, platform, choice string
 		explicit, want                  bool
@@ -298,7 +318,9 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 		{"ubuntu-symlink", "install", "ubuntu", "symlink", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, home, paths := blockHome(t, tc.platform)
+			t.Parallel()
+			env := env
+			root, home, paths := blockHome(t, &env, tc.platform)
 			blockWrite(t, paths.State+"/configured", []byte("1\n"))
 			choice := paths.State + "/ghostty"
 			var err error
@@ -323,7 +345,7 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 			if tc.explicit {
 				args = append(args, "--ghostty")
 			}
-			code, out, stderr := blockRun(t, root, "", args...)
+			code, out, stderr := blockRun(t, env, root, "", args...)
 			if tc.platform == "macos" && (tc.choice == "directory" || tc.choice == "symlink") {
 				if code != 1 || !strings.Contains(stderr, "not a regular file") {
 					t.Fatalf("unsafe choice %q was not rejected: %d %s", tc.choice, code, stderr)
@@ -352,7 +374,9 @@ func TestFullInstallSavedGhosttyChoiceControlsCaskPlan(t *testing.T) {
 }
 
 func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
-	_, _, root, manifest, home, _ := neovimFixture(t)
+	t.Parallel()
+	var env Environment
+	_, _, root, manifest, home, _ := neovimFixture(t, &env)
 	if err := os.RemoveAll(root + "/config"); err != nil {
 		t.Fatal(err)
 	}
@@ -362,46 +386,48 @@ func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
 	if err := os.Rename(manifest, root+"/dependencies.conf"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(root+"/packages.conf", []byte("package macos optional cask fixture-optional\n"), 0600); err != nil {
+	if err := testutil.WriteFile(root+"/packages.conf", []byte("package macos optional cask fixture-optional\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(home+"/bin/brew", []byte("#!/bin/sh\ncase \"$1\" in install) exit 1;; esac\n"), 0700); err != nil {
+	if err := testutil.WriteFile(home+"/bin/brew", []byte("#!/bin/sh\ncase \"$1\" in install) exit 1;; esac\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", home+"/bin:/usr/bin:/bin")
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
-	t.Setenv("SHELL", "/bin/zsh")
-	paths, err := UserPaths()
+	env.set("PATH", home+"/bin:/usr/bin:/bin")
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+	env.set("SHELL", "/bin/zsh")
+	paths, err := userPaths(env)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(paths.State, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(paths.State+"/ghostty", []byte("1\n"), 0600); err != nil {
+	if err := testutil.WriteFile(paths.State+"/ghostty", []byte("1\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
+	code := (CLI{Env: env, Root: root, In: strings.NewReader(""), Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
 	if code != 0 || !strings.Contains(stderr.String(), "Skipped optional packages: fixture-optional ghostty\n") {
 		t.Fatalf("full install %d, optional summary %q", code, stderr.String())
 	}
 }
 
 func TestFullInstallUnsupportedPlatformLeavesHomeUntouched(t *testing.T) {
+	t.Parallel()
+	var env Environment
 	root, home := testRelease(t), t.TempDir()
-	isolateHome(t, home)
-	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	isolateHome(&env, home)
+	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	releaseFile := t.TempDir() + "/os-release"
-	if err := os.WriteFile(releaseFile, []byte("ID=fedora\n"), 0600); err != nil {
+	if err := testutil.WriteFile(releaseFile, []byte("ID=fedora\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SELFISHELL_TEST_OS_RELEASE_FILE", releaseFile)
+	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", releaseFile)
 	procFile := filepath.Join(filepath.Dir(releaseFile), "proc-version")
 	writeTestFile(t, procFile, "Linux fixture\n", 0600)
-	t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", procFile)
+	env.set("SELFISHELL_TEST_PROC_VERSION_FILE", procFile)
 	var out, stderr bytes.Buffer
-	code := (CLI{Root: root, Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
+	code := (CLI{Env: env, Root: root, Out: &out, Err: &stderr}).Run([]string{"install", "--yes"})
 	if code != 1 || !strings.Contains(stderr.String(), "unavailable on unsupported-linux") {
 		t.Fatalf("%d %s", code, stderr.String())
 	}

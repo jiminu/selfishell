@@ -52,17 +52,19 @@ func readPackagePTY(t *testing.T, master *os.File, expected string) string {
 }
 
 func TestProgressTerminalFailure(t *testing.T) {
-	isolateHome(t, t.TempDir())
-	t.Setenv("TERM", "xterm-256color")
-	t.Setenv("CI", "")
-	t.Setenv("NO_COLOR", "1")
+	t.Parallel()
+	var env Environment
+	isolateHome(&env, t.TempDir())
+	env.set("TERM", "xterm-256color")
+	env.set("CI", "")
+	env.set("NO_COLOR", "1")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
-	ui := newProgress(slave, slave, Paths{})
+	ui := newProgress(slave, slave, Paths{}, env)
 	defer ui.pause()
-	c := CLI{Out: slave, Err: slave, progress: ui}
-	p := Process{Out: slave, Err: slave, progress: ui}
+	c := CLI{Env: env, Out: slave, Err: slave, progress: ui}
+	p := Process{inherit: env, Out: slave, Err: slave, progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'")
 	if code != 0 || err != nil {
@@ -88,16 +90,18 @@ func TestProgressTerminalFailure(t *testing.T) {
 }
 
 func TestConfigurationPromptInterrupt(t *testing.T) {
+	t.Parallel()
 	if root := os.Getenv("SELFISHELL_TEST_PROMPT_ROOT"); root != "" {
-		c := CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-		prepared, err := c.prepareConfig(DetectPlatform().Name, false, false, true, false, false)
+		env := ProcessEnvironment() // the parent's fixture environment
+		c := CLI{Env: env, Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+		prepared, err := c.prepareConfig(detectPlatform(env).Name, false, false, true, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// A file changed after preflight must prompt while configuration progress runs.
-		r := failureResource(t, root, "zsh-common")
+		r := failureResource(t, env, root, "zsh-common")
 		blockWrite(t, r.Target, []byte("# user edit after preflight\n"))
-		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		c.progress = newProgress(c.Out, c.Err, prepared.paths, env)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 		if err := c.applyManagedResources(&prepared); err != nil {
@@ -106,6 +110,7 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 		t.Fatal("configuration continued after interrupt")
 	}
 
+	var env Environment
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -114,17 +119,18 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		platform = "ubuntu"
 	}
-	root, _, _ := blockHome(t, platform)
-	blockOK(t, root, "install", "--skip-packages", "--yes")
-	t.Setenv("SELFISHELL_TEST_PROMPT_ROOT", root)
-	t.Setenv("TERM", "xterm-256color")
-	t.Setenv("CI", "")
+	root, _, _ := blockHome(t, &env, platform)
+	blockOK(t, env, root, "install", "--skip-packages", "--yes")
+	env.set("SELFISHELL_TEST_PROMPT_ROOT", root)
+	env.set("TERM", "xterm-256color")
+	env.set("CI", "")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestConfigurationPromptInterrupt$")
+	cmd.Env = env.List()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	if err := cmd.Start(); err != nil {
@@ -152,5 +158,5 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 	if !errors.As(err, &exit) || exit.Sys().(syscall.WaitStatus).Signal() != syscall.SIGINT {
 		t.Fatalf("prompt did not stop on Ctrl-C: %v (timeout: %v)", err, ctx.Err())
 	}
-	blockEqual(t, failureResource(t, root, "zsh-common").Target, []byte("# user edit after preflight\n"))
+	blockEqual(t, failureResource(t, env, root, "zsh-common").Target, []byte("# user edit after preflight\n"))
 }
