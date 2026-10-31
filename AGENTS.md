@@ -215,9 +215,12 @@ lifecycle, package, dependency, or release change.
   developer's real home directory. Clear inherited `WSL_DISTRO_NAME` in Linux
   home fixtures; Windows integration fixtures must explicitly provide a fake
   Windows environment or a private native scratch directory.
-- Integration tests call `t.Parallel()` unless they need `t.Setenv`. They write
-  files only through `testutil.WriteFile` or `testutil.AppendFile` to prevent
-  ETXTBSY from concurrent forks; see [test rules](CONTRIBUTING.md#tests-and-repository-gate).
+- Product code reads the environment only through the injected
+  `process.Environment` (a source check rejects `os.Getenv` and friends), so
+  tests pass a private environment and call `t.Parallel()` instead of using
+  `t.Setenv`. Tests write files only through `testutil.WriteFile` or
+  `testutil.AppendFile` to prevent ETXTBSY from concurrent forks; see
+  [test rules](CONTRIBUTING.md#tests-and-repository-gate).
 - Behavioral changes require tests, especially for empty/existing paths,
   repeated operations, interruptions, unsupported platforms, `--skip-packages`,
   uninstall, restore, update, and rollback.
@@ -234,6 +237,14 @@ lifecycle, package, dependency, or release change.
 adapters; `config/` holds managed shell/editor defaults; `tests/` holds isolated
 coverage and runtime fixtures; `scripts/` holds validation, benchmarks and
 maintenance tools; `.github/` holds automation; `docs/` holds project guides.
+
+`internal/` is layered and imports point only downward: the foundation
+packages (`process`, `managed`, `report`) import no project package, the
+subsystem packages (`terminal`, `release`, `neovim`, `lifecycle`) import only
+the foundation, and `internal/selfishell` holds the CLI and imports the rest.
+Put new code in the lowest layer whose dependencies it needs; a package that
+would need the core belongs in the core or should receive an interface or a
+function instead. See [Go packages](docs/ARCHITECTURE.md#go-packages).
 
 ## Working Process
 
