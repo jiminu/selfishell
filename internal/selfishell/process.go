@@ -24,8 +24,21 @@ type Process struct {
 	Env           []string
 	inherit       Environment // the child environment while Env is nil
 	repoScopedGit bool
-	progress      *operationProgress
+	progress      processProgress
 	foreground    bool // Commands which can prompt retain their terminal streams.
+}
+
+// processProgress is the spinner a Process hides captured child output behind.
+type processProgress interface {
+	// Compact reports whether the spinner animates and child output is hidden.
+	// It accepts a nil receiver.
+	Compact() bool
+	// Streams returns the spinner's own stdout and stderr.
+	Streams() (out, err io.Writer)
+	// Pause stops the animation and clears its line. It accepts a nil receiver.
+	Pause()
+	// Resume restarts the last stage after a Pause.
+	Resume()
 }
 
 // outputTail bounds hidden tool output while retaining failure diagnostics.
@@ -128,13 +141,14 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	// files. CommandContext escalates to Kill if they outlive WaitDelay.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	var captured *outputTail
-	if p.progress != nil && p.progress.compact {
+	var stderr io.Writer
+	if p.progress != nil && p.progress.Compact() {
+		var out io.Writer
+		out, stderr = p.progress.Streams()
 		if p.foreground || forwardCancel {
-			p.progress.pause()
-		} else if p.Out == p.progress.out && p.Err == p.progress.stderr {
-			if p.progress.stop == nil && p.progress.label != "" {
-				p.progress.stage(p.progress.label)
-			}
+			p.progress.Pause()
+		} else if p.Out == out && p.Err == stderr {
+			p.progress.Resume()
 			captured = &outputTail{}
 			cmd.Stdout, cmd.Stderr = captured, captured
 		}
@@ -145,8 +159,8 @@ func (p Process) run(ctx context.Context, forwardCancel bool, name string, args 
 	}
 	err := cmd.Run()
 	if err != nil && captured != nil {
-		p.progress.pause()
-		_, _ = p.progress.stderr.Write(captured.data)
+		p.progress.Pause()
+		_, _ = stderr.Write(captured.data)
 	}
 	if err == nil {
 		return 0, nil

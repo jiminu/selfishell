@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type managed struct {
+type lifecycle struct {
 	c                CLI
 	paths            Paths
 	dry, yes         bool
@@ -21,7 +21,7 @@ type managed struct {
 	atomicWrite      func(string, []byte, os.FileMode) error
 }
 
-func (m *managed) write(path string, data []byte, mode os.FileMode) error {
+func (m *lifecycle) write(path string, data []byte, mode os.FileMode) error {
 	if m.atomicWrite != nil {
 		return m.atomicWrite(path, data, mode)
 	}
@@ -39,19 +39,19 @@ func exists(path string) (os.FileInfo, bool, error) {
 	}
 	return i, e == nil, e
 }
-func (m *managed) statePath(r Resource) string { return m.paths.Resources + "/" + r.Name + ".state" }
-func (m *managed) state(r Resource) (State, bool, error) {
+func (m *lifecycle) statePath(r Resource) string { return m.paths.Resources + "/" + r.Name + ".state" }
+func (m *lifecycle) state(r Resource) (State, bool, error) {
 	s, e := ReadState(m.statePath(r))
 	if errors.Is(e, fs.ErrNotExist) {
 		return State{}, false, nil
 	}
 	return s, e == nil, e
 }
-func (m *managed) save(r Resource, s State) error { return WriteState(m.statePath(r), s) }
-func (m *managed) say(tone reportTone, format string, args ...any) {
+func (m *lifecycle) save(r Resource, s State) error { return WriteState(m.statePath(r), s) }
+func (m *lifecycle) say(tone reportTone, format string, args ...any) {
 	m.c.report("Configuration", tone, format, args...)
 }
-func (m *managed) backup(path string) (string, error) {
+func (m *lifecycle) backup(path string) (string, error) {
 	base := path + ".backup." + time.Now().Format("20060102150405")
 	candidate := base
 	for n := 1; ; n++ {
@@ -65,7 +65,7 @@ func (m *managed) backup(path string) (string, error) {
 		candidate = fmt.Sprintf("%s.%d", base, n)
 	}
 }
-func (m *managed) installResource(r Resource, preflight bool) error {
+func (m *lifecycle) installResource(r Resource, preflight bool) error {
 	switch r.Kind {
 	case "file":
 		return m.installFile(r, preflight)
@@ -76,7 +76,7 @@ func (m *managed) installResource(r Resource, preflight bool) error {
 	}
 	return fmt.Errorf("invalid resource kind: %s", r.Kind)
 }
-func (m *managed) installFile(r Resource, preflight bool) error {
+func (m *lifecycle) installFile(r Resource, preflight bool) error {
 	source, err := os.ReadFile(r.Source)
 	if err != nil {
 		return err
@@ -145,7 +145,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	}
 	if current == sourceChecksum && !preserveOriginal {
 		if !m.dry {
-			if err = m.save(r, State{"file", "active", r.Target, "-", backup, sourceChecksum}); err != nil {
+			if err = m.save(r, State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: sourceChecksum}); err != nil {
 				return err
 			}
 		}
@@ -167,7 +167,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	if has && current != "" {
 		pendingChecksum = current
 	}
-	if err = m.save(r, State{"file", "pending", r.Target, "-", backup, pendingChecksum}); err != nil {
+	if err = m.save(r, State{Kind: "file", Status: "pending", Target: r.Target, Reference: "-", Backup: backup, Checksum: pendingChecksum}); err != nil {
 		return err
 	}
 	if backup != "-" {
@@ -186,7 +186,7 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 	if err = m.write(r.Target, source, 0644); err != nil {
 		return err
 	}
-	if err = m.save(r, State{"file", "active", r.Target, "-", backup, sourceChecksum}); err != nil {
+	if err = m.save(r, State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: sourceChecksum}); err != nil {
 		return err
 	}
 	m.say(reportSuccess, "%s managed file: %s", verb, r.Target)
@@ -195,13 +195,13 @@ func (m *managed) installFile(r Resource, preflight bool) error {
 
 // resolveModified asks once per resource whether to overwrite a locally
 // modified managed file or block, backing it up first. False leaves it as is.
-func (m *managed) resolveModified(r Resource, kind, question string, preflight bool) (bool, error) {
+func (m *lifecycle) resolveModified(r Resource, kind, question string, preflight bool) (bool, error) {
 	action := m.actions[r.Name]
 	if action == "" {
 		if m.yes || !m.c.interactive() {
 			return false, fmt.Errorf("Managed %s was modified; preserving it: %s", kind, r.Target)
 		}
-		m.c.progress.pause()
+		m.c.progress.Pause()
 		fmt.Fprintf(m.c.Out, "Managed %s was modified: %s. %s [y/N] ", kind, r.Target, question)
 		answer, _ := m.c.readAnswer()
 		if affirmative(answer) {
@@ -240,7 +240,7 @@ func copyPreserve(source, target string) error {
 	}
 	return createRawExclusive(target, data, i.Mode().Perm())
 }
-func (m *managed) installLink(r Resource, preflight bool) error {
+func (m *lifecycle) installLink(r Resource, preflight bool) error {
 	s, has, err := m.state(r)
 	if err != nil {
 		return fmt.Errorf("Managed resource state is malformed: %s", m.statePath(r))
@@ -280,7 +280,7 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 					if err != nil || dest != r.Source {
 						return fmt.Errorf("Failed to install managed link: %s", r.Target)
 					}
-					if err = m.save(r, State{"link", "active", r.Target, r.Source, backup, "-"}); err != nil {
+					if err = m.save(r, State{Kind: "link", Status: "active", Target: r.Target, Reference: r.Source, Backup: backup, Checksum: "-"}); err != nil {
 						return err
 					}
 				}
@@ -299,7 +299,7 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 		m.say(reportPreview, "Would link: %s -> %s", r.Target, r.Source)
 		return nil
 	}
-	if err = m.save(r, State{"link", "pending", r.Target, r.Source, backup, "-"}); err != nil {
+	if err = m.save(r, State{Kind: "link", Status: "pending", Target: r.Target, Reference: r.Source, Backup: backup, Checksum: "-"}); err != nil {
 		return err
 	}
 	if err = makeRawDir(rawParent(r.Target)); err != nil {
@@ -350,13 +350,13 @@ func (m *managed) installLink(r Resource, preflight bool) error {
 	if err != nil || dest != r.Source {
 		return fmt.Errorf("Failed to install managed link: %s", r.Target)
 	}
-	if err = m.save(r, State{"link", "active", r.Target, r.Source, backup, "-"}); err != nil {
+	if err = m.save(r, State{Kind: "link", Status: "active", Target: r.Target, Reference: r.Source, Backup: backup, Checksum: "-"}); err != nil {
 		return err
 	}
 	m.say(reportSuccess, "Linked: %s -> %s", r.Target, r.Source)
 	return nil
 }
-func (m *managed) installBlock(r Resource, preflight bool) error {
+func (m *lifecycle) installBlock(r Resource, preflight bool) error {
 	content, err := blockContent(r.Name, m.paths.Config)
 	if err != nil {
 		return err
@@ -399,7 +399,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 	if has && view.status == "intact" && view.checksum == expected {
 		if !preflight {
 			if !m.dry {
-				if err = m.save(r, State{"block", "active", r.Target, "-", "-", expected}); err != nil {
+				if err = m.save(r, State{Kind: "block", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: expected}); err != nil {
 					return err
 				}
 			}
@@ -429,7 +429,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 			m.say(reportPreview, "Would update Selfishell block: %s", r.Target)
 			return nil
 		}
-		if err = m.save(r, State{"block", "pending", r.Target, "-", "-", view.checksum}); err != nil {
+		if err = m.save(r, State{Kind: "block", Status: "pending", Target: r.Target, Reference: "-", Backup: "-", Checksum: view.checksum}); err != nil {
 			return err
 		}
 		data = spliceBlock(data, view, content)
@@ -438,7 +438,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 			m.say(reportPreview, "Would add Selfishell block: %s", r.Target)
 			return nil
 		}
-		if err = m.save(r, State{"block", "pending", r.Target, "-", "-", expected}); err != nil {
+		if err = m.save(r, State{Kind: "block", Status: "pending", Target: r.Target, Reference: "-", Backup: "-", Checksum: expected}); err != nil {
 			return err
 		}
 		data = append(content, data...)
@@ -450,7 +450,7 @@ func (m *managed) installBlock(r Resource, preflight bool) error {
 	if err = m.write(r.Target, data, mode); err != nil {
 		return err
 	}
-	if err = m.save(r, State{"block", "active", r.Target, "-", "-", expected}); err != nil {
+	if err = m.save(r, State{Kind: "block", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: expected}); err != nil {
 		return err
 	}
 	if view.status == "intact" {

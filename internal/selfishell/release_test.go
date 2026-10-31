@@ -83,10 +83,10 @@ func TestReleaseVersionFixture(t *testing.T) {
 func TestReleaseLatestMetadata(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("HOME", t.TempDir())
+	setEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
-	env.set("SELFISHELL_RELEASE_TAGS_API_URL", "")
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
+	setEnv(&env, "SELFISHELL_RELEASE_TAGS_API_URL", "")
 	if err := os.MkdirAll(root+"/latest/download", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -109,11 +109,11 @@ func TestReleaseLatestMetadata(t *testing.T) {
 func TestReleaseLatestPublishedTagFallback(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("HOME", t.TempDir())
+	setEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
 	tags := root + "/tags.json"
-	env.set("SELFISHELL_RELEASE_TAGS_API_URL", "file://"+tags)
+	setEnv(&env, "SELFISHELL_RELEASE_TAGS_API_URL", "file://"+tags)
 	if err := os.MkdirAll(root+"/download/v0.3.0-beta.2", 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -142,9 +142,9 @@ func TestReleaseLatestPublishedTagFallback(t *testing.T) {
 func TestVersionAvailableCLI(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("HOME", t.TempDir())
+	setEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+root)
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+root)
 	os.MkdirAll(root+"/latest/download", 0700)
 	testutil.WriteFile(root+"/latest/download/VERSION", []byte("1.2.3\n"), 0600)
 	var out, stderr bytes.Buffer
@@ -163,7 +163,7 @@ func TestVersionAvailableCLI(t *testing.T) {
 func releaseFixture(t *testing.T, env *Environment) (releaseOperation, string, string) {
 	t.Helper()
 	home := t.TempDir()
-	env.set("HOME", home)
+	setEnv(env, "HOME", home)
 	share := home + "/share/selfishell"
 	releases := share + "/releases"
 	root := releases + "/1.0.0"
@@ -201,7 +201,7 @@ func publishReleaseFixture(t *testing.T, env *Environment, version string, membe
 	if err := testutil.WriteFile(dir+"/SHA256SUMS", []byte(hex.EncodeToString(digest[:])+"  "+name+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	setEnv(env, "SELFISHELL_RELEASE_ROOT", "file://"+remote)
 	return dir
 }
 
@@ -273,7 +273,7 @@ func TestReleaseInstallUsesExactVersionURL(t *testing.T) {
 	var env Environment
 	op, share, releases := releaseFixture(t, &env)
 	remote := t.TempDir()
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+remote)
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+remote)
 	op.Process.inherit = env
 	os.MkdirAll(remote+"/latest/download", 0700)
 	testutil.WriteFile(remote+"/latest/download/VERSION", []byte("2.0.0\n"), 0600)
@@ -312,7 +312,7 @@ func TestReleaseInstallPreflightsOccupiedAndForeignLinks(t *testing.T) {
 			var requests atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests.Add(1) }))
 			defer server.Close()
-			env.set("SELFISHELL_RELEASE_ROOT", server.URL)
+			setEnv(&env, "SELFISHELL_RELEASE_ROOT", server.URL)
 			op.Process.inherit = env
 			if _, err := op.install(context.Background(), "2.0.0"); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("%s %s was not rejected: %v", tc.kind, tc.link, err)
@@ -473,7 +473,7 @@ func TestReleaseInstallPreflightsWholeArchiveBeforeFilesystemMutation(t *testing
 				writeTestFile(t, releases+"/2.0.0/bin/selfishell", "winner binary\n", 0755)
 			}
 			downloads := t.TempDir()
-			env.set("TMPDIR", downloads)
+			setEnv(&env, "TMPDIR", downloads)
 			op.Process.inherit = env
 			sentinel := filepath.Dir(share) + "/sentinel"
 			testutil.WriteFile(sentinel, []byte("original\n"), 0600)
@@ -556,9 +556,9 @@ func TestReleaseFetchUsesMetadataDeadlineOnlyForMetadata(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	env.set("HOME", home)
-	env.set("SELFISHELL_RELEASE_ROOT", "file://"+home+"/remote")
-	env.set("SELFISHELL_CURL_METADATA_MAX_TIME", "7")
+	setEnv(&env, "HOME", home)
+	setEnv(&env, "SELFISHELL_RELEASE_ROOT", "file://"+home+"/remote")
+	setEnv(&env, "SELFISHELL_CURL_METADATA_MAX_TIME", "7")
 	fake := home + "/bin"
 	os.Mkdir(fake, 0700)
 	log := home + "/curl-args"

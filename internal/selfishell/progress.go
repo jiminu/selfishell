@@ -45,15 +45,36 @@ func progressColor(out io.Writer, env Environment) bool {
 	return IsTerminal(out) && env.Get("NO_COLOR") == "" && env.Get("TERM") != "dumb" && !progressCI(env)
 }
 
+// progressOf returns the spinner a Process carries, or nil. Compare its result,
+// not the field, with nil: a nil spinner is still a non-nil interface value.
+func progressOf(p Process) *operationProgress {
+	progress, _ := p.progress.(*operationProgress)
+	return progress
+}
+
+// Compact implements processProgress.
+func (p *operationProgress) Compact() bool { return p != nil && p.compact }
+
+// Streams implements processProgress.
+func (p *operationProgress) Streams() (io.Writer, io.Writer) { return p.out, p.stderr }
+
+// Resume implements processProgress: it restarts the last stage.
+func (p *operationProgress) Resume() {
+	if p.stop == nil && p.label != "" {
+		p.stage(p.label)
+	}
+}
+
 func (p *operationProgress) prompt() func() {
-	p.pause()
+	p.Pause()
 	if p != nil && p.suspendSignals != nil {
 		return p.suspendSignals()
 	}
 	return func() {}
 }
 
-func (p *operationProgress) pause() {
+// Pause stops the animation and clears its line; it implements processProgress.
+func (p *operationProgress) Pause() {
 	if p == nil || p.stop == nil {
 		return
 	}
@@ -67,7 +88,7 @@ func (p *operationProgress) stage(label string) {
 	if p == nil {
 		return
 	}
-	p.pause()
+	p.Pause()
 	p.label = label
 	if !p.compact {
 		fmt.Fprintln(p.out, label+"…")
@@ -130,8 +151,8 @@ func (o *PackageOperation) note(format string, args ...any) {
 }
 
 func (o *PackageOperation) reportIn(section string, tone reportTone, format string, args ...any) {
-	if o.Process.progress != nil && o.Process.progress.compact {
-		o.Process.progress.events = append(o.Process.progress.events, progressEvent{section, fmt.Sprintf(format, args...), tone})
+	if progressOf(o.Process) != nil && progressOf(o.Process).compact {
+		progressOf(o.Process).events = append(progressOf(o.Process).events, progressEvent{section, fmt.Sprintf(format, args...), tone})
 		return
 	}
 	color, _ := o.color(o.Process.Out, "\x1b[32m")
@@ -142,7 +163,7 @@ func (p *operationProgress) finish() {
 	if p == nil {
 		return
 	}
-	p.pause()
+	p.Pause()
 	if p.compact {
 		if p.completion != "" {
 			fmt.Fprintln(p.out, statusText("✓ "+p.completion, p.color, reportSuccess))

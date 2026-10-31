@@ -34,7 +34,7 @@ func TestWindowsProfileDiscoveryUsesDistroIdentity(t *testing.T) {
 			env := env
 			root, home, paths, settings := existingWindowsProfileFixture(t, &env)
 			data := `{"profiles":{"list":[{"guid":"{2c4de342-38b7-51cf-b940-2309a097f518}","source":"Windows.Terminal.Wsl","name":"Renamed shell"}]}}`
-			env.set("WSL_DISTRO_NAME", "Ubuntu")
+			setEnv(&env, "WSL_DISTRO_NAME", "Ubuntu")
 			modern := `{"guid":"{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}","source":"Microsoft.WSL","name":"Renamed modern shell"}`
 			if scenario == "modern" || scenario == "ambiguous" || scenario == "current" {
 				probe := `#!/bin/sh
@@ -51,7 +51,7 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 			}
 			switch scenario {
 			case "current":
-				env.set("WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
+				setEnv(&env, "WT_PROFILE_ID", "{cea72b9a-15bb-5424-9d74-b2555c3f2eaa}")
 			case "missing":
 				data = `{"profiles":{"list":[]}}`
 			case "hidden":
@@ -174,7 +174,7 @@ func TestWindowsTerminalFragmentPreservesUserFiles(t *testing.T) {
 func existingWindowsProfileFixture(t *testing.T, env *Environment) (string, string, Paths, string) {
 	t.Helper()
 	root, home, paths, windowsHome := windowsTerminalFixture(t, env)
-	env.set("WT_PROFILE_ID", "")
+	setEnv(env, "WT_PROFILE_ID", "")
 	settings := windowsHome + "/Microsoft/Windows Terminal/settings.json"
 	if err := os.MkdirAll(rawParent(settings), 0700); err != nil {
 		t.Fatal(err)
@@ -218,7 +218,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	choice := &windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
-	m := managed{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
+	m := lifecycle{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
 	for _, preflight := range []bool{true, false} {
 		if err := m.installWindowsTerminal(choice, preflight); err != nil {
 			t.Fatal(err)

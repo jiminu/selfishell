@@ -40,7 +40,7 @@ func diagnosticPackages(root, platform string, env Environment) ([]Package, erro
 	if err != nil {
 		return nil, err
 	}
-	paths, err := userPaths(env)
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c CLI) status(args []string) int {
 			return 2
 		}
 	}
-	paths, err := userPaths(c.Env)
+	paths, err := userPaths(c.Env.Get)
 	if err != nil {
 		return c.diagnosticError(err)
 	}

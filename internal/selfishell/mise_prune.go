@@ -169,7 +169,7 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if code != 0 {
 		return fmt.Errorf("mise prune exited %d", code)
 	}
-	if o.Process.progress != nil {
+	if progressOf(o.Process) != nil {
 		o.report(reportSuccess, "Cleaned up unused mise versions.")
 	}
 	after := miseInstalledVersions(installs)

@@ -7,15 +7,17 @@ import (
 	"strings"
 )
 
-// Resource order matches the Bash declaration table: internal defaults first,
-// user-facing entrypoints last. Uninstall must retain the all-platform set.
+// Resource is one declared managed path: its kind, state name, target and source.
 type Resource struct{ Kind, Name, Target, Source string }
 
+// ManagedResources returns every declared resource. Their order matches the Bash
+// declaration table: internal defaults first, user-facing entrypoints last.
+// Uninstall must retain the all-platform set.
 func ManagedResources(root string, env Environment) ([]Resource, error) {
 	if root == "" {
 		return nil, fmt.Errorf("release root must be set")
 	}
-	paths, err := userPaths(env)
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		return nil, err
 	}

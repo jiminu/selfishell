@@ -33,9 +33,9 @@ type PackageOperation struct {
 }
 
 func (o *PackageOperation) warn(message string) {
-	o.Process.progress.pause()
-	if o.Process.progress != nil && o.Process.progress.compact {
-		o.Process.progress.events = append(o.Process.progress.events, progressEvent{"Notes", "Warning: " + message, reportWarning})
+	progressOf(o.Process).Pause()
+	if progressOf(o.Process) != nil && progressOf(o.Process).compact {
+		progressOf(o.Process).events = append(progressOf(o.Process).events, progressEvent{"Notes", "Warning: " + message, reportWarning})
 	}
 	color, reset := o.color(o.Process.Err, "\x1b[33m")
 	fmt.Fprintf(o.Process.Err, "%sselfishell: warning:%s %s\n", color, reset, message)
@@ -193,7 +193,7 @@ func (o *PackageOperation) InstallApt(ctx context.Context, requirement string, d
 		}
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s apt packages: %s", requirement, strings.Join(available, " ")), available)
 	}
-	if o.Process.progress != nil {
+	if progressOf(o.Process) != nil {
 		o.report(reportSuccess, "Installed apt packages: %s", strings.Join(available, " "))
 	}
 	return nil

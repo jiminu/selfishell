@@ -36,9 +36,9 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := env
-			env.set("DISPLAY", tc.display)
-			env.set("WAYLAND_DISPLAY", "")
-			env.set("SSH_CONNECTION", tc.ssh)
+			setEnv(&env, "DISPLAY", tc.display)
+			setEnv(&env, "WAYLAND_DISPLAY", "")
+			setEnv(&env, "SSH_CONNECTION", tc.ssh)
 			f := newPackageFixture(t)
 			casks := ""
 			if tc.installed {

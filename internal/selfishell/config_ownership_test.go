@@ -14,7 +14,7 @@ func identicalUserFile(t *testing.T, env *Environment) (string, string, Resource
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(env, home)
-	paths, e := userPaths(*env)
+	paths, e := userPaths(env.Get)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -103,7 +103,7 @@ func TestPendingIdenticalFileBeforeBackupMoveRecovers(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{"file", "pending", r.Target, "-", backup, checksum}); e != nil {
+	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{Kind: "file", Status: "pending", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
 		t.Fatal(e)
 	}
 	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")
@@ -125,7 +125,7 @@ func TestActiveIdenticalFileWithMissingOriginalBackupRepairsOwnership(t *testing
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{"file", "active", r.Target, "-", backup, checksum}); e != nil {
+	if e = WriteState(paths.Resources+"/"+r.Name+".state", State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: backup, Checksum: checksum}); e != nil {
 		t.Fatal(e)
 	}
 	code, _, stderr := testCLI(&env, root, home, "install", "--skip-packages", "--yes")

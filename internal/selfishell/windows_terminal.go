@@ -151,7 +151,7 @@ var errWindowsTerminalUnavailable = errors.New("Windows Terminal setup requires 
 type windowsTerminalTarget struct{ appData, settings, guid, name string }
 
 func (c CLI) findWindowsTerminalTarget(p Process, distro string) (*windowsTerminalTarget, error) {
-	probe, err := p.windowsScript(c.invocationContext(), map[string]string{"operation": "probe", "distro": distro})
+	probe, err := runWindowsScript(c.invocationContext(), p, map[string]string{"operation": "probe", "distro": distro})
 	var detected struct {
 		AppData           string   `json:"appData"`
 		TerminalInstalled bool     `json:"terminalInstalled"`
@@ -172,7 +172,7 @@ func (c CLI) findWindowsTerminalTarget(p Process, distro string) (*windowsTermin
 }
 
 func (c CLI) windowsTerminalChoiceFor(p Process, distro string, target *windowsTerminalTarget) (*windowsTerminalChoice, error) {
-	path, err := p.windowsPath(c.invocationContext(), "-u", target.appData)
+	path, err := convertWindowsPath(c.invocationContext(), p, "-u", target.appData)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
 	return writeAtomic(p.paths.State+"/windows-terminal.json", append(data, '\n'), 0600)
 }
 
-func (p Process) windowsScript(ctx context.Context, request any) ([]byte, error) {
+func runWindowsScript(ctx context.Context, p Process, request any) ([]byte, error) {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
@@ -264,7 +264,7 @@ func (p Process) windowsScript(ctx context.Context, request any) ([]byte, error)
 	return bytes.TrimSpace(out.Bytes()), nil
 }
 
-func (p Process) windowsPath(ctx context.Context, direction, path string) (string, error) {
+func convertWindowsPath(ctx context.Context, p Process, direction, path string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var out, stderr bytes.Buffer
@@ -349,7 +349,7 @@ func (c CLI) findWindowsProfile(p Process, distro string, windowsPaths, modernGU
 	var matches, current []candidate
 	seen := map[string]bool{}
 	for _, windowsPath := range windowsPaths {
-		path, err := p.windowsPath(c.invocationContext(), "-u", windowsPath)
+		path, err := convertWindowsPath(c.invocationContext(), p, "-u", windowsPath)
 		if err != nil {
 			return "", "", "", err
 		}

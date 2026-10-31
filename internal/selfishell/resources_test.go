@@ -21,13 +21,13 @@ func TestChecksum(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	dir := t.TempDir()
-	env.set("HOME", dir)
+	setEnv(&env, "HOME", dir)
 	cksum, err := exec.LookPath("cksum")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The host utility is an independent oracle, not a runtime dependency.
-	env.set("PATH", t.TempDir())
+	setEnv(&env, "PATH", t.TempDir())
 	vectors := [][]byte{nil, []byte("a\r\nb\r\n"), []byte("no final newline"), {0, 255, 128, 0, 10}, bytes.Repeat([]byte{0, 1, 128, 255, 13, 10}, 10000)}
 	for _, size := range []int{1, 255, 256, 257, 32767, 32768, 32769, 65535, 65536, 65537, 1048577} {
 		data := make([]byte, size)
@@ -89,7 +89,7 @@ func TestChecksumCanceled(t *testing.T) {
 	if err := testutil.WriteFile(path, []byte("bytes"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	env.set("HOME", dir)
+	setEnv(&env, "HOME", dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if got, err := Checksum(ctx, path); got != "" || !errors.Is(err, context.Canceled) {
@@ -146,11 +146,11 @@ func TestResources(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	env.set("HOME", home)
-	env.set("XDG_CONFIG_HOME", home+"/alias/../config space")
-	env.set("XDG_STATE_HOME", home+"/state")
-	env.set("XDG_CACHE_HOME", home+"/cache")
-	env.set("XDG_DATA_HOME", home+"/data")
+	setEnv(&env, "HOME", home)
+	setEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
+	setEnv(&env, "XDG_STATE_HOME", home+"/state")
+	setEnv(&env, "XDG_CACHE_HOME", home+"/cache")
+	setEnv(&env, "XDG_DATA_HOME", home+"/data")
 	all, err := ManagedResources("/release/alias/..", env)
 	if err != nil || len(all) == 0 {
 		t.Fatalf("resources: %d %v", len(all), err)
@@ -189,10 +189,10 @@ func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	env.set("HOME", home)
-	env.set("XDG_CONFIG_HOME", home+"/alias/../config space")
-	env.set("XDG_STATE_HOME", home+"/state")
-	paths, err := userPaths(env)
+	setEnv(&env, "HOME", home)
+	setEnv(&env, "XDG_CONFIG_HOME", home+"/alias/../config space")
+	setEnv(&env, "XDG_STATE_HOME", home+"/state")
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}

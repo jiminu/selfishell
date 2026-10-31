@@ -20,7 +20,7 @@ case "$*" in
   *'install '* ) exit "${INSTALL_EXIT:-0}" ;;
 esac
 `, 0755)
-	env.set("MISE_LOG", home+"/mise.log")
+	setEnv(env, "MISE_LOG", home+"/mise.log")
 	op.Process.Env = append(env.List(), "HOME="+home, "PATH="+bin+":/usr/bin:/bin", "MISE_LOG="+home+"/mise.log")
 	return op, paths, root, home
 }

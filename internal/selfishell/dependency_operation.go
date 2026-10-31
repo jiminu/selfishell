@@ -208,7 +208,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 		err = o.dependencyFault("state")
 	}
 	if err == nil {
-		err = replaceRaw(state, []byte(dep.Version+"\n"), 0600)
+		err = writeAtomic(state, []byte(dep.Version+"\n"), 0600)
 	}
 	if err != nil {
 		// Remove only the inode this transaction installed. A concurrent replacement
@@ -392,11 +392,11 @@ func (o *PackageOperation) stageGit(ctx context.Context, dep Dependency, stage s
 
 // directDownloadIntact is shared by install and diagnostics: a recorded raw
 // download must still match its approved SHA-256, not merely be executable.
-func directDownloadIntact(dep Dependency, target string, info os.FileInfo, managed bool) bool {
+func directDownloadIntact(dep Dependency, target string, info os.FileInfo, owned bool) bool {
 	if !info.Mode().IsRegular() || (dep.Marker != "font" && info.Mode()&0111 == 0) {
 		return false
 	}
-	if !managed || (dep.Marker != "font" && dep.Marker != "raw") {
+	if !owned || (dep.Marker != "font" && dep.Marker != "raw") {
 		return true
 	}
 	file, err := os.Open(target)
@@ -419,12 +419,12 @@ func directGitMarkerPresent(dep Dependency, target string, info os.FileInfo) boo
 	return err == nil
 }
 
-func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, target string, managed bool) bool {
+func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, target string, owned bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
 		return false
 	}
-	if managed {
+	if owned {
 		link, err := os.Lstat(target)
 		if err != nil || link.Mode()&os.ModeSymlink != 0 {
 			return false
@@ -432,12 +432,12 @@ func (o *PackageOperation) validDirect(ctx context.Context, dep Dependency, targ
 	}
 	switch dep.Kind {
 	case "download":
-		return directDownloadIntact(dep, target, info, managed)
+		return directDownloadIntact(dep, target, info, owned)
 	case "git":
 		if !directGitMarkerPresent(dep, target, info) {
 			return false
 		}
-		if !managed {
+		if !owned {
 			return true
 		}
 		if _, err := os.Stat(target + "/.git"); err != nil {

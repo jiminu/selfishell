@@ -21,7 +21,7 @@ func blockHome(t *testing.T, env *Environment, platform string) (string, string,
 	home := t.TempDir()
 	isolateHome(env, home)
 	for _, key := range []string{"MISE_DATA_DIR", "MISE_STATE_DIR", "MISE_CACHE_DIR", "MISE_CONFIG_DIR"} {
-		env.set(key, filepath.Join(home, strings.ToLower(key)))
+		setEnv(env, key, filepath.Join(home, strings.ToLower(key)))
 	}
 	tools := filepath.Join(home, "tools")
 	if err := os.Mkdir(tools, 0700); err != nil {
@@ -32,32 +32,32 @@ func blockHome(t *testing.T, env *Environment, platform string) (string, string,
 			t.Fatal(err)
 		}
 	}
-	env.set("PATH", tools)
-	env.set("MISE_GLOBAL_CONFIG_FILE", filepath.Join(home, "mise/global.toml"))
-	env.set("MISE_DEFAULT_CONFIG_FILENAME", "")
-	env.set("MISE_OVERRIDE_CONFIG_FILENAMES", "")
-	env.set("MISE_TRUSTED_CONFIG_PATHS", home)
-	env.set("MISE_IGNORED_CONFIG_PATHS", "")
-	env.set("MISE_OFFLINE", "1")
+	setEnv(env, "PATH", tools)
+	setEnv(env, "MISE_GLOBAL_CONFIG_FILE", filepath.Join(home, "mise/global.toml"))
+	setEnv(env, "MISE_DEFAULT_CONFIG_FILENAME", "")
+	setEnv(env, "MISE_OVERRIDE_CONFIG_FILENAMES", "")
+	setEnv(env, "MISE_TRUSTED_CONFIG_PATHS", home)
+	setEnv(env, "MISE_IGNORED_CONFIG_PATHS", "")
+	setEnv(env, "MISE_OFFLINE", "1")
 	if err := os.Mkdir(filepath.Join(home, "tmp"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	env.set("TMPDIR", filepath.Join(home, "tmp"))
-	env.set("SHELL", "/bin/zsh")
+	setEnv(env, "TMPDIR", filepath.Join(home, "tmp"))
+	setEnv(env, "SHELL", "/bin/zsh")
 	if platform == "macos" {
-		env.set("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
+		setEnv(env, "SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	} else {
-		env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+		setEnv(env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 		release := filepath.Join(home, "os-release")
 		if err := testutil.WriteFile(release, []byte("ID=ubuntu\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		env.set("SELFISHELL_TEST_OS_RELEASE_FILE", release)
+		setEnv(env, "SELFISHELL_TEST_OS_RELEASE_FILE", release)
 		proc := filepath.Join(home, "proc-version")
 		blockWrite(t, proc, []byte("Linux fixture\n"))
-		env.set("SELFISHELL_TEST_PROC_VERSION_FILE", proc)
+		setEnv(env, "SELFISHELL_TEST_PROC_VERSION_FILE", proc)
 	}
-	paths, err := userPaths(*env)
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,9 +244,9 @@ func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
 	if err := os.Chmod(filepath.Join(bin, "mise"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	env.set("PATH", bin+":/usr/bin:/bin")
-	env.set("MISE_GLOBAL_CONFIG_FILE", global)
-	env.set("MISE_SENTINEL_MARKER", marker)
+	setEnv(&env, "PATH", bin+":/usr/bin:/bin")
+	setEnv(&env, "MISE_GLOBAL_CONFIG_FILE", global)
+	setEnv(&env, "MISE_SENTINEL_MARKER", marker)
 	root, home, _ := blockHome(t, &env, "macos")
 	if _, err := (Process{inherit: env}).lookPath("mise"); err == nil {
 		t.Fatal("ambient mise remained on fixture PATH")
@@ -415,7 +415,7 @@ func TestOutdatedUserBlocksUpgradeInPlace(t *testing.T) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			if e = WriteState(paths.Resources+"/user-"+tc.name+".state", State{"block", "active", target, "-", "-", checksum}); e != nil {
+			if e = WriteState(paths.Resources+"/user-"+tc.name+".state", State{Kind: "block", Status: "active", Target: target, Reference: "-", Backup: "-", Checksum: checksum}); e != nil {
 				t.Fatal(e)
 			}
 			blockOK(t, env, root, "install", "--skip-packages", "--yes")
@@ -457,7 +457,7 @@ func TestModifiedZprofileBlockDecisions(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			env.set("SELFISHELL_TEST_TTY", "1")
+			setEnv(&env, "SELFISHELL_TEST_TTY", "1")
 			args := []string{"install", "--skip-packages"}
 			input := "y\ny\n"
 			if decision == "skip" {
@@ -765,7 +765,7 @@ func TestModifiedBlockBackupFailurePreservesTargetAndState(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(backupDir, 0700) })
-	env.set("SELFISHELL_TEST_TTY", "1")
+	setEnv(&env, "SELFISHELL_TEST_TTY", "1")
 	code, out, stderr := blockRun(t, env, root, "y\ny\n", "install", "--skip-packages")
 	if code != 1 || strings.Contains(out, "Updated Selfishell block:") || stderr == "" {
 		t.Fatalf("backup failure accepted: %d %q %q", code, out, stderr)
@@ -792,7 +792,7 @@ func TestModifiedBlockReplaceFailureIsRetryable(t *testing.T) {
 		t.Fatal("bad conflict fixture")
 	}
 	blockWrite(t, target, modified)
-	env.set("SELFISHELL_TEST_TTY", "1")
+	setEnv(&env, "SELFISHELL_TEST_TTY", "1")
 	if e := os.Chmod(home, 0500); e != nil {
 		t.Fatal(e)
 	}
@@ -827,7 +827,7 @@ func TestInteractiveGhosttyChoiceDefaultsToInstall(t *testing.T) {
 			t.Parallel()
 			env := env
 			root, _, paths := blockHome(t, &env, "macos")
-			env.set("SELFISHELL_TEST_TTY", "1")
+			setEnv(&env, "SELFISHELL_TEST_TTY", "1")
 			code, out, stderr := blockRun(t, env, root, "y\n"+tc.answer+"\n", "install", "--skip-packages")
 			if code != 0 || !strings.Contains(out, "Install Ghostty terminal and managed configuration (recommended)? [Y/n] ") {
 				t.Fatalf("%d %s %s", code, out, stderr)

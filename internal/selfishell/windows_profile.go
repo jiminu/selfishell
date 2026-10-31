@@ -110,7 +110,7 @@ func (c CLI) noteWindowsTerminalOverrides(choice *windowsTerminalChoice, say fun
 	}
 }
 
-func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, preflight bool) error {
+func (m *lifecycle) installWindowsTerminal(choice *windowsTerminalChoice, preflight bool) error {
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
@@ -226,7 +226,7 @@ func (m *managed) installWindowsTerminal(choice *windowsTerminalChoice, prefligh
 	return nil
 }
 
-func (m *managed) removeWindowsTerminal(preflight bool) error {
+func (m *lifecycle) removeWindowsTerminal(preflight bool) error {
 	record, err := readWindowsFragmentRecord(m.paths)
 	if err != nil || record == nil {
 		return err
@@ -243,7 +243,7 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 	return os.Remove(windowsFragmentRecordPath(m.paths))
 }
 
-func (m *managed) removeWindowsFragment(record *windowsFragmentRecord, preflight bool) error {
+func (m *lifecycle) removeWindowsFragment(record *windowsFragmentRecord, preflight bool) error {
 	info, present, err := exists(record.Path)
 	if err != nil {
 		return err

@@ -43,7 +43,7 @@ func (o *PackageOperation) ensureBrew(ctx context.Context) error {
 		return nil
 	}
 	color, reset := o.color(o.Process.Out, "\x1b[36m")
-	o.Process.progress.pause()
+	progressOf(o.Process).Pause()
 	fmt.Fprintf(o.Process.Out, "%sInstalling Homebrew%s\n", color, reset)
 	var script bytes.Buffer
 	p := o.Process
@@ -175,7 +175,7 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 	if manager == "cask" {
 		o.installedCasks = append(o.installedCasks, missing...)
 	}
-	if o.Process.progress != nil {
+	if progressOf(o.Process) != nil {
 		o.report(reportSuccess, "Installed Homebrew %s: %s", manager, strings.Join(missing, " "))
 	}
 	return nil

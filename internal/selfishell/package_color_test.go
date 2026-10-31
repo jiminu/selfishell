@@ -55,14 +55,14 @@ func TestProgressTerminalFailure(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	isolateHome(&env, t.TempDir())
-	env.set("TERM", "xterm-256color")
-	env.set("CI", "")
-	env.set("NO_COLOR", "1")
+	setEnv(&env, "TERM", "xterm-256color")
+	setEnv(&env, "CI", "")
+	setEnv(&env, "NO_COLOR", "1")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
 	ui := newProgress(slave, slave, Paths{}, env)
-	defer ui.pause()
+	defer ui.Pause()
 	c := CLI{Env: env, Out: slave, Err: slave, progress: ui}
 	p := Process{inherit: env, Out: slave, Err: slave, progress: ui}
 	ui.stage("Synchronizing tools")
@@ -121,9 +121,9 @@ func TestConfigurationPromptInterrupt(t *testing.T) {
 	}
 	root, _, _ := blockHome(t, &env, platform)
 	blockOK(t, env, root, "install", "--skip-packages", "--yes")
-	env.set("SELFISHELL_TEST_PROMPT_ROOT", root)
-	env.set("TERM", "xterm-256color")
-	env.set("CI", "")
+	setEnv(&env, "SELFISHELL_TEST_PROMPT_ROOT", root)
+	setEnv(&env, "TERM", "xterm-256color")
+	setEnv(&env, "CI", "")
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()

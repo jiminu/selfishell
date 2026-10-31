@@ -172,7 +172,7 @@ func (c CLI) update(args []string) int {
 			if code := c.confirmRelease("Update Selfishell CLI to "+version+"?", o.yes, false); code != 0 {
 				return code
 			}
-			paths, err := userPaths(c.Env)
+			paths, err := userPaths(c.Env.Get)
 			if err != nil {
 				c.error(err.Error())
 				return 1
@@ -189,7 +189,7 @@ func (c CLI) update(args []string) int {
 				return 1
 			}
 			if o.mode == "all" {
-				c.progress.pause()
+				c.progress.Pause()
 				argv := []string{"update", "--continue-after-cli-update"}
 				if o.yes {
 					argv = append(argv, "--yes")
@@ -235,7 +235,7 @@ func (c CLI) completeUpdate() {
 }
 
 func (c CLI) updateTools(o updateOptions) (result int) {
-	paths, err := userPaths(c.Env)
+	paths, err := userPaths(c.Env.Get)
 	if err != nil {
 		c.error(err.Error())
 		return 1

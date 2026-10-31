@@ -14,7 +14,7 @@ import (
 var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
 
 func (c CLI) uninstallConfig(restore, purge, dry bool) error {
-	paths, err := userPaths(c.Env)
+	paths, err := userPaths(c.Env.Get)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 	if err != nil {
 		return fmt.Errorf("Uninstall cancelled because the managed resources could not be listed: %w", err)
 	}
-	m := managed{c: c, paths: paths, dry: dry}
+	m := lifecycle{c: c, paths: paths, dry: dry}
 	failed := false
 	if err := m.removeWindowsTerminal(true); err != nil {
 		c.error(err.Error())
@@ -101,7 +101,7 @@ func managedDirectories(resources []Resource, paths Paths) []string {
 	return append(dirs, paths.Config, paths.Resources, paths.State)
 }
 
-func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
+func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error {
 	s := record.State
 	r := record.Resource
 	if s.Status == "restoring" {
@@ -176,7 +176,7 @@ func (m *managed) preflightUninstall(record ResourceState, restore bool) error {
 	}
 	return nil
 }
-func (m *managed) removeResource(record ResourceState, restore bool) error {
+func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
 	r, s := record.Resource, record.State
 	if err := m.preflightUninstall(record, restore); err != nil {
 		return err
@@ -277,7 +277,7 @@ func preflightRestore(s State, restore bool) error {
 	return nil
 }
 
-func (m *managed) finishRestore(r Resource, s State) error {
+func (m *lifecycle) finishRestore(r Resource, s State) error {
 	if err := preflightRestore(s, true); err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func (m *managed) finishRestore(r Resource, s State) error {
 	return m.forgetResource(r)
 }
 
-func (m *managed) forgetResource(r Resource) error {
+func (m *lifecycle) forgetResource(r Resource) error {
 	if !m.dry {
 		if m.removeState != nil {
 			return m.removeState(m.statePath(r))

@@ -98,7 +98,7 @@ func TestWindowsFontRepeatedRegistrationFailuresRetainOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env.set("SELFISHELL_TEST_FONT_EXE", executable)
+	setEnv(&env, "SELFISHELL_TEST_FONT_EXE", executable)
 	for name, body := range map[string]string{
 		"curl":           "exec /usr/bin/curl \"$@\"",
 		"wslpath":        "printf '%s\\n' \"$2\"",

@@ -16,7 +16,7 @@ func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 			t.Parallel()
 			env := env
 			root, paths, warnings, bin := inventoryFixture(t, &env)
-			env.set("PATH", bin)
+			setEnv(&env, "PATH", bin)
 			fixtureFile(t, bin+"/dpkg-query", "#!/bin/sh\nprintf 'database locked\\n' >&2\nexit 2\n", 0700)
 			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"present\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
 			var out bytes.Buffer

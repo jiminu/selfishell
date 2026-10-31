@@ -200,7 +200,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 type preparedConfig struct {
 	paths           Paths
 	resources       []Resource
-	m               managed
+	m               lifecycle
 	miseGlobal      string
 	ghostty         bool
 	windowsTerminal *windowsTerminalChoice
@@ -208,7 +208,7 @@ type preparedConfig struct {
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
 func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, enableWindowsTerminal bool) (preparedConfig, error) {
-	paths, err := userPaths(c.Env)
+	paths, err := userPaths(c.Env.Get)
 	if err != nil {
 		return preparedConfig{}, err
 	}
@@ -239,7 +239,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	if err != nil {
 		return preparedConfig{}, err
 	}
-	m := managed{c: c, paths: paths, dry: dry, yes: yes, actions: map[string]string{}}
+	m := lifecycle{c: c, paths: paths, dry: dry, yes: yes, actions: map[string]string{}}
 	for _, name := range []string{"user-zshrc", "user-zprofile", "user-zshenv", "user-vimrc", "user-ghostty"} {
 		for _, r := range resources {
 			if r.Name == name {
@@ -279,7 +279,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	c.Context = ctx
 	defer func() { stop() }()
-	defer c.progress.pause()
+	defer c.progress.Pause()
 	if c.progress != nil {
 		// Conflict prompts keep normal terminal interrupt handling. Resume the
 		// configuration context after input, including a changed target after preflight.

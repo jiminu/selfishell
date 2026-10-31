@@ -76,7 +76,7 @@ func ReadPackages(path string) ([]Package, error) {
 func ReadDependencies(path string) ([]Dependency, error) {
 	var dependencies []Dependency
 	err := parseManifest(path, 9, func(f []string) error {
-		d := Dependency{f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]}
+		d := Dependency{Kind: f[0], Name: f[1], Version: f[2], Platform: f[3], Arch: f[4], Source: f[5], Checksum: f[6], Target: f[7], Marker: f[8]}
 		if d.Kind != "download" && d.Kind != "git" && d.Kind != "nvim-plugin" {
 			return fmt.Errorf("Unknown dependency manifest record: %s", d.Kind)
 		}

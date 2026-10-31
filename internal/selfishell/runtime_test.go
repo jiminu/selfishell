@@ -25,18 +25,18 @@ func TestPaths(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	env.set("HOME", home)
+	setEnv(&env, "HOME", home)
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		env.set(k, "")
+		setEnv(&env, k, "")
 	}
-	paths, err := userPaths(env)
+	paths, err := userPaths(env.Get)
 	if err != nil || paths.Config != home+"/.config/selfishell" || paths.State != home+"/.local/state/selfishell" || paths.Cache != home+"/.cache/selfishell" || paths.Data != home+"/.local/share/selfishell" || paths.Resources != paths.State+"/resources" {
 		t.Fatalf("paths=%+v, err=%v", paths, err)
 	}
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		env.set(k, home+"/custom dir")
+		setEnv(&env, k, home+"/custom dir")
 	}
-	paths, err = userPaths(env)
+	paths, err = userPaths(env.Get)
 	if err != nil || paths.Config != home+"/custom dir/selfishell" || paths.State != paths.Config || paths.Data != paths.Config || paths.Cache != paths.Config {
 		t.Fatalf("override paths=%+v, err=%v", paths, err)
 	}
@@ -55,18 +55,18 @@ func TestPaths(t *testing.T) {
 	}
 	prefix := home + "/alias/.."
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		env.set(k, prefix+"/custom")
+		setEnv(&env, k, prefix+"/custom")
 	}
-	paths, err = userPaths(env)
+	paths, err = userPaths(env.Get)
 	expected := Paths{Config: prefix + "/custom/selfishell", State: prefix + "/custom/selfishell", Resources: prefix + "/custom/selfishell/resources", Cache: prefix + "/custom/selfishell", Data: prefix + "/custom/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("XDG path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
 	}
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
-		env.set(k, "")
+		setEnv(&env, k, "")
 	}
-	env.set("HOME", prefix)
-	paths, err = userPaths(env)
+	setEnv(&env, "HOME", prefix)
+	paths, err = userPaths(env.Get)
 	expected = Paths{Config: prefix + "/.config/selfishell", State: prefix + "/.local/state/selfishell", Resources: prefix + "/.local/state/selfishell/resources", Cache: prefix + "/.cache/selfishell", Data: prefix + "/.local/share/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("HOME path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
@@ -75,8 +75,8 @@ func TestPaths(t *testing.T) {
 	if err != nil || len(children) != 1 {
 		t.Fatalf("path discovery created targets: %v %v", children, err)
 	}
-	env.set("HOME", "")
-	if _, err := userPaths(env); err == nil {
+	setEnv(&env, "HOME", "")
+	if _, err := userPaths(env.Get); err == nil {
 		t.Fatal("empty HOME accepted")
 	}
 }
@@ -85,8 +85,8 @@ func TestPlatform(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	root := t.TempDir()
-	env.set("SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
-	env.set("SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
+	setEnv(&env, "SELFISHELL_TEST_OS_RELEASE_FILE", root+"/os-release")
+	setEnv(&env, "SELFISHELL_TEST_PROC_VERSION_FILE", root+"/proc-version")
 	for _, tc := range []struct{ system, arch, id, proc, platform, wantArch string }{
 		{"Darwin", "arm64", "", "", "macos", "arm64"},
 		{"Linux", "x86_64", "ubuntu", "Linux", "ubuntu", "amd64"},
@@ -96,8 +96,8 @@ func TestPlatform(t *testing.T) {
 		{"Linux", "amd64", "debian", "WSL", "unsupported-wsl", "amd64"},
 		{"FreeBSD", "amd64", "", "", "unsupported", "amd64"},
 	} {
-		env.set("SELFISHELL_TEST_SYSTEM_NAME", tc.system)
-		env.set("SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
+		setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", tc.system)
+		setEnv(&env, "SELFISHELL_TEST_MACHINE_ARCH", tc.arch)
 		if err := testutil.WriteFile(root+"/os-release", []byte("NAME=ignored\nID="+tc.id+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func TestPlatform(t *testing.T) {
 			t.Fatalf("got %+v, want %s/%s", p, tc.platform, tc.wantArch)
 		}
 	}
-	env.set("SELFISHELL_TEST_SYSTEM_NAME", "Linux")
+	setEnv(&env, "SELFISHELL_TEST_SYSTEM_NAME", "Linux")
 	if err := os.Remove(root + "/os-release"); err != nil {
 		t.Fatal(err)
 	}
@@ -158,8 +158,8 @@ func TestProcessChild(t *testing.T) {
 func TestProcess(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("SELFISHELL_GO_PROCESS_CHILD", "1")
-	env.set("HTTPS_PROXY", "http://proxy.example:8443")
+	setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
+	setEnv(&env, "HTTPS_PROXY", "http://proxy.example:8443")
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -201,8 +201,8 @@ func TestProcessCancellation(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			env := env
-			env.set("HOME", t.TempDir())
-			env.set("SELFISHELL_GO_PROCESS_CHILD", "1")
+			setEnv(&env, "HOME", t.TempDir())
+			setEnv(&env, "SELFISHELL_GO_PROCESS_CHILD", "1")
 			executable, _ := os.Executable()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -281,9 +281,9 @@ func TestChildProcessEnvironment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := env
-			env.set("HOME", t.TempDir())
+			setEnv(&env, "HOME", t.TempDir())
 			for key, value := range tc.inherit {
-				env.set(key, value)
+				setEnv(&env, key, value)
 			}
 			dir := ""
 			if tc.dir {
@@ -320,7 +320,7 @@ func TestTerminal(t *testing.T) {
 func TestCurl(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("HOME", t.TempDir())
+	setEnv(&env, "HOME", t.TempDir())
 	root := t.TempDir()
 	file := root + "/file with spaces"
 	if err := testutil.WriteFile(file, []byte("download\x00bytes"), 0600); err != nil {
@@ -332,10 +332,10 @@ func TestCurl(t *testing.T) {
 	if code != 0 || err != nil || out.String() != "download\x00bytes" {
 		t.Fatalf("code=%d err=%v out=%q stderr=%q", code, err, out.String(), stderr.String())
 	}
-	env.set("PATH", root) // Invalid policy must be rejected before looking for curl.
+	setEnv(&env, "PATH", root) // Invalid policy must be rejected before looking for curl.
 	p.inherit = env
 	for _, value := range []string{"0", "-1", "x", " 1"} {
-		env.set("SELFISHELL_CURL_CONNECT_TIMEOUT", value)
+		setEnv(&env, "SELFISHELL_CURL_CONNECT_TIMEOUT", value)
 		p.inherit = env
 		code, err = p.Curl(context.Background(), "metadata", "https://example.invalid")
 		if code != 2 || err == nil || !strings.Contains(err.Error(), "positive integers") {
@@ -348,11 +348,11 @@ func TestCurl(t *testing.T) {
 func TestCurlRetryReplacesPartialResponse(t *testing.T) {
 	t.Parallel()
 	var env Environment
-	env.set("HOME", t.TempDir())
+	setEnv(&env, "HOME", t.TempDir())
 	for _, name := range []string{"http_proxy", "HTTP_PROXY", "ALL_PROXY", "all_proxy"} {
-		env.set(name, "")
+		setEnv(&env, name, "")
 	}
-	env.set("SELFISHELL_CURL_METADATA_MAX_TIME", "1")
+	setEnv(&env, "SELFISHELL_CURL_METADATA_MAX_TIME", "1")
 	body := "1.4.1\n"
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -377,7 +377,7 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	t.Parallel()
 	var env Environment
 	home := t.TempDir()
-	env.set("HOME", home)
+	setEnv(&env, "HOME", home)
 	project := t.TempDir()
 	safe := t.TempDir()
 	if err := testutil.WriteFile(filepath.Join(project, "git"), []byte("#!/bin/sh\nprintf unsafe\n"), 0755); err != nil {
@@ -394,7 +394,7 @@ func TestProcessSkipsRelativePATHEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env.set("PATH", rel+":"+safe)
+	setEnv(&env, "PATH", rel+":"+safe)
 	var out bytes.Buffer
 	p := Process{Dir: project, Out: &out, Env: []string{"HOME=" + home, "PATH=" + rel + ":" + safe}}
 	if code, err := p.Run(context.Background(), "git"); err != nil || code != 0 || out.String() != "safe" {

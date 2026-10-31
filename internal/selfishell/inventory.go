@@ -370,24 +370,24 @@ func (i *ToolInventory) directVersion(name, platform, arch string) (ToolResult, 
 	}
 	return result, nil
 }
-func (i *ToolInventory) validDirect(dep Dependency, target string, managed, pinned bool) bool {
+func (i *ToolInventory) validDirect(dep Dependency, target string, owned, pinned bool) bool {
 	info, err := os.Stat(target)
 	if err != nil {
 		return false
 	}
-	if managed {
+	if owned {
 		if link, err := os.Lstat(target); err != nil || link.Mode()&os.ModeSymlink != 0 {
 			return false
 		}
 	}
 	switch dep.Kind {
 	case "download":
-		return directDownloadIntact(dep, target, info, managed && pinned)
+		return directDownloadIntact(dep, target, info, owned && pinned)
 	case "git":
 		if !directGitMarkerPresent(dep, target, info) {
 			return false
 		}
-		if !managed {
+		if !owned {
 			return true
 		}
 		if _, err := os.Stat(target + "/.git"); err != nil {
@@ -462,7 +462,7 @@ func (i *ToolInventory) loadMise() {
 func (i *ToolInventory) windowsFontInventory() *windowsFontStatus {
 	if i.windowsFonts == nil {
 		i.windowsFonts = &windowsFontStatus{}
-		data, err := (Process{inherit: i.env}).windowsScript(context.Background(), map[string]string{"operation": "font-status"})
+		data, err := runWindowsScript(context.Background(), Process{inherit: i.env}, map[string]string{"operation": "font-status"})
 		if err == nil {
 			_ = json.Unmarshal(data, i.windowsFonts)
 		}

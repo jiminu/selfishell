@@ -58,7 +58,7 @@ func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, pa
 	if err != nil {
 		return err
 	}
-	if o.Process.progress == nil {
+	if progressOf(o.Process) == nil {
 		fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers to approved versions...")
 	}
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {

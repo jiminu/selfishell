@@ -22,7 +22,7 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	p := Process{inherit: env, Out: &out, Err: &stderr, progress: ui}
 	ui.stage("Synchronizing tools")
 	code, err := p.Run(context.Background(), "/bin/sh", "-c", "printf 'successful tool chatter\\n'; printf 'tool detail\\n' >&2")
-	ui.pause()
+	ui.Pause()
 	if err != nil || code != 0 || strings.Contains(out.String()+stderr.String(), "tool chatter") {
 		t.Fatalf("capture: %d %v %q %q", code, err, out.String(), stderr.String())
 	}

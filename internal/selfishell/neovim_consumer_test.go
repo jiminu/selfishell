@@ -21,14 +21,14 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	}
 	root, home := testRelease(t), t.TempDir()
 	isolateHome(&env, home)
-	env.set("XDG_CONFIG_HOME", home+"/.config")
-	env.set("XDG_DATA_HOME", home+"/.local/share")
-	env.set("XDG_STATE_HOME", home+"/.local/state")
-	env.set("XDG_CACHE_HOME", home+"/.cache")
-	env.set("MISE_DATA_DIR", home+"/.local/share/mise")
-	env.set("MISE_STATE_DIR", home+"/.local/state/mise")
-	env.set("MISE_CACHE_DIR", home+"/.cache/mise")
-	env.set("SHELL", "/bin/zsh")
+	setEnv(&env, "XDG_CONFIG_HOME", home+"/.config")
+	setEnv(&env, "XDG_DATA_HOME", home+"/.local/share")
+	setEnv(&env, "XDG_STATE_HOME", home+"/.local/state")
+	setEnv(&env, "XDG_CACHE_HOME", home+"/.cache")
+	setEnv(&env, "MISE_DATA_DIR", home+"/.local/share/mise")
+	setEnv(&env, "MISE_STATE_DIR", home+"/.local/state/mise")
+	setEnv(&env, "MISE_CACHE_DIR", home+"/.cache/mise")
+	setEnv(&env, "SHELL", "/bin/zsh")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	var output bytes.Buffer
@@ -39,7 +39,7 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	if code, _, stderr := commandResult(env, root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
-	paths, err := userPaths(env)
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,8 +32,8 @@ printf '%s\n' "$*" >> "$NVIM_LOG"
 case "$*" in *'Lazy! sync'*) mkdir -p "$XDG_DATA_HOME/nvim/lazy"; git clone -q "$LAZY_SOURCE" "$XDG_DATA_HOME/nvim/lazy/lazy-source" ;; esac
 case "$*" in *nvim-treesitter*) exit "${PARSER_EXIT:-0}" ;; esac
 `, 0755)
-	env.set("NVIM_LOG", home+"/nvim.log")
-	env.set("LAZY_SOURCE", repo)
+	setEnv(env, "NVIM_LOG", home+"/nvim.log")
+	setEnv(env, "LAZY_SOURCE", repo)
 	op.Process.Env = append(env.List(), "HOME="+home, "XDG_DATA_HOME="+home+"/data", "PATH="+bin+":/usr/bin:/bin", "NVIM_LOG="+home+"/nvim.log", "LAZY_SOURCE="+repo)
 	return op, paths, root, manifest, home, head
 }

@@ -258,9 +258,9 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 	if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 		t.Fatal(err)
 	}
-	env.set("XDG_DATA_HOME", home+"/work/alias/../data")
+	setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
 	op.Process.inherit = env
-	paths, err := userPaths(env)
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -438,9 +438,9 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 			if err := os.Symlink(home+"/actual/child", home+"/work/alias"); err != nil {
 				t.Fatal(err)
 			}
-			env.set("XDG_DATA_HOME", home+"/work/alias/../data")
+			setEnv(&env, "XDG_DATA_HOME", home+"/work/alias/../data")
 			op.Process.inherit = env
-			paths, err := userPaths(env)
+			paths, err := userPaths(env.Get)
 			if err != nil {
 				t.Fatal(err)
 			}

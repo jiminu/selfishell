@@ -101,7 +101,7 @@ func (c CLI) noteGhosttyOverrides(resources []Resource) {
 			entrypoint = r.Target
 		}
 	}
-	managed, err := os.ReadFile(defaults)
+	defaultsData, err := os.ReadFile(defaults)
 	if err != nil {
 		return
 	}
@@ -109,7 +109,7 @@ func (c CLI) noteGhosttyOverrides(resources []Resource) {
 	if err != nil {
 		return
 	}
-	if found := ghosttyOverridden(managed, user); len(found) > 0 {
+	if found := ghosttyOverridden(defaultsData, user); len(found) > 0 {
 		c.report("Notes", reportWarning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
 	}
 }

@@ -100,7 +100,7 @@ func (o *PackageOperation) InstallMise(ctx context.Context, root string, paths P
 	if err != nil || code != 0 {
 		return o.optionalFailure(requirement, fmt.Sprintf("Could not install %s mise tools: %s", requirement, strings.Join(names, " ")), names)
 	}
-	if o.Process.progress != nil {
+	if progressOf(o.Process) != nil {
 		o.report(reportSuccess, "Synchronized mise tools: %d\n  %s", len(names),
 			strings.ReplaceAll(wrapWords(names, terminalWidth(o.Process.Out)-4), "\n", "\n  "))
 	}

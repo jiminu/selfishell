@@ -22,7 +22,7 @@ func (c CLI) trustMise(paths Paths) {
 	trustManagedMiseConfig(c.invocationContext(), Process{Dir: c.Root + "/config/shared", inherit: c.Env}, binary, paths)
 }
 func (c CLI) defaultShell(dry, yes bool) {
-	c.progress.pause()
+	c.progress.Pause()
 	if filepath.Base(c.Env.Get("SHELL")) == "zsh" {
 		return
 	}

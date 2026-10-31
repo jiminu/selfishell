@@ -158,7 +158,7 @@ func (o *PackageOperation) runNvim(ctx context.Context, root, nvim, mise string,
 	}
 	if err != nil || code != 0 {
 		if log.Len() != 0 {
-			o.Process.progress.pause()
+			progressOf(o.Process).Pause()
 			fmt.Fprint(o.Process.Err, log.String())
 		}
 		if err != nil {
@@ -437,7 +437,7 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 		}
 		verificationError := func(err error) error {
 			if syncLog != "" {
-				o.Process.progress.pause()
+				progressOf(o.Process).Pause()
 				fmt.Fprint(o.Process.Err, syncLog)
 			}
 			return err
@@ -460,7 +460,7 @@ func (o *PackageOperation) InstallNeovimPlugins(ctx context.Context, root string
 			}
 		}
 	}
-	if !synced && o.Process.progress != nil {
+	if !synced && progressOf(o.Process) != nil {
 		o.report(reportSuccess, "Synchronized Neovim plugins: approved revisions")
 	}
 	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", `+lua local ok, done = pcall(function() return require("nvim-treesitter").update():wait(300000) end); if not (ok and done) then vim.cmd("cquit") end`, "+qa"); err != nil {

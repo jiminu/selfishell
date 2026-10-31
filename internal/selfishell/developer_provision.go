@@ -7,7 +7,7 @@ import (
 
 // ProvisionDeveloper installs the fixed tool subsets needed by development
 // consumers. It does not alter managed configuration or install system packages.
-func ProvisionDeveloper(ctx context.Context, root, mode string, process Process) error {
+func ProvisionDeveloper(ctx context.Context, root, mode string, p Process) error {
 	var tools []string
 	direct := []string{"mise"}
 	switch mode {
@@ -20,8 +20,8 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	default:
 		return fmt.Errorf("unknown developer provisioning mode: %s", mode)
 	}
-	env := process.environment()
-	paths, err := userPaths(env)
+	env := p.environment()
+	paths, err := userPaths(env.Get)
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	if !platformSupported(platform.Name) {
 		return fmt.Errorf("unsupported developer platform: %s", platform.Name)
 	}
-	o := &PackageOperation{Process: process}
+	o := &PackageOperation{Process: p}
 	manifest := root + "/dependencies.conf"
 	for _, name := range direct {
 		if err := o.InstallDirect(ctx, paths, manifest, "required", name, platform.Name, platform.Arch, false); err != nil {
