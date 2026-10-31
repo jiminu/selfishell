@@ -1,4 +1,4 @@
-package selfishell
+package terminal
 
 import (
 	"fmt"
@@ -8,18 +8,18 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 )
 
-// terminalFont is the Nerd Font face the terminal integrations select.
-const terminalFont = "JetBrainsMonoNL Nerd Font Mono"
+// Font is the Nerd Font face the terminal integrations select.
+const Font = "JetBrainsMonoNL Nerd Font Mono"
 
-// windowsFontStatus is the Windows font probe: whether the font is installed
+// FontStatus is the Windows font probe: whether the font is installed
 // and the current user's font registrations by name.
-type windowsFontStatus struct {
+type FontStatus struct {
 	FontInstalled bool              `json:"fontInstalled"`
 	Registrations map[string]string `json:"registrations"`
 }
 
-// windowsFontTarget is dep's versioned path under the Windows user's fonts.
-func windowsFontTarget(choice *windowsTerminalChoice, dep managed.Dependency) (string, error) {
+// FontTarget is dep's versioned path under the Windows user's fonts.
+func FontTarget(choice *WindowsChoice, dep managed.Dependency) (string, error) {
 	if choice == nil || !choice.Enabled {
 		return "", fmt.Errorf("Windows Terminal font setup is not enabled")
 	}

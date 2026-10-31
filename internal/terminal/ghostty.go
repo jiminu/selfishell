@@ -1,4 +1,4 @@
-package selfishell
+package terminal
 
 import (
 	"os"
@@ -8,8 +8,9 @@ import (
 	"github.com/jiminu/selfishell/internal/process"
 )
 
-// The app can be installed directly, outside Homebrew's cask inventory.
-func ghosttyInstalled(p process.Process) bool {
+// GhosttyInstalled finds Ghostty on PATH or in the system or user Applications;
+// the app can be installed directly, outside Homebrew's cask inventory.
+func GhosttyInstalled(p process.Process) bool {
 	if _, err := p.LookPath("ghostty"); err == nil {
 		return true
 	}
@@ -94,8 +95,8 @@ func ghosttyTrigger(binding string) string {
 	return trigger
 }
 
-// ghosttyOverrides lists entrypoint settings that the managed defaults override.
-func ghosttyOverrides(resources []managed.Resource) (entrypoint string, found []string) {
+// GhosttyOverrides lists entrypoint settings that the managed defaults override.
+func GhosttyOverrides(resources []managed.Resource) (entrypoint string, found []string) {
 	var defaults string
 	for _, r := range resources {
 		switch r.Name {

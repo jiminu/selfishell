@@ -32,7 +32,7 @@ func (m *lifecycle) write(path string, data []byte, mode os.FileMode) error {
 }
 
 // Report, DryRun, Unchanged, Backup, ResolveModified and Write let the
-// Windows Terminal fragment code drive this lifecycle (windowsLifecycle).
+// Windows Terminal fragment code drive this lifecycle (terminal.Lifecycle).
 func (m *lifecycle) Report(section string, tone report.Tone, format string, args ...any) {
 	m.c.report(section, tone, format, args...)
 }

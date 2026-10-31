@@ -13,6 +13,7 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 const installHelp = `Usage:
@@ -204,12 +205,12 @@ type preparedConfig struct {
 	m               lifecycle
 	miseGlobal      string
 	ghostty         bool
-	windowsTerminal *windowsTerminalChoice
+	windowsTerminal *terminal.WindowsChoice
 }
 
 // windowsSetup reports through the CLI and asks only when it is interactive.
-func (c CLI) windowsSetup() windowsSetup {
-	return windowsSetup{
+func (c CLI) windowsSetup() terminal.Setup {
+	return terminal.Setup{
 		Ctx:     c.invocationContext(),
 		Process: process.Process{Out: c.Out, Err: c.Err, Inherit: c.Env},
 		Distro:  c.Env.Get("WSL_DISTRO_NAME"),
@@ -226,7 +227,7 @@ func (c CLI) windowsSetup() windowsSetup {
 }
 
 func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool) error {
-	choice, err := c.windowsSetup().prepare(p.paths, dry, yes, update, enable)
+	choice, err := c.windowsSetup().Prepare(p.paths, dry, yes, update, enable)
 	if err != nil {
 		return err
 	}
@@ -234,11 +235,11 @@ func (c CLI) addWindowsTerminal(p *preparedConfig, dry, yes, update, enable bool
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
-	return installFragment(&p.m, p.paths, choice, true)
+	return terminal.InstallFragment(&p.m, p.paths, choice, true)
 }
 
 func (c CLI) saveWindowsTerminalChoice(p preparedConfig) error {
-	return saveWindowsChoice(p.paths, p.windowsTerminal, p.m.dry)
+	return terminal.SaveChoice(p.paths, p.windowsTerminal, p.m.dry)
 }
 
 // prepareConfig is read-only, including all user-owned and managed resource preflights.
@@ -261,7 +262,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 			ghostty = yes || dry
 			if !ghostty && c.interactive() {
 				question := "Install Ghostty terminal and managed configuration (recommended)? [Y/n] "
-				if ghosttyInstalled(process.Process{Inherit: c.Env}) {
+				if terminal.GhosttyInstalled(process.Process{Inherit: c.Env}) {
 					question = "Use Selfishell configuration for your existing Ghostty terminal (recommended)? [Y/n] "
 				}
 				fmt.Fprint(c.Out, question)
@@ -351,7 +352,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 			return err
 		}
 	}
-	if err := installFragment(m, m.paths, p.windowsTerminal, false); err != nil {
+	if err := terminal.InstallFragment(m, m.paths, p.windowsTerminal, false); err != nil {
 		return err
 	}
 	if !m.dry {
@@ -369,7 +370,7 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 	}
 	m, paths, miseGlobal, ghostty := &p.m, p.paths, p.miseGlobal, p.ghostty
 	if ghostty {
-		if entrypoint, found := ghosttyOverrides(p.resources); len(found) > 0 {
+		if entrypoint, found := terminal.GhosttyOverrides(p.resources); len(found) > 0 {
 			c.report("Notes", report.Warning, "Selfishell's Ghostty defaults override these settings in %s: %s. Move them to user.ghostty to keep them.", entrypoint, strings.Join(found, ", "))
 		}
 	}
@@ -430,7 +431,9 @@ func (c CLI) installNeovim(operation *PackageOperation, paths managed.Paths, dry
 	return operation.InstallNeovimPlugins(ctx, c.Root, paths, c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf"), dry)
 }
 
-func (c CLI) interactive() bool { return IsTerminal(c.In) || c.Env.Get("SELFISHELL_TEST_TTY") != "" }
+func (c CLI) interactive() bool {
+	return terminal.IsTerminal(c.In) || c.Env.Get("SELFISHELL_TEST_TTY") != ""
+}
 func (c CLI) readAnswer() (string, error) {
 	resume := c.progress.prompt()
 	defer resume()

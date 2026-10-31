@@ -8,6 +8,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 type Package struct{ Platform, Requirement, Manager, Name string }
@@ -103,7 +104,7 @@ func ReadDependencies(path string) ([]managed.Dependency, error) {
 // selectPackages applies the same platform and saved-choice rules to setup and
 // diagnostics. Only font downloads require Windows Terminal opt-in; other WSL
 // packages remain available independently of that choice.
-func selectPackages(root string, paths managed.Paths, packages []Package, platform string, choice *windowsTerminalChoice, env process.Environment) ([]Package, error) {
+func selectPackages(root string, paths managed.Paths, packages []Package, platform string, choice *terminal.WindowsChoice, env process.Environment) ([]Package, error) {
 	var dependencies []managed.Dependency
 	selected := make([]Package, 0, len(packages))
 	for _, p := range packages {
@@ -129,12 +130,12 @@ func selectPackages(root string, paths managed.Paths, packages []Package, platfo
 		if font {
 			if choice == nil {
 				var err error
-				choice, err = readWindowsTerminalChoice(paths)
+				choice, err = terminal.ReadWindowsChoice(paths)
 				if err != nil {
 					return nil, err
 				}
 				if choice == nil {
-					choice = &windowsTerminalChoice{}
+					choice = &terminal.WindowsChoice{}
 				}
 			}
 			if !choice.Enabled {

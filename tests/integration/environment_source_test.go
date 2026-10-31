@@ -14,7 +14,7 @@ import (
 func TestIntegrationProductReadsInjectedEnvironment(t *testing.T) {
 	t.Parallel()
 	var files []string
-	for _, dir := range []string{"selfishell", "process", "managed", "report"} {
+	for _, dir := range []string{"selfishell", "terminal", "process", "managed", "report"} {
 		matches, err := filepath.Glob("../../internal/" + dir + "/*.go")
 		if err != nil || len(matches) == 0 {
 			t.Fatalf("%s sources: %v %v", dir, matches, err)

@@ -11,6 +11,7 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 // PackageOperation owns state for one tools/configuration synchronization.
@@ -19,7 +20,7 @@ import (
 // can report them and skip cleanup while still completing optional groups.
 // Use a fresh value for a new synchronization, including retries and rollback.
 type PackageOperation struct {
-	windowsTerminal                           *windowsTerminalChoice
+	windowsTerminal                           *terminal.WindowsChoice
 	Process                                   process.Process
 	SkippedOptional                           []string
 	windowsFontsChecked, windowsFontsExternal bool
@@ -52,7 +53,7 @@ func (o *PackageOperation) reportSkippedOptional() {
 func (o *PackageOperation) color(stream io.Writer, code string) (string, string) {
 	env := o.Process.Environment()
 	ci := env.Get("CI")
-	if env.Get("NO_COLOR") != "" || env.Get("TERM") == "dumb" || (ci != "" && ci != "false") || !IsTerminal(stream) {
+	if env.Get("NO_COLOR") != "" || env.Get("TERM") == "dumb" || (ci != "" && ci != "false") || !terminal.IsTerminal(stream) {
 		return "", ""
 	}
 	return code, "\x1b[0m"

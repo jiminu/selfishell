@@ -10,6 +10,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -90,33 +91,6 @@ printf '%s\n' '{"appData":"C:\\Users\\Fixture\\AppData\\Local","terminalInstalle
 				t.Fatal("duplicate appearance keys must skip only the override notice", out)
 			}
 		})
-	}
-}
-
-func TestWindowsTerminalOverrides(t *testing.T) {
-	guid := "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"
-	for _, tc := range []struct{ profile, defaults, want string }{
-		{``, ``, ``},
-		{`"font": {"face": "JetBrainsMonoNL Nerd Font Mono"}, "colorScheme": "Dark+",`, `"font": {"size": 12},`, ``},
-		{`"font": {"face": "Consolas"}, "colorScheme": {"dark": "Campbell"},`, ``, `profile font.face "Consolas" takes precedence over Selfishell's font|profile colorScheme.dark "Campbell" takes precedence over Dark+`},
-		{`"fontFace": "Consolas",`, `"colorScheme": "Campbell", "fontFace": "Lucida",`, `profile fontFace "Consolas" takes precedence over Selfishell's font|Defaults fontFace "Lucida" takes precedence over Selfishell's font|Defaults colorScheme "Campbell" takes precedence over Dark+`},
-		// The Settings UI writes per-mode objects; dark mode still uses the fragment.
-		{`"colorScheme": {"light": "Ubuntu"},`, `"colorScheme": {"dark": "Dark+", "light": "Campbell"},`, ``},
-		// A font object makes Windows Terminal ignore the legacy key.
-		{`"fontFace": "Consolas", "font": {"size": 12},`, ``, ``},
-	} {
-		j, err := parseTerminalJSON([]byte(`{"profiles": {"defaults": {` + tc.defaults + `}, "list": [{` + tc.profile + ` "guid": "` + guid + `"}]}}`))
-		if err != nil {
-			t.Fatal(err)
-		}
-		profile, err := j.profile(guid)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := windowsTerminalOverrides(j, profile)
-		if err != nil || strings.Join(got, "|") != tc.want {
-			t.Errorf("%s / %s: got %q, %v", tc.profile, tc.defaults, got, err)
-		}
 	}
 }
 
@@ -219,10 +193,10 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 	if err := testutil.WriteFile(settings, []byte(terminalSettingsFixture), 0600); err != nil {
 		t.Fatal(err)
 	}
-	choice := &windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
+	choice := &terminal.WindowsChoice{Version: 1, Enabled: true, Distro: "Ubuntu-24.04", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: settings, ProfileGUID: "{963ff2f7-6aed-5ce3-9d91-90d99571f53a}"}
 	m := lifecycle{c: CLI{Out: io.Discard, Err: io.Discard}, paths: paths, yes: true, actions: map[string]string{}}
 	for _, preflight := range []bool{true, false} {
-		if err := installFragment(&m, paths, choice, preflight); err != nil {
+		if err := terminal.InstallFragment(&m, paths, choice, preflight); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -231,7 +205,7 @@ func TestWindowsTerminalNativeFragment(t *testing.T) {
 		t.Fatal("native fragment does not update the profile")
 	}
 	for _, preflight := range []bool{true, false} {
-		if err := removeFragment(&m, paths, "", preflight); err != nil {
+		if err := terminal.RemoveFragment(&m, paths, "", preflight); err != nil {
 			t.Fatal(err)
 		}
 	}

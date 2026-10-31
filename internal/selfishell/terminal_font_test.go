@@ -12,14 +12,15 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
 func TestTerminalFontHintAppearsOnce(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
-	macos := "Set your terminal font to " + terminalFont + " to show Neovim's icons."
-	desktop := "Install " + terminalFont + " and set it as your terminal font to show Neovim's icons."
+	macos := "Set your terminal font to " + terminal.Font + " to show Neovim's icons."
+	desktop := "Install " + terminal.Font + " and set it as your terminal font to show Neovim's icons."
 	for _, tc := range []struct {
 		name, platform, display, ssh, want              string
 		installed, ghostty, configured, windowsTerminal bool
@@ -27,7 +28,7 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 		{name: "new install", platform: "macos", want: macos},
 		{name: "already installed", platform: "macos", installed: true},
 		{name: "ghostty chosen", platform: "macos", ghostty: true},
-		{name: "wsl first setup", platform: "ubuntu-wsl", want: "Install " + terminalFont + " on Windows and set it as your terminal font to show Neovim's icons."},
+		{name: "wsl first setup", platform: "ubuntu-wsl", want: "Install " + terminal.Font + " on Windows and set it as your terminal font to show Neovim's icons."},
 		{name: "wsl configured", platform: "ubuntu-wsl", configured: true},
 		{name: "wsl terminal selected", platform: "ubuntu-wsl", windowsTerminal: true, want: "Restart Windows Terminal and reopen your configured WSL profile."},
 		{name: "wsl terminal already configured", platform: "ubuntu-wsl", windowsTerminal: true, configured: true},
@@ -49,7 +50,7 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 			f.executable("brew", fmt.Sprintf(`case "$1 $2" in 'list --cask') printf '%%s\n' %q;; esac`, casks))
 			paths := managed.Paths{State: t.TempDir()}
 			if tc.windowsTerminal {
-				choice := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Imported-Dev", AppData: "C:/fixture", AppDataPath: f.home + "/windows", SettingsPath: f.home + "/windows/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
+				choice := terminal.WindowsChoice{Version: 1, Enabled: true, Distro: "Imported-Dev", AppData: "C:/fixture", AppDataPath: f.home + "/windows", SettingsPath: f.home + "/windows/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
 				data, err := json.Marshal(choice)
 				if err != nil {
 					t.Fatal(err)
@@ -69,7 +70,7 @@ func TestTerminalFontHintAppearsOnce(t *testing.T) {
 			if err := c.installPackages(context.Background(), f.op, paths, packages, tc.platform, "arm64", tc.ghostty, false); err != nil {
 				t.Fatal(err)
 			}
-			if got := out.String(); tc.want == "" && (strings.Contains(got, terminalFont) || strings.Contains(got, "Restart Windows Terminal")) || !strings.Contains(got, tc.want) {
+			if got := out.String(); tc.want == "" && (strings.Contains(got, terminal.Font) || strings.Contains(got, "Restart Windows Terminal")) || !strings.Contains(got, tc.want) {
 				t.Fatalf("want hint %q, output %q", tc.want, got)
 			}
 		})

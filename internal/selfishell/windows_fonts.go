@@ -13,6 +13,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 type retainedWindowsFont struct {
@@ -41,7 +42,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 			}
 		}
 		if !owned {
-			data, err := runWindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
+			data, err := terminal.WindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
 			if err != nil {
 				return err
 			}
@@ -56,7 +57,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 		o.windowsFontsChecked = true
 	}
 	if o.windowsFontsExternal {
-		o.report(report.Info, "Externally installed; preserving Windows font: %s", terminalFont)
+		o.report(report.Info, "Externally installed; preserving Windows font: %s", terminal.Font)
 		return nil
 	}
 	target, err := dependencyTarget(dep, paths, o.Process.Environment())
@@ -134,7 +135,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 		if err != nil {
 			return err
 		}
-		oldPath, err := convertWindowsPath(ctx, o.Process, "-w", oldTarget)
+		oldPath, err := terminal.WindowsPath(ctx, o.Process, "-w", oldTarget)
 		if err != nil {
 			return err
 		}
@@ -188,7 +189,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 	} else if err := o.installDependency(ctx, paths, dep); err != nil {
 		return err
 	}
-	windowsPath, err := convertWindowsPath(ctx, o.Process, "-w", target)
+	windowsPath, err := terminal.WindowsPath(ctx, o.Process, "-w", target)
 	if err != nil {
 		return err
 	}
@@ -198,11 +199,11 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 		// on Windows' bounded command line. Only its current registry value
 		// can be needed by the registration ownership guard.
 		registeredPreviousPaths = nil
-		data, err := runWindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
+		data, err := terminal.WindowsScript(ctx, o.Process, map[string]string{"operation": "font-status"})
 		if err != nil {
 			return err
 		}
-		var status windowsFontStatus
+		var status terminal.FontStatus
 		if err := json.Unmarshal(data, &status); err != nil {
 			return err
 		}
@@ -214,7 +215,7 @@ func (o *PackageOperation) installWindowsFont(ctx context.Context, paths managed
 			}
 		}
 	}
-	_, err = runWindowsScript(ctx, o.Process, map[string]any{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPaths": registeredPreviousPaths})
+	_, err = terminal.WindowsScript(ctx, o.Process, map[string]any{"operation": "font-register", "path": windowsPath, "checksum": dep.Checksum, "name": dep.Name, "previousPaths": registeredPreviousPaths})
 	if err != nil {
 		return err
 	}

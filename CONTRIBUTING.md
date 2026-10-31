@@ -57,10 +57,10 @@ environment with `t.Setenv`. Give each test its own temporary HOME and pass
 child environments explicitly. Write fixture files with `testutil.WriteFile` or
 `testutil.AppendFile`, which hold `syscall.ForkLock` so a parallel test's fork
 cannot make an executable fixture fail with ETXTBSY; a source check enforces it.
-Product code in `internal/selfishell`, `internal/process`, `internal/managed`
-and `internal/report` reads the environment only through the injected
-`process.Environment` (another source check), so its tests pass a private
-environment instead of calling `t.Setenv`.
+Product code in `internal/selfishell`, `internal/terminal`, `internal/process`,
+`internal/managed` and `internal/report` reads the environment only through
+the injected `process.Environment` (another source check), so its tests pass a
+private environment instead of calling `t.Setenv`.
 
 Keep command parsing and shared failure cases focused; do not repeat basic
 help/version or successful reinstall checks in every lifecycle scenario.
@@ -118,7 +118,7 @@ simulate them; they are not evidence of runtime execution on another OS or CPU.
 On WSL 2 with PowerShell interoperability, run these focused checks:
 
 ```sh
-SELFISHELL_TEST_WSL_INTEROP=1 go test ./internal/selfishell -run '^TestWindowsInteropReadOnly$' -v
+SELFISHELL_TEST_WSL_INTEROP=1 go test ./internal/terminal -run '^TestWindowsInteropReadOnly$' -v
 SELFISHELL_TEST_WINDOWS_TEMP=/mnt/c/Windows/Temp go test ./internal/selfishell -run '^TestWindowsTerminalNativeFragment$' -v
 SELFISHELL_TEST_WSL_FONTS=1 SELFISHELL_TEST_WINDOWS_TEMP=/mnt/c/Windows/Temp go test ./internal/selfishell -run '^TestWindowsFontLoadedNativeUpgrade$' -v
 ```

@@ -1,4 +1,4 @@
-package selfishell
+package terminal
 
 import (
 	"bytes"
@@ -41,12 +41,12 @@ func readWindowsFragmentRecord(paths managed.Paths) (*windowsFragmentRecord, err
 }
 
 // Windows Terminal layers this fragment below the profile and Defaults in settings.json.
-func windowsFragment(choice *windowsTerminalChoice) (string, []byte, error) {
+func windowsFragment(choice *WindowsChoice) (string, []byte, error) {
 	profile := struct {
 		Updates     string            `json:"updates"`
 		Font        map[string]string `json:"font"`
 		ColorScheme string            `json:"colorScheme"`
-	}{choice.ProfileGUID, map[string]string{"face": terminalFont}, "Dark+"}
+	}{choice.ProfileGUID, map[string]string{"face": Font}, "Dark+"}
 	data, err := json.MarshalIndent(map[string]any{"profiles": []any{profile}}, "", "  ")
 	path := choice.AppDataPath + "/Microsoft/Windows Terminal/Fragments/Selfishell/" + strings.Trim(choice.ProfileGUID, "{}") + ".json"
 	return path, append(data, '\n'), err
@@ -62,7 +62,7 @@ func windowsTerminalOverrides(j *terminalJSON, profile *terminalJSONNode) ([]str
 		}
 		defaults = profiles.property("defaults")
 	}
-	face, _ := json.Marshal(terminalFont)
+	face, _ := json.Marshal(Font)
 	var found []string
 	for _, layer := range []struct {
 		name string
@@ -100,7 +100,7 @@ func windowsTerminalOverrides(j *terminalJSON, profile *terminalJSONNode) ([]str
 }
 
 // windowsOverrides says which user settings take precedence over the fragment.
-func windowsOverrides(choice *windowsTerminalChoice, say func(string)) {
+func windowsOverrides(choice *WindowsChoice, say func(string)) {
 	j, profile, err := readWindowsProfile(choice.SettingsPath, choice.ProfileGUID)
 	var overrides []string
 	if err == nil && profile != nil {
@@ -114,9 +114,9 @@ func windowsOverrides(choice *windowsTerminalChoice, say func(string)) {
 	}
 }
 
-// windowsLifecycle is the configuration lifecycle that installs and removes
+// Lifecycle is the configuration lifecycle that installs and removes
 // the fragment: its reports, dry-run, backups, conflict prompts and writes.
-type windowsLifecycle interface {
+type Lifecycle interface {
 	report.Reporter
 	DryRun() bool
 	// Unchanged counts a resource that already had its managed content.
@@ -126,9 +126,9 @@ type windowsLifecycle interface {
 	Write(path string, data []byte, mode os.FileMode) error
 }
 
-// installFragment writes choice's fragment and its ownership record; preflight
+// InstallFragment writes choice's fragment and its ownership record; preflight
 // only checks that it could.
-func installFragment(l windowsLifecycle, paths managed.Paths, choice *windowsTerminalChoice, preflight bool) error {
+func InstallFragment(l Lifecycle, paths managed.Paths, choice *WindowsChoice, preflight bool) error {
 	if choice == nil || !choice.Enabled {
 		return nil
 	}
@@ -245,14 +245,14 @@ func installFragment(l windowsLifecycle, paths managed.Paths, choice *windowsTer
 	return nil
 }
 
-// removeFragment removes the recorded fragment if intact, and its record; a
+// RemoveFragment removes the recorded fragment if intact, and its record; a
 // record copied from another distribution is forgotten without touching it.
-func removeFragment(l windowsLifecycle, paths managed.Paths, distro string, preflight bool) error {
+func RemoveFragment(l Lifecycle, paths managed.Paths, distro string, preflight bool) error {
 	record, err := readWindowsFragmentRecord(paths)
 	if err != nil || record == nil {
 		return err
 	}
-	if choice, err := readWindowsTerminalChoice(paths); err == nil && choice.foreign(distro) {
+	if choice, err := ReadWindowsChoice(paths); err == nil && choice.foreign(distro) {
 		if preflight || l.DryRun() {
 			return nil
 		}
@@ -264,7 +264,7 @@ func removeFragment(l windowsLifecycle, paths managed.Paths, distro string, pref
 	return os.Remove(windowsFragmentRecordPath(paths))
 }
 
-func removeRecordedFragment(l windowsLifecycle, record *windowsFragmentRecord, preflight bool) error {
+func removeRecordedFragment(l Lifecycle, record *windowsFragmentRecord, preflight bool) error {
 	info, present, err := managed.Exists(record.Path)
 	if err != nil {
 		return err
@@ -304,15 +304,15 @@ func removeRecordedFragment(l windowsLifecycle, record *windowsFragmentRecord, p
 	return nil
 }
 
-// windowsStatus diagnoses the fragment and its records through say, which
+// WindowsStatus diagnoses the fragment and its records through say, which
 // prints a colored label and a message.
-func windowsStatus(paths managed.Paths, distro string, verbose bool, say func(color, label, message string)) (tracked, intact, recordIssue bool) {
+func WindowsStatus(paths managed.Paths, distro string, verbose bool, say func(color, label, message string)) (tracked, intact, recordIssue bool) {
 	record, err := readWindowsFragmentRecord(paths)
 	if err != nil {
 		say("31", "MALFORMED", windowsFragmentRecordPath(paths))
 		return true, false, true
 	}
-	choice, err := readWindowsTerminalChoice(paths)
+	choice, err := ReadWindowsChoice(paths)
 	if err != nil {
 		say("31", "MALFORMED", paths.State+"/windows-terminal.json")
 		return true, false, true

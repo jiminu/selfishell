@@ -17,6 +17,7 @@ import (
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
+	"github.com/jiminu/selfishell/internal/terminal"
 )
 
 // InstallDirect synchronizes one declared direct package. One operation caches
@@ -77,11 +78,11 @@ func dependencyTarget(dep managed.Dependency, paths managed.Paths, env process.E
 		return "", fmt.Errorf("invalid dependency target: %s", dep.Target)
 	}
 	if dep.Marker == "font" {
-		choice, err := readWindowsTerminalChoice(paths)
+		choice, err := terminal.ReadWindowsChoice(paths)
 		if err != nil {
 			return "", err
 		}
-		return windowsFontTarget(choice, dep)
+		return terminal.FontTarget(choice, dep)
 	}
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		return strings.TrimSuffix(paths.Data, "/selfishell") + "/" + strings.TrimPrefix(dep.Target, ".local/share/"), nil

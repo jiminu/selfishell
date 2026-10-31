@@ -23,6 +23,7 @@ import (
 
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
+	"github.com/jiminu/selfishell/internal/terminal"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
 
@@ -407,49 +408,6 @@ func TestWindowsFontChecksumFailureAndOptionalInteropFailure(t *testing.T) {
 	}
 }
 
-// Opt-in native probes never write Windows settings or font registrations.
-func TestWindowsInteropReadOnly(t *testing.T) {
-	if os.Getenv("SELFISHELL_TEST_WSL_INTEROP") != "1" {
-		t.Skip("requires native WSL interoperability")
-	}
-	t.Parallel()
-	if _, err := exec.LookPath("powershell.exe"); err != nil {
-		t.Fatal(err)
-	}
-	distro := os.Getenv("WSL_DISTRO_NAME")
-	if distro == "" {
-		t.Skip("requires a native WSL distribution identity")
-	}
-	p := process.Process{Env: process.WithEnvironment(process.Process{}, map[string]string{"HOME": t.TempDir()}).Env}
-	data, err := runWindowsScript(context.Background(), p, map[string]string{"operation": "probe", "distro": distro})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var probe struct {
-		AppData       string   `json:"appData"`
-		SettingsPaths []string `json:"settingsPaths"`
-		Guids         []string `json:"wslProfileGuids"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil || probe.AppData == "" {
-		t.Fatal("invalid native probe", string(data), err)
-	}
-	linux, err := convertWindowsPath(context.Background(), p, "-u", probe.AppData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	windows, err := convertWindowsPath(context.Background(), p, "-w", linux)
-	if err != nil || !strings.EqualFold(windows, probe.AppData) {
-		t.Fatal("path round trip", windows, err)
-	}
-	_, guid, _, err := (windowsSetup{Ctx: context.Background(), Process: p, Distro: distro}).findProfile(probe.SettingsPaths, probe.Guids)
-	if err != nil {
-		t.Skipf("native settings have no unique visible target: %v", err)
-	}
-	if !validTerminalGUID(guid) {
-		t.Fatal("invalid native profile identity")
-	}
-}
-
 func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
@@ -794,7 +752,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err := os.MkdirAll(paths.State+"/dependencies", 0700); err != nil {
 		t.Fatal(err)
 	}
-	choice := windowsTerminalChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: scratch + "/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
+	choice := terminal.WindowsChoice{Version: 1, Enabled: true, Distro: "Ubuntu", AppData: "C:/fixture", AppDataPath: scratch, SettingsPath: scratch + "/settings.json", ProfileGUID: "{2c4de342-38b7-51cf-b940-2309a097f518}"}
 	data, _ := json.Marshal(choice)
 	if err := testutil.WriteFile(paths.State+"/windows-terminal.json", data, 0600); err != nil {
 		t.Fatal(err)
@@ -838,7 +796,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err := testutil.WriteFile(paths.State+"/dependencies/"+dep.Name, []byte(dep.Version+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	windowsPath, err := convertWindowsPath(ctx, process.Process{}, "-w", oldTarget)
+	windowsPath, err := terminal.WindowsPath(ctx, process.Process{}, "-w", oldTarget)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1017,7 +975,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 			c := CLI{Env: env, Root: root, Out: &out, Err: io.Discard}
 			op := &PackageOperation{Process: process.Process{Inherit: env, Out: &out, Err: io.Discard}}
 			if scenario == "in-memory" {
-				op.windowsTerminal = &windowsTerminalChoice{Enabled: true}
+				op.windowsTerminal = &terminal.WindowsChoice{Enabled: true}
 			}
 			err = c.installPackages(context.Background(), op, paths, packages, "ubuntu-wsl", "amd64", false, true)
 			if scenario == "malformed" {
