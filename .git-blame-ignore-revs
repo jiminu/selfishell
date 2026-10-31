@@ -5,3 +5,5 @@
 85951525b3805553534cbf0d4efbac92b2ae6479
 # refactor: extract the release lifecycle into internal/release
 745c29c41dc3f4ce9f155d0ee4eb9f200572631e
+# refactor: extract the Neovim synchronization into internal/neovim
+025a6a7a7a4a2d131225b2ae4bc34f89ff5a7941
