@@ -124,7 +124,8 @@ unset _selfishell_fzf_bin
 # fzf-tab wraps the completion widgets, so it loads synchronously after
 # compinit (completion.zsh runs first) instead of with the deferred pair below.
 if command -v fzf >/dev/null 2>&1 && [[ -r "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh" ]]; then
-  source "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
+  # Reloading the configuration must not wrap the completion widgets again.
+  (( $+functions[fzf-tab-complete] )) || source "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
 
   # Keep previews per-command so they do not run for option flags.
 
@@ -214,10 +215,14 @@ typeset -gA FAST_HIGHLIGHT_STYLES
 # second handler: the first one unfunctions the shared handler, and the other
 # would keep waking zle on /dev/null and spin the CPU.
 if (( ! $+functions[_selfishell_deferred_plugins] )); then
-  _selfishell_deferred_plugin_files=(
-    "$SELFISHELL_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"
-    "$SELFISHELL_ZSH_PLUGINS/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
-  )
+  # A plugin already loaded by an earlier source of this configuration is not
+  # sourced again: each load wraps every widget once more and slows typing.
+  _selfishell_deferred_plugin_files=()
+  (( $+functions[_zsh_autosuggest_start] )) ||
+    _selfishell_deferred_plugin_files+=("$SELFISHELL_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh")
+  (( $+functions[_zsh_highlight] )) ||
+    _selfishell_deferred_plugin_files+=("$SELFISHELL_ZSH_PLUGINS/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh")
+  _selfishell_deferred_readable=(${^_selfishell_deferred_plugin_files}(N-r))
   _selfishell_deferred_plugins() {
     local _selfishell_fd="$1" _selfishell_file
     zle -F "$_selfishell_fd"
@@ -231,8 +236,7 @@ if (( ! $+functions[_selfishell_deferred_plugins] )); then
     zle -R
     unfunction _selfishell_deferred_plugins
   }
-  if [[ -r "$_selfishell_deferred_plugin_files[1]" || -r "$_selfishell_deferred_plugin_files[2]" ]] &&
-     exec {_selfishell_deferred_fd}</dev/null; then
+  if (( $#_selfishell_deferred_readable )) && exec {_selfishell_deferred_fd}</dev/null; then
     zle -F "$_selfishell_deferred_fd" _selfishell_deferred_plugins 2>/dev/null || {
       exec {_selfishell_deferred_fd}<&-
       unset _selfishell_deferred_fd
@@ -242,7 +246,7 @@ if (( ! $+functions[_selfishell_deferred_plugins] )); then
     unfunction _selfishell_deferred_plugins
     unset _selfishell_deferred_plugin_files
   fi
-  unset _selfishell_deferred_fd
+  unset _selfishell_deferred_fd _selfishell_deferred_readable
 fi
 
 # Sourcing starship's init twice makes its keymap wrapper call itself.
