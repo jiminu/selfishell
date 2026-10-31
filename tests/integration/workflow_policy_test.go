@@ -790,6 +790,47 @@ func TestCIWorkflowUsesTrustedBaseClassifier(t *testing.T) {
 	}
 }
 
+// The shell job skips the Lua check without nvim, so the Neovim job must fail
+// rather than skip when the pinned nvim is missing.
+func TestCILuaCheckUsesPinnedNeovim(t *testing.T) {
+	t.Parallel()
+	_, jobs := workflowSections(t, "ci.yml")
+	block := policyRun(t, policyStep(t, policyJob(t, jobs, "neovim-developer-e2e"), "Check Lua syntax with pinned Neovim"))
+	for _, present := range []bool{true, false} {
+		t.Run(fmt.Sprintf("nvim=%t", present), func(t *testing.T) {
+			home := t.TempDir()
+			mise, neovim, log := filepath.Join(home, "mise"), filepath.Join(home, "neovim"), filepath.Join(home, "log")
+			policyWrite(t, mise, "#!/bin/sh\ncase \"$1\" in install) printf '%s %s\\n' \"$*\" \"$MISE_GLOBAL_CONFIG_FILE\" >>\"$LOG\" ;; where) printf '%s\\n' \"$FAKE_NEOVIM\" ;; *) exit 2 ;; esac\n")
+			files := []string{mise}
+			if present {
+				policyWrite(t, filepath.Join(neovim, "bin/nvim"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$LOG\"\n")
+				files = append(files, filepath.Join(neovim, "bin/nvim"))
+			}
+			for _, file := range files {
+				if err := os.Chmod(file, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			env := append(policyEnv(home), "RUNNER_TEMP="+home, "GITHUB_WORKSPACE="+repoRoot(), "PINNED_MISE="+mise, "FAKE_NEOVIM="+neovim, "LOG="+log)
+			got, err := runCommandIn(home, repoRoot(), []string{"/bin/bash", "-e", "-o", "pipefail", "-c", block}, nil, env, 10*time.Second)
+			data, _ := os.ReadFile(log)
+			calls := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if calls[0] != "install neovim "+filepath.Join(repoRoot(), "config/shared/mise.toml") {
+				t.Fatalf("mise calls: %q", data)
+			}
+			if !present {
+				if err != nil || got.Status == 0 || len(calls) != 1 {
+					t.Fatalf("missing nvim: status=%d err=%v log=%q", got.Status, err, data)
+				}
+				return
+			}
+			if err != nil || got.Status != 0 || len(calls) != 2 || !strings.HasPrefix(calls[1], "--clean --headless -l scripts/check-lua.lua ") || !strings.Contains(calls[1], " config/shared/nvim/init.lua") || !strings.Contains(string(got.Stdout), " Lua files with nvim") {
+				t.Fatalf("Lua check: status=%d err=%v log=%q stdout=%s stderr=%s", got.Status, err, data, got.Stdout, got.Stderr)
+			}
+		})
+	}
+}
+
 func TestReleaseWorkflowMainAncestryAndImmutableGuard(t *testing.T) {
 	t.Parallel()
 	_, jobs := workflowSections(t, "release.yml")

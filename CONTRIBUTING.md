@@ -32,8 +32,11 @@ archive builds. Publication follows the [release procedure](docs/RELEASING.md#pu
 
 ## Tests and repository gate
 
-`bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, then runs
-Go format, vet, tests and four target builds through `scripts/check-go.sh`.
+`bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, parses the
+Neovim Lua through `scripts/check-lua.sh`, then runs Go format, vet, tests and
+four target builds through `scripts/check-go.sh`. The Lua parse uses `nvim` (or
+`luac`) from PATH and prints a skip line without either; CI runs it in the Neovim
+job with the pinned `nvim`.
 Go owns maintained setup, process execution, assertions and cleanup. Native
 Zsh/Lua probes cover their runtime APIs; small child-process fixtures inject
 external failures.

@@ -198,6 +198,18 @@ jobs:
           GOCACHE="$go_cache" go run ./cmd/selfishell-dev "$GITHUB_WORKSPACE" mise-only
           printf 'PINNED_MISE=%s\n' "$HOME/.local/bin/mise" >>"$GITHUB_ENV"
 
+      - name: Check Lua syntax with pinned Neovim
+        run: |
+          # The shell job has no nvim and skips this check; install only the pinned one.
+          export HOME="$RUNNER_TEMP/selfishell-lua-home"
+          export MISE_GLOBAL_CONFIG_FILE="$GITHUB_WORKSPACE/config/shared/mise.toml"
+          export MISE_TRUSTED_CONFIG_PATHS="$GITHUB_WORKSPACE/config/shared"
+          mkdir -p "$HOME"
+          "$PINNED_MISE" install neovim
+          neovim_bin="$("$PINNED_MISE" where neovim)/bin"
+          test -x "$neovim_bin/nvim"
+          PATH="$neovim_bin:$PATH" bash scripts/check-lua.sh
+
       - name: Verify Go cleanup with pinned mise
         run: PATH="$(dirname "$PINNED_MISE"):$PATH" go test ./internal/selfishell -run '^TestRealMisePruneRetainsCurrentAndProjectNotRollbackOnly$' -count=1 -v
 
