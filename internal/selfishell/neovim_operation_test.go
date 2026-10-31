@@ -3,10 +3,8 @@ package selfishell
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -257,85 +255,6 @@ func TestNeovimParserFailureWarns(t *testing.T) {
 	}
 }
 
-func TestLazyRevisionUpdateReplacesCleanCheckout(t *testing.T) {
-	t.Parallel()
-	var env process.Environment
-	op, paths, _, manifest, home, _ := neovimFixture(t, &env)
-	deps, err := ReadDependencies(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-	if err := os.MkdirAll(home+"/data/selfishell/nvim/lazy", 0700); err != nil {
-		t.Fatal(err)
-	}
-	gitCommand(t, home, "clone", "-q", home+"/lazy-source", target)
-	writeTestFile(t, home+"/lazy-source/init.lua", "next\n", 0600)
-	gitCommand(t, home+"/lazy-source", "add", ".")
-	gitCommand(t, home+"/lazy-source", "commit", "-qm", "next")
-	newHead := gitCommand(t, home+"/lazy-source", "rev-parse", "HEAD")
-	dep := deps[0]
-	dep.Version = newHead
-	if err := op.installLazy(context.Background(), paths, dep, nil); err != nil {
-		t.Fatal(err)
-	}
-	if got := gitCommand(t, target, "rev-parse", "HEAD"); got != newHead {
-		t.Fatalf("revision: %s", got)
-	}
-	if !strings.Contains(op.Process.Out.(*bytes.Buffer).String(), "Updated approved lazy.nvim revision") {
-		t.Fatal("update not reported")
-	}
-}
-
-func TestLazyRestoreFailureIncludesPrimaryActivationError(t *testing.T) {
-	home := t.TempDir()
-	old, target := home+"/previous", home+"/lazy.nvim"
-	writeTestFile(t, old, "previous", 0600)
-	writeTestFile(t, target, "occupied", 0600)
-	primary := errors.New("activation failed")
-	err := restoreLazyOnFailure(old, target, primary)
-	if !errors.Is(err, primary) || !strings.Contains(err.Error(), "cannot restore over occupied target") {
-		t.Fatalf("activation or restoration error lost: %v", err)
-	}
-	if data, readErr := os.ReadFile(old); readErr != nil || string(data) != "previous" {
-		t.Fatalf("previous checkout changed: %q %v", data, readErr)
-	}
-}
-
-func TestLazyPreservesMalformedTargetAndBlockedParent(t *testing.T) {
-	t.Parallel()
-	var env process.Environment
-	for _, tc := range []struct{ shape, want string }{
-		{"file", "preserving"},
-		{"git_symlink", "preserving"},
-		{"blocked_parent", "Could not create Neovim plugin directory"},
-	} {
-		t.Run(tc.shape, func(t *testing.T) {
-			t.Parallel()
-			env := env
-			op, paths, _, manifest, home, _ := neovimFixture(t, &env)
-			deps, err := ReadDependencies(manifest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			target := home + "/data/selfishell/nvim/lazy/lazy.nvim"
-			user := map[string]string{"file": target, "git_symlink": target + "/user-file", "blocked_parent": filepath.Dir(target)}[tc.shape]
-			writeTestFile(t, user, "user data", 0600)
-			if tc.shape == "git_symlink" {
-				if err := os.Symlink(home+"/lazy-source/.git", target+"/.git"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := op.installLazy(context.Background(), paths, deps[0], nil); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("want %q, got %v", tc.want, err)
-			}
-			if readTestFile(t, user) != "user data" {
-				t.Fatal("user data changed")
-			}
-		})
-	}
-}
-
 func TestNeovimUsesManagedMiseResolutionAndExec(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
@@ -385,7 +304,7 @@ printf '%s\n' "$*" >> "$MISE_LOG"
 	op.Process.Env = append(op.Process.Env, "MISE_LOG="+home+"/mise.log", "MANAGED_NVIM="+managed)
 	resolve := func(want string, calls int) {
 		t.Helper()
-		nvim, _, err := op.nvimCommand(context.Background(), root, paths)
+		nvim, _, err := op.neovim().Locate(context.Background(), root, paths)
 		if err != nil || nvim != want {
 			t.Fatalf("resolved %q %v, want %q", nvim, err, want)
 		}

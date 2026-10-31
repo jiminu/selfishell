@@ -68,7 +68,7 @@ func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
 	op := PackageOperation{Process: process.Process{Out: &out, Err: &stderr, Progress: ui}}
-	_, err := op.runNvim(context.Background(), "", "/bin/sh", "", "-c", "printf 'nvim failed\\n' >&2; exit 1")
+	_, err := op.neovim().Run(context.Background(), "", "/bin/sh", "", "-c", "printf 'nvim failed\\n' >&2; exit 1")
 	if err == nil || strings.Count(stderr.String(), "nvim failed") != 1 {
 		t.Fatalf("Neovim error must appear once: %v %q", err, stderr.String())
 	}

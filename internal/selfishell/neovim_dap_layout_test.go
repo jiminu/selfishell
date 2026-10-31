@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/neovim"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
 )
@@ -46,7 +47,7 @@ func TestNeovimDAPLayout(t *testing.T) {
 	for _, dep := range deps {
 		name := filepath.Base(dep.Name)
 		if name == "nvim-tree.lua" || name == "nvim-dap" || name == "nvim-dap-ui" || name == "nvim-nio" {
-			actual, err := (&PackageOperation{Process: p}).gitHead(ctx, filepath.Join(plugins, name))
+			actual, err := neovim.GitHead(ctx, p, filepath.Join(plugins, name))
 			if err != nil || actual != dep.Version {
 				t.Fatalf("plugin %s HEAD %s want %s: %v", dep.Name, actual, dep.Version, err)
 			}

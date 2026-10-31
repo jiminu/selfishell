@@ -61,9 +61,13 @@ The Go code is layered, and imports point only downward:
      and rolls them back in the versioned install layout. The core drives it
      through `release.Operation`, passing `Rollback` a confirmation function,
      and keeps the command arguments, prompts and exit codes.
+   - `internal/neovim` synchronizes the pinned Neovim plugins, the lazy.nvim
+     checkout and the default LSP servers. `PackageOperation` builds a
+     `neovim.Operation` (with a `report.Reporter`, the mise lookup and the nvim
+     resolution cache) and keeps loading the dependency records.
 3. `internal/selfishell` keeps the CLI, the configuration lifecycle,
-   install/update/status/uninstall, package adapters, inventory and Neovim. It
-   imports the packages above; they never import it.
+   install/update/status/uninstall, package adapters and inventory. It imports
+   the packages above; they never import it.
 4. Commands under `cmd/` import only the packages they use.
 
 New code goes in the lowest layer whose dependencies it needs. A foundation

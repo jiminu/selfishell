@@ -1,4 +1,4 @@
-package selfishell
+package neovim
 
 import (
 	"context"
@@ -9,9 +9,10 @@ import (
 	"github.com/jiminu/selfishell/internal/report"
 )
 
-// MasonInstall waits for every installer in headless mode and exits nonzero on
-// failure. Filter first because the command otherwise reinstalls current tools.
-const defaultLSPUpdateLua = `
+// LSPUpdateScript is the headless Lua UpdateLSP runs. MasonInstall waits for
+// every installer in headless mode and exits nonzero on failure. Filter first
+// because the command otherwise reinstalls current tools.
+const LSPUpdateScript = `
 local ok, message = pcall(function()
   require("lazy").load({ plugins = { "mason.nvim", "mason-lspconfig.nvim" } })
   local registry = require("mason-registry")
@@ -47,26 +48,27 @@ end)
 if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 `
 
-func (o *PackageOperation) UpdateDefaultLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
+// UpdateLSP installs this release's approved default LSP server versions.
+func (o Operation) UpdateLSP(ctx context.Context, root string, paths managed.Paths, dryRun bool) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if dryRun {
-		o.report(report.Preview, "Would update default Neovim LSP servers to this release's approved versions.")
+		o.Report.Report("Tools", report.Preview, "Would update default Neovim LSP servers to this release's approved versions.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	nvim, mise, err := o.nvimCommand(ctx, root, paths)
+	nvim, mise, err := o.Locate(ctx, root, paths)
 	if err != nil {
 		return err
 	}
-	if progressOf(o.Process) == nil {
+	if o.Process.Progress == nil {
 		fmt.Fprintln(o.Process.Out, "Updating default Neovim LSP servers to approved versions...")
 	}
-	if _, err := o.runNvim(ctx, root, nvim, mise, "--headless", "+lua "+defaultLSPUpdateLua, "+qa"); err != nil {
+	if _, err := o.Run(ctx, root, nvim, mise, "--headless", "+lua "+LSPUpdateScript, "+qa"); err != nil {
 		return fmt.Errorf("could not update default Neovim LSP servers: %w", err)
 	}
-	o.report(report.Success, "Neovim LSP servers: approved versions")
+	o.Report.Report("Tools", report.Success, "Neovim LSP servers: approved versions")
 	return nil
 }
