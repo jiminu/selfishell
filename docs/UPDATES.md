@@ -89,9 +89,11 @@ The package step of install and tools updates removes that directory, and its
   `man/man1/zinit.1`.
 
 Otherwise the checkout is kept and `status` prints a one-line note; delete it by
-hand if you do not use Zinit directly. Dry runs only preview the removal, and
-`--skip-packages` skips it. A failed removal is reported as a warning and
-retried by the next run.
+hand if you do not use Zinit directly. The managed startup files no longer load
+Zinit, so personal configuration that still calls `zinit` must source
+`zinit.git/zinit.zsh` from that directory itself. Dry runs only preview the
+removal, and `--skip-packages` skips it. A failed removal is reported as a
+warning and retried by the next run.
 
 After the removal, `selfishell rollback` to an older release that still loads
 plugins through Zinit starts shells without plugins until that release's own
