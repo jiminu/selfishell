@@ -1,10 +1,14 @@
 vim.opt.rtp:prepend(vim.env.SELFISHELL_NVIM_CONFIG)
--- Poll fast, and count Git spawns to observe the polling timer.
+-- Poll fast, and count the probe's Git spawns to observe the polling timer.
+-- Only git_remote sets GIT_NO_LAZY_FETCH; plugins such as nvim-tree run Git
+-- too, sometimes synchronously without an on_exit callback, and pass through.
 local interval = 20
 vim.g.selfishell_git_remote_interval = interval
 local git_calls, running, system = 0, 0, vim.system
 vim.system = function(command, options, on_exit)
-  if command[1] ~= "git" then return system(command, options, on_exit) end
+  local probe = command[1] == "git" and type(options) == "table" and type(options.env) == "table"
+    and options.env.GIT_NO_LAZY_FETCH == "1" and type(on_exit) == "function"
+  if not probe then return system(command, options, on_exit) end
   git_calls, running = git_calls + 1, running + 1
   return system(command, options, function(result)
     on_exit(result)
