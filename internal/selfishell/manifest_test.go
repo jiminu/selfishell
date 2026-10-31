@@ -49,7 +49,7 @@ func TestShippedDependencyRevisionsAreCommits(t *testing.T) {
 		switch dep.Kind {
 		case "git":
 			pin = dep.Checksum
-		case "zsh-plugin", "nvim-plugin":
+		case "nvim-plugin":
 		default:
 			continue
 		}
@@ -58,7 +58,7 @@ func TestShippedDependencyRevisionsAreCommits(t *testing.T) {
 			t.Fatalf("%s %s is not pinned to a commit: %q", dep.Kind, dep.Name, pin)
 		}
 	}
-	if kinds["git"] == 0 || kinds["zsh-plugin"] == 0 || kinds["nvim-plugin"] == 0 {
+	if kinds["git"] == 0 || kinds["nvim-plugin"] == 0 {
 		t.Fatalf("pinned dependency kinds missing: %v", kinds)
 	}
 }

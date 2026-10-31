@@ -386,11 +386,11 @@ func TestInventoryDirectExternalSymlinkAndManagedInvalid(t *testing.T) {
 }
 func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
-	target := filepath.Join(os.Getenv("HOME"), "data", "zinit", "zinit.git")
-	fixtureFile(t, filepath.Join(target, "zinit.zsh"), ":\n", 0600)
-	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.15.0 all all source - .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+	target := filepath.Join(os.Getenv("HOME"), "data", "testgit")
+	fixtureFile(t, filepath.Join(target, "marker"), ":\n", 0600)
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source - .local/share/testgit marker\n", 0600)
 	inv := inventory(t, root, paths, warnings)
-	got, err := inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err := inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,8 +398,8 @@ func TestInventoryDirectGitCheckoutAndPlatform(t *testing.T) {
 	if _, err := inv.Detect("direct", "unknown", "linux", "amd64"); err == nil {
 		t.Fatal("missing approved dependency accepted")
 	}
-	fixtureFile(t, filepath.Join(paths.State, "dependencies/zinit"), "v3.15.0\n", 0600)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	fixtureFile(t, filepath.Join(paths.State, "dependencies/testgit"), "v3.15.0\n", 0600)
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,7 +561,7 @@ func TestInventoryMiseManagedBinaryOutsidePath(t *testing.T) {
 }
 func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	root, paths, warnings, _ := inventoryFixture(t)
-	target := filepath.Join(os.Getenv("HOME"), "data", "zinit", "zinit.git")
+	target := filepath.Join(os.Getenv("HOME"), "data", "testgit")
 	if err := os.MkdirAll(target, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -571,9 +571,9 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	marker := filepath.Join(target, "zinit.zsh")
+	marker := filepath.Join(target, "marker")
 	fixtureFile(t, marker, ":\n", 0600)
-	for _, args := range [][]string{{"add", "zinit.zsh"}, {"commit", "--quiet", "-m", "initial"}} {
+	for _, args := range [][]string{{"add", "marker"}, {"commit", "--quiet", "-m", "initial"}} {
 		cmd := exec.Command("git", append([]string{"-C", target}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
@@ -585,10 +585,10 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	sha := strings.TrimSpace(string(out))
-	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.15.0 all all source "+sha+" .local/share/zinit/zinit.git zinit.zsh\n", 0600)
-	fixtureFile(t, filepath.Join(paths.State, "dependencies/zinit"), "v3.15.0\n", 0600)
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source "+sha+" .local/share/testgit marker\n", 0600)
+	fixtureFile(t, filepath.Join(paths.State, "dependencies/testgit"), "v3.15.0\n", 0600)
 	inv := inventory(t, root, paths, warnings)
-	got, err := inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err := inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,43 +596,43 @@ func TestInventoryDirectManagedGitChecksCommitAndTrackedChanges(t *testing.T) {
 	t.Setenv("GIT_DIR", root+"/foreign")
 	t.Setenv("GIT_WORK_TREE", root+"/foreign")
 	fixtureFile(t, target+"/.git/HEAD", "invalid\n", 0600)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 	fixtureFile(t, target+"/.git/HEAD", sha+"\n", 0600)
 	fixtureFile(t, target+"/untracked", "user data\n", 0600)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "v3.15.0", "selfishell", "v3.15.0")
 	fixtureFile(t, marker, "changed\n", 0600)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 	fixtureFile(t, marker, ":\n", 0600)
-	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.15.0 all all source deadbeef .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source deadbeef .local/share/testgit marker\n", 0600)
 	inv = inventory(t, root, paths, warnings)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "missing", "selfishell", "v3.15.0")
 	// A newer pin's commit cannot judge the recorded checkout, but tracked
 	// changes still can.
-	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.16.0 all all source deadbeef .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+	fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.16.0 all all source deadbeef .local/share/testgit marker\n", 0600)
 	inv = inventory(t, root, paths, warnings)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantTool(t, got, "v3.15.0", "selfishell", "v3.16.0")
 	fixtureFile(t, marker, "changed\n", 0600)
-	got, err = inv.Detect("direct", "zinit", "linux", "amd64")
+	got, err = inv.Detect("direct", "testgit", "linux", "amd64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -688,7 +688,7 @@ func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
-			real, lexical := home+"/actual/data/zinit/zinit.git", home+"/work/data/zinit/zinit.git"
+			real, lexical := home+"/actual/data/testgit", home+"/work/data/testgit"
 			sha, want := "-", ToolResult{"detected", "external", "v3.15.0"}
 			switch shape {
 			case "managed_real_checkout":
@@ -696,22 +696,22 @@ func TestInventoryDirectGitFollowsRawXDGSpelling(t *testing.T) {
 					t.Fatal(err)
 				}
 				gitCommand(t, real, "init", "--quiet")
-				fixtureFile(t, real+"/zinit.zsh", ":\n", 0600)
-				gitCommand(t, real, "add", "zinit.zsh")
+				fixtureFile(t, real+"/marker", ":\n", 0600)
+				gitCommand(t, real, "add", "marker")
 				gitCommand(t, real, "commit", "--quiet", "-m", "initial")
 				sha = gitCommand(t, real, "rev-parse", "HEAD")
-				fixtureFile(t, filepath.Join(paths.State, "dependencies/zinit"), "v3.15.0\n", 0600)
+				fixtureFile(t, filepath.Join(paths.State, "dependencies/testgit"), "v3.15.0\n", 0600)
 				want = ToolResult{"v3.15.0", "selfishell", "v3.15.0"}
 			case "external_real_marker":
-				fixtureFile(t, real+"/zinit.zsh", ":\n", 0600)
+				fixtureFile(t, real+"/marker", ":\n", 0600)
 			case "external_lexical_marker":
 				fixtureFile(t, real+"/user-file", "user data\n", 0600)
-				fixtureFile(t, lexical+"/zinit.zsh", ":\n", 0600)
+				fixtureFile(t, lexical+"/marker", ":\n", 0600)
 				want = ToolResult{"missing", "none", "v3.15.0"}
 			}
-			fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git zinit v3.15.0 all all source "+sha+" .local/share/zinit/zinit.git zinit.zsh\n", 0600)
+			fixtureFile(t, filepath.Join(root, "dependencies.conf"), "git testgit v3.15.0 all all source "+sha+" .local/share/testgit marker\n", 0600)
 			before := pathSnapshot(t, root)
-			got, err := inventory(t, root, paths, warnings).Detect("direct", "zinit", "linux", "amd64")
+			got, err := inventory(t, root, paths, warnings).Detect("direct", "testgit", "linux", "amd64")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -96,22 +96,17 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 		}
 		return commit, nil
 	}
-	tag, err := latestTag("zdharma-continuum/zinit")
-	if err != nil {
-		return nil, err
-	}
-	commit, err := gitCommit("https://github.com/zdharma-continuum/zinit.git", "refs/tags/"+tag)
-	if err != nil {
-		return nil, err
-	}
-	record("git", "zinit", tag, commit)
 	for _, dependency := range dependencies {
-		if dependency.Kind != "nvim-plugin" && dependency.Kind != "zsh-plugin" {
+		if dependency.Kind != "nvim-plugin" && dependency.Kind != "git" {
 			continue
 		}
+		repository := dependency.Name
+		if dependency.Kind == "git" {
+			repository = strings.TrimSuffix(strings.TrimPrefix(dependency.Source, "https://github.com/"), ".git")
+		}
 		ref := "HEAD"
-		if releasePinnedPlugins[dependency.Name] {
-			tag, err := latestTag(dependency.Name)
+		if releasePinnedPlugins[repository] {
+			tag, err := latestTag(repository)
 			if err != nil {
 				return nil, err
 			}
@@ -121,9 +116,14 @@ func discoverDependencyUpdates(ctx context.Context, p selfishell.Process, depend
 		if err != nil {
 			return nil, err
 		}
-		record(dependency.Kind, dependency.Name, commit)
+		if dependency.Kind == "git" {
+			// Version and checksum are both the commit, so drift checks stay on.
+			record("git", dependency.Name, commit, commit)
+		} else {
+			record(dependency.Kind, dependency.Name, commit)
+		}
 	}
-	tag, err = latestTag("jdx/mise")
+	tag, err := latestTag("jdx/mise")
 	if err != nil {
 		return nil, err
 	}

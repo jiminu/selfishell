@@ -43,7 +43,7 @@ func nativeQuiet(t *testing.T, result capture) {
 func nativeCommon() string     { return filepath.Join(repoRoot(), "config/shared/zsh/common.zsh") }
 func nativeCompletion() string { return filepath.Join(repoRoot(), "config/shared/zsh/completion.zsh") }
 
-func TestNativeGitCompletionInitializesWithoutZinit(t *testing.T) {
+func TestNativeGitCompletionInitializesWithoutPlugins(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
 	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; (( $+functions[_git] )) || exit 10; [[ -s "$HOME/.zcompdump" ]] || exit 11`, "SELFISHELL_SOURCE="+nativeCommon())
@@ -54,96 +54,50 @@ func TestNativeGitCompletionInitializesWithoutZinit(t *testing.T) {
 	}
 }
 
-// mise skips the first prompt's full hook-env only when PATH is unchanged
-// since activation, so Zinit's $ZPFX/bin must be added before it.
-func TestNativeZinitLoadsBeforeMiseActivation(t *testing.T) {
-	t.Parallel()
-	home := nativeHome(t)
-	nativeWrite(t, filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh"), `path=("$HOME/zpfx/bin" $path)
-zinit() { return 0; }
-`, 0600)
-	bin := filepath.Join(filepath.Dir(home), "bin")
-	nativeWrite(t, filepath.Join(bin, "mise"), `#!/bin/sh
-[ "$*" = 'activate zsh' ] || exit 1
-printf '%s\n' 'typeset -g SELFISHELL_TEST_ACTIVATION_PATH="$PATH"'
-`, 0700)
-	r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; [[ -n "$SELFISHELL_TEST_ACTIVATION_PATH" ]] || exit 10; (( ${path[(I)$HOME/zpfx/bin]} )) || exit 11; [[ "$PATH" == "$SELFISHELL_TEST_ACTIVATION_PATH" ]] || exit 12`,
-		"PATH="+bin+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon())
-	nativeQuiet(t, r)
+// nativePlugins provisions plugin stubs that log when they are sourced.
+func nativePlugins(t *testing.T, home string, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		nativeWrite(t, filepath.Join(home, ".local/share/selfishell/zsh-plugins", name, name+".plugin.zsh"), `[[ -z "$SELFISHELL_TEST_PLUGIN_LOG" ]] || print -r -- `+name+` >>"$SELFISHELL_TEST_PLUGIN_LOG"`+"\n", 0600)
+	}
 }
-func TestNativeZinitStartup(t *testing.T) {
+
+func TestNativePluginStartup(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		zinit    bool
-		complete bool
-		want     int
-	}{
-		{"missing_zinit", false, false, 0}, {"missing_plugins", true, false, 0}, {"preprovisioned", true, true, 4}, {"incomplete_checkout", true, false, 0},
+	for _, tc := range []struct{ name, want string }{
+		{"absent", ""}, {"marker_missing", ""}, {"provisioned", "fzf-tab\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			home := nativeHome(t)
 			root := filepath.Dir(home)
-			log := filepath.Join(root, "zinit-calls")
-			if tc.zinit {
-				zinit := filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh")
-				nativeWrite(t, zinit, `typeset -gA ZINIT
-ZINIT[PLUGINS_DIR]="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
-zinit() {
-  print -r -- "$*" >>"$SELFISHELL_TEST_ZINIT_LOG"
-  if [[ "$1" == ice ]]; then
-    SELFISHELL_TEST_BLOCK_FPATH=${@[(I)blockf]}
-  elif [[ "$1" == light && "$2" == zsh-users/zsh-completions && "$SELFISHELL_TEST_BLOCK_FPATH" == 0 ]]; then
-    source "$ZINIT[PLUGINS_DIR]/zsh-users---zsh-completions/zsh-completions.plugin.zsh"
-  fi
-  return 0
-}
-`, 0600)
-				for _, p := range []string{"zsh-users---zsh-completions", "Aloxaf---fzf-tab", "zsh-users---zsh-autosuggestions", "zdharma-continuum---fast-syntax-highlighting"} {
-					path := filepath.Join(home, ".local/share/zinit/plugins", p)
-					if tc.complete {
-						path = filepath.Join(path, ".git")
-					}
-					if tc.complete || tc.name == "incomplete_checkout" && p != "Aloxaf---fzf-tab" {
-						mustFS(t, os.MkdirAll(path, 0700))
-					}
+			plugins := filepath.Join(home, ".local/share/selfishell/zsh-plugins")
+			names := []string{"zsh-completions", "fzf-tab", "zsh-autosuggestions", "fast-syntax-highlighting"}
+			switch tc.name {
+			case "marker_missing":
+				for _, name := range names {
+					mustFS(t, os.MkdirAll(filepath.Join(plugins, name, ".git"), 0700))
 				}
-				if tc.complete {
-					plugin := filepath.Join(home, ".local/share/zinit/plugins/zsh-users---zsh-completions")
-					nativeWrite(t, filepath.Join(plugin, "zsh-completions.plugin.zsh"), `fpath+="${0:A:h}/src"`+"\n", 0600)
-					nativeWrite(t, filepath.Join(plugin, "src/_selfishell_completion_probe"), "#compdef selfishell-completion-probe\n", 0600)
-				}
+			case "provisioned":
+				nativePlugins(t, home, names...)
+				nativeWrite(t, filepath.Join(plugins, "zsh-completions/src/_selfishell_completion_probe"), "#compdef selfishell-completion-probe\n", 0600)
 			}
 			fakeBin := filepath.Join(root, "bin")
-			if tc.complete {
-				nativeWrite(t, filepath.Join(fakeBin, "fzf"), "#!/bin/sh\nprintf ':\\n'\n", 0700)
+			nativeWrite(t, filepath.Join(fakeBin, "fzf"), "#!/bin/sh\nprintf ':\\n'\n", 0700)
+			log := filepath.Join(root, "plugin-log")
+			// The deferred pair only loads once zle waits for input, which never
+			// happens here; compinit must already see the completions src dir.
+			r := nativeRun(t, home, `source "$SELFISHELL_SOURCE"; print -r -- "probe=${_comps[selfishell-completion-probe]} first=${fpath[1]}"`, "PATH="+fakeBin+":"+nativePath, "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_PLUGIN_LOG="+log)
+			got, src := string(r.Stdout), filepath.Join(plugins, "zsh-completions/src")
+			if len(r.Stderr) != 0 || tc.name == "provisioned" && got != "probe=_selfishell_completion_probe first="+src+"\n" ||
+				tc.name != "provisioned" && (!strings.HasPrefix(got, "probe= ") || strings.Contains(got, plugins)) {
+				t.Fatalf("startup: stdout=%q stderr=%q", got, r.Stderr)
 			}
-			path := nativePath
-			if tc.complete {
-				path = fakeBin + ":" + path
-			}
-			probe := `source "$SELFISHELL_SOURCE"`
-			if tc.complete {
-				probe += `; [[ "${_comps[selfishell-completion-probe]}" == _selfishell_completion_probe ]] || exit 20`
-			}
-			r := nativeRun(t, home, probe, "PATH="+path, "SELFISHELL_SOURCE="+nativeCommon(), "SELFISHELL_TEST_ZINIT_LOG="+log)
-			nativeQuiet(t, r)
 			data, err := os.ReadFile(log)
-			if os.IsNotExist(err) {
-				data = nil
-				err = nil
-			}
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
 			}
-			count := 0
-			for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-				if strings.HasPrefix(line, "light ") {
-					count++
-				}
-			}
-			if count != tc.want {
-				t.Fatalf("light calls: got %d want %d; log=%q", count, tc.want, data)
+			if string(data) != tc.want {
+				t.Fatalf("sourced plugins: got %q want %q", data, tc.want)
 			}
 		})
 	}

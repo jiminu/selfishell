@@ -13,15 +13,11 @@ func previewFixture(t *testing.T) string {
 	t.Helper()
 	home := nativeHome(t)
 	fakeExecutable(t, home, "fzf", "printf ':\\n'")
-	nativeWrite(t, filepath.Join(home, ".local/share/zinit/zinit.git/zinit.zsh"), `typeset -gA ZINIT
-ZINIT[PLUGINS_DIR]="$HOME/.local/share/zinit/plugins"
-zinit() { :; }
-`, 0600)
 	return home
 }
 func previewCommands(t *testing.T, home string) map[string]string {
 	t.Helper()
-	mustFS(t, os.MkdirAll(filepath.Join(home, ".local/share/zinit/plugins/Aloxaf---fzf-tab/.git"), 0700))
+	nativePlugins(t, home, "fzf-tab")
 	contexts := map[string]string{"directory": ":fzf-tab:complete:cd:x", "file": ":fzf-tab:complete:vim:x", "branch": ":fzf-tab:complete:git-switch:x", "diff": ":fzf-tab:complete:git-add:x", "stash": ":fzf-tab:complete:git-stash-show:x", "process": ":fzf-tab:complete:kill:argument-rest"}
 	commands := map[string]string{}
 	for name, context := range contexts {

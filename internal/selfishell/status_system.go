@@ -2,7 +2,6 @@ package selfishell
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -114,63 +113,6 @@ func (c CLI) statusCompiler(platform string, result int, system *diagnosticGroup
 		fmt.Fprintf(c.Out, "        Install build tools by running: %s\n", c.bold("sudo apt install build-essential"))
 	}
 	return 1
-}
-func (c CLI) statusPlugins(dependencies []Dependency) bool {
-	dataHome := envDefault("XDG_DATA_HOME", os.Getenv("HOME")+"/.local/share")
-	zinit, err := os.Stat(dataHome + "/zinit/zinit.git/zinit.zsh")
-	if err != nil || zinit.Size() == 0 {
-		return false
-	}
-	var missing, dirty, drifted []string
-	reported := false
-	for _, d := range dependencies {
-		if d.Kind != "zsh-plugin" {
-			continue
-		}
-		dir := dataHome + "/zinit/plugins/" + strings.ReplaceAll(d.Name, "/", "---")
-		gitDir, err := os.Stat(dir + "/.git")
-		if err != nil || !gitDir.IsDir() {
-			missing = append(missing, d.Name)
-			continue
-		}
-		changes, err := runInventoryQuery("", append(os.Environ(), "GIT_OPTIONAL_LOCKS=0"), "git", "-C", dir, "status", "--porcelain")
-		if err != nil {
-			c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: could not inspect %s: %s", d.Name, err))
-			reported = true
-			continue
-		}
-		if changes != "" {
-			dirty = append(dirty, d.Name)
-			continue
-		}
-		head, err := inventoryGitHead(dir)
-		if err != nil {
-			c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: could not inspect %s: %s", d.Name, err))
-			reported = true
-		} else if head != d.Version {
-			drifted = append(drifted, d.Name)
-		}
-	}
-	if len(missing) > 0 {
-		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d not provisioned (%s)", len(missing), strings.Join(missing, " ")))
-		fmt.Fprintf(c.Out, "        Run '%s' to provision them; shell startup never downloads plugins.\n", c.bold("selfishell install"))
-		reported = true
-	}
-	if len(dirty) > 0 {
-		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d modified locally (%s)", len(dirty), strings.Join(dirty, " ")))
-		reported = true
-	}
-	if len(drifted) > 0 {
-		c.sayDiagnostic("31", "ERROR", fmt.Sprintf("Zsh plugins: %d at an unapproved revision (%s)", len(drifted), strings.Join(drifted, " ")))
-		reported = true
-	}
-	if len(dirty)+len(drifted) > 0 {
-		c.diagnosticHint("Restore the approved Zsh plugin revisions with:", "selfishell update --tools-only")
-	}
-	if !reported {
-		c.sayDiagnostic("32", "OK", "Zsh plugins: provisioned")
-	}
-	return reported
 }
 
 // diagnosticGroup keeps successful system checks concise without hiding failures.

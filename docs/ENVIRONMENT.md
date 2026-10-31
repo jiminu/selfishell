@@ -1,7 +1,7 @@
 # Development Environment
 
 Selfishell installs one development environment. `packages.conf` declares
-its packages: Zsh, Git, Vim, Starship, Zinit, Neovim, CLI tools, language
+its packages: Zsh, Git, Vim, Starship, Zsh plugins, Neovim, CLI tools, language
 runtimes, compiler tooling, and optional terminal fonts on macOS and WSL.
 
 Selfishell installs a pinned mise binary and activates it for interactive Zsh.

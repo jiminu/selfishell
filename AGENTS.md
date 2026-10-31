@@ -14,9 +14,7 @@ and Ubuntu on WSL. Keep installation simple and maintenance predictable.
   release-only version commit, or introduce a second version source.
 - `packages.conf` defines the environment's package membership.
 - `dependencies.conf` pins direct downloads and Git dependencies, including
-  Zinit, Zsh plugin, and Neovim plugin commits. Zsh plugin commits are repeated
-  in the `zinit ice ver'…'` lines of `config/shared/zsh/completion.zsh` and
-  `interactive.zsh`; change both together, as dependency automation does.
+  Zsh plugin and Neovim plugin commits.
 - `config/shared/mise.toml` pins mise-managed tool versions.
 - `config/shared/nvim/lua/config/languages.lua` pins the default LSP servers as
   `server@version`; the update tools phase applies them through Mason, replacing
@@ -69,7 +67,7 @@ Treat every existing path as user data. Back it up safely, never overwrite a
 backup, and never restore over an occupied target.
 
 Selfishell-owned dependency paths are managed product state and may be replaced
-to restore their approved pins: Zsh plugin checkouts, and Zinit or direct
+to restore their approved pins: Zsh plugin checkouts and other Git or direct
 downloads recorded as Selfishell-installed. A usable unrecorded installation is
 preserved as external. Neovim plugin checkouts move to approved commits only
 while clean: a modified or non-Git checkout stops install and update until the

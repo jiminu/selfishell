@@ -121,104 +121,124 @@ if _selfishell_fzf_bin="$(command -v fzf)"; then
 fi
 unset _selfishell_fzf_bin
 
-if (($+functions[zinit])); then
-  # Pinned to the commits recorded in dependencies.conf; keep the two in
-  # sync.
-  # fzf-tab must be loaded synchronously (without wait) to ensure ZLE wrapping is applied in the correct order
-  if command -v fzf >/dev/null 2>&1 && _selfishell_zinit_plugin_ready Aloxaf/fzf-tab; then
-    zinit ice ver'24105b15714bfec37989ed5c5b6e60f572253019'
-    zinit light Aloxaf/fzf-tab
+# fzf-tab wraps the completion widgets, so it loads synchronously after
+# compinit (completion.zsh runs first) instead of with the deferred pair below.
+if command -v fzf >/dev/null 2>&1 && [[ -r "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+  source "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
 
-    # Keep previews per-command so they do not run for option flags.
+  # Keep previews per-command so they do not run for option flags.
 
-    # fzf-tab blanks FZF_DEFAULT_OPTS, so hand it the palette directly.
-    # use-fzf-default-opts would forward the rest of the user's variable, and
-    # --with-nth defeats the NUL encoding it uses for candidates.
-    zstyle ':fzf-tab:*' fzf-flags --color=16
+  # fzf-tab blanks FZF_DEFAULT_OPTS, so hand it the palette directly.
+  # use-fzf-default-opts would forward the rest of the user's variable, and
+  # --with-nth defeats the NUL encoding it uses for candidates.
+  zstyle ':fzf-tab:*' fzf-flags --color=16
 
-    zstyle ':completion:*:descriptions' format '[%d]'
+  zstyle ':completion:*:descriptions' format '[%d]'
 
-    # $realpath is the full path; $word is only the part after the common
-    # prefix. Both branches cap output and fall back to coreutils.
-    # Piped bat cannot detect the background and assumes dark, so the ansi
-    # theme follows the palette instead. BAT_THEME still wins.
-    _selfishell_fzf_tab_path_preview='
-      if [[ -d "$realpath" ]]; then
-        if command -v eza >/dev/null 2>&1; then
-          eza --tree --level=2 --color=always "$realpath" 2>/dev/null
-        else
-          ls -lA "$realpath" 2>/dev/null
-        fi | head -n 200
-      elif [[ -f "$realpath" ]]; then
-        if command -v bat >/dev/null 2>&1; then
-          bat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
-        elif command -v batcat >/dev/null 2>&1; then
-          batcat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
-        else
-          head -n 200 "$realpath" 2>/dev/null
-        fi
+  # $realpath is the full path; $word is only the part after the common
+  # prefix. Both branches cap output and fall back to coreutils.
+  # Piped bat cannot detect the background and assumes dark, so the ansi
+  # theme follows the palette instead. BAT_THEME still wins.
+  _selfishell_fzf_tab_path_preview='
+    if [[ -d "$realpath" ]]; then
+      if command -v eza >/dev/null 2>&1; then
+        eza --tree --level=2 --color=always "$realpath" 2>/dev/null
+      else
+        ls -lA "$realpath" 2>/dev/null
+      fi | head -n 200
+    elif [[ -f "$realpath" ]]; then
+      if command -v bat >/dev/null 2>&1; then
+        bat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+      elif command -v batcat >/dev/null 2>&1; then
+        batcat --color=always --theme="${BAT_THEME:-ansi}" --style=numbers --line-range=:200 "$realpath" 2>/dev/null
+      else
+        head -n 200 "$realpath" 2>/dev/null
       fi
-    '
-    zstyle ':fzf-tab:complete:(cd|z|__zoxide_z):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
-    zstyle ':fzf-tab:complete:(cat|bat|batcat|less|nano|vim|nvim|view):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
-    unset _selfishell_fzf_tab_path_preview
+    fi
+  '
+  zstyle ':fzf-tab:complete:(cd|z|__zoxide_z):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
+  zstyle ':fzf-tab:complete:(cat|bat|batcat|less|nano|vim|nvim|view):*' fzf-preview "$_selfishell_fzf_tab_path_preview"
+  unset _selfishell_fzf_tab_path_preview
 
-    # _git completes this under `git-switch`. A local branch wins, as in git switch;
-    # a bare remote name counts only when one remote has it. Only a resolved hash
-    # reaches `git log`, so same-named paths and options never become the preview.
-    zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
-      if ! ref="$(git show-ref --verify --hash "refs/heads/$word" 2>/dev/null)" &&
-        ! ref="$(git rev-parse --verify --quiet --end-of-options "$word^{commit}" 2>/dev/null)"; then
-        ref=""
-        # for-each-ref treats the word as a glob; branch names cannot contain one.
-        if git check-ref-format "refs/heads/$word" >/dev/null 2>&1; then
-          ref="$(git for-each-ref --format="%(objectname)" "refs/remotes/*/$word" 2>/dev/null)"
-        fi
+  # _git completes this under `git-switch`. A local branch wins, as in git switch;
+  # a bare remote name counts only when one remote has it. Only a resolved hash
+  # reaches `git log`, so same-named paths and options never become the preview.
+  zstyle ':fzf-tab:complete:git-(switch|checkout):*' fzf-preview '
+    if ! ref="$(git show-ref --verify --hash "refs/heads/$word" 2>/dev/null)" &&
+      ! ref="$(git rev-parse --verify --quiet --end-of-options "$word^{commit}" 2>/dev/null)"; then
+      ref=""
+      # for-each-ref treats the word as a glob; branch names cannot contain one.
+      if git check-ref-format "refs/heads/$word" >/dev/null 2>&1; then
+        ref="$(git for-each-ref --format="%(objectname)" "refs/remotes/*/$word" 2>/dev/null)"
       fi
-      if [[ -n "$ref" && "$ref" != *[![:xdigit:]]* ]]; then
-        git log --oneline --decorate --color=always -10 "$ref" -- 2>/dev/null
-      fi
-    '
+    fi
+    if [[ -n "$ref" && "$ref" != *[![:xdigit:]]* ]]; then
+      git log --oneline --decorate --color=always -10 "$ref" -- 2>/dev/null
+    fi
+  '
 
-    # Preview unstaged changes. Command-line options such as --staged are not parsed.
-    zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
-      'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
+  # Preview unstaged changes. Command-line options such as --staged are not parsed.
+  zstyle ':fzf-tab:complete:git-(add|restore|diff):*' fzf-preview \
+    'git diff --color=always -- "${realpath:-$word}" 2>/dev/null | head -n 200'
 
-    # _git-stash appends its subcommand too, so refs complete under
-    # git-stash-<subcommand>; the bare level previews empty. `-p` is explicit
-    # so stash.showStat cannot turn the patch back into a diffstat.
-    zstyle ':fzf-tab:complete:git-stash-(show|pop|apply|drop|branch):*' fzf-preview \
-      'git stash show -p --color=always "$word" 2>/dev/null | head -n 200'
+  # _git-stash appends its subcommand too, so refs complete under
+  # git-stash-<subcommand>; the bare level previews empty. `-p` is explicit
+  # so stash.showStat cannot turn the patch back into a diffstat.
+  zstyle ':fzf-tab:complete:git-stash-(show|pop|apply|drop|branch):*' fzf-preview \
+    'git stash show -p --color=always "$word" 2>/dev/null | head -n 200'
 
-    # Use a ps format shared by BSD and procps; zsh always defines USERNAME.
-    zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
-    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
-      'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'
-    # zstyle answers with the most specific matching pattern rather than a
-    # union, so this context has to repeat the palette the general rule sets.
-    zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --color=16 --preview-window=down:4:wrap
-  fi
-
-  # Rebinding ~700 widgets before every prompt cost 6-7 ms; bind once, after
-  # syntax highlighting wraps them, so suggestions work from the first prompt.
-  ZSH_AUTOSUGGEST_MANUAL_REBIND=1
-  if _selfishell_zinit_plugin_ready zsh-users/zsh-autosuggestions; then
-    zinit ice wait'0' lucid ver'85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5'
-    zinit light zsh-users/zsh-autosuggestions
-  fi
-  if _selfishell_zinit_plugin_ready zdharma-continuum/fast-syntax-highlighting; then
-    # The built-in theme's 256-color entries assume a dark background; the
-    # plugin only fills unset styles, and a saved fast-theme still wins.
-    typeset -gA FAST_HIGHLIGHT_STYLES
-    : ${FAST_HIGHLIGHT_STYLES[variable]:=fg=cyan}
-    : ${FAST_HIGHLIGHT_STYLES[here-string-text]:=bg=blue}
-    : ${FAST_HIGHLIGHT_STYLES[here-string-var]:=fg=cyan,bg=blue}
-    : ${FAST_HIGHLIGHT_STYLES[subtle-bg]:=bg=blue}
-    zinit ice wait'0' lucid ver'4672ad5dd9ad68a7effc1476d65afb7c584ce2b3' \
-      atload'(( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets'
-    zinit light zdharma-continuum/fast-syntax-highlighting
-  fi
+  # Use a ps format shared by BSD and procps; zsh always defines USERNAME.
+  zstyle ':completion:*:*:*:*:processes' command "ps -u $USERNAME -o pid,user,comm"
+  zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview \
+    'ps -p "$word" -o pid,user,%cpu,%mem,command 2>/dev/null'
+  # zstyle answers with the most specific matching pattern rather than a
+  # union, so this context has to repeat the palette the general rule sets.
+  zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --color=16 --preview-window=down:4:wrap
 fi
+
+# Rebinding ~700 widgets before every prompt cost 6-7 ms; bind once, after
+# syntax highlighting wraps them, so suggestions work from the first prompt.
+ZSH_AUTOSUGGEST_MANUAL_REBIND=1
+# The built-in theme's 256-color entries assume a dark background; the
+# plugin only fills unset styles, and a saved fast-theme still wins.
+typeset -gA FAST_HIGHLIGHT_STYLES
+: ${FAST_HIGHLIGHT_STYLES[variable]:=fg=cyan}
+: ${FAST_HIGHLIGHT_STYLES[here-string-text]:=bg=blue}
+: ${FAST_HIGHLIGHT_STYLES[here-string-var]:=fg=cyan,bg=blue}
+: ${FAST_HIGHLIGHT_STYLES[subtle-bg]:=bg=blue}
+
+# Load these two after the first prompt is drawn. /dev/null is always
+# readable, so zle runs the handler once it first waits for input; a precmd
+# hook would run before the prompt is printed and delay it.
+_selfishell_deferred_plugin_files=(
+  "$SELFISHELL_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"
+  "$SELFISHELL_ZSH_PLUGINS/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
+)
+_selfishell_deferred_plugins() {
+  local _selfishell_fd="$1" _selfishell_file
+  zle -F "$_selfishell_fd"
+  exec {_selfishell_fd}<&-
+  for _selfishell_file in $_selfishell_deferred_plugin_files; do
+    [[ -r "$_selfishell_file" ]] && source "$_selfishell_file"
+  done
+  unset _selfishell_deferred_plugin_files
+  (( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets
+  # Highlight and suggest for a line the user already started typing.
+  zle -R
+  unfunction _selfishell_deferred_plugins
+}
+if [[ -r "$_selfishell_deferred_plugin_files[1]" || -r "$_selfishell_deferred_plugin_files[2]" ]] &&
+   exec {_selfishell_deferred_fd}</dev/null; then
+  zle -F "$_selfishell_deferred_fd" _selfishell_deferred_plugins 2>/dev/null || {
+    exec {_selfishell_deferred_fd}<&-
+    unset _selfishell_deferred_fd
+  }
+fi
+if [[ -z "${_selfishell_deferred_fd:-}" ]]; then
+  unfunction _selfishell_deferred_plugins
+  unset _selfishell_deferred_plugin_files
+fi
+unset _selfishell_deferred_fd
 
 # Sourcing starship's init twice makes its keymap wrapper call itself.
 if (( ! $+functions[prompt_starship_precmd] )) && _selfishell_starship_bin="$(command -v starship)"; then
@@ -232,4 +252,4 @@ if (( ! $+functions[prompt_starship_precmd] )) && _selfishell_starship_bin="$(co
 fi
 unset _selfishell_starship_bin
 
-unset SELFISHELL_CACHE_DIR _selfishell_zsh_cache_key
+unset SELFISHELL_CACHE_DIR SELFISHELL_ZSH_PLUGINS _selfishell_zsh_cache_key

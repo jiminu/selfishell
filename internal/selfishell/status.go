@@ -313,9 +313,6 @@ func (c CLI) status(args []string) int {
 		if missing {
 			result = 1
 		}
-		if c.statusPlugins(inventory.dependencies) {
-			result = 1
-		}
 	}
 	return result
 }
@@ -343,12 +340,25 @@ func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform 
 			present++
 		}
 		if verbose {
-			fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, tool.Installed, tool.Source, tool.Approved)
+			installed, approved := tool.Installed, tool.Approved
+			if p.Manager == "direct" {
+				installed, approved = shortRevision(installed), shortRevision(approved)
+			}
+			fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, installed, tool.Source, approved)
 		}
 	}
 	c.toolsSummary(present, requiredMissing, optionalMissing, unknown)
 	return requiredMissing+unknown > 0, nil
 }
+
+// shortRevision abbreviates a full Git commit (a git direct package pin) for display.
+func shortRevision(version string) string {
+	if len(version) == 40 && strings.Trim(version, "0123456789abcdef") == "" {
+		return version[:12]
+	}
+	return version
+}
+
 func blockLabel(name string) string {
 	switch name {
 	case "user-zshrc":

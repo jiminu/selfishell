@@ -28,7 +28,7 @@ latency, or deferred plugin readiness. Use `--prompt` for PTY prompt timing.
 
 Base mode is the default. It measures
 Selfishell's own startup cost independent of external integrations: Starship,
-fzf, zoxide, and Zinit are excluded even if they are installed on the caller's
+fzf, zoxide, and Zsh plugins are excluded even if they are installed on the caller's
 `PATH`. The fixed benchmark path makes results independent of tools installed
 on the developer machine. Every measured shell starts from the isolated home
 directory with an empty isolated mise config. On macOS, base mode also places a
@@ -39,8 +39,8 @@ checkout.
 
 ## Full-environment mode
 
-Full mode provisions pinned mise, Starship, fzf, zoxide, Zinit, and its Zsh
-plugins through the production installers into the temporary `HOME`. It uses
+Full mode provisions pinned mise, Starship, fzf, zoxide, and the Zsh plugins
+through the production installers into the temporary `HOME`. It uses
 the release's exact pins and an isolated mise configuration, so measurements
 include the managed shell integrations without changing the developer's tools
 or plugin checkouts. Provisioning requires network access; run it locally when
@@ -75,7 +75,7 @@ measured state; a changed exit code during sampling fails the benchmark. Exit 1
 is expected when required tools or system prerequisites, such as a package
 manager outside the measured PATH, are missing. Both modes query
 available system package inventories. Base mode uses `/usr/bin:/bin`; full mode
-also shares the temporary pinned shell tools and Zinit plugins and includes
+also shares the temporary pinned shell tools and Zsh plugins and includes
 the caller's PATH tools and package managers.
 It does not install the remaining developer tools or system packages, so these
 results describe a partially provisioned environment, not a complete setup.

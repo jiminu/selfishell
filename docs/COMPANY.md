@@ -36,4 +36,4 @@ Without `latest/download/VERSION`, latest-release discovery fails; pass
 `--version VERSION` to both `install.sh` and `selfishell update`. Archives are
 verified only against the mirrored `SHA256SUMS`, so verify
 [attestations](SECURITY.md) before publishing to the mirror. The variable does
-not redirect mise, Zinit, plugin, or tool downloads.
+not redirect mise, plugin, or tool downloads.

@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -35,38 +36,38 @@ func TestStatusToolsContinuesAfterQueryFailureWithoutMissingHint(t *testing.T) {
 	}
 }
 
-func TestStatusPluginsReportsMissingDirtyDriftedAndInspectionFailures(t *testing.T) {
-	_, _, _, bin := inventoryFixture(t)
-	t.Setenv("PATH", bin)
-	data := os.Getenv("XDG_DATA_HOME") + "/zinit"
-	fixtureFile(t, data+"/zinit.git/zinit.zsh", "# fixture\n", 0600)
-	version := strings.Repeat("a", 40)
-	for _, name := range []string{"dirty", "drifted", "broken", "bad-head"} {
-		head := strings.Repeat("b", 40)
-		if name == "bad-head" {
-			head = "invalid"
+// Zsh plugins are git direct packages; drifted or dirty checkouts are missing.
+func TestStatusToolsReportsGitPluginCheckouts(t *testing.T) {
+	root, paths, warnings, _ := inventoryFixture(t)
+	repo := t.TempDir()
+	gitCommand(t, repo, "init", "--quiet")
+	fixtureFile(t, repo+"/p.plugin.zsh", ":\n", 0600)
+	gitCommand(t, repo, "add", "p.plugin.zsh")
+	gitCommand(t, repo, "commit", "--quiet", "-m", "initial")
+	sha := gitCommand(t, repo, "rev-parse", "HEAD")
+	data := os.Getenv("XDG_DATA_HOME") + "/selfishell/zsh-plugins/"
+	var manifest strings.Builder
+	var packages []Package
+	for _, name := range []string{"present", "drifted", "dirty", "absent"} {
+		fmt.Fprintf(&manifest, "git %s %s all all %s %s .local/share/selfishell/zsh-plugins/%s p.plugin.zsh\n", name, sha, repo, sha, name)
+		packages = append(packages, Package{Name: name, Manager: "direct", Requirement: "required"})
+		if name != "absent" {
+			gitCommand(t, repo, "clone", "--quiet", repo, data+name)
+			fixtureFile(t, paths.State+"/dependencies/"+name, sha+"\n", 0600)
 		}
-		fixtureFile(t, data+"/plugins/test---"+name+"/.git/HEAD", head+"\n", 0600)
 	}
-	fixtureFile(t, bin+"/git", "#!/bin/sh\ncase \"$2\" in\n *dirty) printf ' M tracked\\n';;\n *broken) printf 'fatal: corrupt repository\\n' >&2; exit 128;;\n *bad-head) if [ \"$3\" = rev-parse ]; then printf 'fatal: invalid HEAD\\n' >&2; exit 128; fi;;\nesac\n", 0700)
+	gitCommand(t, data+"drifted", "commit", "--quiet", "--allow-empty", "-m", "drift")
+	fixtureFile(t, data+"dirty/p.plugin.zsh", "changed\n", 0600)
+	fixtureFile(t, root+"/dependencies.conf", manifest.String(), 0600)
 	var out bytes.Buffer
-	var deps []Dependency
-	for _, name := range []string{"missing", "dirty", "drifted", "broken", "bad-head"} {
-		deps = append(deps, Dependency{Kind: "zsh-plugin", Name: "test/" + name, Version: version})
+	problem, err := (CLI{Out: &out}).statusTools(packages, inventory(t, root, paths, warnings), Platform{Name: "ubuntu", Arch: "amd64"}, true)
+	if err != nil || !problem {
+		t.Fatalf("plugin issues passed diagnosis: %v %s", err, &out)
 	}
-	if !(CLI{Out: &out}).statusPlugins(deps) {
-		t.Fatal("plugin issues passed diagnosis")
-	}
-	for _, want := range []string{"1 not provisioned (test/missing)", "1 modified locally (test/dirty)", "1 at an unapproved revision (test/drifted)", "could not inspect", "test/broken", "corrupt repository", "test/bad-head", "invalid HEAD"} {
+	for _, want := range []string{"present | Installed: " + sha[:12] + " | Source: selfishell | Approved: " + sha[:12] + "\n", "Tool: drifted is missing (direct)", "Tool: dirty is missing (direct)", "Tool: absent is missing (direct)", "Tools: 1 present, 3 required missing"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("plugin diagnosis omitted %q: %s", want, &out)
 		}
-	}
-	if strings.Contains(out.String(), "unapproved revision (test/drifted test/broken") || strings.Contains(out.String(), "[OK] Zsh plugins") {
-		t.Fatalf("uncertain inspection classified as approved/unapproved: %s", &out)
-	}
-	if strings.Count(out.String(), "selfishell update --tools-only") != 1 {
-		t.Fatalf("missing plugin hid or duplicated other repair hint: %s", &out)
 	}
 }
 
@@ -149,7 +150,7 @@ func TestDiagnosticsSeparateOptionalMissingToolsAndShowOneHint(t *testing.T) {
 	for _, required := range []bool{false, true} {
 		t.Run(map[bool]string{true: "required", false: "optional"}[required], func(t *testing.T) {
 			root, _ := compactDiagnosticFixture(t, "ubuntu", false)
-			packages := "package all optional direct zinit\n"
+			packages := "package all optional direct fzf-tab\n"
 			wantCode := 0
 			want := "[INFO] Tools: 0 present, 1 optional not installed"
 			if required {

@@ -42,8 +42,9 @@ place. A block target that is a symbolic link, such as a `~/.zshrc` managed by
 a dotfiles tool, stops installation before any change. See
 [Uninstallation](#uninstallation) to remove these changes and restore backups.
 
-Tools install separately: the pinned mise binary at `~/.local/bin/mise`, and
-mise tools, Zinit, and Neovim plugins under `~/.local/share`.
+Tools install separately: the pinned mise binary at `~/.local/bin/mise`, Zsh
+plugin checkouts under `${XDG_DATA_HOME:-$HOME/.local/share}/selfishell/zsh-plugins`,
+and mise tools and Neovim plugins under `~/.local/share`.
 
 ## Reinstallation
 
@@ -419,7 +420,10 @@ then preserved, and Selfishell no longer changes its Windows font registration.
 Personal content in `~/.zshrc`, `~/.zprofile`, `~/.zshenv`, and `~/.vimrc` is
 preserved; uninstall removes only the intact marked Selfishell blocks. Packages
 installed through Apt, Homebrew, or direct tool installers are also preserved.
-Purge does not automatically remove Zinit or Neovim plugin checkouts.
+Purge removes the CLI's `share/selfishell` directory. With the default prefix
+and `XDG_DATA_HOME`, that directory also holds the Zsh plugin checkouts, so they
+are removed while their ownership records stay, and a later installation clones
+them again. Purge does not remove Neovim plugin checkouts.
 
 ## Platform notes
 
