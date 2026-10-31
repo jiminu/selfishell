@@ -210,35 +210,40 @@ typeset -gA FAST_HIGHLIGHT_STYLES
 # Load these two after the first prompt is drawn. /dev/null is always
 # readable, so zle runs the handler once it first waits for input; a precmd
 # hook would run before the prompt is printed and delay it.
-_selfishell_deferred_plugin_files=(
-  "$SELFISHELL_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"
-  "$SELFISHELL_ZSH_PLUGINS/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
-)
-_selfishell_deferred_plugins() {
-  local _selfishell_fd="$1" _selfishell_file
-  zle -F "$_selfishell_fd"
-  exec {_selfishell_fd}<&-
-  for _selfishell_file in $_selfishell_deferred_plugin_files; do
-    [[ -r "$_selfishell_file" ]] && source "$_selfishell_file"
-  done
-  unset _selfishell_deferred_plugin_files
-  (( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets
-  # Highlight and suggest for a line the user already started typing.
-  zle -R
-  unfunction _selfishell_deferred_plugins
-}
-if [[ -r "$_selfishell_deferred_plugin_files[1]" || -r "$_selfishell_deferred_plugin_files[2]" ]] &&
-   exec {_selfishell_deferred_fd}</dev/null; then
-  zle -F "$_selfishell_deferred_fd" _selfishell_deferred_plugins 2>/dev/null || {
-    exec {_selfishell_deferred_fd}<&-
-    unset _selfishell_deferred_fd
+# Sourcing the configuration again before that prompt must not register a
+# second handler: the first one unfunctions the shared handler, and the other
+# would keep waking zle on /dev/null and spin the CPU.
+if (( ! $+functions[_selfishell_deferred_plugins] )); then
+  _selfishell_deferred_plugin_files=(
+    "$SELFISHELL_ZSH_PLUGINS/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"
+    "$SELFISHELL_ZSH_PLUGINS/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
+  )
+  _selfishell_deferred_plugins() {
+    local _selfishell_fd="$1" _selfishell_file
+    zle -F "$_selfishell_fd"
+    exec {_selfishell_fd}<&-
+    for _selfishell_file in $_selfishell_deferred_plugin_files; do
+      [[ -r "$_selfishell_file" ]] && source "$_selfishell_file"
+    done
+    unset _selfishell_deferred_plugin_files
+    (( ! $+functions[_zsh_autosuggest_bind_widgets] )) || _zsh_autosuggest_bind_widgets
+    # Highlight and suggest for a line the user already started typing.
+    zle -R
+    unfunction _selfishell_deferred_plugins
   }
+  if [[ -r "$_selfishell_deferred_plugin_files[1]" || -r "$_selfishell_deferred_plugin_files[2]" ]] &&
+     exec {_selfishell_deferred_fd}</dev/null; then
+    zle -F "$_selfishell_deferred_fd" _selfishell_deferred_plugins 2>/dev/null || {
+      exec {_selfishell_deferred_fd}<&-
+      unset _selfishell_deferred_fd
+    }
+  fi
+  if [[ -z "${_selfishell_deferred_fd:-}" ]]; then
+    unfunction _selfishell_deferred_plugins
+    unset _selfishell_deferred_plugin_files
+  fi
+  unset _selfishell_deferred_fd
 fi
-if [[ -z "${_selfishell_deferred_fd:-}" ]]; then
-  unfunction _selfishell_deferred_plugins
-  unset _selfishell_deferred_plugin_files
-fi
-unset _selfishell_deferred_fd
 
 # Sourcing starship's init twice makes its keymap wrapper call itself.
 if (( ! $+functions[prompt_starship_precmd] )) && _selfishell_starship_bin="$(command -v starship)"; then

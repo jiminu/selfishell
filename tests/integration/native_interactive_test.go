@@ -123,6 +123,17 @@ func TestNativePluginLoadOrder(t *testing.T) {
 // reading, so neither plugin delays the prompt.
 func TestNativeDeferredPluginsLoadAfterFirstPrompt(t *testing.T) {
 	t.Parallel()
+	// Sourcing the configuration twice before the first prompt must still leave
+	// exactly one pending handler; a second one would spin on /dev/null.
+	for _, sources := range []int{1, 2} {
+		t.Run(fmt.Sprintf("sourced-%d", sources), func(t *testing.T) {
+			t.Parallel()
+			testDeferredPluginsLoadAfterFirstPrompt(t, sources)
+		})
+	}
+}
+
+func testDeferredPluginsLoadAfterFirstPrompt(t *testing.T, sources int) {
 	home := nativeHome(t)
 	root := filepath.Dir(home)
 	log := filepath.Join(root, "plugin-log")
@@ -130,8 +141,9 @@ func TestNativeDeferredPluginsLoadAfterFirstPrompt(t *testing.T) {
 	nativeWrite(t, filepath.Join(home, ".local/share/selfishell/zsh-plugins/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"), `print -r -- zsh-autosuggestions >>"$SELFISHELL_TEST_PLUGIN_LOG"
 _zsh_autosuggest_bind_widgets() { print -r -- bind >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
 `, 0600)
-	nativeWrite(t, filepath.Join(home, ".zshrc"), `source "$SELFISHELL_SOURCE"
-precmd() { print -r -- precmd >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
+	// precmd also logs how many zle -F handlers are pending at that moment.
+	nativeWrite(t, filepath.Join(home, ".zshrc"), strings.Repeat(`source "$SELFISHELL_SOURCE"
+`, sources)+`precmd() { print -r -- "precmd $(zle -F | wc -l | tr -d ' ')" >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
 zle-line-init() { print -r -- line-init >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
 zle -N zle-line-init
 `, 0600)
@@ -188,7 +200,7 @@ zle -N zle-line-init
 	<-drained
 	data, err := os.ReadFile(log)
 	mustFS(t, err)
-	if want := "precmd\nline-init\nzsh-autosuggestions\nfast-syntax-highlighting\nbind\nprecmd\nline-init\n"; string(data) != want {
+	if want := "precmd 1\nline-init\nzsh-autosuggestions\nfast-syntax-highlighting\nbind\nprecmd 0\nline-init\n"; string(data) != want {
 		t.Fatalf("load order: got %q want %q", data, want)
 	}
 	if strings.Contains(screen.String(), "_selfishell") || strings.Contains(screen.String(), "zle") {
