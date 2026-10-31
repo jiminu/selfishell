@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/terminal"
 )
@@ -26,11 +27,11 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 			return err
 		}
 	}
-	resources, err := ManagedResources(c.Root, c.Env)
+	resources, err := lifecycle.ManagedResources(c.Root, c.Env)
 	if err != nil {
 		return err
 	}
-	records, err := LoadResourceStates(paths.Resources, resources)
+	records, err := lifecycle.LoadResourceStates(paths.Resources, resources)
 	if err != nil {
 		return fmt.Errorf("Uninstall cancelled because the managed resources could not be listed: %w", err)
 	}
@@ -42,10 +43,10 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 		failed = true
 	}
 	for _, record := range records {
-		if e := m.preflightUninstall(record, restore); e != nil {
+		if e := m.PreflightUninstall(record, restore); e != nil {
 			c.error(e.Error())
-			if record.State.Status == "pending" && !errors.Is(e, errInterruptedInstall) {
-				c.error(errInterruptedInstall.Error())
+			if record.State.Status == "pending" && !errors.Is(e, lifecycle.ErrInterruptedInstall) {
+				c.error(lifecycle.ErrInterruptedInstall.Error())
 			}
 			failed = true
 		}
@@ -57,7 +58,7 @@ func (c CLI) uninstallConfig(restore, purge, dry bool) error {
 		return fmt.Errorf("Uninstall was incomplete; preserved remaining state for a retry: %w", err)
 	}
 	for i := len(records) - 1; i >= 0; i-- {
-		if err = m.removeResource(records[i], restore); err != nil {
+		if err = m.RemoveResource(records[i], restore); err != nil {
 			return fmt.Errorf("Uninstall was incomplete; preserved remaining state for a retry: %w", err)
 		}
 	}

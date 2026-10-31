@@ -1,4 +1,4 @@
-package selfishell
+package lifecycle
 
 import (
 	"context"
@@ -10,9 +10,12 @@ import (
 	"github.com/jiminu/selfishell/internal/report"
 )
 
-var errInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
+// ErrInterruptedInstall reports a resource an interrupted install left pending.
+var ErrInterruptedInstall = errors.New("An interrupted install left this unfinished; run 'selfishell install', then uninstall again.")
 
-func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error {
+// PreflightUninstall checks that record can be removed, and restored when
+// restore is set, without changing anything.
+func (m *Operation) PreflightUninstall(record ResourceState, restore bool) error {
 	s := record.State
 	r := record.Resource
 	if s.Status == "restoring" {
@@ -83,13 +86,16 @@ func (m *lifecycle) preflightUninstall(record ResourceState, restore bool) error
 		}
 	}
 	if s.Status == "pending" {
-		return errInterruptedInstall
+		return ErrInterruptedInstall
 	}
 	return nil
 }
-func (m *lifecycle) removeResource(record ResourceState, restore bool) error {
+
+// RemoveResource removes record's managed path and state, restoring its
+// backup when restore is set; the restore is journaled before the move.
+func (m *Operation) RemoveResource(record ResourceState, restore bool) error {
 	r, s := record.Resource, record.State
-	if err := m.preflightUninstall(record, restore); err != nil {
+	if err := m.PreflightUninstall(record, restore); err != nil {
 		return err
 	}
 	if s.Status == "restoring" {
@@ -188,7 +194,7 @@ func preflightRestore(s managed.State, restore bool) error {
 	return nil
 }
 
-func (m *lifecycle) finishRestore(r managed.Resource, s managed.State) error {
+func (m *Operation) finishRestore(r managed.Resource, s managed.State) error {
 	if err := preflightRestore(s, true); err != nil {
 		return err
 	}
@@ -213,7 +219,7 @@ func (m *lifecycle) finishRestore(r managed.Resource, s managed.State) error {
 	return m.forgetResource(r)
 }
 
-func (m *lifecycle) forgetResource(r managed.Resource) error {
+func (m *Operation) forgetResource(r managed.Resource) error {
 	if !m.Dry {
 		if m.Hooks.RemoveState != nil {
 			return m.Hooks.RemoveState(m.statePath(r))

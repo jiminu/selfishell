@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/testutil"
@@ -268,7 +269,7 @@ func TestCurrentNeovimSourcesAreDeclaredOnce(t *testing.T) {
 	t.Parallel()
 	var env process.Environment
 	root, _, _ := blockHome(t, &env, "macos")
-	resources, err := ManagedResources(root, env)
+	resources, err := lifecycle.ManagedResources(root, env)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package selfishell
+package lifecycle
 
 import (
 	"os"

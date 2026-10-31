@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
@@ -502,7 +503,7 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	home := t.TempDir()
 	isolateHome(&env, home)
 	paths, _ := managed.UserPaths(env.Get)
-	resources, _ := ResourcesForPlatform(root, "macos", false, env)
+	resources, _ := lifecycle.ResourcesForPlatform(root, "macos", false, env)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	testutil.WriteFile(r.Target, []byte("managed"), 0600)
@@ -510,13 +511,13 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	state := managed.State{Kind: "file", Status: "active", Target: r.Target, Reference: "-", Backup: "-", Checksum: checksum}
 	managed.WriteState(paths.Resources+"/"+r.Name+".state", state)
 	var out, stderr bytes.Buffer
-	m := lifecycle{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &stderr}.report)}
-	record := ResourceState{Resource: r, State: state}
-	if e := m.preflightUninstall(record, false); e != nil {
+	m := lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(CLI{Env: env, Root: root, Out: &out, Err: &stderr}.report)}
+	record := lifecycle.ResourceState{Resource: r, State: state}
+	if e := m.PreflightUninstall(record, false); e != nil {
 		t.Fatal(e)
 	}
 	testutil.WriteFile(r.Target, []byte("user edit"), 0600)
-	if e := m.removeResource(record, false); e == nil {
+	if e := m.RemoveResource(record, false); e == nil {
 		t.Fatal("removed edited file")
 	}
 	data, e := os.ReadFile(r.Target)
@@ -570,7 +571,7 @@ func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resources, err := ManagedResources("/release", env)
+	resources, err := lifecycle.ManagedResources("/release", env)
 	if err != nil {
 		t.Fatal(err)
 	}

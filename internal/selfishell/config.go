@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/jiminu/selfishell/internal/lifecycle"
 	"github.com/jiminu/selfishell/internal/managed"
 	"github.com/jiminu/selfishell/internal/process"
 	"github.com/jiminu/selfishell/internal/report"
@@ -202,18 +203,18 @@ func (c CLI) uninstall(args []string) int {
 type preparedConfig struct {
 	paths           managed.Paths
 	resources       []managed.Resource
-	m               lifecycle
+	m               lifecycle.Operation
 	miseGlobal      string
 	ghostty         bool
 	windowsTerminal *terminal.WindowsChoice
 }
 
 // The Windows Terminal fragment code drives the managed-file lifecycle.
-var _ terminal.Lifecycle = (*lifecycle)(nil)
+var _ terminal.Lifecycle = (*lifecycle.Operation)(nil)
 
 // managedLifecycle reports through the CLI and asks only when it is interactive.
-func (c CLI) managedLifecycle(paths managed.Paths, dry, yes bool) lifecycle {
-	return lifecycle{Paths: paths, Reporter: report.ReportFunc(c.report), Ask: c.askModified, Dry: dry, Yes: yes}
+func (c CLI) managedLifecycle(paths managed.Paths, dry, yes bool) lifecycle.Operation {
+	return lifecycle.Operation{Paths: paths, Reporter: report.ReportFunc(c.report), Ask: c.askModified, Dry: dry, Yes: yes}
 }
 
 // askModified pauses the spinner before asking about a modified resource.
@@ -293,7 +294,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	if !platformSupported(platform) {
 		return preparedConfig{}, fmt.Errorf("managed installation is unavailable on %s", platform)
 	}
-	resources, err := ResourcesForPlatform(c.Root, platform, ghostty, c.Env)
+	resources, err := lifecycle.ResourcesForPlatform(c.Root, platform, ghostty, c.Env)
 	if err != nil {
 		return preparedConfig{}, err
 	}
@@ -301,7 +302,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	for _, name := range []string{"user-zshrc", "user-zprofile", "user-zshenv", "user-vimrc", "user-ghostty"} {
 		for _, r := range resources {
 			if r.Name == name {
-				if err = m.installResource(r, true); err != nil {
+				if err = m.InstallResource(r, true); err != nil {
 					return preparedConfig{}, err
 				}
 			}
@@ -317,7 +318,7 @@ func (c CLI) prepareConfig(platform string, dry, yes, update, enableGhostty, ena
 	}
 	for _, r := range resources {
 		if r.Kind != "block" {
-			if err = m.installResource(r, true); err != nil {
+			if err = m.InstallResource(r, true); err != nil {
 				return preparedConfig{}, err
 			}
 		}
@@ -370,7 +371,7 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 				}
 			}
 		}
-		if err := m.installResource(r, false); err != nil {
+		if err := m.InstallResource(r, false); err != nil {
 			return err
 		}
 	}

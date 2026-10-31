@@ -1,4 +1,4 @@
-package selfishell
+package lifecycle
 
 import (
 	"errors"
@@ -90,6 +90,7 @@ func ResourcesForPlatform(root, platform string, ghostty bool, env process.Envir
 	return selected, nil
 }
 
+// ResourceState pairs a declared resource with its recorded state.
 type ResourceState struct {
 	Resource managed.Resource
 	State    managed.State
@@ -97,7 +98,7 @@ type ResourceState struct {
 
 // LoadResourceStates collects the complete declared set before a caller can
 // begin preflight/removal. Any failure discards the entire list. This does not
-// inspect managed targets or make them safe to remove; lifecycle preflight does.
+// inspect managed targets or make them safe to remove; PreflightUninstall does.
 func LoadResourceStates(directory string, resources []managed.Resource) ([]ResourceState, error) {
 	if len(resources) == 0 {
 		return nil, fmt.Errorf("managed resource declaration is empty")
