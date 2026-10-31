@@ -12,11 +12,11 @@ func identicalUserFile(t *testing.T) (string, string, Resource, Paths, []byte) {
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(t, home)
-	paths, e := UserPaths()
+	paths, e := userPaths(nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	resources, e := ResourcesForPlatform(root, "macos", false)
+	resources, e := ResourcesForPlatform(root, "macos", false, nil)
 	if e != nil {
 		t.Fatal(e)
 	}

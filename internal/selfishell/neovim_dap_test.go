@@ -24,7 +24,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 		t.Skip("requires the pinned physical Neovim executable")
 	}
 	p := standaloneNeovimProcess(t, nvim)
-	home := envValue(p.Env, "HOME")
+	home := Environment(p.Env).Get("HOME")
 	config := home + "/.config/nvim"
 	if err := os.MkdirAll(config, 0700); err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestNeovimDAPConfiguration(t *testing.T) {
 		}
 	}
 	p = withEnvironment(p, map[string]string{
-		"PATH":                         home + "/bin:" + envValue(p.Env, "PATH"),
+		"PATH":                         home + "/bin:" + Environment(p.Env).Get("PATH"),
 		"SELFISHELL_NVIM_TEST_FIXTURE": root + "/tests/fixtures/neovim/dap_setup.lua",
 	}, "WSL_DISTRO_NAME", "VIRTUAL_ENV", "CONDA_PREFIX")
 	p.Dir = home + "/project"

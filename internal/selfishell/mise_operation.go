@@ -9,42 +9,16 @@ import (
 	"strings"
 )
 
-func (p Process) environment() []string {
+// environment copies the child's environment: Env, or else the inherited one.
+func (p Process) environment() Environment {
 	if p.Env != nil {
-		return append([]string(nil), p.Env...)
+		return Environment(p.Env).List()
 	}
-	return os.Environ()
-}
-
-func envValue(env []string, key string) string {
-	value := ""
-	for _, entry := range env {
-		if strings.HasPrefix(entry, key+"=") {
-			value = strings.TrimPrefix(entry, key+"=")
-		}
-	}
-	return value
+	return p.inherit.List()
 }
 
 func withEnvironment(p Process, set map[string]string, unset ...string) Process {
-	remove := map[string]bool{}
-	for key := range set {
-		remove[key] = true
-	}
-	for _, key := range unset {
-		remove[key] = true
-	}
-	env := p.environment()
-	p.Env = make([]string, 0, len(env)+len(set))
-	for _, entry := range env {
-		key, _, _ := strings.Cut(entry, "=")
-		if !remove[key] {
-			p.Env = append(p.Env, entry)
-		}
-	}
-	for key, value := range set {
-		p.Env = append(p.Env, key+"="+value)
-	}
+	p.Env = p.environment().With(set, unset...)
 	return p
 }
 
@@ -52,7 +26,7 @@ func (o *PackageOperation) miseCommand(paths Paths) (string, error) {
 	if path, err := o.Process.lookPath("mise"); err == nil {
 		return path, nil
 	}
-	home := envValue(o.Process.environment(), "HOME")
+	home := o.Process.environment().Get("HOME")
 	if home == "" {
 		return "", fmt.Errorf("HOME must be set")
 	}

@@ -16,7 +16,7 @@ const terminalFontCask, terminalFont = "font-jetbrains-mono-nerd-font", "JetBrai
 // installPackages follows the requirement/manager order with one operation.
 // The saved Ghostty choice is not a packages.conf record; its cask comes last.
 func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Paths, packages []Package, platform, arch string, ghostty, dry bool) error {
-	selected, err := selectPackages(c.Root, paths, packages, platform, o.windowsTerminal)
+	selected, err := selectPackages(c.Root, paths, packages, platform, o.windowsTerminal, o.Process.environment())
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 		key := p.Requirement + ":" + p.Manager
 		groups[key] = append(groups[key], p.Name)
 	}
-	manifest := envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")
+	manifest := c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")
 	for _, pair := range []struct{ requirement, manager string }{
 		{"required", "apt"}, {"optional", "apt"},
 		{"required", "formula"}, {"optional", "formula"},
@@ -99,15 +99,15 @@ func (c CLI) installPackages(ctx context.Context, o *PackageOperation, paths Pat
 			return nil
 		}
 		c.report("Notes", reportInfo, "Install %s on Windows and set it as your terminal font to show Neovim's icons.", terminalFont)
-	case platform == "ubuntu" && localDesktop():
+	case platform == "ubuntu" && localDesktop(c.Env):
 		c.report("Notes", reportInfo, "Install %s and set it as your terminal font to show Neovim's icons.", terminalFont)
 	}
 	return nil
 }
 
 // Over SSH the client's terminal draws the icons, so its font is what matters.
-func localDesktop() bool {
-	return os.Getenv("SSH_CONNECTION") == "" && (os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "")
+func localDesktop(env Environment) bool {
+	return env.Get("SSH_CONNECTION") == "" && (env.Get("DISPLAY") != "" || env.Get("WAYLAND_DISPLAY") != "")
 }
 
 // platformMiseTools lists the mise tools packages.conf declares for platform.

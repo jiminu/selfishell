@@ -78,7 +78,7 @@ func TestUninstallRestoreRequiresRecordedBackup(t *testing.T) {
 			root := testRelease(t)
 			home := t.TempDir()
 			isolateHome(t, home)
-			paths, err := UserPaths()
+			paths, err := userPaths(nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -224,7 +224,7 @@ func TestPurgeRetainsDependenciesForReinstall(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
 			isolateHome(t, home)
-			paths, err := UserPaths()
+			paths, err := userPaths(nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -314,7 +314,7 @@ func TestPurgePreservesReplacedStateRoot(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			home := t.TempDir()
 			isolateHome(t, home)
-			paths, err := UserPaths()
+			paths, err := userPaths(nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -443,7 +443,7 @@ func TestUninstallCleanupPreservesUntrackedUserPath(t *testing.T) {
 			root := testRelease(t)
 			home := t.TempDir()
 			isolateHome(t, home)
-			paths, _ := UserPaths()
+			paths, _ := userPaths(nil)
 			os.MkdirAll(filepath.Dir(paths.Config), 0700)
 			target := filepath.Join(t.TempDir(), "personal")
 			if kind == "file" {
@@ -467,8 +467,8 @@ func TestRemovalRevalidatesAfterWholeSetPreflight(t *testing.T) {
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(t, home)
-	paths, _ := UserPaths()
-	resources, _ := ResourcesForPlatform(root, "macos", false)
+	paths, _ := userPaths(nil)
+	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	os.WriteFile(r.Target, []byte("managed"), 0600)
@@ -498,7 +498,7 @@ func TestPurgeRechecksCLILinkBeforeRemoval(t *testing.T) {
 	home := base + "/home"
 	os.Mkdir(home, 0700)
 	isolateHome(t, home)
-	paths, _ := UserPaths()
+	paths, _ := userPaths(nil)
 	share := base + "/.local/share/selfishell"
 	release := share + "/releases/v1"
 	os.MkdirAll(release+"/bin", 0700)

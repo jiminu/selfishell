@@ -21,7 +21,7 @@ func dependencyFixture(t *testing.T) (*PackageOperation, Paths, string, string) 
 	t.Setenv("MISE_CACHE_DIR", home+"/mise/cache")
 	t.Setenv("MISE_CONFIG_DIR", home+"/.config/mise")
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", "")
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

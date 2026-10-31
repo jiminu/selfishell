@@ -16,7 +16,7 @@ import (
 
 func failureResource(t *testing.T, root, name string) Resource {
 	t.Helper()
-	all, err := ManagedResources(root)
+	all, err := ManagedResources(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

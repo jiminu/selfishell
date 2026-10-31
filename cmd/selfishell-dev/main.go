@@ -42,7 +42,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	p := selfishell.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: selfishell.DeveloperToolEnv(os.Args[1])}
+	p := selfishell.Process{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Env: selfishell.DeveloperToolEnv(os.Args[1], os.Environ())}
 	if err := selfishell.ProvisionDeveloper(ctx, os.Args[1], os.Args[2], p); err != nil {
 		fmt.Fprintln(os.Stderr, "selfishell-dev:", err)
 		os.Exit(1)

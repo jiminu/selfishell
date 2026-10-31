@@ -371,7 +371,7 @@ func TestFullInstallGhosttyFailureAppearsInOptionalSummary(t *testing.T) {
 	t.Setenv("PATH", home+"/bin:/usr/bin:/bin")
 	t.Setenv("SELFISHELL_TEST_SYSTEM_NAME", "Darwin")
 	t.Setenv("SHELL", "/bin/zsh")
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

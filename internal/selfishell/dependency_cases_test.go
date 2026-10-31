@@ -241,7 +241,7 @@ func TestDirectDataTargetPreservesRawXDGSpelling(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestDirectGitMarkerFollowsRawXDGSpelling(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv("XDG_DATA_HOME", home+"/work/alias/../data")
-			paths, err := UserPaths()
+			paths, err := userPaths(nil)
 			if err != nil {
 				t.Fatal(err)
 			}

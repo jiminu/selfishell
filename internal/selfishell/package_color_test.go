@@ -59,7 +59,7 @@ func TestProgressTerminalFailure(t *testing.T) {
 	master, slave := packageTestPTY(t)
 	defer master.Close()
 	defer slave.Close()
-	ui := newProgress(slave, slave, Paths{})
+	ui := newProgress(slave, slave, Paths{}, nil)
 	defer ui.pause()
 	c := CLI{Out: slave, Err: slave, progress: ui}
 	p := Process{Out: slave, Err: slave, progress: ui}
@@ -90,14 +90,14 @@ func TestProgressTerminalFailure(t *testing.T) {
 func TestConfigurationPromptInterrupt(t *testing.T) {
 	if root := os.Getenv("SELFISHELL_TEST_PROMPT_ROOT"); root != "" {
 		c := CLI{Root: root, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
-		prepared, err := c.prepareConfig(DetectPlatform().Name, false, false, true, false, false)
+		prepared, err := c.prepareConfig(detectPlatform(nil).Name, false, false, true, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// A file changed after preflight must prompt while configuration progress runs.
 		r := failureResource(t, root, "zsh-common")
 		blockWrite(t, r.Target, []byte("# user edit after preflight\n"))
-		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		c.progress = newProgress(c.Out, c.Err, prepared.paths, nil)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 		if err := c.applyManagedResources(&prepared); err != nil {

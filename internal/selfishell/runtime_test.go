@@ -25,14 +25,14 @@ func TestPaths(t *testing.T) {
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
 		t.Setenv(k, "")
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil || paths.Config != home+"/.config/selfishell" || paths.State != home+"/.local/state/selfishell" || paths.Cache != home+"/.cache/selfishell" || paths.Data != home+"/.local/share/selfishell" || paths.Resources != paths.State+"/resources" {
 		t.Fatalf("paths=%+v, err=%v", paths, err)
 	}
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
 		t.Setenv(k, home+"/custom dir")
 	}
-	paths, err = UserPaths()
+	paths, err = userPaths(nil)
 	if err != nil || paths.Config != home+"/custom dir/selfishell" || paths.State != paths.Config || paths.Data != paths.Config || paths.Cache != paths.Config {
 		t.Fatalf("override paths=%+v, err=%v", paths, err)
 	}
@@ -53,7 +53,7 @@ func TestPaths(t *testing.T) {
 	for _, k := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"} {
 		t.Setenv(k, prefix+"/custom")
 	}
-	paths, err = UserPaths()
+	paths, err = userPaths(nil)
 	expected := Paths{Config: prefix + "/custom/selfishell", State: prefix + "/custom/selfishell", Resources: prefix + "/custom/selfishell/resources", Cache: prefix + "/custom/selfishell", Data: prefix + "/custom/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("XDG path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
@@ -62,7 +62,7 @@ func TestPaths(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	t.Setenv("HOME", prefix)
-	paths, err = UserPaths()
+	paths, err = userPaths(nil)
 	expected = Paths{Config: prefix + "/.config/selfishell", State: prefix + "/.local/state/selfishell", Resources: prefix + "/.local/state/selfishell/resources", Cache: prefix + "/.cache/selfishell", Data: prefix + "/.local/share/selfishell"}
 	if err != nil || paths != expected {
 		t.Fatalf("HOME path meaning changed: got %+v want %+v (err=%v)", paths, expected, err)
@@ -72,7 +72,7 @@ func TestPaths(t *testing.T) {
 		t.Fatalf("path discovery created targets: %v %v", children, err)
 	}
 	t.Setenv("HOME", "")
-	if _, err := UserPaths(); err == nil {
+	if _, err := userPaths(nil); err == nil {
 		t.Fatal("empty HOME accepted")
 	}
 }
@@ -98,7 +98,7 @@ func TestPlatform(t *testing.T) {
 		if err := os.WriteFile(root+"/proc-version", []byte(tc.proc), 0600); err != nil {
 			t.Fatal(err)
 		}
-		p := DetectPlatform()
+		p := detectPlatform(nil)
 		if p.Name != tc.platform || p.Arch != tc.wantArch {
 			t.Fatalf("got %+v, want %s/%s", p, tc.platform, tc.wantArch)
 		}
@@ -107,7 +107,7 @@ func TestPlatform(t *testing.T) {
 	if err := os.Remove(root + "/os-release"); err != nil {
 		t.Fatal(err)
 	}
-	if DetectPlatform().Name != "unsupported-linux" {
+	if detectPlatform(nil).Name != "unsupported-linux" {
 		t.Fatal("missing distro was supported")
 	}
 }
@@ -278,7 +278,7 @@ func TestChildProcessEnvironment(t *testing.T) {
 			env := strings.Split(out.String(), "\n")
 			var got []string
 			for _, key := range tc.vars {
-				got = append(got, envValue(env, key))
+				got = append(got, Environment(env).Get(key))
 			}
 			if want := strings.ReplaceAll(tc.want, "DIR", dir); err != nil || code != 0 || strings.Join(got, "|") != want {
 				t.Fatalf("code=%d err=%v got %q want %q", code, err, strings.Join(got, "|"), want)

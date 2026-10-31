@@ -3,7 +3,6 @@ package selfishell
 import (
 	"context"
 	"fmt"
-	"os"
 )
 
 // ProvisionDeveloper installs the fixed tool subsets needed by development
@@ -21,11 +20,12 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 	default:
 		return fmt.Errorf("unknown developer provisioning mode: %s", mode)
 	}
-	paths, err := UserPaths()
+	env := process.environment()
+	paths, err := userPaths(env)
 	if err != nil {
 		return err
 	}
-	platform := DetectPlatform()
+	platform := detectPlatform(env)
 	if !platformSupported(platform.Name) {
 		return fmt.Errorf("unsupported developer platform: %s", platform.Name)
 	}
@@ -47,14 +47,14 @@ func ProvisionDeveloper(ctx context.Context, root, mode string, process Process)
 }
 
 // DeveloperToolEnv retains an isolated HOME while selecting its pinned mise bin.
-func DeveloperToolEnv(root string) []string {
-	home := os.Getenv("HOME")
-	return withEnvironment(Process{Env: os.Environ()}, map[string]string{
-		"PATH":                      home + "/.local/bin:" + os.Getenv("PATH"),
+func DeveloperToolEnv(root string, env Environment) []string {
+	home := env.Get("HOME")
+	return env.With(map[string]string{
+		"PATH":                      home + "/.local/bin:" + env.Get("PATH"),
 		"MISE_GLOBAL_CONFIG_FILE":   root + "/config/shared/mise.toml",
-		"MISE_DATA_DIR":             envDefault("MISE_DATA_DIR", home+"/.local/share/mise"),
-		"MISE_CACHE_DIR":            envDefault("MISE_CACHE_DIR", home+"/.cache/mise"),
-		"MISE_STATE_DIR":            envDefault("MISE_STATE_DIR", home+"/.local/state/mise"),
+		"MISE_DATA_DIR":             env.Default("MISE_DATA_DIR", home+"/.local/share/mise"),
+		"MISE_CACHE_DIR":            env.Default("MISE_CACHE_DIR", home+"/.cache/mise"),
+		"MISE_STATE_DIR":            env.Default("MISE_STATE_DIR", home+"/.local/state/mise"),
 		"MISE_TRUSTED_CONFIG_PATHS": root + "/config/shared",
-	}).Env
+	})
 }

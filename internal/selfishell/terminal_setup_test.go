@@ -435,7 +435,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(paths.State+"/dependencies/jetbrainsmono-regular", []byte("3.4.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err := NewToolInventory(root, paths, io.Discard)
+	inventory, err := NewToolInventory(root, paths, io.Discard, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(home+"/tools/powershell.exe", []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err = NewToolInventory(root, paths, io.Discard)
+	inventory, err = NewToolInventory(root, paths, io.Discard, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +461,7 @@ func TestWindowsFontStatusRequiresRegistration(t *testing.T) {
 	if err := testutil.WriteFile(manifest, []byte(nextRecord), 0600); err != nil {
 		t.Fatal(err)
 	}
-	inventory, err = NewToolInventory(root, paths, io.Discard)
+	inventory, err = NewToolInventory(root, paths, io.Discard, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +498,7 @@ func TestWindowsFontUpgradeUsesNewPathAndOwnedRegistration(t *testing.T) {
 				t.Fatal(err)
 			}
 			deps, _ := ReadDependencies(manifest)
-			oldTarget, err := dependencyTarget(deps[0], paths)
+			oldTarget, err := dependencyTarget(deps[0], paths, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -528,7 +528,7 @@ print('{}')
 				t.Fatal(err)
 			}
 			deps, _ = ReadDependencies(manifest)
-			newTarget, err := dependencyTarget(deps[0], paths)
+			newTarget, err := dependencyTarget(deps[0], paths, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -775,7 +775,7 @@ func TestWindowsFontLoadedNativeUpgrade(t *testing.T) {
 	if err != nil || response.StatusCode != 200 || fmt.Sprintf("%x", sha256.Sum256(payload)) != dep.Checksum {
 		t.Fatal("font download verification", err, response.StatusCode)
 	}
-	oldTarget, err := dependencyTarget(dep, paths)
+	oldTarget, err := dependencyTarget(dep, paths, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -861,7 +861,7 @@ finally { $handle.Dispose(); [void][NativePrivateFont]::RemoveFontResourceEx($pa
 	if err := op.InstallDirect(ctx, paths, manifest, "required", dep.Name, "ubuntu-wsl", "amd64", false); err != nil {
 		t.Fatal(err)
 	}
-	newTarget, err := dependencyTarget(dep, paths)
+	newTarget, err := dependencyTarget(dep, paths, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -980,7 +980,7 @@ func TestWindowsPackageSelectionKeepsNonFontPackages(t *testing.T) {
 					t.Errorf("wrong install selection: %s", out.String())
 				}
 			}
-			selected, err := diagnosticPackages(root, "ubuntu-wsl")
+			selected, err := diagnosticPackages(root, "ubuntu-wsl", nil)
 			if err != nil {
 				t.Fatal(err)
 			}

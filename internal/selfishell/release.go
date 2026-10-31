@@ -94,8 +94,8 @@ func compareNumeric(a, b string) int {
 
 const officialReleaseRoot = "https://github.com/jiminu/selfishell/releases"
 
-func releaseRootURL() string {
-	if s := os.Getenv("SELFISHELL_RELEASE_ROOT"); s != "" {
+func releaseRootURL(env Environment) string {
+	if s := env.Get("SELFISHELL_RELEASE_ROOT"); s != "" {
 		return strings.TrimRight(s, "/")
 	}
 	return officialReleaseRoot
@@ -118,7 +118,7 @@ func (o releaseOperation) fetch(ctx context.Context, mode, url, destination stri
 }
 
 func (o releaseOperation) latest(ctx context.Context) (string, error) {
-	root := releaseRootURL()
+	root := releaseRootURL(o.Process.environment())
 	dir, err := os.MkdirTemp("", "selfishell-release-metadata.")
 	if err != nil {
 		return "", err
@@ -136,7 +136,7 @@ func (o releaseOperation) latest(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	api := os.Getenv("SELFISHELL_RELEASE_TAGS_API_URL")
+	api := o.Process.environment().Get("SELFISHELL_RELEASE_TAGS_API_URL")
 	if root != officialReleaseRoot && api == "" {
 		return "", fmt.Errorf("unable to determine latest Selfishell release")
 	}
@@ -419,7 +419,7 @@ func (o releaseOperation) install(ctx context.Context, version string) (string, 
 		return "", err
 	}
 	defer os.RemoveAll(download)
-	root := releaseRootURL() + "/download/v" + version
+	root := releaseRootURL(o.Process.environment()) + "/download/v" + version
 	archive := download + "/" + name
 	checksums := download + "/SHA256SUMS"
 	if err := o.fetch(ctx, "transfer", root+"/"+name, archive); err != nil {

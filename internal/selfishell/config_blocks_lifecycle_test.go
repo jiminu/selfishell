@@ -55,7 +55,7 @@ func blockHome(t *testing.T, platform string) (string, string, Paths) {
 		blockWrite(t, proc, []byte("Linux fixture\n"))
 		t.Setenv("SELFISHELL_TEST_PROC_VERSION_FILE", proc)
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestBlockHomeExcludesAmbientMiseAndGlobalConfig(t *testing.T) {
 
 func TestCurrentNeovimSourcesAreDeclaredOnce(t *testing.T) {
 	root, _, _ := blockHome(t, "macos")
-	resources, err := ManagedResources(root)
+	resources, err := ManagedResources(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,7 +55,7 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 	if got, _ := os.Readlink(home + "/selfishell/previous"); got != "releases/1.0.0" {
 		t.Fatalf("changed previous: %s", got)
 	}
-	installs := envValue(op.Process.Env, "MISE_DATA_DIR") + "/installs/node"
+	installs := Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/node"
 	writeTestFile(t, installs+"/24.18.0/bin/node", "", 0755)
 	if err := os.Symlink("24.18.0", installs+"/latest"); err != nil {
 		t.Fatal(err)
@@ -69,8 +69,8 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 			t.Fatalf("restart note after removing %s: %t", remove, got)
 		}
 	}
-	python := envValue(op.Process.Env, "MISE_DATA_DIR") + "/installs/python"
-	dataHome := envValue(op.Process.Env, "XDG_DATA_HOME")
+	python := Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/python"
+	dataHome := Environment(op.Process.Env).Get("XDG_DATA_HOME")
 	if dataHome == "" {
 		dataHome = home + "/.local/share"
 	}
@@ -156,7 +156,7 @@ func TestMisePruneRequiresTrackedCurrentPinsAndReturnsPruneFailure(t *testing.T)
 	if err := op.PruneMise(context.Background(), root, paths, packages, "ubuntu", false); err == nil {
 		t.Fatal("suppressed cleanup failure")
 	}
-	if value := envValue(op.Process.Env, "MISE_IGNORED_CONFIG_PATHS"); value != "" {
+	if value := Environment(op.Process.Env).Get("MISE_IGNORED_CONFIG_PATHS"); value != "" {
 		t.Fatalf("leaked scoped ignore: %s", value)
 	}
 }

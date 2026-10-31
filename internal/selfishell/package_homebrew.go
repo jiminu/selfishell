@@ -28,7 +28,7 @@ func (o *PackageOperation) activateBrew() bool {
 			continue
 		}
 		bin := filepath.Dir(candidate)
-		old := envValue(o.Process.environment(), "PATH")
+		old := o.Process.environment().Get("PATH")
 		o.Process = withEnvironment(o.Process, map[string]string{"PATH": bin + string(os.PathListSeparator) + old})
 		return true
 	}
@@ -156,10 +156,7 @@ func (o *PackageOperation) InstallHomebrew(ctx context.Context, requirement, man
 	}
 	args = append(args, missing...)
 	p := o.Process
-	if p.Env == nil {
-		p.Env = os.Environ()
-	}
-	p.Env = append(append([]string{}, p.Env...), "HOMEBREW_NO_ASK=1")
+	p.Env = append(p.environment().List(), "HOMEBREW_NO_ASK=1")
 	p.foreground = manager == "cask"
 	code, err := p.Run(ctx, "brew", args...)
 	if ctx.Err() != nil {

@@ -30,14 +30,14 @@ func TestPinnedNeovimConsumer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	var output bytes.Buffer
-	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root)}
+	p := Process{Out: &output, Err: &output, Env: DeveloperToolEnv(root, nil)}
 	if err := ProvisionDeveloper(ctx, root, "neovim-e2e", p); err != nil {
 		t.Fatalf("pin provision: %v\n%s", err, output.String())
 	}
 	if code, _, stderr := commandResult(root, "install", "--skip-packages", "--yes"); code != 0 {
 		t.Fatalf("config install: %s", stderr)
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

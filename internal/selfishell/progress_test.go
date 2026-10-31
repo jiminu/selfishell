@@ -15,7 +15,7 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 	isolateHome(t, home)
 	var out, stderr bytes.Buffer
 	state := filepath.Join(home, "state")
-	ui := newProgress(&out, &stderr, Paths{State: state})
+	ui := newProgress(&out, &stderr, Paths{State: state}, nil)
 	ui.compact = true
 	p := Process{Out: &out, Err: &stderr, progress: ui}
 	ui.stage("Synchronizing tools")
@@ -58,7 +58,7 @@ func TestProgressCapturesToolsButPreservesQueriesAndInput(t *testing.T) {
 func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
+	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
@@ -72,7 +72,7 @@ func TestProgressPrintsNeovimErrorOnce(t *testing.T) {
 func TestProgressFailureOutputIsBounded(t *testing.T) {
 	t.Parallel()
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()})
+	ui := newProgress(&out, &stderr, Paths{State: t.TempDir()}, nil)
 	ui.compact = true
 	defer ui.finish()
 	ui.stage("Synchronizing tools")
@@ -90,7 +90,7 @@ func TestConfigurationProgressCancelsBlockedTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, stderr bytes.Buffer
-	ui := newProgress(&out, &stderr, paths)
+	ui := newProgress(&out, &stderr, paths, nil)
 	ui.compact = true
 	defer ui.finish()
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)

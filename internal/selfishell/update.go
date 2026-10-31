@@ -172,18 +172,18 @@ func (c CLI) update(args []string) int {
 			if code := c.confirmRelease("Update Selfishell CLI to "+version+"?", o.yes, false); code != 0 {
 				return code
 			}
-			paths, err := UserPaths()
+			paths, err := userPaths(c.Env)
 			if err != nil {
 				c.error(err.Error())
 				return 1
 			}
-			c.progress = newProgress(c.Out, c.Err, paths)
+			c.progress = newProgress(c.Out, c.Err, paths, c.Env)
 			defer c.progress.finish()
 			c.progress.stage("Downloading and verifying Selfishell " + version)
 			// Keep default signal handling while confirmation reads from the terminal.
 			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}).install(ctx, version)
+			target, err := (releaseOperation{Root: c.Root, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}).install(ctx, version)
 			if err != nil {
 				c.error(err.Error())
 				return 1
@@ -197,7 +197,7 @@ func (c CLI) update(args []string) int {
 				if o.skip {
 					argv = append(argv, "--skip-packages")
 				}
-				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err}).runCLI(ctx, target+"/bin/selfishell", argv...)
+				code, err := (Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env}).runCLI(ctx, target+"/bin/selfishell", argv...)
 				if code != 0 || err != nil {
 					c.report("Tools", reportSuccess, "Activated Selfishell CLI: %s -> %s", active, version)
 				}
@@ -235,7 +235,7 @@ func (c CLI) completeUpdate() {
 }
 
 func (c CLI) updateTools(o updateOptions) (result int) {
-	paths, err := UserPaths()
+	paths, err := userPaths(c.Env)
 	if err != nil {
 		c.error(err.Error())
 		return 1
@@ -265,11 +265,11 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	if err != nil {
 		return c.diagnosticError(err)
 	}
-	if _, err := ReadDependencies(envDefault("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")); err != nil {
+	if _, err := ReadDependencies(c.Env.Default("SELFISHELL_DEPENDENCIES_FILE", c.Root+"/dependencies.conf")); err != nil {
 		c.error(err.Error())
 		return 1
 	}
-	platform := DetectPlatform().Name
+	platform := detectPlatform(c.Env).Name
 	if !platformSupported(platform) {
 		c.error("Managed installation is unavailable on " + platform + ".")
 		return 1
@@ -300,14 +300,14 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 		return 1
 	}
 	if !o.dry {
-		c.progress = newProgress(c.Out, c.Err, prepared.paths)
+		c.progress = newProgress(c.Out, c.Err, prepared.paths, c.Env)
 		prepared.m.c.progress = c.progress
 		defer c.progress.finish()
 	}
-	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, progress: c.progress}}
+	operation := &PackageOperation{windowsTerminal: prepared.windowsTerminal, Process: Process{In: c.In, Out: c.Out, Err: c.Err, inherit: c.Env, progress: c.progress}}
 	if !o.skip {
 		phaseCtx, stop := signal.NotifyContext(c.invocationContext(), os.Interrupt, syscall.SIGTERM)
-		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, DetectPlatform().Arch, prepared.ghostty, o.dry)
+		err = c.installPackages(phaseCtx, operation, prepared.paths, packages, platform, detectPlatform(c.Env).Arch, prepared.ghostty, o.dry)
 		canceled := phaseCtx.Err()
 		stop()
 		if err != nil {

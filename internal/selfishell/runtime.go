@@ -10,28 +10,21 @@ import (
 
 type Paths struct{ Config, State, Resources, Cache, Data string }
 
-// UserPaths only resolves names. Discovery must not create managed state.
-func UserPaths() (Paths, error) {
-	home := os.Getenv("HOME")
+// userPaths only resolves names. Discovery must not create managed state.
+func userPaths(env Environment) (Paths, error) {
+	home := env.Get("HOME")
 	if home == "" {
 		return Paths{}, fmt.Errorf("HOME must be set")
 	}
 	// Keep the caller's spelling: cleaning symlink/.. can select another directory.
-	config := envDefault("XDG_CONFIG_HOME", home+"/.config") + "/selfishell"
-	state := envDefault("XDG_STATE_HOME", home+"/.local/state") + "/selfishell"
-	return Paths{Config: config, State: state, Resources: state + "/resources", Cache: envDefault("XDG_CACHE_HOME", home+"/.cache") + "/selfishell", Data: envDefault("XDG_DATA_HOME", home+"/.local/share") + "/selfishell"}, nil
-}
-
-func envDefault(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
+	config := env.Default("XDG_CONFIG_HOME", home+"/.config") + "/selfishell"
+	state := env.Default("XDG_STATE_HOME", home+"/.local/state") + "/selfishell"
+	return Paths{Config: config, State: state, Resources: state + "/resources", Cache: env.Default("XDG_CACHE_HOME", home+"/.cache") + "/selfishell", Data: env.Default("XDG_DATA_HOME", home+"/.local/share") + "/selfishell"}, nil
 }
 
 type Platform struct{ Name, Arch string }
 
-func DetectPlatform() Platform {
+func detectPlatform(env Environment) Platform {
 	system := runtime.GOOS
 	switch system {
 	case "darwin":
@@ -39,8 +32,8 @@ func DetectPlatform() Platform {
 	case "linux":
 		system = "Linux"
 	}
-	system = envDefault("SELFISHELL_TEST_SYSTEM_NAME", system)
-	arch := envDefault("SELFISHELL_TEST_MACHINE_ARCH", runtime.GOARCH)
+	system = env.Default("SELFISHELL_TEST_SYSTEM_NAME", system)
+	arch := env.Default("SELFISHELL_TEST_MACHINE_ARCH", runtime.GOARCH)
 	switch arch {
 	case "x86_64":
 		arch = "amd64"
@@ -53,10 +46,10 @@ func DetectPlatform() Platform {
 		name = "macos"
 	case "Linux":
 		name = "unsupported-linux"
-		if linuxDistribution(envDefault("SELFISHELL_TEST_OS_RELEASE_FILE", "/etc/os-release")) == "ubuntu" {
+		if linuxDistribution(env.Default("SELFISHELL_TEST_OS_RELEASE_FILE", "/etc/os-release")) == "ubuntu" {
 			name = "ubuntu"
 		}
-		proc, _ := os.ReadFile(envDefault("SELFISHELL_TEST_PROC_VERSION_FILE", "/proc/version"))
+		proc, _ := os.ReadFile(env.Default("SELFISHELL_TEST_PROC_VERSION_FILE", "/proc/version"))
 		text := strings.ToLower(string(proc))
 		if strings.Contains(text, "microsoft") || strings.Contains(text, "wsl") {
 			if name == "ubuntu" {

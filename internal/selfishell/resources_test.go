@@ -143,7 +143,7 @@ func TestResources(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", home+"/state")
 	t.Setenv("XDG_CACHE_HOME", home+"/cache")
 	t.Setenv("XDG_DATA_HOME", home+"/data")
-	all, err := ManagedResources("/release/alias/..")
+	all, err := ManagedResources("/release/alias/..", nil)
 	if err != nil || len(all) == 0 {
 		t.Fatalf("resources: %d %v", len(all), err)
 	}
@@ -160,7 +160,7 @@ func TestResources(t *testing.T) {
 		{"ubuntu", false, 2, "ubuntu"}, {"ubuntu", true, 2, "ubuntu"},
 		{"ubuntu-wsl", false, 2, "ubuntu"},
 	} {
-		resources, err := ResourcesForPlatform("/release", tc.platform, tc.ghostty)
+		resources, err := ResourcesForPlatform("/release", tc.platform, tc.ghostty, nil)
 		if err != nil || len(resources) != len(all)-tc.omitted {
 			t.Fatalf("%s ghostty=%v: %d %v", tc.platform, tc.ghostty, len(resources), err)
 		}
@@ -168,7 +168,7 @@ func TestResources(t *testing.T) {
 			t.Fatal(resources[0])
 		}
 	}
-	if resources, err := ResourcesForPlatform("/release", "unsupported-linux", false); resources != nil || err == nil {
+	if resources, err := ResourcesForPlatform("/release", "unsupported-linux", false, nil); resources != nil || err == nil {
 		t.Fatalf("unsupported: %v %v", resources, err)
 	}
 	entries, _ := os.ReadDir(home)
@@ -182,11 +182,11 @@ func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home+"/alias/../config space")
 	t.Setenv("XDG_STATE_HOME", home+"/state")
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resources, err := ManagedResources("/release")
+	resources, err := ManagedResources("/release", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

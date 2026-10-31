@@ -69,7 +69,7 @@ func (o *PackageOperation) loadDependencies(manifest string) error {
 	return nil
 }
 
-func dependencyTarget(dep Dependency, paths Paths) (string, error) {
+func dependencyTarget(dep Dependency, paths Paths, env Environment) (string, error) {
 	if !filepath.IsLocal(dep.Target) || dep.Target == "." || strings.HasPrefix(dep.Target, "-") {
 		return "", fmt.Errorf("invalid dependency target: %s", dep.Target)
 	}
@@ -89,7 +89,7 @@ func dependencyTarget(dep Dependency, paths Paths) (string, error) {
 	if strings.HasPrefix(dep.Target, ".local/share/") {
 		return strings.TrimSuffix(paths.Data, "/selfishell") + "/" + strings.TrimPrefix(dep.Target, ".local/share/"), nil
 	}
-	return os.Getenv("HOME") + "/" + dep.Target, nil
+	return env.Get("HOME") + "/" + dep.Target, nil
 }
 
 func present(path string) (bool, error) {
@@ -107,7 +107,7 @@ func (o *PackageOperation) installDependency(ctx context.Context, paths Paths, d
 	if dep.Name == "." || filepath.Base(dep.Name) != dep.Name {
 		return fmt.Errorf("invalid dependency name: %s", dep.Name)
 	}
-	target, err := dependencyTarget(dep, paths)
+	target, err := dependencyTarget(dep, paths, o.Process.environment())
 	if err != nil {
 		return err
 	}

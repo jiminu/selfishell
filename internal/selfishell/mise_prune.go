@@ -93,12 +93,12 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		return fmt.Errorf("invalid current mise config: %s", config)
 	}
 	base := o.miseProcess(root, true)
-	trusted := envValue(base.Env, "MISE_TRUSTED_CONFIG_PATHS")
+	trusted := base.environment().Get("MISE_TRUSTED_CONFIG_PATHS")
 	if trusted != "" {
 		trusted += ":"
 	}
 	base = withEnvironment(base, map[string]string{"MISE_TRUSTED_CONFIG_PATHS": trusted + root + "/config/shared"})
-	if envValue(base.Env, "MISE_IGNORED_CONFIG_PATHS") != "" {
+	if base.environment().Get("MISE_IGNORED_CONFIG_PATHS") != "" {
 		return fmt.Errorf("ignored_config_paths can exclude retained versions")
 	}
 	shared := root + "/config/shared"
@@ -149,11 +149,11 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 	if !found {
 		return fmt.Errorf("current mise config is not tracked: %s", config)
 	}
-	data := envValue(base.Env, "MISE_DATA_DIR")
+	data := base.environment().Get("MISE_DATA_DIR")
 	if data == "" {
-		data = envValue(base.Env, "XDG_DATA_HOME")
+		data = base.environment().Get("XDG_DATA_HOME")
 		if data == "" {
-			data = envValue(base.Env, "HOME") + "/.local/share"
+			data = base.environment().Get("HOME") + "/.local/share"
 		}
 		data += "/mise"
 	}
@@ -183,9 +183,9 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths Pat
 		// Open shells keep absolute paths, such as Starship's init, to removed versions.
 		o.note("Run 'exec zsh' in open shells to reload updated tools.")
 	}
-	dataHome := envValue(base.Env, "XDG_DATA_HOME")
+	dataHome := base.environment().Get("XDG_DATA_HOME")
 	if dataHome == "" {
-		dataHome = envValue(base.Env, "HOME") + "/.local/share"
+		dataHome = base.environment().Get("HOME") + "/.local/share"
 	}
 	if stale := masonPackagesOnRemovedPython(dataHome+"/nvim/mason/packages", installs, removed); len(stale) != 0 {
 		o.note("Run ':MasonInstall --force %s' in Neovim: its virtualenv used a removed Python.", strings.Join(stale, " "))

@@ -231,7 +231,7 @@ func (m *managed) removeWindowsTerminal(preflight bool) error {
 	if err != nil || record == nil {
 		return err
 	}
-	if choice, err := readWindowsTerminalChoice(m.paths); err == nil && choice.foreign() {
+	if choice, err := readWindowsTerminalChoice(m.paths); err == nil && choice.foreign(m.c.Env) {
 		if preflight || m.dry {
 			return nil
 		}
@@ -294,7 +294,7 @@ func (c CLI) statusWindowsTerminal(paths Paths, verbose bool) (tracked, intact, 
 		c.sayDiagnostic("31", "MALFORMED", paths.State+"/windows-terminal.json")
 		return true, false, true
 	}
-	if choice.foreign() {
+	if choice.foreign(c.Env) {
 		c.sayDiagnostic("36", "INFO", fmt.Sprintf("Windows Terminal setup was copied from WSL distribution %q; run 'selfishell install' here to set it up", choice.Distro))
 		return false, false, false
 	}

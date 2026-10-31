@@ -2,7 +2,6 @@ package selfishell
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -24,7 +23,10 @@ func platformLabel(name string) string {
 func platformSupported(name string) bool {
 	return name == "macos" || name == "ubuntu" || name == "ubuntu-wsl"
 }
-func commandExists(name string) bool { _, err := exec.LookPath(name); return err == nil }
+func commandExists(name string, env Environment) bool {
+	_, err := (Process{inherit: env}).lookPath(name)
+	return err == nil
+}
 
 // statusSystem checks setup prerequisites; the compiler is checked only after setup.
 // It also reports whether it already suggested 'selfishell install'.
@@ -59,7 +61,7 @@ func (c CLI) statusSystem(platform Platform, configured, verbose bool) (int, boo
 	}
 	if manager == "unknown" {
 		system.say("31", "ERROR", "Package manager: unavailable for this platform")
-	} else if commandExists(manager) {
+	} else if commandExists(manager, c.Env) {
 		system.say("32", "OK", "Package manager: "+manager)
 	} else {
 		system.say("31", "ERROR", "Package manager: "+manager+" was not found")
@@ -71,7 +73,7 @@ func (c CLI) statusSystem(platform Platform, configured, verbose bool) (int, boo
 		return result, installHinted
 	}
 	if platform.Name == "macos" {
-		_, _, ok := runInventory("", nil, "xcode-select", "-p")
+		_, _, ok := runInventory("", c.Env, "xcode-select", "-p")
 		if !ok {
 			system.say("31", "ERROR", "C compiler: Xcode Command Line Tools are not installed (required for compiling Tree-sitter parsers)")
 			fmt.Fprintf(c.Out, "        Install them by running: %s\n", c.bold("xcode-select --install"))
@@ -89,10 +91,10 @@ func (c CLI) statusCompiler(platform string, result int, system *diagnosticGroup
 	// A compiler counts only if it runs; a failed candidate falls through to the next.
 	var broken []string
 	for _, name := range []string{"gcc", "clang"} {
-		if !commandExists(name) {
+		if !commandExists(name, c.Env) {
 			continue
 		}
-		out, _, ok := runInventory("", nil, name, "--version")
+		out, _, ok := runInventory("", c.Env, name, "--version")
 		if !ok {
 			broken = append(broken, name)
 			continue

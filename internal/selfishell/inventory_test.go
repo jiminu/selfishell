@@ -34,7 +34,7 @@ func inventoryFixture(t *testing.T) (string, Paths, *bytes.Buffer, string) {
 	if err := testutil.WriteFile(filepath.Join(root, "dependencies.conf"), []byte(""), 0600); err != nil {
 		t.Fatal(err)
 	}
-	paths, err := UserPaths()
+	paths, err := userPaths(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func fixtureFile(t *testing.T, path, content string, mode os.FileMode) {
 }
 func inventory(t *testing.T, root string, paths Paths, warnings *bytes.Buffer) *ToolInventory {
 	t.Helper()
-	inv, err := NewToolInventory(root, paths, warnings)
+	inv, err := NewToolInventory(root, paths, warnings, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

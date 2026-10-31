@@ -27,7 +27,7 @@ func standaloneNeovimExecutable(t *testing.T, root string) (string, bool) {
 		t.Fatal(err)
 	}
 	version := strings.TrimPrefix(pins[0], "neovim@")
-	data := envDefault("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
+	data := ProcessEnvironment().Default("MISE_DATA_DIR", os.Getenv("HOME")+"/.local/share/mise")
 	candidates := filepath.SplitList(os.Getenv("PATH"))
 	candidates = append(candidates, data+"/installs/neovim/"+version+"/bin")
 	for _, dir := range candidates {
@@ -113,7 +113,7 @@ func TestStandaloneNeovimFixtureIsolation(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("fake Neovim: %d %v", code, err)
 	}
-	home := envValue(p.Env, "HOME")
+	home := Environment(p.Env).Get("HOME")
 	want := strings.Join([]string{home, "", home + "/mise/config", home + "/mise/data", home + "/mise/cache", home + "/mise/state", "1", "", bin + ":/usr/bin:/bin"}, "\n") + "\n"
 	if home == root+"/ambient" || !strings.HasSuffix(home, "/home") || out.String() != want {
 		t.Fatalf("ambient mise or HOME reached Neovim: %q", out.String())

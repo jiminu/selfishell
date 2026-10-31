@@ -24,7 +24,7 @@ func TestNeovimDAPLayout(t *testing.T) {
 		t.Skip("requires the pinned physical Neovim executable")
 	}
 	p := standaloneNeovimProcess(t, nvim)
-	home := envValue(p.Env, "HOME")
+	home := Environment(p.Env).Get("HOME")
 	manifest, err := os.ReadFile(root + "/dependencies.conf")
 	if err != nil {
 		t.Fatal(err)

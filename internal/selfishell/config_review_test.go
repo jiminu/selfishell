@@ -13,8 +13,8 @@ func TestPendingLinkWithForeignTargetStaysPending(t *testing.T) {
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(t, home)
-	paths, _ := UserPaths()
-	resources, _ := ResourcesForPlatform(root, "macos", false)
+	paths, _ := userPaths(nil)
+	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
 	var link Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
@@ -51,7 +51,7 @@ func TestPurgeBackupErrorPreservesCLIAndReleases(t *testing.T) {
 			home := base + "/home"
 			os.Mkdir(home, 0700)
 			isolateHome(t, home)
-			paths, _ := UserPaths()
+			paths, _ := userPaths(nil)
 			share := base + "/.local/share/selfishell"
 			release := share + "/releases/v1"
 			os.MkdirAll(release+"/bin", 0700)
@@ -131,8 +131,8 @@ func TestBackupCollisionAfterSelectionPreservesPendingState(t *testing.T) {
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(t, home)
-	paths, _ := UserPaths()
-	resources, _ := ResourcesForPlatform(root, "macos", false)
+	paths, _ := userPaths(nil)
+	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
 	r := resources[0]
 	os.MkdirAll(filepath.Dir(r.Target), 0700)
 	os.WriteFile(r.Target, []byte("original"), 0600)
@@ -160,7 +160,7 @@ func TestPurgeRechecksBackupInventoryAtApply(t *testing.T) {
 	home := base + "/home"
 	os.Mkdir(home, 0700)
 	isolateHome(t, home)
-	paths, _ := UserPaths()
+	paths, _ := userPaths(nil)
 	share := base + "/.local/share/selfishell"
 	release := share + "/releases/v1"
 	os.MkdirAll(release+"/bin", 0700)
@@ -187,8 +187,8 @@ func TestFailedLinkRollbackPreservesLateTargetBackupAndState(t *testing.T) {
 	root := testRelease(t)
 	home := t.TempDir()
 	isolateHome(t, home)
-	paths, _ := UserPaths()
-	resources, _ := ResourcesForPlatform(root, "macos", false)
+	paths, _ := userPaths(nil)
+	resources, _ := ResourcesForPlatform(root, "macos", false, nil)
 	var link Resource
 	for _, r := range resources {
 		if r.Name == "user-starship" {
