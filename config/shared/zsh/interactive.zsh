@@ -1,5 +1,15 @@
 source "$SELFISHELL_COMMON_DIR/aliases.zsh"
 
+# Windows Terminal and Linux terminals send Ctrl, Alt and Shift arrows as
+# xterm sequences that zle leaves unbound, so it inserts their tail (";5C").
+# Ghostty on macOS already turns Option arrows into Alt-b and Alt-f.
+for _selfishell_keymap in emacs viins; do
+  bindkey -M "$_selfishell_keymap" '^[[1;5D' backward-word '^[[1;5C' forward-word \
+    '^[[1;3D' backward-word '^[[1;3C' forward-word \
+    '^[[1;2D' backward-char '^[[1;2C' forward-char
+done
+unset _selfishell_keymap
+
 # Shell tools configure key bindings before interactive plugins load.
 SELFISHELL_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/selfishell"
 
