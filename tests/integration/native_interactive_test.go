@@ -434,6 +434,17 @@ func TestNativeEditorAliasesAndExports(t *testing.T) {
 		t.Fatalf("editor: %q want %q", r.Stdout, want)
 	}
 }
+func TestNativeModifiedArrowKeys(t *testing.T) {
+	t.Parallel()
+	home := nativeHome(t)
+	// Windows Terminal and Linux terminals send these unbound sequences, and
+	// zle would insert the tail as text, such as ";5C".
+	r := interactiveRun(t, home, `for m in emacs viins; do for k in '^[[1;5D' '^[[1;5C' '^[[1;3D' '^[[1;3C' '^[[1;2D' '^[[1;2C'; do bindkey -M $m "$k"; done; done`)
+	line := "\"^[[1;5D\" backward-word\n\"^[[1;5C\" forward-word\n\"^[[1;3D\" backward-word\n\"^[[1;3C\" forward-word\n\"^[[1;2D\" backward-char\n\"^[[1;2C\" forward-char\n"
+	if want := line + line; string(r.Stdout) != want {
+		t.Fatalf("bindings %q want %q", r.Stdout, want)
+	}
+}
 func TestNativeMissingNeovim(t *testing.T) {
 	t.Parallel()
 	home := nativeHome(t)
