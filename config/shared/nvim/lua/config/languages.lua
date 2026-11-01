@@ -5,9 +5,9 @@ local M = {
     "bashls@5.8.1",
     "jsonls@4.10.0",
     "yamlls@2.0.0",
-    "tombi@v1.9.4",
+    "tombi@v1.9.8",
     "marksman@2026-02-08",
-    "ruff@0.17.2",
+    "ruff@0.17.3",
   },
 }
 
