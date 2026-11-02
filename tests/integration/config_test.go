@@ -185,7 +185,6 @@ func runConfigScenario(t *testing.T, home, cli, release, scenario string, env []
 	} else {
 		assertPersonalFilesRestored(t, home, config)
 	}
-	return
 }
 
 func assertPersonalFilesRestored(t *testing.T, home, config string) {

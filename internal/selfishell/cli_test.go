@@ -2,7 +2,6 @@ package selfishell
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +107,6 @@ func TestVersionAvailableCLI(t *testing.T) {
 	out.Reset()
 	stderr.Reset()
 	if code := c.Run([]string{"version", "--available"}); code != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "Unable to determine the latest Selfishell release") {
-		t.Fatal(fmt.Sprintf("code %d, stdout %q, stderr %q", code, out.String(), stderr.String()))
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), stderr.String())
 	}
 }

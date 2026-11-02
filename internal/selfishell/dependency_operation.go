@@ -276,7 +276,7 @@ func (o *PackageOperation) stageDownload(ctx context.Context, dep managed.Depend
 		if err != nil {
 			return err
 		}
-		if !filepath.IsLocal(hdr.Name) || hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA && hdr.Typeflag != tar.TypeDir {
+		if !filepath.IsLocal(hdr.Name) || hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeDir {
 			return fmt.Errorf("unsafe archive entry: %s", hdr.Name)
 		}
 		if hdr.Typeflag == tar.TypeDir {

@@ -161,7 +161,7 @@ func measureShell(parent context.Context, cwd string, env []string) (float64, [3
 		}
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		if !waited {
-			_ = <-wait
+			<-wait
 		}
 	}()
 	if err := waitForPrompt(ctx, read, 1); err != nil {
