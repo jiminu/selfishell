@@ -58,7 +58,7 @@ func scanReleaseArchive(filename string) (map[string]releaseMember, error) {
 		if _, exists := members[clean]; exists {
 			return nil, fmt.Errorf("duplicate release archive member: %s", clean)
 		}
-		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA && h.Typeflag != tar.TypeDir && h.Typeflag != tar.TypeSymlink {
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir && h.Typeflag != tar.TypeSymlink {
 			return nil, fmt.Errorf("unsupported release archive member: %s", clean)
 		}
 		if h.Typeflag == tar.TypeSymlink && (path.IsAbs(h.Linkname) || strings.Contains(h.Linkname, "\\") || h.Linkname == "") {
@@ -186,7 +186,7 @@ func extractReleaseArchive(filename, staging string) error {
 			if err := os.MkdirAll(target, 0700); err != nil {
 				return err
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			file, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 			if err != nil {
 				return err

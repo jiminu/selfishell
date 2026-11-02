@@ -5,8 +5,9 @@ repository. Store them in a private configuration repository or endpoint and
 inject them during provisioning.
 
 Put private shell initialization directly in the user's `~/.zshrc`, outside the
-marked Selfishell loader block. Selfishell also manages only its marked mise
-shims block within `~/.zprofile`; both files remain user-owned.
+marked Selfishell loader block. Selfishell also manages only its marked blocks
+in `~/.zprofile` (mise shims) and `~/.zshenv` (`skip_global_compinit` and the
+emacs keymap); these files remain user-owned.
 
 Recommended deployment controls:
 

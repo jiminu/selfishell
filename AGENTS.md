@@ -117,7 +117,8 @@ Preserve these lifecycle invariants:
   configuration changes during install and update;
 - remove only an intact installer-managed loader;
 - retain direct-dependency ownership and font recovery records across purge,
-  leaving installed tools and fonts in place;
+  leaving installed tools and fonts in place (Zsh plugin checkouts under
+  `share/selfishell` are removed and cloned again by the next installation);
 - make dry-run create no directories, state, backups, links, or files, and never
   invoke mise: even its read-only commands write metadata;
 - increment the fixed-line state format version before changing field order or

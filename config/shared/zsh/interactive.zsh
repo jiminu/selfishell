@@ -134,8 +134,13 @@ unset _selfishell_fzf_bin
 # fzf-tab wraps the completion widgets, so it loads synchronously after
 # compinit (completion.zsh runs first) instead of with the deferred pair below.
 if command -v fzf >/dev/null 2>&1 && [[ -r "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh" ]]; then
-  # Reloading the configuration must not wrap the completion widgets again.
-  (( $+functions[fzf-tab-complete] )) || source "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
+  # Reloading the configuration must not wrap the completion widgets again,
+  # but fzf's init above has just bound Tab again, so take it back.
+  if (( $+functions[fzf-tab-complete] && $+functions[enable-fzf-tab] )); then
+    enable-fzf-tab
+  else
+    source "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh"
+  fi
 
   # Keep previews per-command so they do not run for option flags.
 

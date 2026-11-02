@@ -76,6 +76,10 @@ The Go code is layered, and imports point only downward:
    It imports the packages above; they never import it.
 4. Commands under `cmd/` import only the packages they use.
 
+Outside these layers, `internal/pty` opens pseudo-terminals for the benchmark
+and the tests, `internal/benchmark` and `internal/releasebuild` serve only their
+`cmd/` tools, and `internal/testutil` is imported only by tests.
+
 New code goes in the lowest layer whose dependencies it needs. A foundation
 package that would need the core is a sign the code belongs in the core, or that
 the core should pass it an interface or a function, as `process.Progress` does
@@ -128,7 +132,7 @@ empty target, a missing field terminator, or NUL bytes
 are rejected. Writers reject embedded line breaks and NUL rather than producing
 a record whose fields cannot be represented faithfully.
 
-New transient records use v3. A pending file update retains the accepted
+A pending file update retains the accepted
 pre-write checksum, so failure before replacement can be retried; the source
 checksum also recognizes a replacement completed before the active state was
 saved. Changes made by the user after the failed write still require conflict

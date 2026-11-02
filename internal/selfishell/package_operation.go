@@ -99,16 +99,6 @@ func (o *PackageOperation) optionalFailure(requirement, message string, names []
 	}
 	return o.fail(message)
 }
-func (o *PackageOperation) run(ctx context.Context, name string, args ...string) error {
-	code, err := o.Process.Run(ctx, name, args...)
-	if err != nil {
-		return err
-	}
-	if code != 0 {
-		return fmt.Errorf("%s exited with status %d", name, code)
-	}
-	return nil
-}
 
 func validRequirement(requirement string) error {
 	if requirement != "required" && requirement != "optional" {

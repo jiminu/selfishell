@@ -38,8 +38,8 @@ is described in [Go packages](docs/ARCHITECTURE.md#go-packages).
 ## Tests and repository gate
 
 `bash scripts/check.sh` checks Bash/Zsh syntax, ShellCheck and shfmt, parses the
-Neovim Lua through `scripts/check-lua.sh`, then runs Go format, vet, tests and
-four target builds through `scripts/check-go.sh`. The Lua parse uses `nvim` (or
+Neovim Lua through `scripts/check-lua.sh`, then builds the four targets and runs
+Go format, vet and tests through `scripts/check-go.sh`. The Lua parse uses `nvim` (or
 `luac`) from PATH and prints a skip line without either; CI runs it in the Neovim
 job with the pinned `nvim`.
 Go owns maintained setup, process execution, assertions and cleanup. Native
@@ -63,8 +63,8 @@ and `internal/report` reads the environment only through
 the injected `process.Environment` (another source check), so its tests pass a
 private environment instead of calling `t.Setenv`.
 
-The subsystem packages (`internal/terminal`, `internal/release` and
-`internal/neovim`) carry only their unit tests; the core's CLI-driving tests in
+The subsystem packages (`internal/terminal`, `internal/release`,
+`internal/neovim` and `internal/lifecycle`) carry only their unit tests; the core's CLI-driving tests in
 `internal/selfishell` verify their behaviour, so a change there needs the whole
 gate, not `go test ./internal/<package>` alone.
 

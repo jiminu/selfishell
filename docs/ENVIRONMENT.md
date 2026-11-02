@@ -27,6 +27,11 @@ Eza and Bat are optional. Terminal setup has separate saved choices; see
 [Ghostty on macOS](INSTALLATION.md#ghostty-on-macos) and
 [Windows Terminal on WSL](INSTALLATION.md#windows-terminal-on-wsl).
 
+Ctrl or Alt with Left/Right moves the command line by word, and Shift with
+Left/Right by character. Windows Terminal and Linux terminals send these keys
+as xterm modifier sequences; Ghostty on macOS turns Option with Left/Right into
+Alt-b and Alt-f itself.
+
 ## Prompt and colors
 
 Directories that are not writable show a red Nerd Font lock icon immediately

@@ -114,8 +114,11 @@ prompt is drawn: `interactive.zsh` registers a one-shot `zle -F` handler on an
 always-readable descriptor, so the line editor runs it as soon as it first waits
 for input, sources both plugins, binds the autosuggestion widgets once and
 redraws the line. A `precmd` hook would run before the prompt is printed and put
-their load time back on the critical path. `scripts/benchmark.sh --prompt`
-measures the prompt with and without these plugins ready.
+their load time back on the critical path. Sourcing the configuration again in
+the same shell registers no second handler and skips a plugin that is already
+loaded, since each load would wrap every widget once more.
+`scripts/benchmark.sh --prompt` measures the first prompt, which this deferral
+keeps free of their load time; it does not measure when the plugins are ready.
 
 ## Startup caches
 
