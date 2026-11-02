@@ -16,8 +16,8 @@ var ErrMalformedState = errors.New("malformed managed state")
 
 // State retains the six payload fields of Bash's seven-line v2 record.
 // V3 adds the restoring status and retains accepted pre-write checksums.
-// Every record is written as v3; readers still accept v2 records left by
-// releases before 1.5.0.
+// Every record is written as v3; readers still accept the v2 records that
+// releases before 1.7.1 wrote for completed resources.
 type State struct{ Kind, Status, Target, Reference, Backup, Checksum string }
 
 func (s State) fields() []string {

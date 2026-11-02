@@ -141,9 +141,10 @@ record without touching that now user-owned path. If both paths are absent,
 recovery stops; if both are occupied, neither is overwritten. Finish an
 interrupted restore with `selfishell uninstall --restore` before reinstalling.
 
-Every record is written as v3. Readers still accept v2 records left by releases
-before 1.5.0, which rewrite as v3 on the next install or update. A CLI older
-than 1.5.0 rejects v3 records, so rolling back below 1.5.0 is not supported.
+Every record is written as v3. Releases before 1.7.1 wrote completed `active`
+records as v2; readers still accept them, and the next install or update that
+applies the configuration rewrites them as v3. A CLI older than 1.5.0 rejects
+v3 records, so rolling back below 1.5.0 is not supported.
 
 Managed block checksums treat a closing marker at EOF without a final newline
 as the same line with a newline. Removal still uses the actual byte boundaries

@@ -71,13 +71,37 @@ Tree-sitter parsers install on first opening their filetype. Existing Apt and
 Homebrew packages are not upgraded; use `brew upgrade` or the operating system's
 Apt upgrade policy separately.
 
+Neovim synchronization can remove plugin checkouts no longer used by its
+configuration. Before cleanup, Selfishell checks directories absent from the
+release's plugin manifest. A non-Git or unreadable checkout, local changes,
+or untracked or ignored files stop synchronization and preserve the directory.
+Generated `doc/tags` files are excluded from this check.
+Move the reported directory outside `nvim/lazy` before retrying if you need to
+keep its contents. Clean unused Git checkouts can still be removed.
+
+Selfishell also verifies the bytes of its managed mise executable against the
+release's approved checksum. A manual `mise self-update` is replaced with the
+approved version on the next tools synchronization. An external mise installation
+that Selfishell does not own remains untouched.
+
+Uninstalling with `--purge` leaves installed tools and fonts in place and retains
+their ownership records. Reinstalling Selfishell continues to synchronize these
+managed dependencies instead of treating them as external installations; see
+[purge](INSTALLATION.md#restore-configuration-and-purge-selfishell) to forget them.
+
+`--skip-packages` skips all package and tool installation when this phase runs,
+matching `selfishell install --skip-packages`. CLI-only and already-current
+default updates skip the entire phase.
+
 ### Zinit before 1.7.0
 
 Releases before 1.7.0 installed the Zsh plugins through Zinit under
-`${XDG_DATA_HOME:-$HOME/.local/share}/zinit`. The 1.7 releases removed a
+`${XDG_DATA_HOME:-$HOME/.local/share}/zinit`. Selfishell 1.7.0 removed a
 Selfishell-installed checkout during install and tools updates. An installation
-that skipped those releases keeps that directory; it is no longer read, and you
-can delete it by hand unless personal configuration still uses Zinit.
+that skipped 1.7.0 keeps that directory; it is no longer read, and you can
+delete it by hand unless personal configuration still uses Zinit. Rolling back
+to a release before 1.7.0 starts shells without plugins until that release's
+own `selfishell install` installs Zinit again.
 
 ### Neovim LSP servers
 
