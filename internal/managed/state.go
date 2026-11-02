@@ -15,16 +15,13 @@ import (
 var ErrMalformedState = errors.New("malformed managed state")
 
 // State retains the six payload fields of Bash's seven-line v2 record.
-// V3 transient records distinguish an interrupted restore and retain accepted
-// pre-write checksums. Completed records use v2 for rollback compatibility.
+// V3 adds the restoring status and retains accepted pre-write checksums.
+// Every record is written as v3; readers still accept the v2 records that
+// releases before 1.7.1 wrote for completed resources.
 type State struct{ Kind, Status, Target, Reference, Backup, Checksum string }
 
 func (s State) fields() []string {
-	version := "3"
-	if s.Status == "active" {
-		version = "2"
-	}
-	return []string{version, s.Kind, s.Status, s.Target, s.Reference, s.Backup, s.Checksum}
+	return []string{"3", s.Kind, s.Status, s.Target, s.Reference, s.Backup, s.Checksum}
 }
 
 func (s State) validate() error {
