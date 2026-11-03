@@ -63,8 +63,9 @@ and `prompt-command-{empty,repository}` in a 160-column PTY with the managed
 Starship configuration. Each scenario warms one shell before collecting samples.
 Every measured shell sends its first `:` command immediately after seeing the
 first prompt and measures until the next prompt. This first-command metric
-captures startup work that delays that response, including deferred plugin
-loading still in progress. It is not an exact plugin-readiness timestamp or a
+captures startup work that delays that response. Queued input can run before
+`zle -F` handlers, so a fast first command does not prove deferred plugins are
+ready or bound their load time. It is not a plugin-readiness timestamp or a
 single-keystroke rendering measurement. The shell then waits 100 ms and runs
 three more `:` commands for the ordinary command metric. A numbered prompt marker
 distinguishes a new command cycle from an editing redraw. Timings include shell
@@ -124,8 +125,9 @@ the same shell registers no second handler and skips a plugin that is already
 loaded, since each load would wrap every widget once more.
 `scripts/benchmark.sh --prompt` measures the first prompt, which this deferral
 keeps free of their load time, and the immediate first command response, which
-exposes deferred loading that blocks that command. Neither is an exact timestamp
-for when every plugin is ready.
+includes deferred loading only if it runs before that command. Zsh can process
+queued input first, so neither metric guarantees that all deferred loading was
+measured or that every plugin is ready.
 
 ## Startup caches
 

@@ -154,9 +154,9 @@ func TestWaitForPromptRejectsOldMarkerAndClosedShell(t *testing.T) {
 	}
 }
 
-// The same one-shot zle -F mechanism as the managed deferred plugin loader.
-// A delay after the first prompt must be visible in the first command metric.
-func TestFirstCommandIncludesDeferredLoading(t *testing.T) {
+// Line-editor initialization runs after the prompt and before queued input.
+// Unlike zle -F handlers, it cannot be overtaken by the first command.
+func TestFirstCommandIncludesLineEditorInitialization(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/zsh"); err != nil {
 		t.Skip("/bin/zsh unavailable")
@@ -169,17 +169,13 @@ precmd() {
  if (( count == 2 )); then print -r -- "$loaded" >> "$HOME/loaded"; fi
 }
 RPROMPT='__SFS_READY_${count}__'
-_deferred() {
- local fd=$1
- zle -F "$fd"
- exec {fd}<&-
- sleep 0.3
- loaded=1
- zle -R
- unfunction _deferred
+zle-line-init() {
+ if (( ! loaded )); then
+  sleep 0.3
+  loaded=1
+ fi
 }
-exec {deferred_fd}</dev/null
-zle -F "$deferred_fd" _deferred
+zle -N zle-line-init
 `
 	if err := testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte(fixture), 0600); err != nil {
 		t.Fatal(err)
@@ -191,9 +187,9 @@ zle -F "$deferred_fd" _deferred
 	}
 	data, err := os.ReadFile(filepath.Join(home, "loaded"))
 	if err != nil || string(data) != "1\n1\n" {
-		t.Fatalf("first command overtook deferred loading: %q, %v", data, err)
+		t.Fatalf("first command overtook line-editor initialization: %q, %v", data, err)
 	}
 	if len(got.FirstCommand) != 1 || got.FirstCommand[0] < 250 {
-		t.Fatalf("deferred delay not measured: %+v", got)
+		t.Fatalf("initialization delay not measured: %+v", got)
 	}
 }
