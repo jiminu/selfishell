@@ -1,6 +1,7 @@
 package selfishell
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -206,6 +207,7 @@ type preparedConfig struct {
 	m               lifecycle.Operation
 	miseGlobal      string
 	ghostty         bool
+	shellChanged    bool
 	windowsTerminal *terminal.WindowsChoice
 }
 
@@ -371,8 +373,19 @@ func (c CLI) applyManagedResources(p *preparedConfig) error {
 				}
 			}
 		}
+		// Compare applied bytes so skipped personal changes do not request a reload.
+		isShell := managed.RawParent(r.Target) == paths.Config+"/zsh" ||
+			r.Name == "user-zshrc" || r.Name == "user-zprofile" || r.Name == "user-zshenv"
+		var before []byte
+		if isShell && !m.Dry {
+			before, _ = managed.ReadFile(r.Target)
+		}
 		if err := m.InstallResource(r, false); err != nil {
 			return err
+		}
+		if isShell && !m.Dry {
+			after, _ := managed.ReadFile(r.Target)
+			p.shellChanged = p.shellChanged || !bytes.Equal(before, after)
 		}
 	}
 	if err := terminal.InstallFragment(m, m.Paths, p.windowsTerminal, false); err != nil {
@@ -444,7 +457,16 @@ func (c CLI) applyConfig(p preparedConfig, dry, yes, skip bool, operation *Packa
 		c.report("Notes", report.Info, "%d items unchanged.", m.UnchangedCount)
 	}
 	c.complete("Selfishell configuration installed.")
+	c.shellReloadHint(p, operation)
 	return nil
+}
+
+const shellReloadMessage = "Open a new terminal, or run 'exec zsh -l' to load updated shell configuration and tools."
+
+func (c CLI) shellReloadHint(p preparedConfig, operation *PackageOperation) {
+	if p.shellChanged && !p.m.Dry && (operation == nil || !operation.shellReloadNoted) {
+		c.report("Notes", report.Info, shellReloadMessage)
+	}
 }
 
 func (c CLI) installNeovim(operation *PackageOperation, paths managed.Paths, dry bool) error {

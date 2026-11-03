@@ -54,6 +54,11 @@ use `selfishell install --skip-packages`; see
 [modified managed files](TROUBLESHOOTING.md#modified-managed-file) for conflict
 handling and missing-block repair.
 
+After installing or changing Zsh files or their loader blocks, Selfishell
+suggests opening a new terminal or running `exec zsh -l` to load them. An
+unchanged reapplication, skipped personal changes, and dry-run do not show this
+notice.
+
 If you need to remove the installation before starting over, keep a separate
 copy of personal configuration and any backups you need. Use the
 [uninstall procedure](#uninstallation) to preview and restore managed paths

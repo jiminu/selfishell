@@ -35,7 +35,10 @@ A successful update reports the version transition, such as
 `Selfishell updated: 1.2.10 -> 1.2.14`; release notes are on GitHub.
 If the tools/configuration phase fails, the CLI may already have
 switched: check `selfishell version` for the active release. Tools-only updates
-finish with `Selfishell tools and configuration synchronized.`
+finish with `Selfishell tools and configuration synchronized.` When managed Zsh
+files or loader blocks change, a successful synchronization also suggests opening
+a new terminal or running `exec zsh -l`. Unchanged or skipped files and dry-run
+do not trigger this notice.
 
 Completed changes remain in place if a later step fails. After resolving the
 reported error, retry a failed installation with `selfishell install`, or a failed
@@ -158,7 +161,7 @@ variables, one-off `mise exec tool@version`, or untracked projects can be
 removed. Record those versions in project configuration and load it with mise
 before updating. See [mise prune](https://mise.jdx.dev/cli/prune.html).
 When cleanup removes a version, the update notes that open shells should run
-`exec zsh`: they keep paths to the removed versions, such as Starship's prompt.
+`exec zsh -l`: they keep paths to the removed versions, such as Starship's prompt.
 Virtualenvs also keep the Python that created them. When cleanup removes a
 Python, the update names any Mason package built on it, such as debugpy, with
 the `:MasonInstall --force` command that rebuilds it. Rebuild a uv project's
