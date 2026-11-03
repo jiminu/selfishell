@@ -232,6 +232,14 @@ managed-resource state without checking the network or available Apt/Homebrew
 updates. Use
 `selfishell version --available` to check the latest release.
 
+Status also lists and counts installed managed tools whose versions differ from
+the current release's approved pins, and suggests `selfishell update --tools-only`.
+This is informational and does not change the exit code: CLI-only updates and
+rollbacks can intentionally leave earlier tool versions installed. External
+installations and Apt/Homebrew versions are excluded. If mise reports multiple
+installed current versions, the tool matches when the approved version is among
+them. Missing tools and failed inspections retain their existing diagnostics.
+
 Interactive Zsh checks once before the first prompt, reads the installed
 `VERSION`, and displays a cached notice for newer releases. Settings anywhere
 outside the marked loader block, including below it, are applied before this

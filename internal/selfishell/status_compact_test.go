@@ -2,6 +2,7 @@ package selfishell
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"strings"
@@ -220,5 +221,53 @@ func TestHomeDisplayPreservesExternalPaths(t *testing.T) {
 		if got := displayHome(tc.message, "/home/u"); got != tc.want {
 			t.Errorf("%q: got %q, want %q", tc.message, got, tc.want)
 		}
+	}
+}
+
+func TestStatusToolsVersionDifferencesAreInformational(t *testing.T) {
+	t.Parallel()
+	for _, version := range []string{"1.0", "2.0"} {
+		t.Run(version, func(t *testing.T) {
+			t.Parallel()
+			var env process.Environment
+			root, paths, warnings, bin := inventoryFixture(t, &env)
+			testutil.SetEnv(&env, "PATH", bin)
+			fixtureFile(t, root+"/config/shared/mise.toml", "[tools]\nnode = \"2.0\"\npython = \"2.0\"\ngh = \"2.0\"\n", 0600)
+			fixtureFile(t, bin+"/mise", "#!/bin/sh\nprintf 'node "+version+" config 2.0\\npython 1.0 config 1.0\\npython 2.0 config 2.0\\n'\n", 0700)
+			fixtureFile(t, bin+"/gh", "#!/bin/sh\nexit 0\n", 0700)
+			fixtureFile(t, bin+"/brew", "#!/bin/sh\nprintf '{\"formulae\":[{\"name\":\"git\",\"versions\":[\"1.0\"]}],\"casks\":[]}'\n", 0700)
+			fixtureFile(t, root+"/dependencies.conf", fmt.Sprintf("download probe 2.0 all all source %x .local/bin/probe raw\n", sha256.Sum256([]byte("#!/bin/sh\nexit 0\n"))), 0600)
+			fixtureFile(t, env.Get("HOME")+"/.local/bin/probe", "#!/bin/sh\nexit 0\n", 0700)
+			fixtureFile(t, paths.State+"/dependencies/probe", version+"\n", 0600)
+			packages := []Package{
+				{Name: "node", Manager: "mise", Requirement: "required"},
+				{Name: "python", Manager: "mise", Requirement: "required"},
+				{Name: "gh", Manager: "mise", Requirement: "required"},
+				{Name: "git", Manager: "formula", Requirement: "required"},
+				{Name: "probe", Manager: "direct", Requirement: "required"},
+			}
+			for _, verbose := range []bool{false, true} {
+				var out bytes.Buffer
+				problem, err := (CLI{Env: env, Out: &out}).statusTools(packages, inventory(t, env, root, paths, warnings), Platform{Name: "macos", Arch: "arm64"}, verbose)
+				if err != nil || problem {
+					t.Fatalf("version difference failed diagnosis: %v %s", err, &out)
+				}
+				if !strings.Contains(out.String(), "Tools: 5 present") {
+					t.Fatal(out.String())
+				}
+				if version == "1.0" {
+					for _, want := range []string{"[INFO] Tool: node | Installed: 1.0 | Approved: 2.0", "[INFO] Tool: probe | Installed: 1.0 | Approved: 2.0", "[INFO] Tools: 2 differ from approved versions", "selfishell update --tools-only"} {
+						if !strings.Contains(out.String(), want) {
+							t.Fatalf("missing %q: %s", want, &out)
+						}
+					}
+					if strings.Count(out.String(), "[INFO] Tool:") != 2 || strings.Count(out.String(), "selfishell update --tools-only") != 1 {
+						t.Fatal(out.String())
+					}
+				} else if strings.Contains(out.String(), "differ from approved") || strings.Contains(out.String(), "selfishell update --tools-only") {
+					t.Fatal(out.String())
+				}
+			}
+		})
 	}
 }
