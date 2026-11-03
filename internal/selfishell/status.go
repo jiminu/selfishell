@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -325,7 +326,7 @@ func (c CLI) status(args []string) int {
 
 // statusTools reports missing required tools and failed tool inspections.
 func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform Platform, verbose bool) (bool, error) {
-	present, requiredMissing, optionalMissing, unknown := 0, 0, 0, 0
+	present, requiredMissing, optionalMissing, unknown, different := 0, 0, 0, 0, 0
 	for _, p := range packages {
 		tool, e := inventory.Detect(p.Manager, p.Name, dependencyPlatform(platform.Name), platform.Arch)
 		if e != nil {
@@ -344,6 +345,12 @@ func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform 
 			}
 		} else if tool.Installed != "unknown" {
 			present++
+			// External tools and system package versions have no comparable pin.
+			if (tool.Source == "selfishell" || tool.Source == "mise") && tool.Approved != "" &&
+				!slices.Contains(strings.Fields(tool.Installed), tool.Approved) {
+				different++
+				c.sayDiagnostic("36", "INFO", fmt.Sprintf("Tool: %s | Installed: %s | Approved: %s", p.Name, shortRevision(tool.Installed), shortRevision(tool.Approved)))
+			}
 		}
 		if verbose {
 			installed, approved := tool.Installed, tool.Approved
@@ -353,7 +360,7 @@ func (c CLI) statusTools(packages []Package, inventory *ToolInventory, platform 
 			fmt.Fprintf(c.Out, "[TOOL] %s | Installed: %s | Source: %s | Approved: %s\n", p.Name, installed, tool.Source, approved)
 		}
 	}
-	c.toolsSummary(present, requiredMissing, optionalMissing, unknown)
+	c.toolsSummary(present, requiredMissing, optionalMissing, unknown, different)
 	return requiredMissing+unknown > 0, nil
 }
 
@@ -389,7 +396,7 @@ func (c CLI) missingTool(p Package) {
 	}
 }
 
-func (c CLI) toolsSummary(present, requiredMissing, optionalMissing, unknown int) {
+func (c CLI) toolsSummary(present, requiredMissing, optionalMissing, unknown, different int) {
 	message := fmt.Sprintf("Tools: %d present", present)
 	color, label := "32", "OK"
 	if unknown > 0 {
@@ -410,7 +417,10 @@ func (c CLI) toolsSummary(present, requiredMissing, optionalMissing, unknown int
 	if unknown > 0 {
 		c.diagnosticHint("Resolve the reported inspection errors, then rerun selfishell status.", "")
 	}
-	if requiredMissing+optionalMissing > 0 {
+	if different > 0 {
+		c.sayDiagnostic("36", "INFO", fmt.Sprintf("Tools: %d differ from approved versions", different))
+		c.diagnosticHint("Synchronize tools with:", "selfishell update --tools-only")
+	} else if requiredMissing+optionalMissing > 0 {
 		c.diagnosticHint("Synchronize missing tools with:", "selfishell update --tools-only")
 	}
 }
