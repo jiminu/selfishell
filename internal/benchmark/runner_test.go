@@ -142,7 +142,7 @@ func TestRunnerPromptDiagnosticsAndTSV(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, metric := range []string{"prompt-first-empty", "prompt-command-empty", "prompt-first-repository", "prompt-command-repository", "cli-status"} {
+	for _, metric := range []string{"prompt-first-empty", "prompt-command-empty", "prompt-first-command-empty", "prompt-first-command-repository", "prompt-first-repository", "prompt-command-repository", "cli-status"} {
 		found := false
 		for _, line := range strings.Split(string(data), "\n") {
 			fields := strings.Split(line, "\t")

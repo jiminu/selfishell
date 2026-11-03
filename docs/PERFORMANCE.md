@@ -58,10 +58,16 @@ They use the same iteration count (`SELFISHELL_BENCHMARK_ITERATIONS`, default
 They have no enforced timing budgets.
 
 `--prompt` uses the native Go PTY probe. It measures
-`prompt-first-{empty,repository}` and `prompt-command-{empty,repository}` in
-a 160-column PTY with the managed Starship configuration. Each scenario warms
-one shell before collecting samples. Every measured shell runs three `:`
-commands after a fixed 100 ms settling interval. A numbered prompt marker
+`prompt-first-{empty,repository}`, `prompt-first-command-{empty,repository}`,
+and `prompt-command-{empty,repository}` in a 160-column PTY with the managed
+Starship configuration. Each scenario warms one shell before collecting samples.
+Every measured shell sends its first `:` command immediately after seeing the
+first prompt and measures until the next prompt. This first-command metric
+captures startup work that delays that response. Queued input can run before
+`zle -F` handlers, so a fast first command does not prove deferred plugins are
+ready or bound their load time. It is not a plugin-readiness timestamp or a
+single-keystroke rendering measurement. The shell then waits 100 ms and runs
+three more `:` commands for the ordinary command metric. A numbered prompt marker
 distinguishes a new command cycle from an editing redraw. Timings include shell
 process creation for the first prompt and run until the marker reaches the PTY;
 they exclude GUI terminal rendering. The settling interval does not prove
@@ -118,7 +124,10 @@ their load time back on the critical path. Sourcing the configuration again in
 the same shell registers no second handler and skips a plugin that is already
 loaded, since each load would wrap every widget once more.
 `scripts/benchmark.sh --prompt` measures the first prompt, which this deferral
-keeps free of their load time; it does not measure when the plugins are ready.
+keeps free of their load time, and the immediate first command response, which
+includes deferred loading only if it runs before that command. Zsh can process
+queued input first, so neither metric guarantees that all deferred loading was
+measured or that every plugin is ready.
 
 ## Startup caches
 
