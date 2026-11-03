@@ -86,10 +86,10 @@ zshexit() { print finished >> "$HOME/finished"; }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.First) != 1 || len(got.Command) != 3 {
-		t.Fatalf("sample shape = %d,%d", len(got.First), len(got.Command))
+	if len(got.First) != 1 || len(got.FirstCommand) != 1 || len(got.Command) != 3 {
+		t.Fatalf("sample shape = %d,%d,%d", len(got.First), len(got.FirstCommand), len(got.Command))
 	}
-	for _, v := range append(got.First, got.Command...) {
+	for _, v := range append(append(got.First, got.FirstCommand...), got.Command...) {
 		if v <= 0 {
 			t.Fatalf("non-positive sample %f", v)
 		}
@@ -151,5 +151,49 @@ func TestWaitForPromptRejectsOldMarkerAndClosedShell(t *testing.T) {
 	failed <- readResult{err: syscall.EIO}
 	if err := waitForPrompt(context.Background(), failed, 4); err == nil || !strings.Contains(err.Error(), "exited") {
 		t.Fatalf("EIO: %v", err)
+	}
+}
+
+// The same one-shot zle -F mechanism as the managed deferred plugin loader.
+// A delay after the first prompt must be visible in the first command metric.
+func TestFirstCommandIncludesDeferredLoading(t *testing.T) {
+	t.Parallel()
+	if _, err := os.Stat("/bin/zsh"); err != nil {
+		t.Skip("/bin/zsh unavailable")
+	}
+	home := t.TempDir()
+	fixture := `setopt promptsubst
+typeset -gi count=0 loaded=0
+precmd() {
+ (( ++count ))
+ if (( count == 2 )); then print -r -- "$loaded" >> "$HOME/loaded"; fi
+}
+RPROMPT='__SFS_READY_${count}__'
+_deferred() {
+ local fd=$1
+ zle -F "$fd"
+ exec {fd}<&-
+ sleep 0.3
+ loaded=1
+ zle -R
+ unfunction _deferred
+}
+exec {deferred_fd}</dev/null
+zle -F "$deferred_fd" _deferred
+`
+	if err := testutil.WriteFile(filepath.Join(home, ".zshrc"), []byte(fixture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	env := PromptEnvironment("/release", home, home, "/release/zshrc", "/usr/bin:/bin", nil)
+	got, err := MeasurePrompt(context.Background(), home, env, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, "loaded"))
+	if err != nil || string(data) != "1\n1\n" {
+		t.Fatalf("first command overtook deferred loading: %q, %v", data, err)
+	}
+	if len(got.FirstCommand) != 1 || got.FirstCommand[0] < 250 {
+		t.Fatalf("deferred delay not measured: %+v", got)
 	}
 }

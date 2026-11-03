@@ -34,7 +34,7 @@ func Summarize(samples []float64) (Stats, error) {
 }
 
 // PromptSamples contains raw milliseconds from one warmup plus iterations measured shells.
-type PromptSamples struct{ First, Command []float64 }
+type PromptSamples struct{ First, FirstCommand, Command []float64 }
 
 // PromptEnvironment builds the child environment without inheriting caller tools or activation.
 func PromptEnvironment(root, home, zdotdir, platformConfig, path string, inherited []string) []string {
@@ -78,7 +78,7 @@ func MeasurePrompt(ctx context.Context, cwd string, env []string, iterations int
 		return PromptSamples{}, err
 	}
 	env = append(append([]string(nil), env...), "MISE_CEILING_PATHS="+abs)
-	samples := PromptSamples{First: make([]float64, 0, iterations), Command: make([]float64, 0, iterations*3)}
+	samples := PromptSamples{First: make([]float64, 0, iterations), FirstCommand: make([]float64, 0, iterations), Command: make([]float64, 0, iterations*3)}
 	for iteration := 0; iteration <= iterations; iteration++ {
 		first, commands, err := measureShell(ctx, abs, env)
 		if err != nil {
@@ -86,7 +86,8 @@ func MeasurePrompt(ctx context.Context, cwd string, env []string, iterations int
 		}
 		if iteration > 0 {
 			samples.First = append(samples.First, first)
-			samples.Command = append(samples.Command, commands[:]...)
+			samples.FirstCommand = append(samples.FirstCommand, commands[0])
+			samples.Command = append(samples.Command, commands[1:]...)
 		}
 	}
 	return samples, nil
@@ -97,19 +98,19 @@ type readResult struct {
 	err  error
 }
 
-func measureShell(parent context.Context, cwd string, env []string) (float64, [3]float64, error) {
+func measureShell(parent context.Context, cwd string, env []string) (float64, [4]float64, error) {
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	// Match the old pty.fork boundary: include PTY creation and sizing.
 	start := time.Now()
 	master, slave, err := pty.Open()
 	if err != nil {
-		return 0, [3]float64{}, err
+		return 0, [4]float64{}, err
 	}
 	defer master.Close()
 	if err := pty.Resize(slave, 32, 160); err != nil {
 		slave.Close()
-		return 0, [3]float64{}, err
+		return 0, [4]float64{}, err
 	}
 	cmd := exec.Command("/bin/zsh", "-d", "-i")
 	cmd.Dir = cwd
@@ -120,7 +121,7 @@ func measureShell(parent context.Context, cwd string, env []string) (float64, [3
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	if err := cmd.Start(); err != nil {
 		slave.Close()
-		return 0, [3]float64{}, err
+		return 0, [4]float64{}, err
 	}
 	slave.Close()
 	read := make(chan readResult, 8)
@@ -168,32 +169,36 @@ func measureShell(parent context.Context, cwd string, env []string) (float64, [3
 		select {
 		case childErr := <-wait:
 			waited = true
-			return 0, [3]float64{}, fmt.Errorf("%w; shell exit: %v", err, childErr)
+			return 0, [4]float64{}, fmt.Errorf("%w; shell exit: %v", err, childErr)
 		default:
-			return 0, [3]float64{}, err
+			return 0, [4]float64{}, err
 		}
 	}
 	first := float64(time.Since(start)) / float64(time.Millisecond)
-	settle := time.NewTimer(100 * time.Millisecond)
-	select {
-	case <-settle.C:
-	case <-ctx.Done():
-		settle.Stop()
-		return 0, [3]float64{}, ctx.Err()
-	}
-	var commands [3]float64
-	for count := 2; count <= 4; count++ {
+	var commands [4]float64
+	for count := 2; count <= 5; count++ {
+		// Probe the first command immediately; retain the settling interval for
+		// the three ordinary command samples so their metric stays comparable.
+		if count == 3 {
+			settle := time.NewTimer(100 * time.Millisecond)
+			select {
+			case <-settle.C:
+			case <-ctx.Done():
+				settle.Stop()
+				return 0, [4]float64{}, ctx.Err()
+			}
+		}
 		start = time.Now()
 		if _, err := master.Write([]byte(":\n")); err != nil {
-			return 0, [3]float64{}, fmt.Errorf("command %d write: %w", count, err)
+			return 0, [4]float64{}, fmt.Errorf("command %d write: %w", count, err)
 		}
 		if err := waitForPrompt(ctx, read, count); err != nil {
-			return 0, [3]float64{}, err
+			return 0, [4]float64{}, err
 		}
 		commands[count-2] = float64(time.Since(start)) / float64(time.Millisecond)
 	}
 	if _, err := master.Write([]byte("exit\n")); err != nil {
-		return 0, [3]float64{}, fmt.Errorf("exit write: %w", err)
+		return 0, [4]float64{}, fmt.Errorf("exit write: %w", err)
 	}
 	exitTimer := time.NewTimer(5 * time.Second)
 	defer exitTimer.Stop()
@@ -201,12 +206,12 @@ func measureShell(parent context.Context, cwd string, env []string) (float64, [3
 	case err := <-wait:
 		waited = true
 		if err != nil {
-			return 0, [3]float64{}, fmt.Errorf("shell exit: %w", err)
+			return 0, [4]float64{}, fmt.Errorf("shell exit: %w", err)
 		}
 	case <-exitTimer.C:
-		return 0, [3]float64{}, errors.New("shell did not exit after measurement")
+		return 0, [4]float64{}, errors.New("shell did not exit after measurement")
 	case <-ctx.Done():
-		return 0, [3]float64{}, ctx.Err()
+		return 0, [4]float64{}, ctx.Err()
 	}
 	return first, commands, nil
 }

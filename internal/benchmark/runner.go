@@ -600,11 +600,16 @@ RPROMPT+='__SFS_READY_${_selfishell_benchmark_prompt}__'
 		if e != nil {
 			return e
 		}
+		firstCommand, e := Summarize(samples.FirstCommand)
+		if e != nil {
+			return e
+		}
 		commands, e := Summarize(samples.Command)
 		if e != nil {
 			return e
 		}
 		f.metric("prompt-first-"+scenario.label, first)
+		f.metric("prompt-first-command-"+scenario.label, firstCommand)
 		f.metric("prompt-command-"+scenario.label, commands)
 	}
 	return f.resultErr
