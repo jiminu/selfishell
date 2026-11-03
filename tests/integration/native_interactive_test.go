@@ -126,8 +126,9 @@ func TestNativeDeferredPluginsLoadAfterFirstPrompt(t *testing.T) {
 	// Sourcing the configuration twice before the first prompt must still leave
 	// exactly one pending handler; a second one would spin on /dev/null.
 	// Sourcing it again after the prompt must not load any plugin a second
-	// time; each load wraps every widget once more. fzf's init binds Tab again
-	// on every source, so fzf-tab must take it back without being reloaded.
+	// time; each load wraps every widget once more. fzf's init must not run
+	// again either: it would replace the widgets autosuggestions wrapped, and
+	// rebind Tab away from fzf-tab.
 	for _, tc := range []struct {
 		name     string
 		sources  int
@@ -155,12 +156,18 @@ enable-fzf-tab
 `, 0600)
 	nativeWrite(t, filepath.Join(plugins, "zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"), `print -r -- zsh-autosuggestions >>"$SELFISHELL_TEST_PLUGIN_LOG"
 _zsh_autosuggest_start() { :; }
-_zsh_autosuggest_bind_widgets() { print -r -- bind >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
+_zsh_autosuggest_bind_widgets() {
+  print -r -- bind >>"$SELFISHELL_TEST_PLUGIN_LOG"
+  _test_wrapped_history() { zle fzf-history-widget-orig; }
+  zle -A fzf-history-widget fzf-history-widget-orig
+  zle -N fzf-history-widget _test_wrapped_history
+}
 `, 0600)
 	nativeWrite(t, filepath.Join(plugins, "fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"), `print -r -- fast-syntax-highlighting >>"$SELFISHELL_TEST_PLUGIN_LOG"
 _zsh_highlight() { :; }
 `, 0600)
-	fzf := fakeExecutable(t, home, "fzf", "printf '%s\\n' 'fzf-completion() { :; }' 'zle -N fzf-completion' \"bindkey '^I' fzf-completion\"\n")
+	// The init defines a widget, as fzf's does, and logs every time it runs.
+	fzf := fakeExecutable(t, home, "fzf", "printf '%s\\n' 'print -r -- fzf-init >>\"$SELFISHELL_TEST_PLUGIN_LOG\"' 'fzf-history-widget() { :; }' 'zle -N fzf-history-widget' 'fzf-completion() { :; }' 'zle -N fzf-completion' \"bindkey '^I' fzf-completion\"\n")
 	// precmd also logs how many zle -F handlers are pending at that moment.
 	nativeWrite(t, filepath.Join(home, ".zshrc"), strings.Repeat(`source "$SELFISHELL_SOURCE"
 `, sources)+`precmd() { print -r -- "precmd $(zle -F | wc -l | tr -d ' ')" >>"$SELFISHELL_TEST_PLUGIN_LOG"; }
@@ -211,7 +218,7 @@ zle -N zle-line-init
 	_, err = master.Write([]byte(":\n"))
 	mustFS(t, err)
 	waitLog("line-init", 2)
-	want := "fzf-tab\nprecmd 1\nline-init\nzsh-autosuggestions\nfast-syntax-highlighting\nbind\nprecmd 0\nline-init\n"
+	want := "fzf-init\nfzf-tab\nprecmd 1\nline-init\nzsh-autosuggestions\nfast-syntax-highlighting\nbind\nprecmd 0\nline-init\n"
 	lines := 2
 	if resource {
 		_, err = master.Write([]byte("source \"$SELFISHELL_SOURCE\"\n"))
@@ -220,11 +227,11 @@ zle -N zle-line-init
 		waitLog("line-init", lines)
 		want += "precmd 0\nline-init\n"
 	}
-	_, err = master.Write([]byte("print -r -- \"tab ${$(bindkey '^I')##* }\" >>\"$SELFISHELL_TEST_PLUGIN_LOG\"\n"))
+	_, err = master.Write([]byte("print -r -- \"tab ${$(bindkey '^I')##* } history $widgets[fzf-history-widget]\" >>\"$SELFISHELL_TEST_PLUGIN_LOG\"\n"))
 	mustFS(t, err)
 	lines++
 	waitLog("line-init", lines)
-	want += "tab fzf-tab-complete\nprecmd 0\nline-init\n"
+	want += "tab fzf-tab-complete history user:_test_wrapped_history\nprecmd 0\nline-init\n"
 	_, err = master.Write([]byte("exit\n"))
 	mustFS(t, err)
 	if err := cmd.Wait(); err != nil {
