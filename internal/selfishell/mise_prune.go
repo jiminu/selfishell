@@ -167,7 +167,8 @@ func (o *PackageOperation) PruneMise(ctx context.Context, root string, paths man
 	}
 	if len(removed) != 0 {
 		// Open shells keep absolute paths, such as Starship's init, to removed versions.
-		o.note("Run 'exec zsh' in open shells to reload updated tools.")
+		o.note(shellReloadMessage)
+		o.shellReloadNoted = true
 	}
 	dataHome := base.Environment().Get("XDG_DATA_HOME")
 	if dataHome == "" {

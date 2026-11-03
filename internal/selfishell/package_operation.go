@@ -27,6 +27,7 @@ type PackageOperation struct {
 	windowsFontsChecked, windowsFontsExternal bool
 	installedCasks                            []string // casks this operation installed
 	UnchangedCount                            int
+	shellReloadNoted                          bool
 	dependencyManifest                        string
 	dependencies                              []managed.Dependency
 	dependencyFault                           func(string) error // focused filesystem-failure test seam

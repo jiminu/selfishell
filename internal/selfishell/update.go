@@ -429,6 +429,7 @@ func (c CLI) updateTools(o updateOptions) (result int) {
 	} else {
 		c.completeUpdate()
 	}
+	c.shellReloadHint(prepared, operation)
 	if !o.dry && prepared.m.UnchangedCount > 0 && c.progress.compact {
 		c.report("Notes", report.Info, "%d configuration items unchanged.", prepared.m.UnchangedCount)
 	}

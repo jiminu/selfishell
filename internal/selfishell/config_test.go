@@ -587,3 +587,63 @@ func TestManagedDirectoriesRemoveChildrenFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestShellReloadHintTracksAppliedConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"install", "update"} {
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			var env process.Environment
+			root, paths := compactDiagnosticFixture(t, &env, "ubuntu", false)
+			testutil.SetEnv(&env, "SELFISHELL_TEST_TTY", "1")
+			args := []string{command, "--skip-packages"}
+			if command == "update" {
+				args = append(args, "--tools-only")
+			}
+			check := func(input string, want bool, extra ...string) {
+				t.Helper()
+				if command == "install" {
+					input = "y\n" + input
+				}
+				code, out, stderr := blockRun(t, env, root, input, append(append([]string(nil), args...), extra...)...)
+				if code != 0 || stderr != "" {
+					t.Fatalf("%v: %d %s %s", args, code, out, stderr)
+				}
+				count := strings.Count(out, "exec zsh")
+				if want && count != 1 || !want && count != 0 {
+					t.Fatalf("reload hint count=%d want=%t: %s", count, want, out)
+				}
+			}
+			check("", false)
+			source := root + "/config/shared/zsh/aliases.zsh"
+			want := append(blockRead(t, source), []byte("\n# new defaults\n")...)
+			blockWrite(t, source, want)
+			check("", false, "--dry-run")
+			check("", true)
+			blockEqual(t, paths.Config+"/zsh/aliases.zsh", want)
+			check("", false)
+			source = root + "/config/shared/nvim/lua/config/options.lua"
+			blockWrite(t, source, append(blockRead(t, source), []byte("\n-- editor-only change\n")...))
+			check("", false)
+			if err := os.Remove(env.Get("HOME") + "/.zshrc"); err != nil {
+				t.Fatal(err)
+			}
+			check("", true)
+			target := paths.Config + "/zsh/aliases.zsh"
+			personal := append(blockRead(t, target), []byte("\n# personal change\n")...)
+			blockWrite(t, target, personal)
+			check("n\n", false)
+			blockEqual(t, target, personal)
+		})
+	}
+}
+
+func TestFreshInstallSuggestsReloadingShell(t *testing.T) {
+	t.Parallel()
+	var env process.Environment
+	root, _, _ := blockHome(t, &env, "ubuntu")
+	out := blockOK(t, env, root, "install", "--skip-packages", "--yes")
+	if strings.Count(out, "exec zsh") != 1 {
+		t.Fatal(out)
+	}
+}

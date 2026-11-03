@@ -75,6 +75,10 @@ func TestMisePruneScopesAndValidatesRetention(t *testing.T) {
 			t.Fatalf("restart note after removing %s: %t", remove, got)
 		}
 	}
+	(CLI{Out: op.Process.Out}).shellReloadHint(preparedConfig{shellChanged: true}, op)
+	if got := op.Process.Out.(*bytes.Buffer).String(); strings.Count(got, "exec zsh") != 1 {
+		t.Fatalf("configuration repeated the prune restart note: %s", got)
+	}
 	python := process.Environment(op.Process.Env).Get("MISE_DATA_DIR") + "/installs/python"
 	dataHome := process.Environment(op.Process.Env).Get("XDG_DATA_HOME")
 	if dataHome == "" {
