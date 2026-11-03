@@ -122,20 +122,25 @@ if _selfishell_fzf_bin="$(command -v fzf)"; then
   # and it reaches only Ctrl-T and Ctrl-R.
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
 
-  _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
-  if ! _selfishell_zsh_cache_current "$_selfishell_fzf_cache" "$_selfishell_fzf_bin"; then
-    _selfishell_generate_fzf_cache "$_selfishell_fzf_cache"
+  # Sourcing the init again redefines its widgets and drops the wrappers the
+  # deferred plugins put on them, so Ctrl-R and Ctrl-T would stop updating
+  # suggestions and highlighting. A new fzf takes effect in a new shell.
+  if (( ! $+functions[fzf-history-widget] )); then
+    _selfishell_fzf_cache="$SELFISHELL_CACHE_DIR/fzf-init.zsh"
+    if ! _selfishell_zsh_cache_current "$_selfishell_fzf_cache" "$_selfishell_fzf_bin"; then
+      _selfishell_generate_fzf_cache "$_selfishell_fzf_cache"
+    fi
+    [[ -s "$_selfishell_fzf_cache" ]] && source "$_selfishell_fzf_cache"
+    unset _selfishell_fzf_cache
   fi
-  [[ -s "$_selfishell_fzf_cache" ]] && source "$_selfishell_fzf_cache"
-  unset _selfishell_fzf_cache
 fi
 unset _selfishell_fzf_bin
 
 # fzf-tab wraps the completion widgets, so it loads synchronously after
 # compinit (completion.zsh runs first) instead of with the deferred pair below.
 if command -v fzf >/dev/null 2>&1 && [[ -r "$SELFISHELL_ZSH_PLUGINS/fzf-tab/fzf-tab.plugin.zsh" ]]; then
-  # Reloading the configuration must not wrap the completion widgets again,
-  # but fzf's init above has just bound Tab again, so take it back.
+  # Reloading the configuration must not wrap the completion widgets again.
+  # If fzf's init above ran anyway, it bound Tab again, so take it back.
   if (( $+functions[fzf-tab-complete] && $+functions[enable-fzf-tab] )); then
     enable-fzf-tab
   else
