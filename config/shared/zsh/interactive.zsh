@@ -119,8 +119,14 @@ unset _selfishell_zoxide_bin
 if _selfishell_fzf_bin="$(command -v fzf)"; then
   # Scheme 16 keeps fzf to the terminal's own colors, as the prompt does by
   # naming colors. The environment wins, so this is a default, not a policy,
-  # and it reaches only Ctrl-T and Ctrl-R.
+  # and fzf-tab uses its own palette below.
   export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:---color=16}"
+
+  # Avoid traversing macOS container links back into Desktop and Documents.
+  # User options come last; strip our prefix so re-sourcing stays idempotent.
+  export FZF_DEFAULT_OPTS="--walker=file,hidden ${FZF_DEFAULT_OPTS#'--walker=file,hidden '}"
+  export FZF_CTRL_T_OPTS="--walker=file,dir,hidden ${FZF_CTRL_T_OPTS#'--walker=file,dir,hidden '}"
+  export FZF_ALT_C_OPTS="--walker=dir,hidden ${FZF_ALT_C_OPTS#'--walker=dir,hidden '}"
 
   # Sourcing the init again redefines its widgets and drops the wrappers the
   # deferred plugins put on them, so Ctrl-R and Ctrl-T would stop updating
