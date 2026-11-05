@@ -200,6 +200,24 @@ Otherwise Zsh selects vi mode when it inherits an `EDITOR` or `VISUAL`
 containing `vi`, as in shells started under tmux, Herdr, or Neovim. To use vi
 mode, add `bindkey -v` to `~/.zshrc`.
 
+File searches in `fzf`, Ctrl-T, and Alt-C include hidden paths but do not
+follow directory symlinks. This avoids searching the same Desktop or Documents
+through macOS app container links. Ctrl-T includes files and directories;
+Alt-C lists directories only. The default exclusions remain `.git,node_modules`;
+`Library` is not excluded.
+
+To follow links, set the relevant variable in your `~/.zshrc`, outside the
+Selfishell block: `FZF_DEFAULT_OPTS` for plain `fzf`, `FZF_CTRL_T_OPTS` for
+Ctrl-T, or `FZF_ALT_C_OPTS` for Alt-C. For example:
+
+```zsh
+export FZF_CTRL_T_OPTS="--walker=file,dir,follow,hidden --preview 'head -50 {}'"
+```
+
+Existing options take precedence over Selfishell's defaults. Custom
+`FZF_CTRL_T_COMMAND`, `FZF_ALT_C_COMMAND`, and `FZF_DEFAULT_COMMAND` values are
+preserved; their commands determine which paths are searched.
+
 ## Neovim customization
 
 For personal debug configuration, add

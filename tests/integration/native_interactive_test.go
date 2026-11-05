@@ -488,11 +488,39 @@ func TestNativeFzfPaletteAndUserOptions(t *testing.T) {
 			if want == "" {
 				want = "--color=16"
 			}
+			want = "--walker=file,hidden " + want
 			if !strings.Contains(out, "opts="+want+"\n") || !strings.Contains(out, "type=scalar-export\n") || !strings.Contains(out, "cd=--color=16\n") || !strings.Contains(out, "kill=--color=16 --preview-window=down:4:wrap\n") || !strings.Contains(out, "follows=unset\n") {
 				t.Fatalf("fzf settings: %q", out)
 			}
 			if strings.Contains(out, "cd=--with-nth") || strings.Contains(out, "cd=--bind") {
 				t.Fatalf("user opts reached fzf-tab: %q", out)
+			}
+		})
+	}
+}
+
+func TestNativeFzfWalkerOptions(t *testing.T) {
+	t.Parallel()
+	for _, userOpts := range []string{"", "--preview 'cat {}'", "--walker=file,dir,follow,hidden --preview 'cat {}'"} {
+		t.Run(fmt.Sprintf("opts=%q", userOpts), func(t *testing.T) {
+			t.Parallel()
+			home := nativeHome(t)
+			fakeExecutable(t, home, "fzf", "printf ':\\n'")
+			r := interactiveRun(t, home, `
+print -rl -- "$FZF_DEFAULT_OPTS" "$FZF_CTRL_T_OPTS" "$FZF_ALT_C_OPTS"
+local before="$FZF_DEFAULT_OPTS|$FZF_CTRL_T_OPTS|$FZF_ALT_C_OPTS"
+source "$SELFISHELL_SOURCE"
+[[ "$before" == "$FZF_DEFAULT_OPTS|$FZF_CTRL_T_OPTS|$FZF_ALT_C_OPTS" ]] || exit 10
+print -rl -- "$FZF_CTRL_T_COMMAND" "$FZF_ALT_C_COMMAND"
+`, "FZF_DEFAULT_OPTS="+userOpts, "FZF_CTRL_T_OPTS="+userOpts, "FZF_ALT_C_OPTS="+userOpts,
+				"FZF_CTRL_T_COMMAND=printf custom-files", "FZF_ALT_C_COMMAND=")
+			global := userOpts
+			if global == "" {
+				global = "--color=16"
+			}
+			want := "--walker=file,hidden " + global + "\n--walker=file,dir,hidden " + userOpts + "\n--walker=dir,hidden " + userOpts + "\nprintf custom-files\n\n"
+			if string(r.Stdout) != want {
+				t.Fatalf("walker options: got %q, want %q", r.Stdout, want)
 			}
 		})
 	}
