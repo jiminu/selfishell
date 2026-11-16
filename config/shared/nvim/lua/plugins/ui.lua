@@ -506,6 +506,13 @@ return {
         desc = "Changed hunks",
       },
       {
+        "<leader>gD",
+        function()
+          Snacks.picker.git_diff({ base = "HEAD~1" })
+        end,
+        desc = "Changed hunks against previous commit",
+      },
+      {
         "<leader>gl",
         function()
           Snacks.picker.git_log()
