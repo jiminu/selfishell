@@ -142,6 +142,7 @@ if not ok then vim.api.nvim_err_writeln(tostring(message)); vim.cmd("cquit") end
 		{"dap_focus", "debug-focus.txt", "source fixture\n", "DAP focus smoke: OK"},
 		{"dap_args", "debug-args.txt", "", "DAP args smoke: OK"},
 		{"window_resize", "resize.txt", "", "Window resize input smoke: OK"},
+		{"scrollbar", "scrollbar.txt", strings.Repeat("line\n", 250), "Scrollbar smoke: OK"},
 	} {
 		file := filepath.Join(home, probe.filename)
 		if probe.content != "" {
