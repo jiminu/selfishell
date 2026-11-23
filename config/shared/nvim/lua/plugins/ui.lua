@@ -687,31 +687,34 @@ return {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
     opts = {
-      show_in_active_only = true,
-      hide_if_all_visible = true,
-      -- The default CursorColumn color is hard to see against this theme.
-      handle = {
-        blend = 60,
-        color = "#797979",
+      scrollbar = {
+        visibility = "active",
+        hide_if_all_visible = true,
+        mouse = false,
+        overlap = { reserve = false },
+        thumb = {
+          blend = 60,
+          highlight = { bg = "#797979" },
+        },
       },
       marks = {
-        -- Diagnostic marks must be lists; a string like the Git marks fails to render.
         Error = { text = { "•", "•" } },
         GitAdd = { text = "│" },
         GitChange = { text = "│" },
       },
       -- Plugin windows use scratch buffers; blink.cmp names its windows only
       -- after opening them, too late for a filetype match on the first open.
-      excluded_buftypes = { "terminal", "nofile" },
-      excluded_filetypes = { "prompt", "help" },
-      -- Keep cursor marks disabled to avoid redraws on every cursor move.
-      handlers = {
+      exclude = {
+        buftypes = { "terminal", "nofile" },
+        filetypes = { "prompt", "help" },
+      },
+      providers = {
+        -- Keep cursor marks disabled to avoid redraws on every cursor move.
         cursor = false,
         diagnostic = true,
         gitsigns = true,
-        handle = true,
+        marks = false,
         search = false,
-        ale = false,
       },
     },
   }),
