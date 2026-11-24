@@ -26,4 +26,26 @@ vim.api.nvim_win_call(sidebar, function()
   vim.api.nvim_exec_autocmds("OptionSet", { pattern = "statusline" })
 end)
 assert(vim.api.nvim_win_is_valid(thumb), "inactive statusline refresh closed the editing scrollbar")
+
+assert(vim.fn.exists(":MinimapToggle") == 2, "minimap is not enabled")
+local minimap = require("scrollbar.minimap.renderer")
+local minimap_scheduler = require("scrollbar.minimap.scheduler")
+minimap_scheduler.flush()
+assert(minimap.get_state(win), "minimap did not open with the file")
+
+local function toggle_minimap()
+  vim.api.nvim_feedkeys(vim.keycode("<Space>uM"), "xt", false)
+  minimap_scheduler.flush()
+end
+toggle_minimap()
+assert(not minimap.get_state(win), "minimap shortcut did not hide the map")
+toggle_minimap()
+assert(minimap.get_state(win), "minimap shortcut did not show the map again")
+
+-- Cursor yielding applies only within the minimap's float, including its edge.
+local map_config = vim.api.nvim_win_get_config(minimap.get_state(win).float_win)
+local bar_config = vim.api.nvim_win_get_config(renderer.get_state(win).float_win)
+assert(map_config.anchor == bar_config.anchor and map_config.col == bar_config.col,
+  "minimap would reappear when the cursor reaches the scrollbar")
+assert(bar_config.zindex > map_config.zindex, "scrollbar must draw over the minimap")
 print("Scrollbar smoke: OK")

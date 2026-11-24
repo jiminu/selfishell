@@ -159,7 +159,9 @@ return {
   plugin("mofiqul/vscode.nvim", {
     lazy = false,
     priority = 1000,
-    config = function()
+    opts = { group_overrides = { ScrollbarMinimapViewport = { link = "StatusLine" } } },
+    config = function(_, opts)
+      require("vscode").setup(opts)
       vim.cmd.colorscheme("vscode")
     end,
   }),
@@ -686,7 +688,16 @@ return {
   plugin("petertriho/nvim-scrollbar", {
     main = "scrollbar",
     event = { "BufReadPost", "BufNewFile" },
+    keys = {
+      { "<leader>uM", "<cmd>MinimapToggle<CR>", desc = "Toggle minimap" },
+    },
     opts = {
+      minimap = {
+        enabled = true,
+        preset = "vscode",
+        -- Keep the minimap hidden under the cursor at the scrollbar column too.
+        placement = { stack = "below" },
+      },
       scrollbar = {
         visibility = "active",
         hide_if_all_visible = true,
