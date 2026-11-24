@@ -690,10 +690,22 @@ return {
       scrollbar = {
         visibility = "active",
         hide_if_all_visible = true,
+        events = {
+          -- Temporary workaround for petertriho/nvim-scrollbar#140. The fix is on main
+          -- (be44693, PR #141), still untagged after v2.0.0. When pinning the next
+          -- release, remove this list and the statusline block in scrollbar_smoke.lua.
+          OptionSet = { pattern = {
+            "ambiwidth", "breakindent", "cmdheight", "concealcursor", "conceallevel", "diff", "display",
+            "foldcolumn", "foldenable", "foldexpr", "foldignore", "foldlevel", "foldmarker", "foldmethod",
+            "foldminlines", "foldnestmax", "laststatus", "linebreak", "list", "listchars", "number",
+            "numberwidth", "relativenumber", "showbreak", "showtabline", "signcolumn", "smoothscroll",
+            "statuscolumn", "tabstop", "winbar", "wrap", "wrapcolumn",
+          } },
+        },
+        layout = { columns = { { "thumb", "marks" } } },
         mouse = false,
-        overlap = { reserve = false },
+        overlap = { reserve = false, show_through = 60 },
         thumb = {
-          blend = 60,
           highlight = { bg = "#797979" },
         },
       },
